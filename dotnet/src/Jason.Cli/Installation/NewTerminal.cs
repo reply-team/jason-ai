@@ -30,7 +30,7 @@ internal static class NewTerminal
     {
         ArgumentNullException.ThrowIfNull(places);
 
-        var account = places.AccountPath is { } read ? read() : OperatingSystem.IsWindows() ? new UserPathValue(places.PathKey).Read() : null;
+        var account = OperatingSystem.IsWindows() ? places.AccountPathValue.Read() : null;
         var folders = Entries(places.MachinePath()).Concat(Entries(account));
         var extensions = (places.PathExtensions ?? Environment.GetEnvironmentVariable("PATHEXT") ?? DefaultExtensions)
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

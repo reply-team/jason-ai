@@ -410,7 +410,7 @@ public sealed class InstallCommandTests : IDisposable
     public async Task On_windows_a_jason_first_on_the_machine_Path_is_named_with_what_removes_it_and_left(bool commandLineInstall)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
-        using var key = ScratchKey.Create();
+        var account = new AccountPathInMemory();
         var tools = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "tools")).FullName;
         var decoy = Path.Combine(tools, "jason.exe");
         File.WriteAllText(decoy, "another jason");
@@ -420,7 +420,7 @@ public sealed class InstallCommandTests : IDisposable
         }
 
         var executable = Carried("jason.exe");
-        var places = WindowsPlaces(key.SubKey) with { MachinePath = () => new StoredPath(tools, RegistryValueKind.ExpandString), PathExtensions = ".COM;.EXE;.BAT;.CMD" };
+        var places = WindowsPlaces(NoKey) with { AccountPath = account, MachinePath = () => new StoredPath(tools, RegistryValueKind.ExpandString), PathExtensions = ".COM;.EXE;.BAT;.CMD" };
         var (env, output) = Environment(places, executable);
 
         var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
@@ -430,6 +430,7 @@ public sealed class InstallCommandTests : IDisposable
         var command = report.GetProperty("command");
         Assert.True(command.GetProperty("placed").GetBoolean());
         Assert.Equal(decoy, command.GetProperty("finds").GetString());
+        Assert.False(command.GetProperty("finds_this").GetBoolean(), "another jason first by name reads as this one, and the install scripts would end saying jason is in the terminal");
         var first = $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable})";
         Assert.Contains(
             commandLineInstall
@@ -437,7 +438,7 @@ public sealed class InstallCommandTests : IDisposable
                 : $"{first}. It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
             report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
         Assert.Equal("another jason", File.ReadAllText(decoy));
-        Assert.True(PathEntry.Carries(key.ReadPath()!.Value.Raw, Path.GetDirectoryName(executable)!));
+        Assert.True(PathEntry.Carries(account.Stored!.Raw, Path.GetDirectoryName(executable)!));
     }
 
     /// <summary>With nothing before it, the entry appended last is what a new terminal finds: this jason, and no problem.</summary>
@@ -446,15 +447,17 @@ public sealed class InstallCommandTests : IDisposable
     public async Task On_windows_this_jason_is_what_a_new_terminal_finds_where_nothing_comes_before_it()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
-        using var key = ScratchKey.Create();
-        key.SetPath(Path.Combine(_tree.Paths.Root, "empty"), RegistryValueKind.ExpandString);
+        var account = new AccountPathInMemory(new StoredPath(Path.Combine(_tree.Paths.Root, "empty"), RegistryValueKind.ExpandString));
         var executable = Carried("jason.exe");
-        var (env, output) = Environment(WindowsPlaces(key.SubKey) with { PathExtensions = ".COM;.EXE;.BAT;.CMD" }, executable);
+        var (env, output) = Environment(WindowsPlaces(NoKey) with { AccountPath = account, PathExtensions = ".COM;.EXE;.BAT;.CMD" }, executable);
 
         var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal(executable, Report(output).GetProperty("command").GetProperty("finds").GetString());
+        var command = Report(output).GetProperty("command");
+        Assert.Equal(executable, command.GetProperty("finds").GetString());
+        Assert.True(command.GetProperty("finds_this").GetBoolean());
+        Assert.Equal((Path.Combine(_tree.Paths.Root, "empty") + ";" + Path.GetDirectoryName(executable), RegistryValueKind.ExpandString), (account.Stored!.Raw, account.Stored.Kind));
     }
 
     /// <summary>
@@ -466,10 +469,9 @@ public sealed class InstallCommandTests : IDisposable
     public async Task On_windows_a_held_command_line_install_leaves_the_Path_as_it_is()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
-        using var key = ScratchKey.Create();
         var before = Path.Combine(_tree.Paths.Root, "before");
-        key.SetPath(before, RegistryValueKind.ExpandString);
-        var (old, _, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, """{"error":{"code":"internal","message":"no","retryable":false}}"""), WindowsPlaces(key.SubKey));
+        var account = new AccountPathInMemory(new StoredPath(before, RegistryValueKind.ExpandString));
+        var (old, _, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, """{"error":{"code":"internal","message":"no","retryable":false}}"""), WindowsPlaces(NoKey) with { AccountPath = account });
 
         var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
 
@@ -480,7 +482,8 @@ public sealed class InstallCommandTests : IDisposable
         Assert.False(command.GetProperty("placed").GetBoolean());
         Assert.False(command.GetProperty("changed").GetBoolean());
         Assert.Equal(JsonValueKind.Null, command.GetProperty("finds").ValueKind);
-        Assert.Equal((before, RegistryValueKind.ExpandString), key.ReadPath());
+        Assert.False(command.GetProperty("finds_this").GetBoolean());
+        Assert.Equal(new StoredPath(before, RegistryValueKind.ExpandString), account.Stored);
         Assert.Contains(
             $"The command-line install at {old} is not retired in this run, so this account's Path was left as it is: a new terminal still finds that jason.",
             report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
@@ -517,6 +520,7 @@ public sealed class InstallCommandTests : IDisposable
         {
             Assert.Equal(ExitCodes.ApiError, exit);
             Assert.Equal(decoy, command.GetProperty("finds").GetString());
+            Assert.False(command.GetProperty("finds_this").GetBoolean());
             Assert.Contains(
                 $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable}). It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
                 report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
@@ -526,6 +530,7 @@ public sealed class InstallCommandTests : IDisposable
         {
             Assert.Equal(ExitCodes.Success, exit);
             Assert.Equal(Path.Combine(bin, "jason"), command.GetProperty("finds").GetString());
+            Assert.True(command.GetProperty("finds_this").GetBoolean(), "the wrapper running this jason reads as another file");
         }
     }
 
@@ -1692,7 +1697,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "taken_back, finds (the", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "taken_back, finds (the", "finds_this (whether", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }
@@ -1797,6 +1802,9 @@ public sealed class InstallCommandTests : IDisposable
     }
 
     private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root };
+
+    /// <summary>A key no row makes: places given an account Path of their own in memory name it, and nothing opens it.</summary>
+    private const string NoKey = @"Software\Jason.Tests\never-opened";
 
     private SetupPlaces WindowsPlaces(string pathKey) => new(SetupSystem.Windows, Home, LocalAppData, pathKey, null) { Temporary = _tree.Paths.Root };
 

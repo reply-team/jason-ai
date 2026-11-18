@@ -70,10 +70,14 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     internal Func<StoredPath?> MachinePath { get; init; } = static () => null;
 
     /// <summary>
-    /// Windows: the account's <c>Path</c> as a new terminal reads it; null reads the one under <see cref="PathKey"/>. A
-    /// value of a test's own in a test that looks without placing anything.
+    /// Windows: the account's <c>Path</c> as a new terminal reads it and as <c>jason install</c> appends its entry and
+    /// takes a retired one off; null is the one under <see cref="PathKey"/>. A value of a test's own in a test, so a row
+    /// writes no registry key.
     /// </summary>
-    internal Func<StoredPath?>? AccountPath { get; init; }
+    internal IAccountPath? AccountPath { get; init; }
+
+    /// <summary>The account's <c>Path</c> this run reads and writes: <see cref="AccountPath"/>, else the value under <see cref="PathKey"/>.</summary>
+    internal IAccountPath AccountPathValue => AccountPath ?? new UserPathValue(PathKey);
 
     /// <summary>Windows: the extensions a shell tries, in order, as <c>PATHEXT</c> lists them; null reads this process's.</summary>
     internal string? PathExtensions { get; init; }

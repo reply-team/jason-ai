@@ -251,7 +251,7 @@ internal sealed class CommandLineRemoval(SetupPlaces places, List<string> left, 
 
         try
         {
-            var value = new UserPathValue(places.PathKey);
+            var value = places.AccountPathValue;
             var stored = value.Read();
             var expand = PathEntry.ReadAs(stored?.Kind != Microsoft.Win32.RegistryValueKind.String);
             if (stored is null || !PathEntry.Carries(stored.Raw, directory, expand))

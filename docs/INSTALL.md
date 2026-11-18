@@ -589,10 +589,12 @@ shell finds that `jason` by name and the agents Jason starts are not given it fi
 answers to `jason`; a line would only write the same split entry again. The check says which character, and the way
 on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
 
-And `path` fails, naming both files, where `jason` by name is another file than the `jason` answering — Jason Desktop's
-own wrapper at `~/.local/bin/jason` counts as the `jason` it runs. Typed by name, `jason` runs that other file, so you
-and every agent use it and not this one, and `ready` is false until that file is removed or its folder taken off the
-PATH. That is also what a published build of this repository says, run by its full path while a release answers by name.
+On macOS and Windows, where a machine holds one installation, `path` fails, naming both files, where `jason` by name is
+another file than the `jason` answering — Jason Desktop's own wrapper at `~/.local/bin/jason` counts as the `jason` it
+runs. Typed by name, `jason` runs that other file, so you and every agent use it and not this one, and `ready` is false
+until that file is removed or its folder taken off the PATH. That is also what a published build of this repository
+says, run by its full path while a release answers by name. On Linux the check passes there and says that two
+installations are on this machine.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
 `runtime`, `runtime_version`, `dispatcher`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with

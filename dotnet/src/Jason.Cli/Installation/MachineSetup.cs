@@ -45,7 +45,12 @@ public sealed record InstallOptions(bool Human, bool Roles, string? Retire, Time
 /// placed the command and retired what it retires (<see cref="NewTerminal"/>): this jason, the wrapper running it, or
 /// another file, which is then a problem naming what removes it. Null where none is found, or the command was not placed.
 /// </param>
-public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack, string? Finds = null);
+/// <param name="FindsThis">
+/// Whether <paramref name="Finds"/> is this jason or the wrapper running it, decided here once (<see cref="NewTerminal.Runs"/>):
+/// the install scripts read this and never compare paths themselves. False where nothing is found or the command was not
+/// placed.
+/// </param>
+public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack, string? Finds = null, bool FindsThis = false);
 
 /// <summary>One skills root, as this run left it.</summary>
 /// <param name="Root">The folder.</param>
@@ -193,7 +198,8 @@ public static class MachineSetup
         {
             await run.Step("Reading what a new terminal finds", () =>
             {
-                command = placed with { Finds = run.Finds() };
+                var (finds, findsThis) = run.Finds();
+                command = placed with { Finds = finds, FindsThis = findsThis };
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
@@ -650,7 +656,7 @@ public static class MachineSetup
             var changed = false;
             try
             {
-                changed = new UserPathValue(places.PathKey).Append(Bundle);
+                changed = places.AccountPathValue.Append(Bundle);
                 Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} was on this account's Path already.");
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -661,7 +667,7 @@ public static class MachineSetup
             // Read back: the entry is what a new terminal finds this jason by, so nothing else answering jason goes without it.
             try
             {
-                var stored = new UserPathValue(places.PathKey).Read();
+                var stored = places.AccountPathValue.Read();
                 CommandPlaced = stored is not null && PathEntry.Carries(stored.Raw, Bundle, PathEntry.ReadAs(stored.Kind != Microsoft.Win32.RegistryValueKind.String));
             }
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -704,26 +710,26 @@ public static class MachineSetup
         /// where it is not this jason or the wrapper running it, a problem names it and what removes it, and it is left as
         /// it is.
         /// </summary>
-        public string? Finds()
+        public (string? Finds, bool FindsThis) Finds()
         {
             var finds = Windows
                 ? NewTerminal.FindsOnWindows(places)
                 : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: !PathEntry.OnPath(TerminalPath(), places.LocalBin));
             if (NewTerminal.Runs(finds, carried.Executable))
             {
-                return finds;
+                return (finds, true);
             }
 
             if (finds is null)
             {
                 Problems.Add($"A terminal opened from now on finds no jason by name, as its PATH reads now: {carried.Executable} runs this jason by its full path.");
-                return null;
+                return (null, false);
             }
 
             var image = new FileInfo(finds).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? finds;
             var owner = env.Managers is { } records ? PackageOwner.Of(image, string.Equals(image, finds, PathCase) ? null : finds, records) : null;
             Problems.Add(NewTerminal.Problem(finds, carried.Executable, CommandLineInstalls.IsJasons(env, places, image), owner));
-            return finds;
+            return (finds, false);
         }
 
         // --- retiring the command-line install ---------------------------------------------------------------

@@ -162,11 +162,12 @@ public sealed class NewTerminalTests : IDisposable
             NewTerminal.Problem(Found, Carried, commandLineInstall: false, owner: null));
     }
 
+    [SupportedOSPlatform("windows")]
     private SetupPlaces Windows(StoredPath? machine, StoredPath? account) =>
         new(SetupSystem.Windows, Path.Combine(_tree.Paths.Root, "home"), Path.Combine(_tree.Paths.Root, "local"), @"Software\Jason.Tests\never-opened", null)
         {
             MachinePath = () => machine,
-            AccountPath = () => account,
+            AccountPath = new AccountPathInMemory(account),
             PathExtensions = ".COM;.EXE;.BAT;.CMD",
             Temporary = _tree.Paths.Root,
         };

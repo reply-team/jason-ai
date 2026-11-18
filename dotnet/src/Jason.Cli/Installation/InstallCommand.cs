@@ -122,8 +122,10 @@ public static class InstallCommand
         each PATHEXT extension in order; on macOS the PATH a terminal has, with ~/.local/bin in front where the
         lines put it there. Where it is neither this jason nor the wrapper running it, a problem names it and
         what removes it - a command-line install's own `jason update apply`, a package manager's command, or
-        else removing it or taking its folder off the PATH - and it is left as it is; the install scripts end
-        non-zero then too. Null where none is found, or the command was not placed)}; skills [{root,
+        else removing it or taking its folder off the PATH - and it is left as it is. Null where none is found,
+        or the command was not placed), finds_this (whether finds is this jason or the wrapper running it,
+        decided here once: the install scripts read it, compare no path themselves, and end non-zero where it is
+        false; false where finds is null)}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.

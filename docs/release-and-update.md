@@ -1849,8 +1849,10 @@ Path, then the account's, each expanded as its registry kind says, the name trie
 order; on macOS the PATH a terminal has, with `~/.local/bin` in front where the profile lines put it there. Where it is
 neither the carried file nor the wrapper running it, a problem names it and what removes it — a command-line install's
 own `jason update apply`, which moves it into Jason Desktop; a package manager's command; or else removing it or taking
-its folder off the PATH — and it is left as it is, and the install scripts end non-zero then too. Null where none is
-found or the command was not placed. Where the command-line install of the first step is held, its runtime not stopped
+its folder off the PATH — and it is left as it is. Null where none is found or the command was not placed. Beside it,
+`finds_this` says whether `finds` is this jason or the wrapper running it, decided once by `jason install`: the install
+scripts read that member, compare no path themselves, and end non-zero where it is false; a report without it, from an
+older kept application, is read as before it existed. Where the command-line install of the first step is held, its runtime not stopped
 or the layout refusing, the terminal command is left as it is on both systems, the Path unwritten on Windows, and
 `placed` is false;
 `skills`, one entry per root — `root`, `hosts`, `written`, `unchanged`, `left_alone`; `roles` (with `--roles`, else null);
