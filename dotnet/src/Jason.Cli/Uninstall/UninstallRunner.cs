@@ -658,6 +658,13 @@ public static class UninstallRunner
     }
 
     /// <summary>
+    /// The line that names a directory a build unpacked under another temporary folder of this account, which this
+    /// uninstall leaves: where it is, and why it stays.
+    /// </summary>
+    internal static string LeftElsewhere(string directory) =>
+        $"Left '{directory}': unpacked from another session of this account, under another of its temporary folders; it is safe to remove once nothing runs from it.";
+
+    /// <summary>
     /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
     /// planned, and the directory holding them if that is now empty.
     /// </summary>
@@ -669,13 +676,6 @@ public static class UninstallRunner
     /// so they go and the plan names each. Elsewhere a running copy holds nothing, so they stay, counted, and the report
     /// says so in the plan's words. The parent goes only if nothing is left in it — the report says why when it stays.
     /// </remarks>
-    /// <summary>
-    /// The line that names a directory a build unpacked under another temporary folder of this account, which this
-    /// uninstall leaves: where it is, and why it stays.
-    /// </summary>
-    internal static string LeftElsewhere(string directory) =>
-        $"Left '{directory}': unpacked from another session of this account, under another of its temporary folders; it is safe to remove once nothing runs from it.";
-
     private static void RemoveExtractedLibraries(
         CliEnvironment env,
         UninstallPlan plan,
