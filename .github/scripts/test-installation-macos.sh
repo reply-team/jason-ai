@@ -246,6 +246,21 @@ left_over() {
         done || true
 }
 
+# Whether one fact of jason status, in the file $1, names the folder $2 itself, by its path, in its list of folders Jason
+# did not deploy under a name Jason ships: the list before the sentence's verb, split as the list is joined (", " and
+# " and "), one item the path or ending in it after a space.
+names_own_skill() {
+    python3 - "$1" "$2" <<'PY'
+import re, sys
+text, own = open(sys.argv[1], encoding='utf-8').read().replace('\\\\', '\\'), sys.argv[2]
+for fact in re.finditer(r'(?P<list>[^"]+?) (?:is a (?:folder|link)|are (?:folders and links|folders|links)) Jason did not deploy, under (?:a name|names) Jason ships', text):
+    for item in re.split(r', | and ', fact.group('list')):
+        if item == own or item.endswith(' ' + own):
+            sys.exit(0)
+sys.exit(1)
+PY
+}
+
 step="${1:-}"; shift || true
 case "$step" in
 stand-in)
@@ -809,9 +824,9 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     say "under the moved 0.49: $counted campaign(s), archived included; the journal holds $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print("%d entries, the newest %s" % (len(j), j[0]["id"] if j else "none"))' "$OUT/way-back-journal-before.json")"
     # Before step 1, as the page says: jason status names the person's own quick-start as a folder Jason did not deploy.
     within 120 'jason status under the moved 0.49' "$carried" status > "$OUT/way-back-status-before.json" 2>&1 || true
-    grep -qF 'quick-start' "$OUT/way-back-status-before.json" && grep -qE 'Jason did not deploy, under (a name Jason ships, left as it is|names Jason ships, left as they are)' "$OUT/way-back-status-before.json" \
+    names_own_skill "$OUT/way-back-status-before.json" "$OWN_SKILL" \
         || fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $(cat "$OUT/way-back-status-before.json")"
-    say "before step 1, jason status under the moved 0.49 names the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is"
+    say "before step 1, jason status under the moved 0.49 names the person's own quick-start, $OWN_SKILL, as a folder Jason did not deploy, under a name Jason ships, left as it is"
     own1="$(own_bytes "$OWN_SKILL")"
     [ "$own1" != absent ] || fail "the person's own quick-start is not at $OWN_SKILL before going back"
     say "moment 1, before step 1: the person's own quick-start/SKILL.md at $OWN_SKILL is $own1"

@@ -483,6 +483,19 @@ function Read-OwnSkill([string] $folder) {
     "$($bytes.Length) bytes, sha256 $([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant())"
 }
 
+function Test-NamesOwnSkill([string] $said, [string] $own) {
+    # Whether one fact of jason status names $own itself, by its path, in its list of folders Jason did not deploy under a
+    # name Jason ships: the list before the sentence's verb, split as the list is joined (", " and " and "), one item the
+    # path or ending in it after a space. Status prints JSON, so a backslash arrives doubled.
+    $text = $said.Replace('\\', '\')
+    foreach ($fact in [regex]::Matches($text, '(?<list>[^"]+?) (?:is a (?:folder|link)|are (?:folders and links|folders|links)) Jason did not deploy, under (?:a name|names) Jason ships')) {
+        foreach ($item in ($fact.Groups['list'].Value -split ', | and ')) {
+            if ($item -ieq $own -or $item.EndsWith(" $own", [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+    }
+    $false
+}
+
 function Get-LeftOver {
     $now = Join-Path $Out 'now.txt'
     Write-Listing $now -Quiet
@@ -1445,8 +1458,8 @@ switch ($Step) {
         Say "under the moved 0.49: $($campaignsBefore.Count) campaign(s), archived included; the journal holds $($journalBefore.Count) entries, the newest $newest"
         # Before step 1, as the page says: jason status names the person's own quick-start as a folder Jason did not deploy.
         $named = Invoke-Program $carried @('status') $quiet
-        if (-not ($named.Said.Contains('quick-start') -and ($named.Said.Contains('Jason did not deploy, under a name Jason ships, left as it is') -or $named.Said.Contains('Jason did not deploy, under names Jason ships, left as they are')))) { Fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $($named.Said)" }
-        Say "before step 1, jason status under the moved 0.49 names the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is"
+        if (-not (Test-NamesOwnSkill $named.Said $ownSkill)) { Fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $($named.Said)" }
+        Say "before step 1, jason status under the moved 0.49 names the person's own quick-start, $ownSkill, as a folder Jason did not deploy, under a name Jason ships, left as it is"
         $own1 = Read-OwnSkill $ownSkill
         if ($own1 -ceq 'absent') { Fail "the person's own quick-start is not at $ownSkill before going back" }
         Say "moment 1, before step 1: the person's own quick-start\SKILL.md at $ownSkill is $own1"
