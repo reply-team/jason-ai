@@ -60,6 +60,13 @@ $ownSkill = Join-Path $env:USERPROFILE '.agents\skills\quick-start'
 
 function Fail([string] $why) { throw $why }
 
+# A failed assertion that does not keep the legs after it from being read: said now as an error, recorded, and failed by
+# the Held step at the end with its own words.
+function Fail-Held([string] $why) {
+    Write-Host "::error title=Installation::$why"
+    Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value $why
+}
+
 function Say([string] $line) {
     Write-Host $line
     if ($env:GITHUB_STEP_SUMMARY) { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- $line" }
@@ -105,6 +112,14 @@ function Write-ProcessTree([System.Diagnostics.Process] $process) {
     Write-Host '  every process of the application folder and of jason:'
     foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
         Write-Host "    $($running.ProcessId), started by $($running.ParentProcessId): $("$($running.CommandLine)".Substring(0, [Math]::Min(200, "$($running.CommandLine)".Length)))"
+    }
+}
+
+function Write-JasonProcesses {
+    Write-Host '  every process of the application folder, of jason, of the uninstaller and of Windows PowerShell:'
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' -or $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' })) {
+        Write-Host "    $($running.ProcessId), started by $($running.ParentProcessId): $("$($running.CommandLine)".Substring(0, [Math]::Min(300, "$($running.CommandLine)".Length)))"
+        foreach ($window in (Get-VisibleWindows @([int] $running.ProcessId))) { Write-Host "      visible window: $window" }
     }
 }
 
@@ -208,12 +223,27 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
 }
 
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
-function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}) {
+function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600) {
     $saved = @{}
     foreach ($name in $environment.Keys) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $environment[$name]) }
     try {
-        $said = (& $file @arguments 2>&1 | ForEach-Object { "$_" }) -join "`n"
-        $code = $LASTEXITCODE
+        $job = Start-ThreadJob -ArgumentList $file, $arguments -ScriptBlock {
+            param($program, $words)
+            $lines = (& $program @words 2>&1 | ForEach-Object { "$_" }) -join "`n"
+            [pscustomobject]@{ Said = $lines; Code = $LASTEXITCODE }
+        }
+        if (-not (Wait-Job -Job $job -Timeout $seconds)) {
+            $what = "$(Split-Path -Leaf $file) $($arguments -join ' ')"
+            Write-Host "$what had not ended after $seconds s"
+            Write-JasonProcesses
+            $started = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ParentProcessId -eq $PID -and $_.Name -ne 'conhost.exe' })
+            $started | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Fail "$what did not end within $seconds s"
+        }
+        $result = Receive-Job -Job $job
+        Remove-Job -Job $job -Force
+        $said = $result.Said
+        $code = $result.Code
     } finally {
         foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
     }
@@ -230,7 +260,9 @@ function Invoke-InstallScript([string] $path) {
 function Find-InNewShell([string] $command) {
     $file = Join-Path $Out "found-$([Guid]::NewGuid().ToString('N')).txt"
     $probe = "`$found = Get-Command $command -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if (`$found) { `$found.Source; & `$found.Source --version } else { 'not found' }"
-    Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -Wait -NoNewWindow -RedirectStandardOutput $file
+    $shell = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -PassThru -NoNewWindow -RedirectStandardOutput $file
+    $null = $shell.Handle
+    if (-not $shell.WaitForExit(120000)) { Write-JasonProcesses; Stop-Process -Id $shell.Id -Force -ErrorAction SilentlyContinue; Fail "a new shell looking for $command did not end within 120 s" }
     $lines = @(Get-Content -LiteralPath $file)
     Remove-Item -LiteralPath $file
     return $lines
@@ -351,7 +383,11 @@ switch ($Step) {
 
     'Held' {
         $divergent = Join-Path $Out 'divergent.txt'
-        if (Test-Path -LiteralPath $divergent) { Fail "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
+        $failedLegs = Join-Path $Out 'failed-legs.txt'
+        $held = @()
+        if (Test-Path -LiteralPath $failedLegs) { $held += @(Get-Content -LiteralPath $failedLegs) }
+        if (Test-Path -LiteralPath $divergent) { $held += "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
+        if ($held.Count -gt 0) { Fail ($held -join ' | ') }
         Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
     }
 
@@ -426,6 +462,13 @@ switch ($Step) {
         Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 60 'the window starting'
         Start-Sleep -Seconds 10
+        # The application's first start sets the machine up (jason install): the skills record and the person's own skill
+        # read right after it.
+        $record = Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json'
+        $claims = @(Select-String -LiteralPath $record -SimpleMatch 'quick-start' -ErrorAction SilentlyContinue | ForEach-Object { "line $($_.LineNumber): $($_.Line.Trim())" })
+        $ownText = if (Test-Path -LiteralPath (Join-Path $ownSkill 'SKILL.md')) { (Get-Content -LiteralPath (Join-Path $ownSkill 'SKILL.md') -Raw).Trim() } else { '(absent)' }
+        Say "after the window's first start, the record at .agents\skills names quick-start in: $(if ($claims) { $claims -join '; ' } else { 'no line' }); the person's own SKILL.md reads: $ownText"
+        if ($claims -or $ownText -ne "a person's own skill") { Fail-Held "the window's first start took the person's own quick-start: the record names it in $(if ($claims) { $claims -join '; ' } else { 'no line' }), and the file reads '$ownText'" }
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
         # The runtime the window's start asked for may still be starting: it is given half a minute to answer.
@@ -437,19 +480,56 @@ switch ($Step) {
         }
         $file = Join-Path $Out 'uninstall-terminal.json'
         $probe = "jason uninstall --purge-data --yes | Set-Content -LiteralPath '$file'; exit `$LASTEXITCODE"
-        $verb = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -Wait -PassThru -NoNewWindow
+        # The shell's own process is waited for, not what it started: the waiter jason uninstall leaves outlives it by design.
+        $verb = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -PassThru -NoNewWindow
+        $null = $verb.Handle
+        if (-not $verb.WaitForExit(300000)) { Write-JasonProcesses; Fail 'jason uninstall in a new shell did not end within 300 s' }
         Get-Content -LiteralPath $file | ForEach-Object { Write-Host $_ }
         if ($verb.ExitCode -ne 0) { Fail "jason uninstall exited with $($verb.ExitCode)" }
         if (-not ((Get-Content -LiteralPath $file -Raw).Contains('Handed the application at'))) { Fail 'jason uninstall did not hand the application to its uninstaller' }
 
-        # The waiter hands the folder to the uninstaller once the verb has ended, and the folder goes whole.
-        Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        # The waiter hands the folder to the uninstaller once the verb has ended, and the folder goes whole. Watched for
+        # 150 s, twice a second: every run of the uninstaller, silent or not, with its exit and its visible windows, and the
+        # waiter's Windows PowerShell. The window was closed before the verb, so a run without /S, which asks the person,
+        # has no cause here: one fails the leg by name, quoting its window.
+        $runs = @{}
+        $asked = $null
+        $started = Get-Date
+        while (((Get-Date) - $started).TotalSeconds -lt 150 -and (Test-Path -LiteralPath $app)) {
+            foreach ($run in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' })) {
+                $id = [int] $run.ProcessId
+                if (-not $runs.ContainsKey($id)) {
+                    $handle = Get-Process -Id $id -ErrorAction SilentlyContinue
+                    if ($handle) { $null = $handle.Handle }
+                    $silent = "$($run.CommandLine)" -match '(^|\s)/S(\s|$)'
+                    $runs[$id] = @{ Process = $handle; Silent = $silent; Line = "$($run.CommandLine)"; Windows = [System.Collections.Generic.List[string]]::new() }
+                    Write-Host "  at $([int]((Get-Date) - $started).TotalSeconds) s an uninstaller run, process $id, $(if ($silent) { 'with /S' } else { 'WITHOUT /S' }): $($run.CommandLine)"
+                }
+                foreach ($window in (Get-VisibleWindows @($id))) { if (-not $runs[$id].Windows.Contains($window)) { $runs[$id].Windows.Add($window); Write-Host "    its visible window: $window" } }
+                if (-not $runs[$id].Silent -and $runs[$id].Windows.Count -gt 0 -and -not $asked) { $asked = $runs[$id] }
+            }
+            if ($asked) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        foreach ($id in $runs.Keys) {
+            $run = $runs[$id]
+            $exit = if ($run.Process -and $run.Process.HasExited) { $run.Process.ExitCode } else { 'still running' }
+            Say "an uninstaller run after jason uninstall, $(if ($run.Silent) { 'with /S' } else { 'without /S' }): exit $exit, visible windows: $(if ($run.Windows.Count) { $run.Windows -join '; ' } else { 'none' })"
+        }
+        if ($asked) {
+            Write-JasonProcesses
+            Fail "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; ')"
+        }
+        if (Test-Path -LiteralPath $app) {
+            Write-JasonProcesses
+            Fail "the application's folder had not gone 150 s after jason uninstall ended"
+        }
         Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 "the Installed apps entry going"
         Start-Sleep -Seconds 5
         if (Test-Path -LiteralPath $data) { Fail "$data was written again after the purge: the uninstaller started the application although jason uninstall had done it all" }
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left' }
         if (@(Get-OwnProcesses $app).Count -ne 0) { Fail 'a process still runs from the application folder' }
-        if (-not (Test-Path -LiteralPath (Join-Path $ownSkill 'SKILL.md'))) { Fail "the person's own skill went with the uninstall" }
+        if (-not (Test-Path -LiteralPath (Join-Path $ownSkill 'SKILL.md'))) { Fail-Held "the person's own skill went with the uninstall" }
         Say 'jason uninstall from a new shell: the runtime stopped, the folder gone whole after the verb ended, no Installed apps entry, no Path entry, no data directory written again, the person''s own skill kept'
     }
 
@@ -742,7 +822,7 @@ switch ($Step) {
 
         $server = Start-Process python -ArgumentList '-m', 'http.server', '8098', '--bind', '127.0.0.1', '--directory', $Next -PassThru -NoNewWindow
         try {
-            Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/manifest.json' -UseBasicParsing).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
+            Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/manifest.json' -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
             $feedAddress = 'http://127.0.0.1:8098/manifest.json'
 
             # A window open: the Desktop refuses a request that names a feed, and the verb says so.
