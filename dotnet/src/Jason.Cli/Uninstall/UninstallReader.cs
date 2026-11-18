@@ -84,6 +84,7 @@ public static class UninstallReader
         var imageDirectory = image is null ? null : Path.GetDirectoryName(image);
         var extracted = Extracted(env, image, imageDirectory);
         var (others, othersLeft) = Others(env, extracted, imageDirectory, OperatingSystem.IsWindows(), ExtractBase(env));
+        var (bases, elsewhere) = OtherBases(env, extracted, imageDirectory, OperatingSystem.IsWindows(), ExtractBase(env));
 
         return new UninstallPlan(
             autostart.Registered,
@@ -107,7 +108,9 @@ public static class UninstallReader
             othersLeft,
             link,
             linkUnreadable,
-            desktop);
+            desktop,
+            bases,
+            bases is null ? null : elsewhere);
     }
 
     /// <summary>
@@ -262,9 +265,7 @@ public static class UninstallReader
         {
             others = [.. Directory.EnumerateDirectories(parent)
                 .Where(other => !string.Equals(Path.GetFullPath(other), Path.GetFullPath(extracted), StringComparison.OrdinalIgnoreCase))
-                .Where(other => !new DirectoryInfo(other).Attributes.HasFlag(FileAttributes.ReparsePoint))
-                .Where(other => !Directory.EnumerateDirectories(other).Any())
-                .Where(other => !Holds(other, env.Paths.Root) && (installDirectory is null || !Holds(other, installDirectory)))
+                .Where(other => Shaped(env, other, installDirectory))
                 .Order(StringComparer.Ordinal)];
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -277,6 +278,111 @@ public static class UninstallReader
             : ([], string.Create(
                 CultureInfo.InvariantCulture,
                 $"What other builds of this program unpacked under '{parent}' is left, {others.Count} director{(others.Count == 1 ? "y" : "ies")} of native libraries: a copy may be running from them, and elsewhere than Windows nothing it holds stops a removal. Remove them by hand once nothing runs from them."));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="directory"/> is shaped as the host unpacks a build: a directory, not a link, holding files and
+    /// no directory, and holding neither the data directory nor the installation.
+    /// </summary>
+    private static bool Shaped(CliEnvironment env, string directory, string? installDirectory) =>
+        !new DirectoryInfo(directory).Attributes.HasFlag(FileAttributes.ReparsePoint)
+        && !Directory.EnumerateDirectories(directory).Any()
+        && !Holds(directory, env.Paths.Root)
+        && (installDirectory is null || !Holds(directory, installDirectory));
+
+    /// <summary>
+    /// The temporary folders of this account that builds of this program unpack under, beside the one this build unpacked
+    /// under, and what was unpacked there: named to be left, never removed. On Windows only, and only where the host
+    /// unpacks into its own default base; otherwise no base is looked under and the bases are null.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On Windows the host unpacks under <c>%TEMP%\.net\&lt;program&gt;\&lt;id&gt;</c>, and %TEMP% is whatever the
+    /// process's environment carries. Where Remote Desktop Session Host gives each session a temporary folder of its own,
+    /// that folder is named with the session's number inside the account's Temp folder, and a process started outside the
+    /// session's environment unpacks under the account's Temp folder instead: the same build then stands under two bases
+    /// of one account, and an uninstall run in one session sees only its own.
+    /// </para>
+    /// <para>
+    /// The bases are read from the path the host unpacked into, never from the registry and never guessed: this build's
+    /// own; the account's Temp folder, which is the parent where the own base's name is all digits and otherwise the own
+    /// base itself; and that folder's other folders whose names are all digits. A base counts where its
+    /// <c>.net\&lt;program&gt;</c> folder is there and none of the three is a link. A base that cannot be read is skipped,
+    /// and the rest are still read.
+    /// </para>
+    /// <para>
+    /// What is there is named and left, not removed: a session's own folder goes with the session at sign-out by default,
+    /// and what is unpacked from another session may be in use there. Only what is shaped as the host unpacks is named.
+    /// </para>
+    /// </remarks>
+    internal static (IReadOnlyList<string>? Bases, IReadOnlyList<string> Left) OtherBases(
+        CliEnvironment env,
+        string? extracted,
+        string? installDirectory,
+        bool windows,
+        string? extractBase,
+        Func<string, IEnumerable<string>>? directories = null)
+    {
+        directories ??= Directory.EnumerateDirectories;
+        if (!windows || extractBase is { Length: > 0 } || extracted is null
+            || Path.GetDirectoryName(Path.GetFullPath(extracted)) is not { Length: > 0 } programFolder
+            || Path.GetDirectoryName(programFolder) is not { Length: > 0 } net
+            || !string.Equals(Path.GetFileName(net), ".net", StringComparison.OrdinalIgnoreCase)
+            || Path.GetDirectoryName(net) is not { Length: > 0 } own)
+        {
+            return (null, []);
+        }
+
+        var program = Path.GetFileName(programFolder);
+        var root = Session(own) && Path.GetDirectoryName(own) is { Length: > 0 } parent ? parent : own;
+        var candidates = new List<string>();
+        if (!Same(root, own))
+        {
+            candidates.Add(root);
+        }
+
+        try
+        {
+            candidates.AddRange(directories(root)
+                .Select(Path.GetFullPath)
+                .Where(candidate => Session(candidate) && !Same(candidate, own))
+                .Order(StringComparer.Ordinal));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The account's Temp folder could not be listed: its numbered folders are not looked under, and it still is.
+        }
+
+        var bases = new List<string> { own };
+        var left = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            var folder = Path.Combine(candidate, ".net", program);
+            try
+            {
+                if (!Directory.Exists(folder) || Linked(candidate) || Linked(Path.Combine(candidate, ".net")) || Linked(folder))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<string> here = [.. directories(folder)
+                    .Where(directory => Shaped(env, directory, installDirectory))
+                    .Order(StringComparer.Ordinal)];
+                bases.Add(candidate);
+                left.AddRange(here);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Skipped, and not among the bases looked under; the rest are still read.
+            }
+        }
+
+        return (bases, left);
+
+        static bool Session(string directory) => Path.GetFileName(directory) is { Length: > 0 } name && name.All(char.IsAsciiDigit);
+        static bool Same(string one, string other) =>
+            string.Equals(Path.TrimEndingDirectorySeparator(one), Path.TrimEndingDirectorySeparator(other), StringComparison.OrdinalIgnoreCase);
+        static bool Linked(string directory) => new DirectoryInfo(directory).Attributes.HasFlag(FileAttributes.ReparsePoint);
     }
 
     /// <summary>The variable that moves the directory a single-file build unpacks into away from the host's default.</summary>

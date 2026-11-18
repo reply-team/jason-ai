@@ -84,6 +84,17 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// Where this jason is the one Jason Desktop carries, on macOS and Windows: the application's own placements and the
 /// application itself, which this uninstall takes off too; null for any other installation.
 /// </param>
+/// <param name="ExtractedLibraryBases">
+/// The temporary folders of this account looked under for what builds of this program unpacked, this build's own first:
+/// on Windows, the account's Temp folder where this build's is a session's numbered folder in it, and that folder's other
+/// numbered folders, each where builds unpacked under it. Null where none but this build's own was looked under: elsewhere
+/// than Windows, where the host was told to unpack somewhere else, or where this build's directory is not known.
+/// </param>
+/// <param name="ExtractedLibrariesElsewhere">
+/// What builds of this program unpacked under the bases in <paramref name="ExtractedLibraryBases"/> other than this
+/// build's own, one directory each: named and left, never removed, since it was unpacked from another session of this
+/// account and may be in use there. Null where <paramref name="ExtractedLibraryBases"/> is.
+/// </param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
@@ -106,7 +117,9 @@ public sealed record UninstallPlan(
     string? OtherExtractedLibrariesLeft = null,
     LinkRegistrationPlan? Link = null,
     string? LinkUnreadable = null,
-    DesktopPlan? Desktop = null)
+    DesktopPlan? Desktop = null,
+    IReadOnlyList<string>? ExtractedLibraryBases = null,
+    IReadOnlyList<string>? ExtractedLibrariesElsewhere = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

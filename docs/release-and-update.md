@@ -1903,7 +1903,11 @@ its native libraries inside it, and the first run of each version unpacks those 
 under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
 new version is slower than the next, and it is safe to delete when nothing is running. `jason uninstall` removes its
 own build's directory there; on Windows every other build's too, and elsewhere it counts them and leaves them, since
-a copy running from one holds nothing there. Under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` it removes its own alone.
+a copy running from one holds nothing there. On Windows it also looks under this account's other temporary folders —
+the Temp folder a session's numbered temporary folder is in, and its other numbered folders, as Remote Desktop Session
+Host gives a session one — and names what builds unpacked there as left, removing nothing there: unpacked from another
+session of this account, it is safe to remove once nothing runs from it. Under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` it
+removes its own alone.
 
 ## 11. The code behind this page
 

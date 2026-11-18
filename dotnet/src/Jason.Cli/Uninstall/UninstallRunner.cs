@@ -669,6 +669,13 @@ public static class UninstallRunner
     /// so they go and the plan names each. Elsewhere a running copy holds nothing, so they stay, counted, and the report
     /// says so in the plan's words. The parent goes only if nothing is left in it — the report says why when it stays.
     /// </remarks>
+    /// <summary>
+    /// The line that names a directory a build unpacked under another temporary folder of this account, which this
+    /// uninstall leaves: where it is, and why it stays.
+    /// </summary>
+    internal static string LeftElsewhere(string directory) =>
+        $"Left '{directory}': unpacked from another session of this account, under another of its temporary folders; it is safe to remove once nothing runs from it.";
+
     private static void RemoveExtractedLibraries(
         CliEnvironment env,
         UninstallPlan plan,
@@ -679,6 +686,13 @@ public static class UninstallRunner
         if (plan.ExtractedLibraries is not { } extracted)
         {
             return;
+        }
+
+        // What builds unpacked under this account's other temporary folders is named and left, whatever becomes of this
+        // build's own below: nothing there is removed.
+        foreach (var elsewhere in plan.ExtractedLibrariesElsewhere ?? [])
+        {
+            kept.Add(LeftElsewhere(elsewhere));
         }
 
         try

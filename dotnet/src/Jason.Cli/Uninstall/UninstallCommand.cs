@@ -57,7 +57,11 @@ public static class UninstallCommand
              build of this program unpacked beside them — a running copy holds its own, and each build
              unpacks again on its next start. Elsewhere a running copy holds nothing, so those are counted
              and left, for you to remove once nothing runs from them; and with DOTNET_BUNDLE_EXTRACT_BASE_DIR
-             set they are not looked for. Then, on Windows, each jason-retired-<id> folder an install, an
+             set they are not looked for. On Windows what builds unpacked under this account's other
+             temporary folders - the Temp folder a session's numbered temporary folder is in, and its other
+             numbered folders - is named and left, never removed: unpacked from another session of this
+             account, it is safe to remove once nothing runs from it. Then, on Windows, each
+             jason-retired-<id> folder an install, an
              update or a move renamed a running jason.exe into - in the temporary folder, and beside the
              folder of the default command-line install and of the one this removal takes - once that
              process has ended; one it still runs is named, for you to remove once it has ended
@@ -494,6 +498,11 @@ public static class UninstallCommand
         if (plan.OtherExtractedLibrariesLeft is { } left)
         {
             env.Out.WriteLine($"  NOT touched: {left}");
+        }
+
+        foreach (var elsewhere in plan.ExtractedLibrariesElsewhere ?? [])
+        {
+            env.Out.WriteLine($"  NOT touched: {UninstallRunner.LeftElsewhere(elsewhere)}");
         }
 
         if (plan.Link is { Fate: LinkRegistrationFate.Kept } kept)
