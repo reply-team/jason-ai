@@ -38,8 +38,10 @@ public enum StartWait
 /// <para>
 /// "Answers" is <see cref="DescriptorProcess.Live"/>, the reading the plan and the stop make. "Another process" is
 /// <see cref="Others"/>: one that is neither this one, a runtime that answers on this data directory or an earlier demo's,
-/// nor anything such a runtime started, at any depth. One such process left at the bound, or still running once the runtime
-/// has stopped, is <c>jason_running</c>.
+/// nor, on Windows, anything such a runtime started, at any depth; elsewhere a process's parent is not told
+/// (<see cref="IInstallationRemover.ParentOf"/>), so a runtime's children are counted until its stop ends them. One such
+/// process left at the bound, or still running once the runtime has stopped and its children have had their moment, is
+/// <c>jason_running</c>.
 /// </para>
 /// </remarks>
 internal static class StartInFlight
@@ -79,8 +81,9 @@ internal static class StartInFlight
 
     /// <summary>
     /// The processes running <paramref name="image"/>, in any session, besides this one, a runtime that answers on this data
-    /// directory or on an earlier demo's (<paramref name="demo"/>), and every process any of those started, at any depth: a
-    /// runtime's plugin hosts and an agent's <c>jason</c> calls for its work, which its stop ends.
+    /// directory or on an earlier demo's (<paramref name="demo"/>), and, on Windows, every process any of those started, at any
+    /// depth: a runtime's plugin hosts and an agent's <c>jason</c> calls for its work, which its stop ends. Elsewhere a
+    /// process's parent is not told, and those are counted.
     /// </summary>
     public static IReadOnlyList<int> Others(CliEnvironment env, string image, IEnumerable<string> demo)
     {

@@ -292,6 +292,65 @@ public sealed partial class UninstallCarriedTests
         Assert.Equal(0, registrar.Removals);
     }
 
+    /// <summary>
+    /// Windows, from a terminal: a runtime still starting is waited for, the starter leaves within its moment, the look the
+    /// application's uninstaller makes then finds none, and the uninstall goes on to the end, the runtime stopped. Places
+    /// whose registry keys are never made, so nothing is written under this account's registry.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_Windows_the_starter_leaving_within_its_moment_leaves_the_look_nothing_and_the_uninstall_completes()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The application's uninstaller and its look are Windows'.");
+        var executable = WindowsApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", ".."));
+        var (env, output, remover) = Environment(AbsentKeysPlaces(), executable);
+        var processes = new FakeProcessControl();
+        var clock = new Leaping();
+        var stops = 0;
+        var looks = 0;
+        remover.Looks = (image, _) =>
+        {
+            if (!Same(image, executable))
+            {
+                return [];
+            }
+
+            looks++;
+            if (looks == 3)
+            {
+                _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STARTING"));
+                processes.RunningPids.Add(RuntimeVerbs.Pid);
+            }
+
+            var running = new List<int>();
+            if (looks <= 5)
+            {
+                running.Add(Starter);
+            }
+
+            if (looks < 3 || processes.RunningPids.Contains(RuntimeVerbs.Pid))
+            {
+                running.Add(RuntimeVerbs.Pid);
+            }
+
+            return running;
+        };
+        env = env with { Processes = processes, Clock = clock, HttpHandler = Stopping(processes, () => stops++) };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString() + env.Error);
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(RuntimeVerbs.Pid, report.GetProperty("plan").GetProperty("runtime_pid").GetInt32());
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString() == "A runtime was starting when this began; it answered, and it was stopped.");
+        Assert.True(stops > 0, "the runtime that came up was not stopped through jason runtime stop");
+        Assert.Equal(1, Count(env.Error.ToString()!, "may be starting"));
+        Assert.True(clock.Passed < TimeSpan.FromSeconds(60), $"it waited {clock.Passed}");
+        Assert.Contains($"any-session {executable}", remover.Reads);
+        Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
+    }
+
     private static string ApplicationOf(string executable) =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
 
