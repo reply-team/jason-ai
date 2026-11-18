@@ -528,6 +528,14 @@ function Get-LeftOver {
     @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch '^(extracted|retired)\t' -and (& $counts $_) } | ForEach-Object { "- $_" }))
 }
 
+# ONE GUARD, AT THE ENTRY. Every step but the five that read the machine or this job's own files and write only those
+# files (the listing, the compare, the held list and a leg's begin and end, which the stub trials run) changes the machine
+# or runs a program on it, and runs on a GitHub-hosted runner alone. The reset inside Begin keeps its own refusal.
+$readingSteps = @('Listing', 'Compare', 'Held', 'Begin', 'End')
+if ($Step -cnotin $readingSteps -and ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted')) {
+    Fail "the step $Step changes the machine it runs on, and runs on a GitHub-hosted runner alone"
+}
+
 switch ($Step) {
     'Extracted' {
         # The id of the folder this build's executable extracts its native libraries to, read by running it once with the
@@ -548,8 +556,7 @@ switch ($Step) {
         # Through [Environment]'s pair an installer expands every such entry and writes the whole value back as REG_SZ,
         # which a fresh account's install once did. A runner's own value is whatever its image left, so the job gives it
         # the shape to be kept rather than hoping for one; everything already in it stays. A GitHub-hosted runner's
-        # account alone: no person's Path is ever written here.
-        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail "PathShape writes the account's Path, and runs on a GitHub-hosted runner alone." }
+        # account alone, by the guard at the entry: no person's Path is ever written here.
         $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
         try {
             $entries = @(([string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $_ -and $_ -cne $keptEntry })
@@ -1431,8 +1438,7 @@ switch ($Step) {
         # purging the data, ends the leg.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         # It runs on the account's own home and default data directory, which a moved installation and the previous
-        # release share: a GitHub-hosted runner's alone, never a person's machine.
-        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail 'WayBack runs on the account''s own home and data directory, and on a GitHub-hosted runner alone.' }
+        # release share: a GitHub-hosted runner's alone, by the guard at the entry, never a person's machine.
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         $jason = Join-Path $commandLine 'jason.exe'
         # The person's own quick-start, as the page's going back will say: moved out of the skills folder before step 3, then

@@ -262,6 +262,13 @@ PY
 }
 
 step="${1:-}"; shift || true
+# ONE GUARD, AT THE ENTRY. Every step but the five that read the machine or this job's own files and write only those
+# files (the listing, the compare, the held list and a leg's begin and end, which the stub trials run) changes the machine
+# or runs a program on it, and runs on a GitHub-hosted runner alone. The reset inside begin keeps its own refusal.
+case "$step" in
+    listing|compare|held|begin|end) ;;
+    *) if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "the step '$step' changes the machine it runs on, and runs on a GitHub-hosted runner alone"; fi ;;
+esac
 case "$step" in
 stand-in)
     # A copy of install.sh whose one line naming what a signature must satisfy names this test build's own ad hoc
@@ -759,8 +766,7 @@ way-back)
     previous="$1"; feed="$2"; version="$3"; again="${4:-}"
     case "$again" in ''|again) ;; *) fail "way-back takes 'again' or nothing as its fourth word, not '$again'" ;; esac
     # It runs on the account's own home and default data directory, which a moved installation and the previous release
-    # share: a GitHub-hosted runner's alone, never a person's Mac.
-    if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "way-back runs on the account's own home and data directory, and on a GitHub-hosted runner alone."; fi
+    # share: a GitHub-hosted runner's alone, by the guard at the entry, never a person's Mac.
     # The person's own quick-start, as the page's going back says: named by jason status before step 1, moved out of the
     # skills folder before step 3, then either put back after step 3 (put-back) or kept out while the previous release is
     # installed (keep-out). The one switch is JASON_PROOF_OWN_SKILL_GOING_BACK in ci.yml. Its SKILL.md is read, by its

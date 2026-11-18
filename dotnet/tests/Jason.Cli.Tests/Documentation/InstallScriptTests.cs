@@ -491,6 +491,35 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The proof scripts change the machine they run on: they install, uninstall, write the account's Path and its
+    /// profiles. Each holds every step but the five that only read (the listing, the compare, the held list, a leg's begin
+    /// and end, which stub trials run) behind one guard at its entry, before any step runs: a GitHub-hosted runner, or
+    /// the step refuses. A step added to either script falls under it by default.
+    /// </summary>
+    [Fact]
+    public void The_proof_scripts_change_a_machine_on_a_GitHub_hosted_runner_alone()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var reading = windows.IndexOf("$readingSteps = @('Listing', 'Compare', 'Held', 'Begin', 'End')\n", StringComparison.Ordinal);
+        var guard = windows.IndexOf("if ($Step -cnotin $readingSteps -and ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted')) {", StringComparison.Ordinal);
+        var steps = windows.IndexOf("\nswitch ($Step) {\n", StringComparison.Ordinal);
+        Assert.True(reading >= 0 && guard > reading && steps > guard, "Test-InstallationWindows.ps1 no longer guards every changing step at its entry, before its steps.");
+        Assert.Equal(1, windows.Split("\nswitch ($Step) {\n").Length - 1);
+        var set = System.Text.RegularExpressions.Regex.Match(windows, @"\[ValidateSet\((?<steps>[^)]*)\)\] \[string\] \$Step");
+        Assert.True(set.Success, "Test-InstallationWindows.ps1 no longer names its steps in one ValidateSet.");
+        var named = set.Groups["steps"].Value.Split(',').Select(step => step.Trim().Trim('\'')).ToList();
+        Assert.Subset(named.ToHashSet(), new HashSet<string> { "Listing", "Compare", "Held", "Begin", "End" });
+        Assert.True(named.Count > 5, "Test-InstallationWindows.ps1 names no step that changes the machine.");
+
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var entry = macos.IndexOf("step=\"${1:-}\"; shift || true\n", StringComparison.Ordinal);
+        var exempt = macos.IndexOf("\n    listing|compare|held|begin|end) ;;\n", StringComparison.Ordinal);
+        var refuse = macos.IndexOf("*) if [ \"${GITHUB_ACTIONS:-}\" != true ] || [ \"${RUNNER_ENVIRONMENT:-}\" != github-hosted ]; then fail \"the step '$step' changes the machine it runs on", StringComparison.Ordinal);
+        var first = macos.IndexOf("\nstand-in)\n", StringComparison.Ordinal);
+        Assert.True(entry >= 0 && exempt > entry && refuse > exempt && first > refuse, "test-installation-macos.sh no longer guards every changing step at its entry, before its steps.");
+    }
+
+    /// <summary>
     /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
     /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
     /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
