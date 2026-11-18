@@ -11,6 +11,8 @@
 #
 #   listing <name>                 the places an installation can touch, written to $OUT/<name>.txt
 #   compare <after> <before>       every line equal but those of the data directory and the harness root, which are kept
+#                                  (with previous-profiles: also the empty profiles and the enabled launchd record the
+#                                  previous release's own install and registration leave, each named and said)
 #   install <feed> <version> <script>
 #                                  install.sh from the feed as an agent runs it, in a shell whose PATH does not name
 #                                  ~/.local/bin and whose account shell is zsh, as a person's Mac has it: the place, the
@@ -215,6 +217,17 @@ compare)
                 left="$(printf '%s\n' "$left" | grep -vE "^profile \\$name	" || true)"
                 went="$(printf '%s\n' "$went" | grep -vE "^profile \\$name	absent\$" || true)"
             done
+        fi
+        # And the record the previous release's own registration wrote: its autostart enable loads with -w, which records
+        # the runtime's label as enabled, a record no command run without administrator rights removes, and which this
+        # version's uninstall reads and leaves, since it clears a disabled record alone. Named, said, and not counted; a
+        # disabled record, or any other label, still counts.
+        expected_left="$(printf '%s\n' "$left" | grep -E '^launchd record (gui|user)	ai\.jason\.runtime enabled$' || true)"
+        if [ -n "$expected_left" ]; then
+            say "expected after the previous release's own autostart enable (load -w): $(printf '%s' "$expected_left" | tr '\n\t' '; ') (the earlier release's enabled record, which does nothing)"
+            left="$(printf '%s\n' "$left" | grep -vE '^launchd record (gui|user)	ai\.jason\.runtime enabled$' || true)"
+        else
+            say "no enabled record of the previous release's registration is left in launchd"
         fi
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
