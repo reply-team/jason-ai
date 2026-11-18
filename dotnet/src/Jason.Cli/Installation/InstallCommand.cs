@@ -28,10 +28,12 @@ public static class InstallCommand
     private static readonly string Contract =
         """
         Run by the jason Jason Desktop carries (a version.json beside the executable); any other jason is refused
-        (install_not_carried), and so is a system other than macOS and Windows (install_unsupported). It is
-        idempotent: a second run changes nothing and says so. It starts no process that outlives it, and prints
-        one JSON document (--human: lines), always: a step that fails part-way is named under problems and the
-        steps after it still run.
+        (install_not_carried), and so is a system other than macOS and Windows (install_unsupported), and a
+        jason run elevated, as an administrator or as another account than the session's on Windows, as root on
+        macOS (install_elevated), each before anything is read or written. It is idempotent: a second run
+        changes nothing and says so. It starts no process that outlives it, and prints one JSON document
+        (--human: lines), always: a step that fails part-way is named under problems and the steps after it
+        still run.
 
         Done, in this order, each step reported:
           1. A command-line install of Jason, where one is found, has its runtime drained and stopped: the
@@ -75,7 +77,8 @@ public static class InstallCommand
              the value's kind kept and running programs told (a Path of a kind that is not a string is
              refused and left); and the jason and jason-desktop command files Jason Desktop placed in
              %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is one of the application's
-             shapes.
+             shapes. Where the command-line install of step 1 is held - its runtime would not stop, or the
+             layout refuses - the Path is left as it is and placed is false, as the wrapper is left on macOS.
              The command files go, and step 3 runs, only once the terminal command reads back as placed: the
              wrapper and its lines, or the Path entry. Otherwise the old install stays: where it sat at
              ~/.local/bin/jason the wrapper has taken its executable's place, and elsewhere it still answers.
@@ -113,7 +116,16 @@ public static class InstallCommand
 
         The document: version, executable (this jason); command {runs (what a new terminal finds: the wrapper on
         macOS, the folder on the Path on Windows), placed (whether a new terminal finds this jason, as read back;
-        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back}; skills [{root,
+        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back, finds (the
+        file a terminal opened from now on runs for jason, read once everything is placed and retired: on
+        Windows the machine's Path, then the account's, each expanded as its kind says, the name tried with
+        each PATHEXT extension in order; on macOS the PATH a terminal has, with ~/.local/bin in front where the
+        lines put it there. Where it is neither this jason nor the wrapper running it, a problem names it and
+        what removes it - a command-line install's own `jason update apply`, a package manager's command, or
+        else removing it or taking its folder off the PATH - and it is left as it is. Null where none is found,
+        or the command was not placed), finds_this (whether finds is this jason or the wrapper running it,
+        decided here once: the install scripts read it, compare no path themselves, and end non-zero where it is
+        false; false where finds is null)}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.
@@ -126,6 +138,14 @@ public static class InstallCommand
         holder lets go. A setup the holder runs as its waited child, handed the holder's nonce in
         JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
         is no update folder, or no data directory at all, it takes no lock and makes none.
+
+        From a place that goes away: on macOS, run by the jason of an application opened from its disk image, or
+        of a copy macOS runs from a temporary place of its own (App Translocation) because it was opened where it
+        was downloaded, it refuses with install_vanishing_place before anything is stopped, written or retired:
+        nothing placed, retired or stopped, and no lock taken. The sentence says to move Jason to Applications, or
+        to ~/Applications, and open it there. A volume is that place only where it is read-only, as access(2)
+        answers, which writes nothing; a disk of your own is not refused by its path. Windows is not refused this
+        way: its installer puts the application in place.
 
         Inside a move of a command-line install into Jason Desktop: the setup the move runs is given JASON_MOVE,
         naming the move's record. A jason install that finds it, while that record in <data>/update/move.json
@@ -180,6 +200,14 @@ public static class InstallCommand
                 + "On Linux, install.sh places jason, and `jason skills install` deploys the skills.");
         }
 
+        // An elevated setup would write the terminal command, the skills and a logon registration as that account, or into
+        // another account's profile, which the person's own jason then cannot change: refused before anything is read, its
+        // own version.json and the update's lock included.
+        if (places.Elevated)
+        {
+            return Refuse(env, options.Human, CliErrors.InstallElevated, Elevated(places.Platform));
+        }
+
         if (CarriedExecutable.Of(env) is not { } carried)
         {
             return Refuse(
@@ -189,6 +217,13 @@ public static class InstallCommand
                 "This jason is not the one Jason Desktop carries (no version.json beside it), so nothing was read or written. "
                 + "Run the jason inside the application: on macOS Jason.app/Contents/Resources/bundle/jason, on Windows "
                 + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
+        }
+
+        // From a place that goes away, a mounted disk image or a translocated copy, nothing is set up: before the update's
+        // lock is read or taken, and before anything is stopped, written or retired (VanishingPlace).
+        if (VanishingPlace.Refusal(carried, places) is { } vanishing)
+        {
+            return Refuse(env, options.Human, CliErrors.InstallVanishingPlace, vanishing);
         }
 
         // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`
@@ -279,6 +314,16 @@ public static class InstallCommand
 
         return ExitCodes.Success;
     }
+
+    /// <summary>Why an elevated setup is refused, and the way on: the same run from the account's own ordinary terminal.</summary>
+    private static string Elevated(SetupSystem platform) =>
+        (platform is SetupSystem.Windows
+            ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
+            : "This jason runs as root")
+        + ", and the terminal command, the skills and a logon registration would be set up the same way or in another account's profile, so nothing was read or written. "
+        + (platform is SetupSystem.Windows
+            ? "Run `jason install` again from an ordinary terminal of the account signed in here, not run as an administrator."
+            : "Run `jason install` again from an ordinary terminal, without sudo.");
 
     private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)
     {

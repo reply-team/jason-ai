@@ -18,6 +18,11 @@ public sealed class ToastChannelTests
 {
     private const string UnreadableAnswer = "SENTINEL_TOAST_ANSWER";
 
+    /// <summary>Where the facts below find each Linux program: by its full path, as the search path gave it.</summary>
+    private const string NotifySend = "/usr/bin/notify-send";
+
+    private const string Gdbus = "/usr/bin/gdbus";
+
     private static readonly NotificationMessage Message = NotificationComposer.Compose(2, 0);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -37,7 +42,7 @@ public sealed class ToastChannelTests
         public Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken)
         {
             _launches.Enqueue((launch, bound));
-            var program = launch.Command[0] == "C:\\jason\\jason.exe" ? "toast-host" : launch.Command[0];
+            var program = launch.Command[0] == "C:\\jason\\jason.exe" ? "toast-host" : Path.GetFileName(launch.Command[0]);
             var key = program != "gdbus" ? program
                 : launch.Command.Contains("org.freedesktop.DBus.NameHasOwner") ? "probe"
                 : launch.Command.Contains("org.freedesktop.DBus.ListActivatableNames") ? "activatable"
@@ -215,7 +220,7 @@ public sealed class ToastChannelTests
 
         Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.NotAttempted, NotAttemptedReasons.NoDesktop, detail: "no notification daemon");
         Assert.Equal(
-            [ToastCommands.LinuxDaemonProbe().Command, ToastCommands.LinuxActivatableProbe().Command],
+            [ToastCommands.LinuxDaemonProbe(Gdbus).Command, ToastCommands.LinuxActivatableProbe(Gdbus).Command],
             launcher.Launches.Select(l => l.Launch.Command));
     }
 
@@ -237,7 +242,7 @@ public sealed class ToastChannelTests
 
         Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
         Assert.Equal(
-            [ToastCommands.LinuxDaemonProbe().Command, ToastCommands.LinuxActivatableProbe().Command, ToastCommands.LinuxNotifySend(Message).Command],
+            [ToastCommands.LinuxDaemonProbe(Gdbus).Command, ToastCommands.LinuxActivatableProbe(Gdbus).Command, ToastCommands.LinuxNotifySend(NotifySend, Message).Command],
             launcher.Launches.Select(l => l.Launch.Command));
     }
 
@@ -260,8 +265,8 @@ public sealed class ToastChannelTests
 
         Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
         IReadOnlyList<string>[] launched = which == "probe"
-            ? [ToastCommands.LinuxDaemonProbe().Command, ToastCommands.LinuxNotifySend(Message).Command]
-            : [ToastCommands.LinuxDaemonProbe().Command, ToastCommands.LinuxActivatableProbe().Command, ToastCommands.LinuxNotifySend(Message).Command];
+            ? [ToastCommands.LinuxDaemonProbe(Gdbus).Command, ToastCommands.LinuxNotifySend(NotifySend, Message).Command]
+            : [ToastCommands.LinuxDaemonProbe(Gdbus).Command, ToastCommands.LinuxActivatableProbe(Gdbus).Command, ToastCommands.LinuxNotifySend(NotifySend, Message).Command];
         Assert.Equal(launched, launcher.Launches.Select(l => l.Launch.Command));
     }
 
@@ -286,7 +291,7 @@ public sealed class ToastChannelTests
         }
 
         Assert.Equal(
-            [ToastCommands.LinuxDaemonProbe().Command, ToastCommands.LinuxNotifySend(Message).Command],
+            [ToastCommands.LinuxDaemonProbe(Gdbus).Command, ToastCommands.LinuxNotifySend(NotifySend, Message).Command],
             launcher.Launches.Select(l => l.Launch.Command));
         Assert.All(launcher.Launches, l => Assert.True(l.Launch.Environment.ContainsKey("DBUS_SESSION_BUS_ADDRESS")));
     }
@@ -300,7 +305,7 @@ public sealed class ToastChannelTests
         var (toast, launcher, _) = Channel(Facts(DesktopPlatform.Linux, 2, "notify-send"), new() { ["notify-send"] = _ => Exit(exit, stderr: "no daemon") });
 
         Assert.Equal(result, (await toast.DeliverAsync(Message, "ntf_test", Ct)).Result);
-        Assert.Equal(ToastCommands.LinuxNotifySend(Message).Command, Assert.Single(launcher.Launches).Launch.Command);
+        Assert.Equal(ToastCommands.LinuxNotifySend(NotifySend, Message).Command, Assert.Single(launcher.Launches).Launch.Command);
     }
 
     [Fact]
@@ -315,7 +320,37 @@ public sealed class ToastChannelTests
             });
 
         Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
-        Assert.Equal(ToastCommands.LinuxGdbus(Message).Command, launcher.Launches[^1].Launch.Command);
+        Assert.Equal(ToastCommands.LinuxGdbus(Gdbus, Message).Command, launcher.Launches[^1].Launch.Command);
+    }
+
+    /// <summary>
+    /// On Linux a toast is started by the path the search path gave for its program, never by the bare name again, which
+    /// the operating system would look up anew.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_the_toast_is_started_by_the_path_the_search_path_gave()
+    {
+        var (toast, launcher, _) = Channel(
+            Facts(DesktopPlatform.Linux, 2, "notify-send", "gdbus"),
+            new() { ["probe"] = _ => Exit(0, "(true,)\n"), ["notify-send"] = _ => Exit(0) });
+
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Delivered);
+        Assert.Equal([Gdbus, NotifySend], launcher.Launches.Select(l => l.Launch.Command[0]));
+    }
+
+    /// <summary>
+    /// A Linux desktop whose search path gives neither notify-send nor gdbus by a full path starts nothing, and answers as
+    /// a program that could not be started answers: a launch that failed, worth trying again.
+    /// </summary>
+    [Fact]
+    public async Task A_linux_desktop_with_neither_program_starts_nothing_and_answers_as_a_launch_that_failed()
+    {
+        var facts = Facts(DesktopPlatform.Linux, 2);
+        var launcher = new RecordingLauncher([]);
+        var toast = new ToastChannel(launcher, new Self(), facts, Presence.Desktop, new Logger<ToastChannel>(LoggerFactory.Create(_ => { })));
+
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Failed, code: ToastOutcomes.LaunchFailed, @class: FailureClass.Transient);
+        Assert.Empty(launcher.Launches);
     }
 
     [Fact]

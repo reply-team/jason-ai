@@ -17,6 +17,51 @@ public class ProgramRunnerTests
 
     private static readonly TimeSpan Generous = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// A program named bare is looked up on the search path and started by the full path found there, since the one door
+    /// starts a system tool by its full path alone; a name that is a path is started as it is only where it is a full one.
+    /// </summary>
+    [Fact]
+    public void A_bare_name_is_started_by_the_full_path_the_search_path_gives()
+    {
+        var folder = Directory.CreateTempSubdirectory("jason-runner-");
+        var empty = Directory.CreateTempSubdirectory("jason-runner-");
+        try
+        {
+            var program = Path.Combine(folder.FullName, OperatingSystem.IsWindows() ? "a-tool.exe" : "a-tool");
+            File.WriteAllBytes(program, []);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(program, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            var searchPath = string.Join(Path.PathSeparator, empty.FullName, folder.FullName);
+
+            Assert.Equal(program, ProgramRunners.FullPathOf("a-tool", searchPath, ".COM;.EXE"));
+            Assert.Null(ProgramRunners.FullPathOf("a-tool", empty.FullName, ".COM;.EXE"));
+            Assert.Null(ProgramRunners.FullPathOf("a-tool", null, null));
+            Assert.Equal(program, ProgramRunners.FullPathOf(program, empty.FullName, ".COM;.EXE"));
+            Assert.Null(ProgramRunners.FullPathOf(Path.Combine("bin", "a-tool"), searchPath, ".COM;.EXE"));
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+            empty.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>A name that is a path but not a full one is not started, and that is an answer, as a missing program is.</summary>
+    [Fact]
+    public async Task A_path_that_is_not_a_full_one_answers_rather_than_throwing()
+    {
+        var result = await ProgramRunners.ForThisMachine()
+            .RunAsync(Path.Combine("bin", "jason-no-such-program-exists"), [], null, Generous, Ct);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.True(result.NotStarted);
+        Assert.NotEqual(string.Empty, result.StandardError);
+    }
+
     [Fact]
     public async Task A_program_that_answers_is_read_back_whole()
     {

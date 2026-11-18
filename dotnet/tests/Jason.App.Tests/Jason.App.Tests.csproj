@@ -39,6 +39,8 @@
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
     <!-- The one rule for ending a process from a test, held in one file and linked here: a test ends only a child it can prove is its own. -->
     <Compile Include="../Jason.Runtime.Tests/Integration/OwnedChild.cs" Link="OwnedChild.cs" />
+    <!-- The muxer by its full path, for a row that starts a build's dll through it: the door starts every child by its full path. -->
+    <Compile Include="../Jason.Runtime.Tests/Muxer.cs" Link="Muxer.cs" />
     <!-- The critical tier's attribute and its families, one vocabulary in every test assembly. -->
     <Compile Include="../Jason.Runtime.Tests/Critical.cs" Link="Critical.cs" />
     <!-- The critical tier's table and its guard: each test assembly holds its own column of the table to what it discovers. -->

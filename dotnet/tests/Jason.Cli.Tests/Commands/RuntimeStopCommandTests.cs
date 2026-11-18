@@ -1,5 +1,6 @@
 using System.Net;
 using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Cli.Tests.Process;
 using Jason.Runtime.Tests;
 
@@ -86,23 +87,84 @@ public class RuntimeStopCommandTests
     }
 
     /// <summary>
-    /// The note stands only for a runtime that was stopped: one that refused the shutdown, or acknowledged it and did not
-    /// go, takes it back, as the install routine does. A note that stood before such a stop is not one this stop wrote, and
-    /// a stop that cannot find a runtime writes nothing and leaves what stands.
+    /// A stop on an installer's behalf that did not see the runtime end reads the four cases <c>jason install</c>'s stop
+    /// reads, through the one classifier beside the note (<see cref="StartOwed.After"/>). Here, the runtime ended: it refused
+    /// the shutdown as it went down, so it runs no longer, and the note this stop wrote stands for the start that is owed.
     /// </summary>
     [Fact]
-    public async Task With_start_owed_a_runtime_that_did_not_stop_leaves_no_note()
+    public async Task With_start_owed_a_runtime_that_ended_though_its_stop_failed_keeps_the_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (env, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ =>
+        {
+            processes.RunningPids.Remove(RuntimeVerbs.Pid);
+            return RuntimeVerbs.Response(HttpStatusCode.ServiceUnavailable, Refused);
+        }), processes);
+
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a runtime that ended was left with no note that a start is owed");
+    }
+
+    /// <summary>
+    /// The runtime took the shutdown and had not ended within the stop's wait: it is going down, so the note this stop wrote
+    /// stands for when it has ended.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_runtime_that_took_the_stop_and_had_not_ended_keeps_the_note()
     {
         using var dir = new TempPaths();
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
         var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
-        var (outlives, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"))), stays);
+        var (env, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"))), stays);
 
-        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(outlives, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
-        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a runtime that did not go was said to owe a start");
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
 
-        const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
-        var (refuses, output, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, Refused)), new FakeProcessControl());
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a runtime going down was left with no note that a start is owed");
+    }
+
+    /// <summary>
+    /// The shutdown was sent and its answer never came: whether the runtime took it is not known, so the note this stop wrote
+    /// stands, inert beside a runtime that answers, and its own start or a deliberate stop takes it back. Held for an answer
+    /// that is lost and for a cancel inside the send, which ends the stop with the note as it was written.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_stop_whose_answer_never_came_keeps_the_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (lost, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => throw new HttpRequestException("the connection was reset")), stays);
+
+        Assert.NotEqual(ExitCodes.Success, await RuntimeStopCommand.RunOnBehalfAsync(lost, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a stop whose answer never came took back the note that a start is owed");
+
+        StartOwed.Remove(dir.Paths);
+        using var cancel = new CancellationTokenSource();
+        var (cancelled, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ =>
+        {
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        }), stays);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RuntimeStopCommand.RunOnBehalfAsync(cancelled, human: false, cancel.Token, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a stop cancelled inside its send took back the note that a start is owed");
+    }
+
+    /// <summary>
+    /// The runtime refused the shutdown and goes on running: no start is owed beside it, so the note this stop wrote is taken
+    /// back, and the answer printed is the refusal, unchanged. A stop that cannot find a runtime writes nothing and leaves
+    /// what stands.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_runtime_that_refused_the_stop_and_runs_on_leaves_no_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (refuses, output, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, Refused)), stays);
 
         Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], refuses, Ct));
         Assert.Equal(Refused + System.Environment.NewLine, output.ToString());
@@ -115,6 +177,8 @@ public class RuntimeStopCommandTests
         Assert.Equal(ExitCodes.RuntimeUnavailable, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], idle, Ct));
         Assert.Equal("{\"stopped_at\":\"2026-11-17T15:05:35Z\"}", File.ReadAllText(dir.Paths.StartOwedFile));
     }
+
+    private const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
 
     /// <summary>
     /// The flag takes back only what it wrote. With an older note already standing it writes none and leaves that one,

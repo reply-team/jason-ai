@@ -1296,8 +1296,10 @@ public class StatusCommandTests
         var output = new StringWriter();
         Running(dir);
         var installed = Path.Combine(dir.Paths.Root, "programs", name, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        File.WriteAllText(installed, string.Empty);
 
-        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = Path.GetDirectoryName(installed) }, Ct);
 
         var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
         Assert.Equal(CheckState.Ok, check.State);
@@ -1360,6 +1362,82 @@ public class StatusCommandTests
         var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
         Assert.Equal(CheckState.Ok, check.State);
         Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Another file first by name is what a person and every agent typing jason run, so this jason's readiness says nothing
+    /// of theirs: the path check fails, naming both files, and the installation is not ready. That is so on a machine where
+    /// a build of a checkout answers here and a release answers by name, and the sentence says why in one reading. On macOS
+    /// and Windows, where a machine holds one installation; Linux keeps the check it had (the next row).
+    /// </summary>
+    [Fact]
+    public async Task Another_jason_first_by_name_fails_the_path_check_naming_both()
+    {
+        Assert.SkipWhen(OperatingSystem.IsLinux(), "On Linux the path check is as it was before one installation per machine: the next row holds it.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs")).FullName, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        File.WriteAllText(installed, string.Empty);
+        var found = Path.Combine(dir.Paths.Root, "bin", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.True(check.Required);
+        Assert.Equal(
+            $"'jason' resolves to {found}, not to this jason ({installed}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
+            + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {installed}.",
+            check.Fact,
+            ignoreCase: true);
+        Assert.False(report.Ready);
+    }
+
+    /// <summary>
+    /// On Linux the path check is exactly what it was before one installation per machine: another jason by name than the
+    /// one answering is said, the check passes, and readiness is not touched by it.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_another_jason_first_by_name_is_said_and_the_path_check_passes_as_before()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "On macOS and Windows a machine holds one installation, and the row above holds the failure.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs")).FullName, "jason");
+        File.WriteAllText(installed, string.Empty);
+        var found = Path.Combine(dir.Paths.Root, "bin", "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"'jason' resolves to {found}, which is not the file answering here ({installed}): two installations are on this machine.", check.Fact);
+    }
+
+    /// <summary>
+    /// The application's wrapper running this jason is this jason by name: on macOS a new terminal finds
+    /// <c>~/.local/bin/jason</c>, which runs the image inside the application.
+    /// </summary>
+    [Fact]
+    public async Task The_application_s_wrapper_running_this_jason_is_this_jason_by_name()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "The wrapper is the application's on macOS; a Windows shell never runs a script with no extension by name, and Linux keeps the check it had.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "Jason.app", "bundle")).FullName, "jason");
+        File.WriteAllText(installed, string.Empty);
+        var bin = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "local-bin")).FullName;
+        File.WriteAllText(Path.Combine(bin, "jason"), Jason.Cli.Installation.CommandFiles.Wrapper(installed, null));
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = bin }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"'jason' resolves to {Path.Combine(bin, "jason")}.", check.Fact);
     }
 
     /// <summary>

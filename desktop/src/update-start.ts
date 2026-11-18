@@ -48,10 +48,6 @@ function installation(): { data: string; log: Logger } {
 export interface RequestUpdaterDeps {
     data: string;
     log: Logger;
-    /** A window's: lets it go before the installer runs. A window-less start has none to let go. */
-    beforeInstall?(): Promise<void>;
-    /** A window's: brings back what `beforeInstall` let go when the installer stopped before it finished. */
-    afterRefused?(): Promise<void>;
     changed?(state: UpdateState): void;
 }
 
@@ -68,9 +64,10 @@ export function carriedRuntimeStart(data: string, log: Logger): () => Promise<'s
 }
 
 /**
- * The updater a request is taken by where no window's updater is there: a window-less start's, and the Demo's, which has
- * none of its own. It stops the runtime the application carries as the window's updater does, and an earlier demo's
- * left running, through the carried `jason`; it shows nothing, since the request's file is the answer.
+ * The updater a request is taken by where no window's updater is there: a window-less start's, and a Live window's that
+ * has none of its own. A window that shows the Demo makes none: it refuses every request as `demo_open` (`takeRequest`).
+ * It stops the runtime the application carries as the window's updater does, and an earlier demo's left running, through
+ * the carried `jason`; it shows nothing, since the request's file is the answer.
  */
 export function requestUpdater(deps: RequestUpdaterDeps): Updater {
     const platform = process.platform;
@@ -90,8 +87,8 @@ export function requestUpdater(deps: RequestUpdaterDeps): Updater {
                 () => stopDemoRuntime({ platform, executable, person: paths.data, env }),
             ),
         refused: () => undefined,
-        beforeInstall: deps.beforeInstall ?? (async () => undefined),
-        afterRefused: deps.afterRefused ?? (async () => undefined),
+        beforeInstall: async () => undefined,
+        afterRefused: async () => undefined,
         changed: deps.changed ?? (() => undefined),
     });
     updater.prepare();

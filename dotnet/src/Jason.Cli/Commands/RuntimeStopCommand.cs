@@ -41,7 +41,10 @@ public static class RuntimeStopCommand
     /// The verb with <c>--start-owed</c>: a stop made on behalf of an install or an update, which leaves the note that a
     /// start is owed rather than taking it back, since the runtime it stops is one nobody asked to stop. The note is
     /// written just before the shutdown is asked, so it stands from the stop on, the caller killed during the wait
-    /// included, and taken back where the runtime then did not stop. It takes back only what it wrote: where an older note
+    /// included. Where the stop does not see the runtime end, the note is read as <c>jason install</c>'s stop reads it
+    /// (<see cref="Installation.StartOwed.After"/>): taken back only where the runtime refused the shutdown and goes on
+    /// running, and kept where it ended, took the shutdown and has not ended, or was sent it and no answer came, a cancel
+    /// inside the send among them. It takes back only what it wrote: where an older note
     /// already stands it writes none and leaves that one, whatever the stop comes to. Where no runtime answers to this data directory
     /// nothing is stopped and nothing is written: no start is owed for a runtime that was not running, and a data
     /// directory that is not there is not made.
@@ -72,10 +75,13 @@ public static class RuntimeStopCommand
             }
         }
 
-        var exit = await RunAsync(env, human, cancellationToken, timeout, poll).ConfigureAwait(false);
-        if (exit != ExitCodes.Success && wrote)
+        bool? taken = null;
+        var exit = await RunAsync(env, human, cancellationToken, timeout, poll, answered: answer => taken = answer).ConfigureAwait(false);
+        if (exit != ExitCodes.Success && wrote
+            && Installation.StartOwed.After(env.Paths, env.Processes ?? RuntimeProcessControl.Instance, stopSent: true, taken) == Installation.StopLeft.GoesOn)
         {
-            // Still running, so no start is owed: the note this stop wrote is taken back, and only that one.
+            // It refused the shutdown and goes on running, so no start is owed: the note this stop wrote is taken back, and
+            // only that one.
             Installation.StartOwed.Remove(env.Paths);
         }
         else if (exit == ExitCodes.Success && unwritten is not null)

@@ -13,9 +13,11 @@ the terminal command, the skills and Jason's data are your account's own.
 
 Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
 Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
-script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
-the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
-without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
+script ends by teaching it its role skills (§4). On macOS and Windows they come with Jason Desktop: the set-up reads them
+from the folder beside the `jason` it carries, with no network. On Linux teaching it is a fetch of its own, and so is a
+later `jason skills install` on any system: a release takes its skills from the package of them it published,
+`jason-skills.zip`, over the network, at the tag it was published as. A machine without the network teaches it from a
+checkout instead, with `--source`, which also takes a git repository at a ref;
 only that needs `git`.
 
 You also need a directory you can write to, and — if you want an agent harness taught — that
@@ -89,8 +91,7 @@ That yes covers your own host and nothing else this page marks **Ask first.** Wh
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
 that line names only a host the install script did not give its skills.
 
-This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names, as the
-latest published release has it, so what it says matches what its `latest` addresses install.
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
@@ -250,6 +251,11 @@ to the folder it starts in — read the root's and the project's with a campaign
 | `%LOCALAPPDATA%\Programs\jason-desktop\`; `jason.exe` in its `resources\bundle` | Windows |
 | `~/.local/bin/jason` | Linux |
 
+On macOS and Windows the line runs as you. Jason Desktop and everything it sets up are your account's own, so
+`install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another
+account's than the one signed in — stop before anything is downloaded, and say to run the line again as yourself.
+On Linux a run as root installs as any run does, where it is told to.
+
 Three flags matter on Linux — spelled `--version`, `--install-dir` and `--no-modify-path`. On macOS and Windows
 `--version` (`-Version` for `install.ps1`) is the one taken, from 0.49.0: `--install-dir` and `--no-modify-path`
 (`-InstallDir`, `-NoModifyPath`) are refused there before anything is read or written, since the application has its
@@ -355,7 +361,10 @@ installation itself: one installation, Jason Desktop and the `jason` it carries,
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
 `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from one of
-them, it sets the machine up as the script does (§2): the application's first start of each version runs the
+them, it sets the machine up as the script does (§2), once it is in its place: on macOS, drag Jason into Applications, or
+into the Applications folder in your home, and open it there. Opened from its disk image, or where it was downloaded,
+which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its
+Command Line item says to move Jason first. From its place, the application's first start of each version runs the
 `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each
 is found, and its Command Line item says what that placed
 ([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install
@@ -581,6 +590,13 @@ One installation `path` fails with no line at all: a `jason` in a directory whos
 shell finds that `jason` by name and the agents Jason starts are not given it first on their PATH, whatever else
 answers to `jason`; a line would only write the same split entry again. The check says which character, and the way
 on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
+
+On macOS and Windows, where a machine holds one installation, `path` fails, naming both files, where `jason` by name is
+another file than the `jason` answering — Jason Desktop's own wrapper at `~/.local/bin/jason` counts as the `jason` it
+runs. Typed by name, `jason` runs that other file, so you and every agent use it and not this one, and `ready` is false
+until that file is removed or its folder taken off the PATH. That is also what a published build of this repository
+says, run by its full path while a release answers by name. On Linux the check passes there and says that two
+installations are on this machine.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
 `runtime`, `runtime_version`, `dispatcher`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -68,6 +69,32 @@ public sealed partial class InstallNoticesTests : IDisposable
         var lines = Lines(again.Stdout);
         Assert.Contains(lines, line => line.StartsWith("Jason 0.6.0 is already installed at ", StringComparison.Ordinal));
         AssertEndsWith(LicenceLine("0.6.0"), lines);
+    }
+
+    /// <summary>
+    /// A run as root installs on Linux as any run does: the refusal of root is macOS's alone, where the application and
+    /// what it sets up are the account's own. Here the executable goes where the install directory says, and a root that
+    /// asks for a directory of its own gets it. <c>id</c> is stood in for, answering 0 to <c>-u</c>, so the row runs as
+    /// root by every test the script could make without being root.
+    /// </summary>
+    [Theory]
+    [InlineData(Sh)]
+    [UnsupportedOSPlatform("windows")]
+    public void A_run_as_root_on_linux_installs_as_any_run_does(string script)
+    {
+        var installer = Installer.For(script, _tree);
+        var stubs = _tree.NewDirectory("stubs");
+        var id = Path.Combine(stubs, "id");
+        File.WriteAllText(id, "#!/bin/sh\n[ \"${1:-}\" = -u ] && { echo 0; exit 0; }\nexec /usr/bin/id \"$@\"\n");
+        File.SetUnixFileMode(id, (UnixFileMode)0b111_101_101);
+        installer.Variables["PATH"] = stubs + ":" + Environment.GetEnvironmentVariable("PATH");
+
+        var run = installer.Run(installer.Feed("0.49.0"));
+
+        Assert.True(run.Exit == 0, run.Stderr);
+        Assert.DoesNotContain("root", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains(Lines(run.Stdout), line => line.StartsWith("Installed Jason 0.49.0 to ", StringComparison.Ordinal));
+        Assert.True(File.Exists(installer.Target));
     }
 
     /// <summary>A run that installs nothing says nothing about the licence of what it did not install.</summary>

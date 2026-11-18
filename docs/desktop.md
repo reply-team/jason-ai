@@ -36,7 +36,7 @@ one of 0.49.0 or later that is already there, and moves the command line into it
 | System | File | Notes |
 | --- | --- | --- |
 | Windows on x64 | `jason-desktop-windows-x64-setup.exe` | Run it. It installs for your account, with no administrator rights. The installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are signed. |
-| macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications. Signed, notarized and stapled. |
+| macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications, then open Jason from there: opened from the disk image itself, it sets nothing up and says to move it first. Signed, notarized and stapled. |
 | macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application is updated through the application's own updater, which `jason update apply` there hands the update to, as on Apple silicon. |
 | Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
 | Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
@@ -238,7 +238,7 @@ them on.
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
 - `<data>/desktop/machine-setup.json`: on macOS and Windows, the version `jason install` last completed for at a start or
-  from the Command Line item, and what it reported, which the item shows (below). It counts among the desktop's own
+  from the Command Line item, the place it ran from (the `jason` the application carries), and what it reported, which the item shows (below). It counts among the desktop's own
   records, so a new installation's first start, which writes it, still opens on the demo.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
   holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
@@ -389,7 +389,8 @@ shows it as it was built. It is not an installation and has nothing to do with t
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
 writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
 Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
-reaches the network there: Demo runs no runtime, checks for no update and loads nothing but the application's own files,
+reaches the network there: Demo runs no runtime, checks for no update (a terminal's `jason update apply` is refused while
+it shows, as `demo_open`: leave the demo or quit the desktop, then run it again) and loads nothing but the application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
 
@@ -399,8 +400,8 @@ the desktop's own log), and no record of a mode writes the record as the demo an
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
 
-**The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed runs the
-application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
+**The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed, from the
+place the application runs from, runs the application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
 you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
 installed, and retires an older command-line install of Jason. Then it runs the command line's finishing step,
 `jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
@@ -414,7 +415,13 @@ no network; a data directory it could not list is not done, and runs again at th
 after one that did not get there runs both again; one that fails every time runs again at every start, which the Command
 Line item says in Live and only the desktop's log says in the Demo. Where another `jason` holds the update's lock, a
 `jason install` or an update, its finish or a rollback (`install_in_progress`, `update_in_progress`), nothing is set up and
-nothing recorded, the item says it is left for the next start, and it is no failure. The set-up writes nothing under your
+nothing recorded, the item says it is left for the next start, and it is no failure. On macOS, an application opened from
+its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, runs from a place that goes
+away: `jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything, and the item
+says to move Jason to Applications, or to the Applications folder in your home, and open it there. From such a place the
+set-up is not run: nothing is placed, retired or stopped by it, no finishing step runs, a start that is owed is not paid
+and nothing is recorded, so each start from there asks again, and the first start from Applications sets the machine up, the same version included, since the set-up is recorded by the
+place as well as the version. The set-up writes nothing under your
 data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
 window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,
 and then goes on while it finishes; a runtime start an update in flight refused meanwhile is made again once the set-up

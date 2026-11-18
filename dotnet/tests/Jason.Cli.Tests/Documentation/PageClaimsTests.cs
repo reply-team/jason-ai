@@ -54,6 +54,25 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The page lists the Desktop's refusals a carried update calls retryable, and the list is the set the verb retries,
+    /// read out of the code: a reason added on one side alone is a row the page and the verb tell apart.
+    /// </summary>
+    [Fact]
+    public void The_page_lists_the_desktop_refusals_the_verb_retries()
+    {
+        const string lead = "Retryable where the reason is one that passes: ";
+        var row = Page("docs", "release-and-update.md").Split('\n').Single(line => line.StartsWith("| `update_refused_by_desktop` |", StringComparison.Ordinal));
+        var at = row.IndexOf(lead, StringComparison.Ordinal);
+        Assert.True(at > 0, row);
+        var listed = row[(at + lead.Length)..].TrimEnd().TrimEnd('|').Split(", ").Select(code => code.Trim().Trim('`')).ToList();
+
+        Assert.Equal(listed.Count, listed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            Jason.Cli.Update.CarriedUpdate.RetryableRefusals.Order(StringComparer.Ordinal),
+            listed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// The pages say what an executable another program holds open meets: the update's and the rollback's moves wait for
     /// it, and the wait they name is the uninstall's own rule's. The install page no longer says it of install.ps1, which
     /// moves no executable of its own any more: the application's installer places it.
@@ -745,6 +764,17 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Where a declared program is looked for: only the entries of the search path that are full paths. An entry that is not
+    /// one names wherever the runtime stands, and every program Jason starts by name is started by its full path.
+    /// </summary>
+    [Fact]
+    public void The_plugins_page_says_an_entry_of_the_search_path_that_is_not_a_full_path_is_not_searched() =>
+        Assert.Contains(
+            "Only the entries of the search path that are full paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a program found only there is `executable_missing`.",
+            Flat(Page("docs", "plugins.md")),
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// Wherever a page walks the role skills in, or says what follows an older applier, the UI follows: the install
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>
@@ -824,6 +854,7 @@ public partial class PageClaimsTests
     [Theory]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
+    [Critical(Family.D1, "the prompt hosts were read against")]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector(string page)
     {
         var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason by following");
@@ -839,6 +870,7 @@ public partial class PageClaimsTests
     /// walk after it. Until that reading, the digest stands for a deliberate change.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the agent section hosts were read against")]
     public void The_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(AgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Agent()))));
 
@@ -1786,6 +1818,7 @@ public partial class PageClaimsTests
     /// agent follows on a first run against a real account are in it, and a change to them is a deliberate one.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the golden path's agent section hosts were read against")]
     public void The_golden_path_s_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(GoldenAgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(GoldenAgent()))));
 
@@ -2680,6 +2713,32 @@ public partial class PageClaimsTests
     }
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
+    /// <summary>
+    /// The pages say what an application opened from its disk image does, as the code does it: <c>jason install</c> refuses
+    /// with <c>install_vanishing_place</c> before anything is stopped, written or retired, and the desktop records a set-up
+    /// by its place as well as its version. INSTALL.md said such an install set the machine up as the script does.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/INSTALL.md", "Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first.")]
+    [InlineData("docs/desktop.md", "opened from the disk image itself, it sets nothing up and says to move it first.")]
+    [InlineData("docs/desktop.md", "`jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything")]
+    [InlineData("docs/desktop.md", "From such a place the set-up is not run: nothing is placed, retired or stopped by it, no finishing step runs, a start that is owed is not paid and nothing is recorded, so each start from there asks again")]
+    [InlineData("docs/desktop.md", "the place it ran from (the `jason` the application carries)")]
+    [InlineData("docs/release-and-update.md", "is refused with `install_vanishing_place` before anything is stopped, written or retired, and before the update's lock is read or taken")]
+    [InlineData("desktop/README.md", "`ran_from`, the carried `jason` it ran from")]
+    public void The_pages_say_an_application_opened_from_its_disk_image_sets_nothing_up(string page, string said)
+    {
+        Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
+        Assert.DoesNotContain("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        // The window's own Live start still brings a runtime up from such a place: the page claims only what the set-up does.
+        Assert.DoesNotContain("no runtime started", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
+        Assert.Equal("install_vanishing_place", CliErrors.InstallVanishingPlace);
+
+        using var paths = new TempPaths();
+        var help = Flat(Jason.Cli.Installation.InstallCommand.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)).Description ?? string.Empty);
+        Assert.Contains("it refuses with install_vanishing_place before anything is stopped, written or retired", help, StringComparison.Ordinal);
+    }
+
     private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
 
     /// <summary>A page with the marks of a quoted block taken off, so a sentence quoted across lines reads as one.</summary>

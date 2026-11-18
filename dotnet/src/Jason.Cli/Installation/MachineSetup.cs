@@ -40,7 +40,17 @@ public sealed record InstallOptions(bool Human, bool Roles, string? Retire, Time
 /// <param name="Changed">Whether this run wrote the wrapper or the Path entry.</param>
 /// <param name="Profiles">The profiles this run put <c>install.sh</c>'s two lines into; macOS only.</param>
 /// <param name="TakenBack">The application's Windows command files this run removed from <c>WindowsApps</c>.</param>
-public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack);
+/// <param name="Finds">
+/// The file a terminal opened from now on runs for <c>jason</c>, read as that terminal reads its PATH once this run has
+/// placed the command and retired what it retires (<see cref="NewTerminal"/>): this jason, the wrapper running it, or
+/// another file, which is then a problem naming what removes it. Null where none is found, or the command was not placed.
+/// </param>
+/// <param name="FindsThis">
+/// Whether <paramref name="Finds"/> is this jason or the wrapper running it, decided here once (<see cref="NewTerminal.Runs"/>):
+/// the install scripts read this and never compare paths themselves. False where nothing is found or the command was not
+/// placed.
+/// </param>
+public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack, string? Finds = null, bool FindsThis = false);
 
 /// <summary>One skills root, as this run left it.</summary>
 /// <param name="Root">The folder.</param>
@@ -129,6 +139,13 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(places);
         ArgumentNullException.ThrowIfNull(options);
 
+        // From a place that goes away, nothing at all: the update's door runs this routine with no InstallCommand before it.
+        if (VanishingPlace.Refusal(carried, places) is { } vanishing)
+        {
+            var running = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null ? RuntimeStates.NotRunning : RuntimeStates.Running;
+            return new InstallReport(carried.Version, carried.Executable, null, [], null, null, running, [], [], [vanishing]);
+        }
+
         // The command-line executables an earlier run renamed aside while a process held them, once that process ended: before
         // this run renames any, whose process still runs.
         RetiredSweep.Sweep(places, options.Retire);
@@ -168,7 +185,7 @@ public static class MachineSetup
 
         await run.Step("Placing the terminal command", () =>
         {
-            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand() : run.MacCommand(old, holding);
+            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand(old, holding) : run.MacCommand(old, holding);
             return Task.CompletedTask;
         }).ConfigureAwait(false);
 
@@ -178,6 +195,18 @@ public static class MachineSetup
             {
                 // Only once a new terminal finds this jason, as read back: otherwise the old one is what still answers.
                 retired = run.CommandPlaced ? run.Retire(old) : run.NotRetired(old);
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
+        // wrapper being there is not yet that terminal finding this jason, where another file comes first.
+        if (command is { Placed: true } placed)
+        {
+            await run.Step("Reading what a new terminal finds", () =>
+            {
+                var (finds, findsThis) = run.Finds();
+                command = placed with { Finds = finds, FindsThis = findsThis };
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
@@ -402,19 +431,20 @@ public static class MachineSetup
                 null => "the stop's answer never came",
             };
             env.Error.Write(said.ToString());
-            if (DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null)
+            var left = StartOwed.After(env.Paths, env.Processes ?? RuntimeProcessControl.Instance, stopSent, stopTaken);
+            if (left is StopLeft.Ended)
             {
                 Problems.Add($"Stopping the runtime that ran from {old} did not finish ({why}), though it runs no longer, so nothing of that install was retired in this run. `jason runtime start` starts one; run this again to retire it.");
                 return (RuntimeStates.Stopped, true);
             }
 
-            if (stopTaken is true)
+            if (left is StopLeft.GoingDown)
             {
                 Problems.Add($"The runtime that runs from {old} took the stop and had not ended when stopping it stopped part-way ({why}), so nothing of that install was retired. {env.Paths.StartOwedFile} says a start is owed once it has ended; run this again to retire it.");
                 return (RuntimeStates.WouldNotStop, true);
             }
 
-            var unknown = stopSent && stopTaken is null;
+            var unknown = left is StopLeft.Unknown;
             if (!unknown)
             {
                 StartOwed.Remove(env.Paths);
@@ -612,7 +642,7 @@ public static class MachineSetup
         /// kind kept and running programs told; and the application's own command files in <c>WindowsApps</c> taken back,
         /// each only where it is one of the application's shapes.
         /// </summary>
-        public InstallCommandOutcome? WindowsCommand()
+        public InstallCommandOutcome? WindowsCommand(string? old, bool holding)
         {
             if (!OperatingSystem.IsWindows())
             {
@@ -620,10 +650,20 @@ public static class MachineSetup
                 return null;
             }
 
+            // A command-line install held in this run still answers as jason, and an entry appended after its own would leave
+            // a new terminal finding it, while the report said this jason was placed: the Path is left, as the wrapper is on
+            // macOS, and the scripts end non-zero.
+            if (old is not null && holding)
+            {
+                Problems.Add($"The command-line install at {old} is not retired in this run, so this account's Path was left as it is: a new terminal still finds that jason.");
+                CommandPlaced = false;
+                return new InstallCommandOutcome(Bundle, false, carried.Executable, false, [], []);
+            }
+
             var changed = false;
             try
             {
-                changed = new UserPathValue(places.PathKey).Append(Bundle);
+                changed = places.AccountPathValue.Append(Bundle);
                 Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} was on this account's Path already.");
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -634,7 +674,7 @@ public static class MachineSetup
             // Read back: the entry is what a new terminal finds this jason by, so nothing else answering jason goes without it.
             try
             {
-                var stored = new UserPathValue(places.PathKey).Read();
+                var stored = places.AccountPathValue.Read();
                 CommandPlaced = stored is not null && PathEntry.Carries(stored.Raw, Bundle, PathEntry.ReadAs(stored.Kind != Microsoft.Win32.RegistryValueKind.String));
             }
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -670,6 +710,33 @@ public static class MachineSetup
             }
 
             return new InstallCommandOutcome(Bundle, CommandPlaced, carried.Executable, changed, [], takenBack);
+        }
+
+        /// <summary>
+        /// The file a terminal opened from now on runs for <c>jason</c>, read as it reads its PATH (<see cref="NewTerminal"/>);
+        /// where it is not this jason or the wrapper running it, a problem names it and what removes it, and it is left as
+        /// it is.
+        /// </summary>
+        public (string? Finds, bool FindsThis) Finds()
+        {
+            var finds = Windows
+                ? NewTerminal.FindsOnWindows(places)
+                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: !PathEntry.OnPath(TerminalPath(), places.LocalBin));
+            if (NewTerminal.Runs(finds, carried.Executable))
+            {
+                return (finds, true);
+            }
+
+            if (finds is null)
+            {
+                Problems.Add($"A terminal opened from now on finds no jason by name, as its PATH reads now: {carried.Executable} runs this jason by its full path.");
+                return (null, false);
+            }
+
+            var image = new FileInfo(finds).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? finds;
+            var owner = env.Managers is { } records ? PackageOwner.Of(image, string.Equals(image, finds, PathCase) ? null : finds, records) : null;
+            Problems.Add(NewTerminal.Problem(finds, carried.Executable, CommandLineInstalls.IsJasons(env, places, image), owner));
+            return (finds, false);
         }
 
         // --- retiring the command-line install ---------------------------------------------------------------
