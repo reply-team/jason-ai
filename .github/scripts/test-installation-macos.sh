@@ -10,9 +10,21 @@
 # job uploads, and they are what a person reads.
 #
 #   listing <name>                 the places an installation can touch, written to $OUT/<name>.txt
-#   compare <after> <before>       every line equal but those of the data directory and the harness root, which are kept
+#   compare <after> <before> [mode] [whole]
+#                                  every line equal but those of the data directory and the harness root, which are kept
 #                                  (with previous-profiles: also the empty profiles and the enabled launchd record the
-#                                  previous release's own install and registration leave, each named and said)
+#                                  previous release's own install and registration leave, each named and said; with
+#                                  ran-from-image: the preferences file and the folder this build's jason unpacked, which
+#                                  an application that ran from its disk image leaves, named and said). A line the
+#                                  machine already had at this leg's clean begin is printed under its own heading, by the
+#                                  leg that left it, and not counted; with whole, as the held step runs it, nothing is
+#                                  set aside that way
+#   by-hand <app> <version>        this build's application put in Applications by hand on a clean machine and opened, as
+#                                  a person's start opens it: the set-up ran and completed, a new login shell finds jason,
+#                                  this build's, the profile line, the skills recorded, and the set-up's report saying a
+#                                  new terminal finds this jason. The uninstall is the next step's
+#   ran-from-image-end             the disk image leg's own end: the two things the application that ran from the image
+#                                  left, removed by name where this leg's begin did not find them, logged, never a proof
 #   install <feed> <version> <script> [pinned]
 #                                  install.sh from the feed as an agent runs it, in a shell whose PATH does not name
 #                                  ~/.local/bin and whose account shell is zsh, as a person's Mac has it: the place, the
@@ -35,7 +47,8 @@
 #                                  is a test build, as JASON_PROOF_BUILD says it must (test on CI's build, release on the
 #                                  release's packages). The uninstall is the next step's
 #   requirement <zip>              install.sh's APP_REQUIREMENT against a published application: admitted, and refused for another team
-#   held                           fails when any compare above found the machine after an uninstall not the one before
+#   held                           the machine now compared with the machine before, whole, through no leg's begin; and
+#                                  fails when any compare found the machine after an uninstall not the one before
 #   assess                         Gatekeeper's assessment of the placed application at its final path: accepted, as a
 #                                  notarized Developer ID application (the release's packages alone)
 #   quarantine <feed> <copy>       a copy of the feed whose desktop archives carry the quarantine attribute a browser
@@ -140,6 +153,173 @@ launchd_records() {
 
 # This job's PATH without ~/.local/bin, which the runner's image puts there and a person's terminal does not have.
 plain_path() { printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$HOME/.local/bin" | paste -sd: -; }
+# Every application is started as a person's start starts it, with this PATH (env PATH="$(plain_path)"), the one
+# install.sh runs under: what the application's set-up finds on its own PATH is then the system's, never this job's. The
+# legs that hold what a person's opening of the application sets up - the one on a clean machine and the two over the
+# previous release's bundle - open it through LaunchServices instead (open_app), which gives it the environment a person's
+# application has; a leg uses one of the two ways, never both.
+
+# The application at the bundle $1 opened as a person opens it: through LaunchServices by the bundle's full path, never by
+# name, since an older copy the runner's temporary folder holds may be known by it; what it writes to its standard output
+# and error goes to $2. Prints the process id of the one process then found running that bundle's executable, held to
+# run from that bundle before anything else is read; where none is found within 30 s, or more than one, or the one found
+# runs from elsewhere, it says why in $OUT/open-app-failure.txt and returns 1.
+open_app() {
+    local bundle="$1" log="$2" pattern pids command until
+    : > "$log"
+    rm -f "$OUT/open-app-failure.txt"
+    within 60 "open $bundle" open --stdout "$log" --stderr "$log" "$bundle" || { printf 'open %s failed\n' "$bundle" > "$OUT/open-app-failure.txt"; return 1; }
+    pattern="^$(printf '%s' "$bundle" | sed 's#[][\.*^$+?(){}|]#\\&#g')/Contents/MacOS/Jason( |\$)"
+    until=$(( $(date +%s) + 30 ))
+    pids=""
+    while [ -z "$pids" ] && [ "$(date +%s)" -lt "$until" ]; do
+        sleep 0.5
+        pids="$(pgrep -f -- "$pattern" || true)"
+    done
+    if [ -z "$pids" ]; then printf 'no process ran %s/Contents/MacOS/Jason within 30 s of open; the Jason processes: %s\n' "$bundle" "$(jason_processes | tr '\n' ';')" > "$OUT/open-app-failure.txt"; return 1; fi
+    if [ "$(printf '%s\n' "$pids" | grep -c .)" != 1 ]; then printf 'more than one process runs %s/Contents/MacOS/Jason: %s\n' "$bundle" "$(printf '%s' "$pids" | tr '\n' ' ')" > "$OUT/open-app-failure.txt"; return 1; fi
+    command="$(ps -o command= -p "$pids" 2>/dev/null || true)"
+    case "$command" in
+        "$bundle/Contents/MacOS/Jason"|"$bundle/Contents/MacOS/Jason "*) ;;
+        *) printf 'the process %s found after open runs %s, not %s/Contents/MacOS/Jason\n' "$pids" "$command" "$bundle" > "$OUT/open-app-failure.txt"; return 1 ;;
+    esac
+    printf '%s\n' "$pids"
+}
+
+# The environment LaunchServices gives an application opened by open is launchd's, not this job's, and its SHELL is the
+# account's login shell, by which jason install picks the profiles it writes. The legs that open the application hold the
+# product to the shell the account really has, never to one this job sets: nothing here changes launchd's environment.
+# Said before each opening: the account's login shell, and launchd's SHELL and PATH, as they are.
+say_open_environment() {
+    say "before open: the account's login shell is '$(account_shell)'; launchd's SHELL is '$(launchctl getenv SHELL 2>/dev/null || true)', its PATH '$(launchctl getenv PATH 2>/dev/null || true)'"
+}
+# The account's login shell, as the directory service records it (dscl's UserShell).
+account_shell() { dscl . -read "/Users/$USER" UserShell 2>/dev/null | sed -n 's/^UserShell:[[:space:]]*//p' | head -n 1 || true; }
+# The profiles the product names for the shell $1, one per line, by the product's own table: the two functions install.sh
+# defines and carries verbatim from the command line's PathEntry (login_profile and interactive_profile; a test holds the
+# copy to the source), run here with SHELL set to $1 - the file a login shell of it reads, then the file its every
+# interactive shell reads, where it has one.
+product_profiles() {
+    local functions
+    functions="$(sed -n '/^login_profile() {$/,/^}$/p; /^interactive_profile() {$/,/^}$/p' install/install.sh)"
+    [ -n "$functions" ] || return 1
+    ( eval "$functions"; SHELL="$1"; login_profile; interactive_profile )
+}
+# A login shell as a new terminal of the account starts one: the shell $1, in the environment the system gives.
+fresh_in() { env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL="$1" TERM=xterm-256color PATH=/usr/bin:/bin:/usr/sbin:/sbin "$1" -l -i -c "$2" 2>/dev/null; }
+# The SHELL in the environment of the process $1, as ps reads it; empty where it names none.
+app_shell_of() { ps -E -ww -o command= -p "$1" 2>/dev/null | grep -oE '(^| )SHELL=[^ ]*' | head -n 1 | sed 's/^ *SHELL=//' || true; }
+# The profiles the set-up's report says it wrote the lines into (its command's profiles), from the set-up record $1, one
+# per line in the file $2.
+report_profiles() {
+    python3 -c 'import json,sys
+command = (json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}).get("command") or {}
+print("\n".join(str(item) for item in (command.get("profiles") or [])))' "$1" > "$2"
+}
+# The terminal command as the account's own new terminal finds it, after a start of this build's application: the
+# account's login shell as a login shell finds ~/.local/bin/jason saying the version $1, alone by that name; and the
+# profiles the product names for that shell carry its line. For a shell that is neither zsh nor bash the product names
+# ~/.profile alone, and its promise is the terminal, not a file: there the profiles the set-up's report says it wrote (the
+# file $2, where there is one) are said, and the leg fails only where that login shell does not find jason.
+hold_account_terminal() {
+    local version="$1" written="${2:-}" shell found every profile listed
+    shell="$(account_shell)"
+    [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
+    found="$(within 60 "a new login shell of $shell finding jason" fresh_in "$shell" 'command -v jason; jason --version')" || true
+    every="$(within 60 "a new login shell of $shell listing every jason" fresh_in "$shell" 'which -a jason')" || true
+    case "${shell##*/}" in
+        zsh|bash)
+            [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell of $shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+            [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell of $shell does not say $version: $found"
+            [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell of $shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+            listed="$(product_profiles "$shell")" || fail "the product's profile functions could not be read from install/install.sh"
+            [ -n "$listed" ] || fail "the product names no profile for $shell"
+            while IFS= read -r profile; do
+                [ -n "$profile" ] || continue
+                grep -qx '# added by jason install' "$profile" 2>/dev/null || fail "$profile, which the product names for $shell, carries no line for ~/.local/bin"
+            done <<< "$listed"
+            say "the account's login shell is $shell: a new login shell of it finds jason at $WRAPPER alone by that name, saying $version, and the profiles the product names for it carry the line: $(printf '%s' "$listed" | tr '\n' ' ')"
+            ;;
+        *)
+            say "the account's login shell is $shell, neither zsh nor bash: the profiles the set-up's report says it wrote: $(if [ -n "$written" ] && [ -s "$written" ]; then while IFS= read -r profile; do [ -n "$profile" ] || continue; printf '%s (%s) ' "$profile" "$(if grep -qx '# added by jason install' "$profile" 2>/dev/null; then echo 'carries the line'; else echo 'no line'; fi)"; done < "$written"; else printf 'none read'; fi)"
+            [ -n "$(printf '%s\n' "$found" | sed -n 1p)" ] || fail "a new login shell of $shell does not find jason"
+            say "a new login shell of $shell finds jason at $(printf '%s\n' "$found" | sed -n 1p), saying $(printf '%s\n' "$found" | sed -n 2p); every jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+            ;;
+    esac
+}
+
+# The desktop's machine_setup_finished lines of a start, counted; and whether the last one completed.
+start_setup_finishes() {
+    python3 -c 'import glob,json,os,sys
+lines = []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == "machine_setup_finished" and event.get("Why") == "start":
+            lines.append(event)
+last = lines[-1] if lines else {}
+print("%d %s" % (len(lines), str(last.get("Completed", "none")).lower()))' "$DATA"
+}
+
+# The desktop's log of this job's data directory, copied whole to $OUT/$1 where there is one: kept before an assertion on
+# a start can fail, and again on the way out.
+keep_desktop_log() {
+    [ -n "$(ls "$DATA"/logs/desktop-*.jsonl 2>/dev/null || true)" ] || return 0
+    cat "$DATA"/logs/desktop-*.jsonl > "$OUT/$1" 2>/dev/null || true
+}
+
+# The desktop's machine_setup_ran lines of a start, counted; and the last one's exit and whether it completed.
+start_setup_runs() {
+    python3 -c 'import glob,json,os,sys
+lines = []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == "machine_setup_ran" and event.get("Why") == "start":
+            lines.append(event)
+last = lines[-1] if lines else {}
+print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Completed", "none")).lower()))' "$DATA"
+}
+
+# The leg a line of $OUT/inherited.txt, or of the file $2, is attributed to, for the line $1 ("+ <line>" or "- <line>");
+# nothing where none.
+inherited_by() {
+    local rows="${2:-$OUT/inherited.txt}"
+    [ -f "$rows" ] || return 0
+    LINE="$1" awk -F '\t' '{ leg = $1; sub(/^[^\t]*\t/, ""); if ($0 == ENVIRON["LINE"]) { print leg; exit } }' "$rows"
+}
+
+# What a clean leg's begin found and excused: the machine then, listed to $OUT/leg-start.txt, against the machine before,
+# the data directory and the harness root aside. One row per line, "<leg><TAB><+ or -> <line>", in $OUT/inherited.txt;
+# a line recorded at an earlier begin keeps the leg it was attributed to there, and a new one is attributed to $1, the leg
+# that last changed the machine. The held step reads the machine at the end the same way: listed to $OUT/$2.txt, its rows
+# in the file $3.
+record_inherited() {
+    local by="${1:-no leg, before any leg ran}" listing="$OUT/${2:-leg-start}.txt" rows="${3:-$OUT/inherited.txt}" line was
+    write_listing "$listing" quiet
+    : > "$rows.next"
+    { comm -13 "$OUT/before.txt" "$listing" | sed 's/^/+ /'; comm -23 "$OUT/before.txt" "$listing" | sed 's/^/- /'; } \
+        | { grep -vE '^[+-] (data directory|harness root)' || true; } \
+        | while IFS= read -r line; do
+            was="$(inherited_by "$line")"
+            printf '%s\t%s\n' "${was:-$by}" "$line" >> "$rows.next"
+        done
+    mv "$rows.next" "$rows"
+}
+
+# The two lines an application that ran leaves, by name: its preferences file, and the folder this build's jason unpacked
+# under each id this build's jason extracts to.
+ran_from_image_lines() {
+    printf 'system-kept\tLibrary/Preferences/ai.jasonharness.desktop.plist\n'
+    [ -f "$OUT/this-build-extracted.txt" ] || return 0
+    while IFS= read -r id; do [ -z "$id" ] || printf 'extracted\t%s\n' "$id"; done < "$OUT/this-build-extracted.txt"
+}
 
 wait_until() {
     local seconds="$1" what="$2"; shift 2
@@ -323,6 +503,28 @@ compare)
     kept='^(data directory|harness root)'
     left="$(comm -13 "$before" "$after" | grep -vE "$kept" || true)"
     went="$(comm -23 "$before" "$after" | grep -vE "$kept" || true)"
+    # The held step's compare (final): the lines the previous release's own acts leave - its empty profiles, and the
+    # runtime's enabled or disabled record in launchd - are expected only where the leg that left them, by the attribution
+    # the held step made ($OUT/final-attributed.txt), is a leg of the previous release ($OUT/previous-legs.txt), each named
+    # beside that leg; the same lines left by a leg of this build alone count.
+    if [ "${3:-}" = final ]; then
+        counted_left=""; counted_went=""; excused=""
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            by=""
+            if printf '%s\n' "$line" | grep -qE "^profile \.(zprofile|zshrc)	$(printf '' | shasum -a 256 | cut -d' ' -f1)\$|^launchd record (gui|user)	ai\.jason\.runtime (enabled|disabled)\$"; then by="$(inherited_by "+ $line" "$OUT/final-attributed.txt")"; fi
+            if [ -n "$by" ] && grep -qxF -- "$by" "$OUT/previous-legs.txt" 2>/dev/null; then excused="$excused+ $line  (left by '$by', a leg of the previous release)"$'\n'; else counted_left="$counted_left$line"$'\n'; fi
+        done <<< "$left"
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            by=""
+            if printf '%s\n' "$line" | grep -qE '^profile \.(zprofile|zshrc)	absent$'; then by="$(inherited_by "- $line" "$OUT/final-attributed.txt")"; fi
+            if [ -n "$by" ] && grep -qxF -- "$by" "$OUT/previous-legs.txt" 2>/dev/null; then excused="$excused- $line  (left by '$by', a leg of the previous release)"$'\n'; else counted_went="$counted_went$line"$'\n'; fi
+        done <<< "$went"
+        left="$(printf '%s' "$counted_left" | sed '/^$/d')"
+        went="$(printf '%s' "$counted_went" | sed '/^$/d')"
+        [ -z "$excused" ] || say "expected in $1, each left by a leg of the previous release, as that release's own install, registration and removal leave them: $(printf '%s' "$excused" | tr '\t\n' ' ;')"
+    fi
     # After the previous release's command-line install alone, an expected leftover: the profiles 0.48's install.sh
     # created, which no record of this version's names, emptied of their lines. Said, and not counted.
     if [ "${3:-}" = previous-profiles ] || [ "${3:-}" = previous-own ]; then
@@ -357,6 +559,15 @@ compare)
             fi
         fi
     fi
+    # After this build's application ran from its disk image: the two things an application that ran leaves, which nothing
+    # installed and no product door can take, named and said with their reason, and not counted; anything else left
+    # counts. The leg's own end removes them afterwards (ran-from-image-end).
+    if [ "${3:-}" = ran-from-image ]; then
+        named="$(ran_from_image_lines)"
+        expected_left="$(printf '%s\n' "$left" | grep -xF -f <(printf '%s\n' "$named") || true)"
+        say "expected in $1: $(if [ -n "$expected_left" ]; then printf '%s' "$expected_left" | tr '\t\n' ' ;'; else printf 'neither of the two'; fi) (the application ran from the image: its preferences file and what its jason unpacked; the set-up placed nothing)"
+        left="$(printf '%s\n' "$left" | grep -vxF -f <(printf '%s\n' "$named") || true)"
+    fi
     # An extraction folder gone since the listing against is the removal's taking (this build's own; another release's by
     # that release's own removal): said, and not counted.
     taken_x="$(printf '%s\n' "$went" | grep -E '^extracted	' || true)"
@@ -387,12 +598,34 @@ compare)
         esac
     done <<< "$left"
     left="$(printf '%s' "$rest" | sed '/^$/d')"
+    # The lens: a leg is charged for what it does, against the machine its own clean begin found. A line that machine
+    # already had, recorded there with the leg that left it ($OUT/inherited.txt), is printed under its own heading by that
+    # leg and not counted here; that leg is held to it by its own compare and stays failed by name, and the held step's
+    # whole compare counts it again. One limit: a line this leg leaves that is the same as an inherited one cannot be told
+    # apart from it, and is attributed to the earlier leg.
+    inherited_here=""
+    if [ "${4:-}" != whole ] && [ -s "$OUT/inherited.txt" ]; then
+        counted_left=""; counted_went=""
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            by="$(inherited_by "+ $line")"
+            if [ -n "$by" ]; then inherited_here="$inherited_here+ $line  (left by '$by')"$'\n'; else counted_left="$counted_left$line"$'\n'; fi
+        done <<< "$left"
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            by="$(inherited_by "- $line")"
+            if [ -n "$by" ]; then inherited_here="$inherited_here- $line  (left by '$by')"$'\n'; else counted_went="$counted_went$line"$'\n'; fi
+        done <<< "$went"
+        left="$(printf '%s' "$counted_left" | sed '/^$/d')"
+        went="$(printf '%s' "$counted_went" | sed '/^$/d')"
+        [ -z "$inherited_here" ] || say "inherited at this leg's begin and not counted in $1, each by the leg that left it: $(printf '%s' "$inherited_here" | tr '\t\n' ' ;')"
+    fi
     [ -z "$expected_x" ] || say "expected in $1: $(printf '%s' "$expected_x" | tr '\t\n' ' ;') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)"
     if [ -n "$soft_x" ]; then
         say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
         printf '%s: %s\n' "$1" "$(printf '%s' "$soft_x" | tr '\t\n' ' ;')" >> "$OUT/soft-seen.txt"
     fi
-    { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
+    { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; [ -z "$inherited_here" ] || { echo "inherited at this leg's begin, not counted here (each by the leg that left it):"; printf '%s' "$inherited_here"; }; } > "$diffed" || true
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
@@ -435,8 +668,11 @@ begin)
         if [ "$outcome" = failure ]; then skip_leg "not run: the leg it needs failed, $needed"; else skip_leg "not run: the leg it needs did not run ($outcome), $needed"; fi
         exit 0
     done
+    # A leg that needs the previous release's fetch runs the previous release: recorded, for the held step's compare.
+    for need in "$@"; do [ "${need%=*}" != 'Fetch the previous release' ] || { printf '%s\n' "$LEG" >> "$OUT/previous-legs.txt"; break; }; done
     if [ -n "$clean" ]; then
         [ -f "$OUT/before.txt" ] || { skip_leg 'not run: the leg it needs failed, The machine before anything is installed'; exit 0; }
+        prior="$(cat "$OUT/last-leg.txt" 2>/dev/null || true)"
         found="$(left_over)"
         if [ -n "$found" ]; then
             resets="$OUT/resets.txt"
@@ -507,6 +743,22 @@ begin)
             say "the reset removed: $(printf '%s' "${removed:-nothing}" | tr '\t\n' ' ;'); left: $(printf '%s' "${left:-nothing}" | tr '\t\n' ' ;')"
             if [ -n "$left" ]; then skip_leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $(printf '%s\n' "$left" | tr '\t\n' ' ;')"; exit 0; fi
         fi
+        # The harness root, which every uninstall keeps as its contract says, holds the folders and markers an earlier leg's
+        # installation made, and a new data directory's runtime refuses them as another's: moved aside whole before a clean
+        # leg, never deleted, said in one line and logged, never a proof; on a GitHub-hosted runner alone, as the reset.
+        if [ -e "$ROOT" ] || [ -L "$ROOT" ]; then
+            if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then skip_leg "not run: the harness root $ROOT an earlier leg left is moved aside on a GitHub-hosted runner alone, and this is not one"; exit 0; fi
+            roots="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/harness-roots"
+            mkdir -p "$roots"
+            n=$(( $(find "$roots" -mindepth 1 -maxdepth 1 | wc -l) + 1 ))
+            aside="$roots/$n-after-$(printf '%s' "${prior:-no leg}" | tr -c 'A-Za-z0-9._-' '-' | cut -c 1-80)"
+            if mv "$ROOT" "$aside"; then line="before '$LEG': the harness root $ROOT, left after '${prior:-no leg}', moved aside to $aside"; else line="before '$LEG': the harness root $ROOT, left after '${prior:-no leg}', could not be moved aside to $aside"; fi
+            say "$line"
+            printf '%s\n' "$line" >> "$OUT/resets.txt"
+            if [ -e "$ROOT" ] || [ -L "$ROOT" ]; then skip_leg "not run: the harness root $ROOT could not be moved aside"; exit 0; fi
+        fi
+        # What this begin found and excused, for this leg's compare to set aside by the leg that left it.
+        record_inherited "$prior"
     fi
     # This leg now changes the machine, and is the one a later leg's start holds to what it leaves.
     printf '%s\n' "$LEG" > "$OUT/last-leg.txt"
@@ -520,6 +772,14 @@ end)
 
 held)
     close_leg
+    # The final compare: the machine now against the true machine before, through no leg's begin, so that a line any leg
+    # left counts here whichever leg was charged for it. Each line is attributed as a begin attributes it, the last leg
+    # taking what no begin saw ($OUT/final-attributed.txt); the lines the previous release's own acts leave are expected
+    # only where that leg is one of the previous release, and named beside it.
+    if [ -f "$OUT/before.txt" ]; then
+        record_inherited "$(cat "$OUT/last-leg.txt" 2>/dev/null || true)" final "$OUT/final-attributed.txt"
+        bash "$0" compare final before final whole
+    fi
     [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
     [ ! -s "$OUT/not-run.txt" ] || cat "$OUT/not-run.txt" >> "$OUT/failed-legs.txt"
     [ ! -s "$OUT/failed-legs.txt" ] || fail "$(paste -sd '|' "$OUT/failed-legs.txt" | sed 's/|/ | /g')$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
@@ -575,7 +835,7 @@ install)
     # The terminal command: the wrapper, the profile lines of a zsh account, and a new login shell finds it.
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
-    grep -qx '# added by jason install' "$HOME/.zprofile" || fail "~/.zprofile carries no line for ~/.local/bin"
+    for profile in .zprofile .zshrc; do grep -qx '# added by jason install' "$HOME/$profile" || fail "~/$profile carries no line for ~/.local/bin"; done
     found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
     [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
     [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
@@ -631,7 +891,7 @@ refuse-while-open)
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     record="$HOME/.agents/skills/.jason-skills.json"
     before="$(stat -f %m "$record" 2>/dev/null || echo none)"
-    "$placed/Contents/MacOS/Jason" > "$OUT/window-open.log" 2>&1 &
+    env PATH="$(plain_path)" "$placed/Contents/MacOS/Jason" > "$OUT/window-open.log" 2>&1 &
     window=$!
     # The application's first start sets the machine up (jason install --terminal-path): the skills record and the
     # person's own skill read once the record was written again, or at 60 s.
@@ -655,6 +915,10 @@ refuse-while-open)
     ;;
 
 uninstall-terminal)
+    # With account-shell, as after the legs that open the application: the uninstall typed in a new terminal of the
+    # account's own login shell, and the profiles the product names for that shell held free of the line.
+    by="${1:-}"
+    case "$by" in ''|account-shell) ;; *) fail "uninstall-terminal takes account-shell or nothing, not '$by'" ;; esac
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     # A runtime for the uninstall to stop: the one the application's start left running, once it answers, else one started.
     sleep 5
@@ -663,12 +927,30 @@ uninstall-terminal)
     fi
     within 60 'jason runtime status' "$carried" runtime status > /dev/null 2>&1 || fail "no runtime answers before the uninstall"
     status=0
-    within 300 'jason uninstall from a new login shell' fresh 'jason uninstall --purge-data --yes' > "$OUT/uninstall-terminal.json" || status=$?
+    if [ "$by" = account-shell ]; then
+        shell="$(account_shell)"
+        [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
+        within 300 "jason uninstall from a new login shell of $shell" fresh_in "$shell" 'jason uninstall --purge-data --yes' > "$OUT/uninstall-terminal.json" || status=$?
+    else
+        within 300 'jason uninstall from a new login shell' fresh 'jason uninstall --purge-data --yes' > "$OUT/uninstall-terminal.json" || status=$?
+    fi
     cat "$OUT/uninstall-terminal.json"
     [ "$status" -eq 0 ] || fail "jason uninstall from a new login shell exited with $status"
     [ ! -e "$placed" ] || fail "$placed is left"
     [ ! -e "$WRAPPER" ] || fail "the wrapper is left"
-    if grep -qx '# added by jason install' "$HOME/.zprofile" 2>/dev/null; then fail "~/.zprofile still carries the line"; fi
+    if [ "$by" != account-shell ]; then
+        if grep -qx '# added by jason install' "$HOME/.zprofile" 2>/dev/null; then fail "~/.zprofile still carries the line"; fi
+    else
+        case "${shell##*/}" in
+            zsh|bash)
+                listed="$(product_profiles "$shell")" || fail "the product's profile functions could not be read from install/install.sh"
+                while IFS= read -r profile; do
+                    [ -n "$profile" ] || continue
+                    if grep -qx '# added by jason install' "$profile" 2>/dev/null; then fail "$profile, which the product names for $shell, still carries the line"; fi
+                done <<< "$listed" ;;
+            *) say "the account's login shell $shell is neither zsh nor bash: no profile is held free of the line here; the compare reads them all" ;;
+        esac
+    fi
     [ ! -e "$DATA" ] || fail "~/.jason is left after --purge-data"
     [ -f "$OWN_SKILL/SKILL.md" ] || fail_held "the person's own skill went with the uninstall"
     say "launchd's records after this build's jason uninstall from a new login shell: $(launchd_records | tr '\t\n' ' ;' || true)"
@@ -677,7 +959,7 @@ uninstall-terminal)
 
 uninstall-menu)
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
-    "$placed/Contents/MacOS/Jason" > "$OUT/window-menu.log" 2>&1 &
+    env PATH="$(plain_path)" "$placed/Contents/MacOS/Jason" > "$OUT/window-menu.log" 2>&1 &
     window=$!
     sleep 8
     # What the item starts once the person said Uninstall: the carried jason on its own, waiting for this process, which
@@ -1058,7 +1340,7 @@ over-previous-desktop)
     say "the previous release's Jason Desktop $old placed at $placed from its own download, its signature verified"
 
     # Opened, as a person opens it, then quit, as a person closes it before running a line in a terminal.
-    "$placed/Contents/MacOS/Jason" > "$OUT/over-previous-window.log" 2>&1 &
+    env PATH="$(plain_path)" "$placed/Contents/MacOS/Jason" > "$OUT/over-previous-window.log" 2>&1 &
     window=$!
     sleep 15
     kill -0 "$window" 2>/dev/null || fail "the previous release's Jason Desktop did not stay running: $(tail -n 20 "$OUT/over-previous-window.log")"
@@ -1280,21 +1562,6 @@ if doc.get("next_cursor"): sys.exit("more than one page of campaigns")
 print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap-campaigns.json" > "$2" || fail "the campaigns $1 lists could not be read"
     }
     runtimes_of() { ps -axo pid=,command= | grep -F "$1 runtime run" | grep -v grep || true; }
-    # The desktop's machine_setup_ran lines of a start, counted; and the last one's exit and whether it completed.
-    ran_lines() {
-        python3 -c 'import glob,json,os,sys
-lines = []
-for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
-    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(event, dict) and event.get("EventName") == "machine_setup_ran" and event.get("Why") == "start":
-            lines.append(event)
-last = lines[-1] if lines else {}
-print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Completed", "none")).lower()))' "$DATA"
-    }
     state_of() { if [ -e "$1" ]; then printf '%s %s' "$(shasum -a 256 < "$1" | cut -d' ' -f1)" "$(stat -f %m "$1")"; else printf absent; fi; }
     record="$DATA/desktop/machine-setup.json"
     owed="$DATA/run/start-owed.json"
@@ -1325,8 +1592,12 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     within 300 "codesign verifying the previous release's application" codesign --verify --deep --strict "$placed" || fail "the signature of the previous release's $placed does not verify"
     old="$(version_of "$placed")"
     { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the previous release's application says '$old', where it must be a version before $version"
-    "$placed/Contents/MacOS/Jason" > "$OUT/bundle-swap-previous-window.log" 2>&1 &
-    window=$!
+    # The application is opened in this leg, by LaunchServices, with the environment it gives; the desktop's log kept on the
+    # way out once this build's start has begun.
+    trap '[ -z "${desktop_log:-}" ] || keep_desktop_log "$desktop_log"' EXIT
+    say_open_environment
+    window="$(open_app "$placed" "$OUT/bundle-swap-previous-window.log")" || fail "the previous release's Jason Desktop could not be opened from $placed: $(cat "$OUT/open-app-failure.txt" 2>/dev/null)"
+    say "the previous release's Jason Desktop opened by open from $placed, its process $window running from that bundle, with SHELL '$(app_shell_of "$window")'"
     sleep 30
     kill -0 "$window" 2>/dev/null || fail "the previous release's Jason Desktop did not stay running: $(tail -n 20 "$OUT/bundle-swap-previous-window.log")"
     end_process "$window" "the previous release's Jason Desktop"
@@ -1376,17 +1647,22 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     say "the bundle at $placed swapped for this build's $version, its signature verifying, the previous release's moved out to $swapped"
 
     # This build's application started: its first start's set-up read in its log, looked for for 180 s.
-    ran_before="$(ran_lines)" || fail "the desktop's log could not be read before the start"
+    ran_before="$(start_setup_runs)" || fail "the desktop's log could not be read before the start"
+    finished_before="$(start_setup_finishes)" || fail "the desktop's log could not be read before the start"
     record_before="$(state_of "$record")"
-    "$placed/Contents/MacOS/Jason" > "$OUT/bundle-swap-window.log" 2>&1 &
-    window=$!
+    # The desktop's log kept from the start on, whatever the leg comes to.
+    desktop_log="bundle-swap${mode:+-$mode}-desktop-log.jsonl"
+    say_open_environment
+    window="$(open_app "$placed" "$OUT/bundle-swap-window.log")" || fail "this build's application could not be opened from $placed after the swap: $(cat "$OUT/open-app-failure.txt" 2>/dev/null)"
+    say "this build's application opened by open from $placed, its process $window running from that bundle, with SHELL '$(app_shell_of "$window")'"
     until=$(( $(date +%s) + 180 ))
     ran_after="$ran_before"
     while [ "${ran_after%% *}" -le "${ran_before%% *}" ] && [ "$(date +%s)" -lt "$until" ]; do
         kill -0 "$window" 2>/dev/null || fail "this build's application did not stay running after the swap: $(tail -n 20 "$OUT/bundle-swap-window.log")"
         sleep 2
-        ran_after="$(ran_lines)" || fail "the desktop's log could not be read after the start"
+        ran_after="$(start_setup_runs)" || fail "the desktop's log could not be read after the start"
     done
+    keep_desktop_log "$desktop_log"
     [ "${ran_after%% *}" -gt "${ran_before%% *}" ] || fail "this build's application wrote no machine_setup_ran line at its start within 180 s of it"
     set -- $ran_after
     ran_exit="$2"; ran_completed="$3"
@@ -1394,6 +1670,20 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     [ "$ran_exit" = 0 ] || fail "the set-up at this build's first start after the swap exited $ran_exit"
     # Completed is the routine's own (jason install, which runs offline), never the finishing step's: held in both halves.
     [ "$ran_completed" = true ] || fail "the set-up at this build's first start after the swap did not complete"
+    # The finishing step after the routine, waited for before any jason here runs, since a jason that writes under the data
+    # directory first would make the finishing step find an installation: its line looked for for 120 s. Without
+    # running-cli it completes, and the record is written; with it, it reads the public feed, where a test build has no
+    # release, and its outcome is said.
+    until=$(( $(date +%s) + 120 ))
+    finished_after="$finished_before"
+    while [ "${finished_after%% *}" -le "${finished_before%% *}" ] && [ "$(date +%s)" -lt "$until" ]; do
+        sleep 2
+        finished_after="$(start_setup_finishes)" || fail "the desktop's log could not be read after the start"
+    done
+    keep_desktop_log "$desktop_log"
+    [ "${finished_after%% *}" -gt "${finished_before%% *}" ] || fail "this build's application wrote no machine_setup_finished line at its start within 120 s of the set-up"
+    say "the finishing step after the set-up ran: completed ${finished_after#* }"
+    [ "$mode" = running-cli ] || [ "${finished_after#* }" = true ] || fail "the finishing step after the set-up at this build's first start after the swap did not complete"
     # The runtime: looked for for 120 s from the carried jason, since it starts only once the finishing step returns.
     until=$(( $(date +%s) + 120 ))
     answered=""
@@ -1414,14 +1704,12 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
     ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
-    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
-    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
-    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
-    every="$(within 60 'a new login shell listing every jason' fresh 'which -a jason')" || true
-    [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+    : > "$OUT/bundle-swap-report-profiles.txt"
+    if [ -f "$record" ]; then report_profiles "$record" "$OUT/bundle-swap-report-profiles.txt" || true; fi
+    hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt"
     others="$(ps -axo pid=,command= | grep -E '/jason runtime run' | grep -v grep | grep -vF "$carried runtime run" || true)"
     [ -z "$others" ] || fail "a runtime runs from another jason than $carried: $others"
-    say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory; a new zsh login shell finds it alone by that name, saying $version; and no runtime runs from another jason"
+    say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and no runtime runs from another jason"
 
     # The skills of the hosts found, recorded; the person's own quick-start left alone and named by jason status.
     for root in .claude/skills .agents/skills; do [ -f "$HOME/$root/.jason-skills.json" ] || fail "no skills record in ~/$root after this build's first start"; done
@@ -1548,7 +1836,7 @@ print(count)' "$data"
     }
     ran_before="$(ran_lines)" || fail "the desktop's log could not be read before the open"
     if [ -e "$record" ]; then record_before="$(shasum -a 256 < "$record") $(stat -f %m "$record")"; else record_before=absent; fi
-    "$mounted/Contents/MacOS/Jason" > "$OUT/vanishing-window.log" 2>&1 &
+    env PATH="$(plain_path)" "$mounted/Contents/MacOS/Jason" > "$OUT/vanishing-window.log" 2>&1 &
     window=$!
     until=$(( $(date +%s) + 120 ))
     ran_after="$ran_before"
@@ -1660,7 +1948,7 @@ intel)
     grep -q '"applied_migrations":\["' "$OUT/intel-runtime-status.json" || fail "the runtime reported no applied migrations: $(cat "$OUT/intel-runtime-status.json")"
     say "the x64 application's jason says $version on an Intel Mac, and its runtime started, migrated and answered"
 
-    "$placed/Contents/MacOS/Jason" > "$OUT/intel-window.log" 2>&1 &
+    env PATH="$(plain_path)" "$placed/Contents/MacOS/Jason" > "$OUT/intel-window.log" 2>&1 &
     window=$!
     sleep 10
     kill -0 "$window" 2>/dev/null || fail "Jason Desktop did not stay running on the Intel Mac: $(tail -n 20 "$OUT/intel-window.log")"
@@ -1672,8 +1960,154 @@ intel)
     say "jason uninstall took the x64 application and everything it placed off the Intel Mac"
     ;;
 
+by-hand)
+    # This build's application put in Applications by hand on a clean machine, as a person drags it there, and opened as a
+    # person opens it, with no script before it: its first start sets the machine up. Held: the set-up's routine ran at the
+    # start, exited 0 and completed; a new login shell finds jason at ~/.local/bin/jason, the application's wrapper, and it
+    # says this build, the one jason by that name; the profile line is there; the skills of the hosts found are recorded,
+    # the person's own quick-start left alone and named by jason status; and the set-up's report, in the record the start
+    # writes, says a new terminal finds this jason. The uninstall from a new terminal and the compare are the leg's next
+    # steps.
+    built="$1"; version="$2"
+    [ -d "$built" ] || fail "no application at $built"
+    [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
+    [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
+    place=/Applications
+    [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
+    placed="$place/Jason.app"
+    within 300 "copying this build's application into $place" ditto "$built" "$placed" || fail "this build's application could not be copied to $placed"
+    within 300 "codesign verifying this build's application" codesign --verify --deep --strict "$placed" || fail "this build's application at $placed does not verify"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+    carried="$placed/Contents/Resources/bundle/jason"
+    record="$DATA/desktop/machine-setup.json"
+    say "this build's application $version put at $placed by hand, its signature verifying, with no script run before it"
+
+    # Opened as a person opens it: its first start's set-up read in its log, looked for for 180 s; the desktop's log kept
+    # from here on.
+    ran_before="$(start_setup_runs)" || fail "the desktop's log could not be read before the start"
+    finished_before="$(start_setup_finishes)" || fail "the desktop's log could not be read before the start"
+    desktop_log=by-hand-desktop-log.jsonl
+    trap 'keep_desktop_log "$desktop_log"' EXIT
+    say_open_environment
+    window="$(open_app "$placed" "$OUT/by-hand-window.log")" || fail "this build's application could not be opened from $placed: $(cat "$OUT/open-app-failure.txt" 2>/dev/null)"
+    say "this build's application opened by open from $placed, its process $window running from that bundle, with SHELL '$(app_shell_of "$window")'"
+    until=$(( $(date +%s) + 180 ))
+    ran_after="$ran_before"
+    while [ "${ran_after%% *}" -le "${ran_before%% *}" ] && [ "$(date +%s)" -lt "$until" ]; do
+        kill -0 "$window" 2>/dev/null || fail "this build's application did not stay running: $(tail -n 20 "$OUT/by-hand-window.log")"
+        sleep 2
+        ran_after="$(start_setup_runs)" || fail "the desktop's log could not be read after the start"
+    done
+    keep_desktop_log "$desktop_log"
+    [ "${ran_after%% *}" -gt "${ran_before%% *}" ] || fail "this build's application wrote no machine_setup_ran line at its first start within 180 s of it"
+    set -- $ran_after
+    ran_exit="$2"; ran_completed="$3"
+    say "this build's first start ran the set-up: jason install exited $ran_exit, completed $ran_completed"
+    [ "$ran_exit" = 0 ] || fail "the set-up at this build's first start exited $ran_exit"
+    [ "$ran_completed" = true ] || fail "the set-up at this build's first start did not complete"
+    # The finishing step after the routine, waited for before any jason here runs, since a jason that writes under the data
+    # directory first would make it find an installation and leave the record unwritten: on a clean machine it completes.
+    until=$(( $(date +%s) + 120 ))
+    finished_after="$finished_before"
+    while [ "${finished_after%% *}" -le "${finished_before%% *}" ] && [ "$(date +%s)" -lt "$until" ]; do
+        kill -0 "$window" 2>/dev/null || fail "this build's application did not stay running: $(tail -n 20 "$OUT/by-hand-window.log")"
+        sleep 2
+        finished_after="$(start_setup_finishes)" || fail "the desktop's log could not be read after the start"
+    done
+    keep_desktop_log "$desktop_log"
+    [ "${finished_after%% *}" -gt "${finished_before%% *}" ] || fail "this build's application wrote no machine_setup_finished line at its first start within 120 s of the set-up"
+    say "the finishing step after the set-up ran: completed ${finished_after#* }"
+    [ "${finished_after#* }" = true ] || fail "the finishing step after the set-up at this build's first start did not complete"
+
+    # The set-up's report, as the record the first start writes keeps it: a new terminal finds this jason.
+    [ -f "$record" ] || fail "this build's first start wrote no set-up record at $record, so its report cannot be read"
+    python3 -c 'import json,sys
+command = (json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}).get("command") or {}
+print(command.get("finds") or "")
+print(str(command.get("finds_this")).lower())' "$record" > "$OUT/by-hand-report.txt" || fail "the set-up record at $record could not be read: $(cat "$record")"
+    finds="$(sed -n 1p "$OUT/by-hand-report.txt")"
+    [ "$(sed -n 2p "$OUT/by-hand-report.txt")" = true ] || fail "the set-up's report does not say a new terminal finds this jason: finds '$finds', finds_this $(sed -n 2p "$OUT/by-hand-report.txt")"
+    { [ "$finds" = "$WRAPPER" ] || [ "$finds" = "$carried" ]; } || fail "the set-up's report says a new terminal finds '$finds', neither $WRAPPER nor $carried"
+    say "the set-up's report, in the record at $record, says a new terminal finds $finds, this jason"
+
+    # The terminal command: the application's wrapper; the account's own new terminal finds it (hold_account_terminal).
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER after this build's first start"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    report_profiles "$record" "$OUT/by-hand-report-profiles.txt" || fail "the profiles in the set-up record at $record could not be read"
+    hold_account_terminal "$version" "$OUT/by-hand-report-profiles.txt"
+    say "~/.local/bin/jason is the application's wrapper running $carried"
+
+    # The skills of the hosts found, recorded; the person's own quick-start left alone and named by jason status.
+    for root in .claude/skills .agents/skills; do [ -f "$HOME/$root/.jason-skills.json" ] || fail "no skills record in ~/$root after this build's first start"; done
+    within 120 'jason status' "$carried" status > "$OUT/by-hand-status.json" 2>/dev/null || true
+    if grep -q "person's own" "$OUT/failed-legs.txt" 2>/dev/null; then
+        say "the skills of Claude Code and Codex are recorded in both folders; the person's own quick-start was lost in a leg before, as recorded, so this start's handling of it is not seen"
+    elif [ -f "$OWN_SKILL/SKILL.md" ]; then
+        [ "$(cat "$OWN_SKILL/SKILL.md")" = "a person's own skill" ] || fail "the person's own skill at $OWN_SKILL was changed by this build's first start"
+        if grep -q '"quick-start/' "$HOME/.agents/skills/.jason-skills.json"; then fail "the record in ~/.agents/skills claims the person's own quick-start"; fi
+        names_own_skill "$OUT/by-hand-status.json" "$OWN_SKILL" || fail "jason status does not name the person's own quick-start, $OWN_SKILL, as a folder Jason did not deploy"
+        say "the skills of Claude Code and Codex are recorded in both folders, and the person's own quick-start is left alone, named by jason status"
+    else
+        say "the skills of Claude Code and Codex are recorded in both folders; the person's own quick-start is gone already, so this start's handling of it is not seen"
+    fi
+
+    say "jason status after this build's first start, whole:"
+    cat "$OUT/by-hand-status.json"
+    end_process "$window" "this build's application"
+    pkill -f "$placed/Contents/MacOS/" 2>/dev/null || true
+    sleep 3
+    ;;
+
+ran-from-image-end)
+    # The disk image leg's own end, on every way out of the leg once it ran: the two things the application that ran from
+    # the image leaves, which no product door can take since nothing was installed, removed by name - its preferences
+    # through the preferences system first (which would otherwise write back a copy it holds), then the file where it is a
+    # file of its own and not a link; and each folder this build's jason unpacked, by this build's id alone. Each only where
+    # this leg's begin did not find it, so nothing an earlier leg left is taken here. Logged in $OUT/leg-ends.txt, never a
+    # proof; the next leg's begin holds the machine it hands on to the machine before. Once per leg.
+    done_mark="$OUT/ran-from-image-ended"
+    [ ! -e "$done_mark" ] || exit 0
+    : > "$done_mark"
+    started="$OUT/leg-start.txt"
+    [ -f "$started" ] || fail "no listing of this leg's begin at $started, so what this leg left cannot be told from what it found"
+    log="$OUT/leg-ends.txt"
+    pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
+    preferences="$HOME/Library/Preferences/ai.jasonharness.desktop.plist"
+    if grep -qxF "$(printf 'system-kept\tLibrary/Preferences/ai.jasonharness.desktop.plist')" "$started"; then
+        line="  $preferences: there at this leg's begin, left"
+    elif [ -L "$preferences" ]; then
+        line="  $preferences: a link, left"
+    elif [ -f "$preferences" ]; then
+        status=0
+        ( within 10 'defaults delete ai.jasonharness.desktop' defaults delete ai.jasonharness.desktop > "$OUT/ran-from-image-defaults.txt" 2>&1 ) || status=$?
+        if [ -f "$preferences" ] && [ ! -L "$preferences" ]; then rm -f "$preferences" || true; fi
+        if [ -e "$preferences" ]; then line="  $preferences: defaults delete ended $status, and the file could not be removed"; else line="  $preferences: removed (defaults delete ended $status)"; fi
+    else
+        line="  $preferences: not there"
+    fi
+    printf '%s\n' "the leg 'Open this build from its disk image, then eject it', at its end:" "$line" >> "$log"
+    echo "$line"
+    if [ -f "$OUT/this-build-extracted.txt" ]; then
+        while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            folder="$HOME/.net/jason/$id"
+            case "$id" in *[!A-Za-z0-9]*) line="  $folder: not an id of the shape a build's is, left" ;; *)
+                if grep -qxF "$(printf 'extracted\t%s' "$id")" "$started"; then line="  $folder: there at this leg's begin, left"
+                elif [ -L "$folder" ]; then line="  $folder: a link, left"
+                elif [ -d "$folder" ]; then
+                    if rm -rf "$folder"; then line="  $folder: removed"; else line="  $folder: could not be removed"; fi
+                else line="  $folder: not there"; fi ;;
+            esac
+            printf '%s\n' "$line" >> "$log"
+            echo "$line"
+        done < "$OUT/this-build-extracted.txt"
+    fi
+    say "the disk image leg's own end removed by name what the application that ran from the image left, where this leg's begin did not find it (in leg-ends.txt; not a proof)"
+    ;;
+
 *)
-    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|vanishing-place|assess|quarantine|intel ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|bundle-swap|by-hand|vanishing-place|ran-from-image-end|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac

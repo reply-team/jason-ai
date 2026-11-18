@@ -2609,6 +2609,26 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-pinned-uninstall before
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # This build's application put in Applications by hand on a clean machine, as a person drags it there, and opened as
+      # a person opens it, with no script before it: its first start's set-up ran and completed, a new login shell finds
+      # jason, this build's, the profile line is there, the skills are recorded, and the set-up's report says a new
+      # terminal finds this jason; then the installation taken off from a new terminal and the listing held to the machine
+      # before.
+      - name: This build's application, put in Applications by hand on a clean machine and opened, puts jason in a new terminal
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          LEG: "This build's application, put in Applications by hand on a clean machine and opened, puts jason in a new terminal"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh by-hand desktop/dist/mac-arm64/Jason.app "$VERSION"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal account-shell
+          bash .github/scripts/test-installation-macos.sh listing after-by-hand-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-by-hand-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
@@ -2718,7 +2738,7 @@ jobs:
           bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
           [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh bundle-swap "$PREVIOUS" desktop/dist/mac-arm64/Jason.app "$VERSION"
-          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal account-shell
           bash .github/scripts/test-installation-macos.sh listing after-bundle-swap-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
@@ -2736,14 +2756,16 @@ jobs:
           bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
           [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh bundle-swap "$PREVIOUS" desktop/dist/mac-arm64/Jason.app "$VERSION" running-cli
-          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal account-shell
           bash .github/scripts/test-installation-macos.sh listing after-bundle-swap-cli-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-cli-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # Opened from its disk image: this build's application in a read-only image, its jason install refused with
       # install_vanishing_place, the application opened from the image and quit, the image ejected; nothing set up, and the
-      # listing held to the machine before.
+      # listing held to the machine before, with the two things an application that ran leaves named as expected: its
+      # preferences file and what its jason unpacked. The leg's own end removes those two, on every way out of it once it
+      # ran, logged and never a proof.
       - name: Open this build from its disk image, then eject it
         if: ${{ !cancelled() }}
         timeout-minutes: 20
@@ -2753,9 +2775,11 @@ jobs:
         run: |
           bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
           [ ! -e "$OUT/skip" ] || exit 0
+          trap 'bash .github/scripts/test-installation-macos.sh ran-from-image-end' EXIT
           bash .github/scripts/test-installation-macos.sh vanishing-place desktop/dist/mac-arm64/Jason.app
           bash .github/scripts/test-installation-macos.sh listing after-vanishing-place
-          bash .github/scripts/test-installation-macos.sh compare after-vanishing-place before
+          bash .github/scripts/test-installation-macos.sh compare after-vanishing-place before ran-from-image
+          bash .github/scripts/test-installation-macos.sh ran-from-image-end
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # The previous release's own uninstall, for what it leaves in launchd's records: said, and its listing kept.

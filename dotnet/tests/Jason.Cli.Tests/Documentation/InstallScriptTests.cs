@@ -549,6 +549,60 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// A person's start of Jason Desktop gets the PATH a terminal is given, which does not name ~/.local/bin, where the job's
+    /// runner puts it on every step's. An application started with the job's PATH finds on it whatever the job put there,
+    /// and its set-up reads a machine no person has, so the macOS proof script starts every application with the PATH
+    /// install.sh already runs under: <c>env PATH="$(plain_path)"</c> before the application's executable, on the line
+    /// that starts it.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_script_starts_every_application_with_a_terminals_PATH()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
+        var starts = lines
+            .Select((line, at) => (line, at))
+            .Where(item => Regex.IsMatch(item.line, @"/Contents/MacOS/Jason""?\s*(?:>|&|$)") && !Regex.IsMatch(item.line, @"^\s*#"))
+            .ToList();
+        Assert.NotEmpty(starts);
+        var plain = starts
+            .Where(item => !Regex.IsMatch(item.line, @"^\s*env PATH=""\$\(plain_path\)"" ""\$[a-z_]+/Contents/MacOS/Jason"" >"))
+            .Select(item => $"line {item.at + 1}: {item.line.Trim()}")
+            .ToList();
+        Assert.True(plain.Count == 0, "test-installation-macos.sh starts an application with the job's own PATH: " + string.Join("; ", plain));
+    }
+
+    /// <summary>
+    /// The legs that hold what a person's opening of Jason Desktop sets up - this build put in Applications by hand, and the
+    /// previous release's bundle replaced by this build's - open the application through LaunchServices, which gives it the
+    /// environment a person's application has; every other leg starts it with a terminal's PATH, and no leg does both. The
+    /// opening is by the bundle's full path, never by name, since LaunchServices may know an older copy the runner's
+    /// temporary folder holds, and the one helper that opens it holds the process it then finds to run from that bundle.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_script_opens_the_application_by_its_bundle_in_the_legs_of_a_persons_opening_alone()
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var steps = Regex.Matches(text, @"(?m)^(?<name>[a-z][a-z0-9-]*)\)\n(?<body>.*?)\n    ;;$", RegexOptions.Singleline)
+            .ToDictionary(match => match.Groups["name"].Value, match => match.Groups["body"].Value);
+        string[] opening = ["by-hand", "bundle-swap"];
+        var wrong = opening.Where(name => !steps.ContainsKey(name)).Select(name => $"no step {name}").ToList();
+        foreach (var (name, body) in steps)
+        {
+            var opens = Regex.IsMatch(body, @"(?m)^\s*window=""\$\(open_app ""\$[a-z_]+"" ");
+            var starts = Regex.IsMatch(body, @"(?m)^\s*env PATH=""\$\(plain_path\)"" ""\$[a-z_]+/Contents/MacOS/Jason""");
+            if (opening.Contains(name) && !opens) wrong.Add($"{name} does not open the application with open_app");
+            if (opening.Contains(name) && starts) wrong.Add($"{name} also starts the application with a terminal's PATH");
+            if (!opening.Contains(name) && opens) wrong.Add($"{name} opens the application with open_app, which only the legs of a person's opening do");
+        }
+        var byName = text.Split('\n').Where(line => !line.TrimStart().StartsWith('#') && Regex.IsMatch(line, @"\bopen\s+-[ab]\b")).ToList();
+        wrong.AddRange(byName.Select(line => $"opens by name: {line.Trim()}"));
+        var opened = Regex.Matches(text, @"(?m)^\s*within \d+ ""open \$bundle"" open --stdout ""\$log"" --stderr ""\$log"" ""\$bundle"" ").Count;
+        if (opened != 1) wrong.Add($"open_app's one open by the bundle's path is found {opened} times");
+        if (!text.Contains("\"$bundle/Contents/MacOS/Jason\"|\"$bundle/Contents/MacOS/Jason \"*) ;;", StringComparison.Ordinal)) wrong.Add("open_app does not hold the process it finds to run from the bundle it opened");
+        Assert.True(wrong.Count == 0, string.Join("; ", wrong));
+    }
+
+    /// <summary>
     /// The proof scripts change the machine they run on: they install, uninstall, write the account's Path and its
     /// profiles. Each holds every step but the five that only read (the listing, the compare, the held list, a leg's begin
     /// and end, which stub trials run) behind one guard at its entry, before any step runs: a GitHub-hosted runner, or
