@@ -1049,6 +1049,225 @@ over-previous-desktop)
     say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
     ;;
 
+over-running-cli)
+    # The one line over a running command-line install of the previous release: its own install.sh from its own assets,
+    # a runtime running, its login start registered and one campaign made; then this build's install.sh, as an agent runs
+    # it, with that runtime still running. Asserted: the application at this version; ~/.local/bin/jason the
+    # application's wrapper, naming no data directory, and a new login shell finding it; jason install's report saying the
+    # old runtime stopped and naming the retired executable; the command-line install retired, no runtime running from it;
+    # a runtime running from the carried jason, which install.sh starts again; the login registration naming the carried
+    # jason; and the campaigns the same, by id. The uninstall and the compare after it are the leg's next steps.
+    previous="$1"; feed="$2"; version="$3"; script="$4"
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    # The ids of the campaigns a jason lists, archived included, sorted, one a line, into a file: one page of a thousand;
+    # more than one page is refused.
+    campaign_ids() {
+        within 120 "jason campaign list with $1" "$1" campaign list --include-archived --limit 1000 > "$OUT/over-running-cli-campaigns.json" || fail "jason campaign list with $1 failed"
+        python3 -c 'import json,sys
+doc = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.lstrip().startswith("{")][-1])
+if doc.get("next_cursor"): sys.exit("more than one page of campaigns")
+print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/over-running-cli-campaigns.json" > "$2" || fail "the campaigns $1 lists could not be read"
+    }
+    # A member of jason install's report, the last document install.sh printed that has a command and a runtime.
+    report_field() { python3 -c 'import json,sys
+doc = None
+for line in open(sys.argv[1]).read().splitlines():
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        found = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(found, dict) and "command" in found and "runtime" in found:
+        doc = found
+if doc is None:
+    sys.exit("no report of jason install")
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else doc)' "$@"; }
+    # The processes whose command line runs a runtime from the file named.
+    runtimes_of() { ps -axo pid=,command= | grep -F "$1 runtime run" | grep -v grep || true; }
+    within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/over-running-cli-previous.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/over-running-cli-previous.txt")"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
+    # The previous release, held: an empty or this build's own version would prove this build over itself.
+    { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the previous release's jason says '$old', where it must be a version before $version"
+    within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
+    within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+    within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before the one line' > "$OUT/over-running-cli-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/over-running-cli-campaign.json")"
+    made="$(read_field "$OUT/over-running-cli-campaign.json" id)" || fail "the campaign made under the previous release has no id: $(cat "$OUT/over-running-cli-campaign.json")"
+    [ -n "$made" ] || fail "the campaign made under the previous release has no id: $(cat "$OUT/over-running-cli-campaign.json")"
+    campaign_ids "$WRAPPER" "$OUT/over-running-cli-ids-before.txt"
+    grep -qx "$made" "$OUT/over-running-cli-ids-before.txt" || fail "the campaign $made made under the previous release is not listed"
+    within 60 "the previous release's runtime answering" "$WRAPPER" runtime status > /dev/null || fail "no runtime answers under the previous release before the one line"
+    # What the retirement later takes, held first to be there: the notice files, and a runtime from $WRAPPER found by the
+    # same match that later finds none, so that a match which never finds anything cannot pass.
+    for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ -f "$HOME/.local/bin/$notice" ] || fail "the previous release's install.sh placed no $notice in ~/.local/bin"; done
+    [ -n "$(runtimes_of "$WRAPPER")" ] || fail "no process runs '$WRAPPER runtime run' before the one line, so finding none after it would prove nothing; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+    say "the previous release's command-line Jason $old installed by its own script at $WRAPPER with its notice files, a runtime running from it (pid $(runtimes_of "$WRAPPER" | awk '{print $1}' | tr '\n' ' ')), its login start registered, $(wc -l < "$OUT/over-running-cli-ids-before.txt" | tr -d ' ') campaign(s)"
+
+    # This build's line, as an agent runs it, with that runtime still running.
+    status=0
+    within 300 'install.sh over the running command-line install' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-running-cli-install.txt" 2>&1 || status=$?
+    cat "$OUT/over-running-cli-install.txt"
+    [ "$status" -eq 0 ] || fail "this build's install.sh over the running $old exited with $status"
+    # jason install's report: the old runtime stopped, and the executable retired the one $old placed.
+    said_runtime="$(report_field "$OUT/over-running-cli-install.txt" runtime)" || fail "install.sh printed no report of jason install"
+    [ "$said_runtime" = stopped ] || fail "jason install's report says the old runtime is '$said_runtime', not stopped"
+    said_retired="$(report_field "$OUT/over-running-cli-install.txt" retired.executable)" || fail "install.sh printed no report of jason install"
+    [ "$said_retired" = "$WRAPPER" ] || fail "jason install's report retired '$said_retired', not $WRAPPER"
+    say "this build's install.sh ran over the running command-line $old and ended 0; jason install's report says the old runtime stopped and retired $said_retired"
+
+    # The application in place, at this version.
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications after the one line"
+    carried="$placed/Contents/Resources/bundle/jason"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+
+    # The terminal command: the application's wrapper, naming no data directory, and a new login shell finds it.
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is still an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    say "Jason Desktop $version is at $placed; ~/.local/bin/jason is its wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
+
+    # The command-line install retired: its notice files gone, no runtime running from its executable.
+    for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
+    [ -z "$(runtimes_of "$WRAPPER")" ] || fail "a runtime still runs from the retired $WRAPPER: $(runtimes_of "$WRAPPER")"
+    say "the command-line install is retired: no notice file in ~/.local/bin, and no runtime runs from $WRAPPER"
+
+    # The runtime install.sh starts again after jason install stopped the old one: answering, and running from the carried
+    # jason. None is started here.
+    within 60 'a runtime answering after the one line' "$carried" runtime status > "$OUT/over-running-cli-status.txt" 2>&1 || fail "no runtime answers after the one line, where install.sh starts one again after jason install stopped the old: $(cat "$OUT/over-running-cli-status.txt")"
+    [ -n "$(runtimes_of "$carried")" ] || fail "a runtime answers after the one line, but none runs from $carried; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+    say "a runtime answers after the one line, running from $carried (pid $(runtimes_of "$carried" | awk '{print $1}' | tr '\n' ' '))"
+
+    # The data kept, by id, and the login registration naming the carried file.
+    campaign_ids "$carried" "$OUT/over-running-cli-ids-after.txt"
+    cmp -s "$OUT/over-running-cli-ids-before.txt" "$OUT/over-running-cli-ids-after.txt" || fail "after the one line the campaigns listed are not the ones listed before it: $(diff "$OUT/over-running-cli-ids-before.txt" "$OUT/over-running-cli-ids-after.txt" | tr '\n' ' ')"
+    after_count="$(wc -l < "$OUT/over-running-cli-ids-after.txt" | tr -d ' ')"
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/over-running-cli-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after the one line"
+    [ "$(read_field "$OUT/over-running-cli-autostart.json" registered)" = true ] || fail "no login registration after the one line: $(cat "$OUT/over-running-cli-autostart.json")"
+    [ "$(read_field "$OUT/over-running-cli-autostart.json" executable)" = "$carried" ] || fail "the login registration names $(read_field "$OUT/over-running-cli-autostart.json" executable), not $carried"
+    say "after the one line: the same $after_count campaign(s), by id, and the login registration names $carried"
+    ;;
+
+vanishing-place)
+    # An application opened from its disk image sets nothing up: this build's application put in a read-only disk image,
+    # as a download is, and the image mounted; jason install from the application on it, as its first start runs it,
+    # refused with install_vanishing_place; the application opened from the image as a person opens a download, its own
+    # start running the setup and refused, and quit; the image ejected. Asserted: the refusal by its code and its words,
+    # nothing placed, the start's setup run and refused and no setup record written, the image gone, and no jason in a new
+    # terminal after the eject. The listing and the compare after it are the leg's next steps. On any failure between the
+    # staging and the detach, the staged copy and the image are removed, the application from the image ended and the image
+    # detached, so that no later leg finds it holding the data directory.
+    built="$1"
+    [ -d "$built" ] || fail "no application at $built"
+    [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
+    [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
+    data="${JASON_DATA_DIR:-$HOME/.jason}"
+    record="$data/desktop/machine-setup.json"
+    image="$RUNNER_TEMP/jason-vanishing-place.dmg"
+    mount="$RUNNER_TEMP/jason-vanishing-place"
+    stage="$RUNNER_TEMP/jason-vanishing-stage"
+    [ ! -e "$image" ] && [ ! -e "$mount" ] && [ ! -e "$stage" ] || fail "$image, $mount or $stage is there before the leg makes it"
+    # From here to the detach, a failure leaves nothing behind: the staged copy and the image removed, the application
+    # from the image ended, the image detached.
+    trap 'pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true; hdiutil detach -force "$mount" > /dev/null 2>&1 || true; rm -f "$image"; rm -rf "$stage"' EXIT
+    # The volume's root holds Jason.app, as a download's image does: the application staged in a folder of its own.
+    mkdir -p "$stage"
+    ditto "$built" "$stage/Jason.app" || fail "this build's application could not be staged at $stage"
+    within 300 'hdiutil create' hdiutil create -srcfolder "$stage" -volname 'Jason Test' -format UDZO "$image" > "$OUT/vanishing-create.txt" 2>&1 || fail "hdiutil create failed: $(tail -n 3 "$OUT/vanishing-create.txt")"
+    rm -rf "$stage"
+    within 120 'hdiutil attach' hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$image" > "$OUT/vanishing-attach.txt" 2>&1 || fail "hdiutil attach failed: $(tail -n 3 "$OUT/vanishing-attach.txt")"
+    mounted="$mount/Jason.app"
+    [ -d "$mounted" ] || fail "no Jason.app at the root of the mounted image at $mount"
+    say "this build's application put in a read-only disk image (UDZO), at its root, and mounted at $mount"
+
+    # jason install from the application on the image, as its first start runs it.
+    status=0
+    within 120 'jason install from the disk image' env SHELL=/bin/zsh "$mounted/Contents/Resources/bundle/jason" install > "$OUT/vanishing-install.json" 2> "$OUT/vanishing-install.err" || status=$?
+    cat "$OUT/vanishing-install.json" "$OUT/vanishing-install.err"
+    [ "$status" -ne 0 ] || fail "jason install from the disk image ended 0"
+    python3 -c 'import json,sys
+code, message = "", ""
+for path in sys.argv[1:]:
+    for line in open(path, encoding="utf-8").read().splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                doc = json.loads(line)
+            except ValueError:
+                continue
+            error = doc.get("error") if isinstance(doc, dict) else None
+            if isinstance(error, dict) and error.get("code"):
+                code, message = error["code"], str(error.get("message") or "")
+print(code)
+print(message)' "$OUT/vanishing-install.json" "$OUT/vanishing-install.err" > "$OUT/vanishing-refusal.txt" || fail "the refusal could not be read"
+    code="$(sed -n 1p "$OUT/vanishing-refusal.txt")"
+    [ "$code" = install_vanishing_place ] || fail "jason install from the disk image exited $status with the code '$code', not install_vanishing_place"
+    # The branch of the refusal a mounted image takes, by its words, rather than a translocated copy's.
+    grep -qF 'a read-only volume' "$OUT/vanishing-refusal.txt" || fail "the refusal does not say the place is a read-only volume: $(sed -n 2p "$OUT/vanishing-refusal.txt")"
+    [ -z "$(app)" ] || fail "the refused jason install placed an application at $(app)"
+    [ ! -e "$WRAPPER" ] || fail "the refused jason install placed a terminal command at $WRAPPER"
+    say "jason install from the application on the disk image exited $status, refused with install_vanishing_place as on a read-only volume, and placed nothing"
+
+    # Opened from the image, as a person opens a download: its start runs the setup, which is refused; then quit. The
+    # setup's run is read in the desktop's log, by its line counted before the open and after; the setup record, which a
+    # refused setup does not write, is held to be as it was.
+    ran_lines() {
+        python3 -c 'import glob,json,os,sys
+count = 0
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == "machine_setup_ran" and event.get("Why") == "start" and event.get("Exit") not in (0, None) and event.get("Completed") is False:
+            count += 1
+print(count)' "$data"
+    }
+    ran_before="$(ran_lines)" || fail "the desktop's log could not be read before the open"
+    if [ -e "$record" ]; then record_before="$(shasum -a 256 < "$record") $(stat -f %m "$record")"; else record_before=absent; fi
+    "$mounted/Contents/MacOS/Jason" > "$OUT/vanishing-window.log" 2>&1 &
+    window=$!
+    until=$(( $(date +%s) + 120 ))
+    ran_after="$ran_before"
+    while [ "$ran_after" -le "$ran_before" ] && [ "$(date +%s)" -lt "$until" ]; do
+        kill -0 "$window" 2>/dev/null || fail "Jason Desktop opened from the disk image did not stay running: $(tail -n 20 "$OUT/vanishing-window.log")"
+        sleep 2
+        ran_after="$(ran_lines)" || fail "the desktop's log could not be read after the open"
+    done
+    [ "$ran_after" -gt "$ran_before" ] || fail "Jason Desktop opened from the disk image wrote no refused setup run (machine_setup_ran at start, exit not 0, not completed) to its log within 120 s"
+    kill -0 "$window" 2>/dev/null || fail "Jason Desktop opened from the disk image did not stay running: $(tail -n 20 "$OUT/vanishing-window.log")"
+    end_process "$window" 'Jason Desktop opened from the disk image'
+    pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true
+    sleep 3
+    if [ -e "$record" ]; then record_after="$(shasum -a 256 < "$record") $(stat -f %m "$record")"; else record_after=absent; fi
+    [ "$record_after" = "$record_before" ] || fail "opening the application from its disk image wrote the setup record at $record: $(cat "$record" 2>/dev/null || true)"
+    [ -z "$(app)" ] || fail "opening the application from its disk image placed an application at $(app)"
+    [ ! -e "$WRAPPER" ] || fail "opening the application from its disk image placed a terminal command at $WRAPPER: $(cat "$WRAPPER")"
+    say "Jason Desktop opened from the disk image, its start ran the setup and was refused ($((ran_after - ran_before)) line(s) in its log), and it quit having set nothing up: no application placed, no terminal command, the setup record $(if [ "$record_before" = absent ]; then echo 'not written'; else echo 'as it was'; fi)"
+
+    # Ejected, as a person ejects a download's image, and gone.
+    within 120 'hdiutil detach' hdiutil detach "$mount" > "$OUT/vanishing-detach.txt" 2>&1 || fail "the disk image could not be ejected: $(tail -n 3 "$OUT/vanishing-detach.txt")"
+    [ ! -e "$mounted" ] || fail "after the eject the application is still at $mounted"
+    if [ -d "$mount" ]; then [ -z "$(ls -A "$mount")" ] || fail "after the eject $mount still holds: $(ls -A "$mount" | tr '\n' ' ')"; fi
+    rm -f "$image"
+    trap - EXIT
+    found="$(within 60 'a new login shell looking for jason' fresh 'command -v jason || echo none')" || true
+    [ "$found" = none ] || fail "after the disk image was ejected a new login shell finds jason at '$found'"
+    say "the disk image ejected and its mount gone, and a new zsh login shell finds no jason"
+    ;;
+
 previous-removal)
     # The previous release's own removal of its logon registration, said in launchd's records: its command-line Jason
     # installed by its own script, its logon registration, and its own jason uninstall. Facts for the release before this
@@ -1143,7 +1362,7 @@ intel)
     ;;
 
 *)
-    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|assess|quarantine|intel ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|vanishing-place|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac

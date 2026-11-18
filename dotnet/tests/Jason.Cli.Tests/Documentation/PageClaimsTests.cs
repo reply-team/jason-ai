@@ -54,6 +54,22 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// On Windows the removal looks under this account's other temporary folders and names what builds unpacked there as
+    /// left, removing nothing there; the page and the verb's help say so in the same clause.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/release-and-update.md")]
+    [InlineData("dotnet/src/Jason.Cli/Uninstall/UninstallCommand.cs")]
+    public void The_pages_say_what_builds_unpacked_under_other_temporary_folders_is_named_and_left(string page)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains("the folder its own temporary folder is numbered inside, where it is one, and that folder's numbered folders, or its own numbered folders where it is none", text, StringComparison.Ordinal);
+        Assert.Contains("this removal takes only what stands under its own temporary folder, and what it names is safe to remove once nothing runs from it", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("another session of this account", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The page lists the Desktop's refusals a carried update calls retryable, and the list is the set the verb retries,
     /// read out of the code: a reason added on one side alone is a row the page and the verb tell apart.
     /// </summary>
