@@ -491,6 +491,45 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// PowerShell names ignore case, and a script parameter keeps its type for every assignment made at the script's own
+    /// scope: a local given a parameter's name is converted to the parameter's type, and throws, as a result object
+    /// assigned to a switch does, or turns into a string, and every check on its members passes for nothing. The Windows
+    /// proof script writes no variable whose name, compared case-insensitively, is one of its script parameters: no
+    /// assignment, compound or not, no increment or decrement, no foreach loop variable, with or without the script: scope.
+    /// It is read line by line, so a function's own local of such a name is refused as well, which keeps the rule simple;
+    /// only a function's own signature line, whose parameters may take defaults, is not read.
+    /// </summary>
+    [Fact]
+    public void The_Windows_proof_script_assigns_no_variable_named_as_one_of_its_parameters()
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var block = Regex.Match(text, @"^param\(\n(?<body>.*?)\n\)\n", RegexOptions.Multiline | RegexOptions.Singleline);
+        Assert.True(block.Success, "Test-InstallationWindows.ps1 no longer opens with one param() block.");
+        var names = Regex.Matches(block.Groups["body"].Value, @"\]\s*\$(?<name>[A-Za-z_][A-Za-z0-9_]*)")
+            .Select(match => match.Groups["name"].Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("Step", names);
+        Assert.Contains("Again", names);
+        var first = text[..(block.Index + block.Length)].Count(character => character == '\n') + 1;
+        string[] writes =
+        [
+            @"(?<![\w$`])\$(?:script:)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=|\+=|-=|\*=|/=)(?!=)",
+            @"(?<![\w$`])\$(?:script:)?(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:\+\+|--)",
+            @"(?:\+\+|--)\$(?:script:)?(?<name>[A-Za-z_][A-Za-z0-9_]*)",
+            @"(?i)\bforeach\s*\(\s*\$(?:script:)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s+in\b",
+        ];
+        var found = text[(block.Index + block.Length)..].Split('\n')
+            .Select((line, at) => (line, at))
+            .Where(item => !item.line.TrimStart().StartsWith("function ", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(item => writes.SelectMany(write => Regex.Matches(item.line, write))
+                .Where(match => names.Contains(match.Groups["name"].Value))
+                .Select(match => $"line {first + item.at}: {item.line.Trim()}"))
+            .Distinct()
+            .ToList();
+        Assert.True(found.Count == 0, "Test-InstallationWindows.ps1 assigns a variable named as one of its parameters: " + string.Join("; ", found));
+    }
+
+    /// <summary>
     /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
     /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
     /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one
