@@ -660,6 +660,61 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows leg that opens the window while jason uninstall runs, so the waiter asks, holds the verb where the window
+    /// can open rather than hoping for the moment: a skill file the verb removes after it stops the runtime is held open,
+    /// sharing read alone, before the verb starts, and the hold is seen refusing a writer; the verb then tries that file
+    /// again for its wait, and the leg lets go only once the window's process runs and the verb has not ended. A verb that
+    /// ended before that fails the leg, and so does a held file still there after the verb, so the leg cannot end green
+    /// having proven nothing; where the window was opened, the leg first closes it and ends every uninstaller run the
+    /// waiter shows, so the next leg meets neither.
+    /// </summary>
+    [Fact]
+    public void The_Windows_waiter_leg_holds_the_verb_while_the_window_opens_and_cannot_end_green_having_proven_nothing()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = windows[windows.IndexOf("\n    'UninstallWaiterShown' {\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    'UpdateApply' {\n", StringComparison.Ordinal)];
+
+        // The hold, the silent leg's own: a file of this build's skills record, held sharing read alone, seen refusing a writer.
+        var record = leg.IndexOf("$skillsRecord = Join-Path $env:USERPROFILE '.claude\\skills\\.jason-skills.json'", StringComparison.Ordinal);
+        var holder = leg.IndexOf("$holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', \"`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()\" -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        var registered = leg.IndexOf("Register-Scratch ", StringComparison.Ordinal);
+        var refusing = leg.IndexOf("[System.IO.File]::Open($held, 'Open', 'ReadWrite', 'ReadWrite')", StringComparison.Ordinal);
+        var verb = leg.IndexOf("$verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        Assert.True(record >= 0 && holder > record && registered > holder && refusing > registered && verb > refusing, "the waiter leg does not hold a file of this build's skills, recorded, and see the hold refuse a writer, before jason uninstall starts");
+
+        // Past the stop, the window opened; the verb must still run once the window's process does, and only then is it let go.
+        var stopped = leg.IndexOf("Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited }", StringComparison.Ordinal);
+        var early = leg.IndexOf("if ($verb.HasExited) { Fail ", StringComparison.Ordinal);
+        var window = leg.IndexOf("Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null", StringComparison.Ordinal);
+        var seen = leg.IndexOf("Wait-Until { $verb.HasExited -or @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 }", StringComparison.Ordinal);
+        var landed = leg.IndexOf("$landed = -not $verb.HasExited", StringComparison.Ordinal);
+        var release = leg.IndexOf("New-Item -ItemType File -Path $release -Force | Out-Null", StringComparison.Ordinal);
+        var unlanded = leg.IndexOf("$noProof = if (-not $landed) { \"", StringComparison.Ordinal);
+        var ended = leg.IndexOf("if (-not $verb.WaitForExit(300000)) { Fail ", StringComparison.Ordinal);
+        var taken = leg.IndexOf("if (-not $noProof -and (Test-Path -LiteralPath $held)) { $noProof = \"", StringComparison.Ordinal);
+        Assert.True(stopped > verb && early > stopped && window > early && seen > window && landed > seen && release > landed && unlanded > release && ended > unlanded && taken > ended,
+            "the waiter leg does not open the window past the stop, see its process while the verb still runs, let go only then, and keep the reason where the verb ended first or the held file outlived the verb");
+        Assert.DoesNotContain("Start-Sleep", leg[verb..release], StringComparison.Ordinal);
+        Assert.DoesNotContain("if (-not $landed) { Fail ", leg, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (Test-Path -LiteralPath $held) { Fail ", leg, StringComparison.Ordinal);
+
+        // A leg that proved nothing still cleans up before it fails by that reason: the window closed, then while the waiter
+        // this verb left still runs, every uninstaller run it shows ended by its id; the shown run is looked for only after.
+        var cleanUp = leg.IndexOf("        if ($noProof) {\n", StringComparison.Ordinal);
+        var closed = leg.IndexOf("Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }", cleanUp, StringComparison.Ordinal);
+        var waiter = leg.IndexOf("$waiterLine = \"Wait-Process -Id $($verb.Id) -Timeout 600;\"", cleanUp, StringComparison.Ordinal);
+        var shownEnded = leg.IndexOf("$_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\\s)/S(\\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }", cleanUp, StringComparison.Ordinal);
+        var failed = leg.IndexOf("            Fail $noProof\n        }\n", cleanUp, StringComparison.Ordinal);
+        var looked = leg.IndexOf("        $shown = $null\n", StringComparison.Ordinal);
+        Assert.True(cleanUp > taken && closed > cleanUp && waiter > closed && shownEnded > waiter && failed > shownEnded && looked > failed,
+            "the waiter leg does not close the window and end the uninstaller runs the waiter shows, while the waiter runs, before it fails by the reason it kept, and before it looks for the shown run");
+
+        // Let go and waited for even where the leg fails.
+        Assert.Contains("} finally {\n            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null\n            if ($holder) { $null = $holder.WaitForExit(15000) }\n        }", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
     /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
     /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
@@ -729,6 +784,43 @@ public partial class InstallScriptTests
         var take = begin.IndexOf("\n            if (-not (Take-PreviousOwn $Leg $prior)) { return }\n", StringComparison.Ordinal);
         var read = begin.IndexOf("\n            $found = @(Get-LeftOver)\n", StringComparison.Ordinal);
         Assert.True(cache >= 0 && take > cache && read > take, "a clean Windows begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
+    /// Going back and forward again on Windows, with the person's own quick-start put back under Jason's name, leaves the
+    /// skills record in ~\.agents\skills: this build's own uninstall reports that file as edited, keeps it without --force,
+    /// and keeps the record that names it. One name is this build's own kept record and no other; the leg that moves again
+    /// records its exact listing line only where that uninstall's own report names exactly the person's file, under that
+    /// root, as the one edited file, and the record names it; and a compare excuses the line only where that leg recorded it.
+    /// </summary>
+    [Fact]
+    public void The_Windows_compare_excuses_this_build_s_own_kept_record_only_where_its_uninstall_reports_the_person_s_file_edited()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\n$thisBuildKept = [ordered]@{ 'agents skills\\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\\skills\\.jason-skills.json') }\n", windows, StringComparison.Ordinal);
+        Assert.Contains("@(Get-Content -LiteralPath $thisBuildKeptRows) -ccontains \"$leg`t$line\"", Function("Test-ThisBuildKept"), StringComparison.Ordinal);
+        Assert.Contains("elseif (Test-ThisBuildKept $by $line) { $keptOwn.Add(", Function("Compare-Listings"), StringComparison.Ordinal);
+
+        // The one writer of a row: the leg that moves again, after its own uninstall, once the report and the record are read.
+        Assert.Single(Regex.Matches(windows, @"Add-Content -LiteralPath \$thisBuildKeptRows"));
+        var wayBack = windows[windows.IndexOf("\n    'WayBack' {\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)];
+        var again = wayBack.IndexOf("        if ($Again) {\n", StringComparison.Ordinal);
+        var uninstall = wayBack.IndexOf("$ran = Invoke-Program $carried @('uninstall', '--purge-data', '--yes') $quiet 300", StringComparison.Ordinal);
+        var edited = wayBack.IndexOf("$edited = @($roots | ForEach-Object { $root = $_; @($root.files) | Where-Object { $_.edited -eq $true } | ForEach-Object { \"$($root.root)`t$($_.path)\" } })", StringComparison.Ordinal);
+        var exact = wayBack.IndexOf("if ($edited.Count -ne 1 -or $edited[0] -ine \"$keptRoot`t$keptFile\") { Fail ", StringComparison.Ordinal);
+        var names = wayBack.IndexOf("if ($recorded -cnotcontains 'quick-start/SKILL.md') { Fail ", StringComparison.Ordinal);
+        var row = wayBack.IndexOf("Add-Content -LiteralPath $thisBuildKeptRows", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("Say \"going back and forward again leaves the person ", StringComparison.Ordinal);
+        var otherwise = wayBack.IndexOf("        } else {\n            # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.\n", StringComparison.Ordinal);
+        Assert.True(again >= 0 && uninstall > again && edited > uninstall && exact > edited && names > exact && row > names && said > row && otherwise > said,
+            "the leg that moves again does not record this build's own kept record only after its own uninstall's report names exactly the person's file as edited and the record names it, and say so");
     }
 
     /// <summary>
@@ -1005,6 +1097,171 @@ public partial class InstallScriptTests
             }
 
             return "^(?:" + string.Join('|', alternatives) + ")$";
+        }
+    }
+
+    /// <summary>
+    /// Going back to the previous release on macOS leaves that release's own skills record, which its uninstall keeps where
+    /// the person's own quick-start stands. One name is the previous release's own and no other; the way-back leg records
+    /// its exact listing line only after reading the file as that release's own, outside the leg that moves again; a compare
+    /// excuses a line only where a leg of the previous release recorded it exactly; and a clean begin takes it after that leg,
+    /// before it reads the machine, so the next leg runs.
+    /// </summary>
+    [Fact]
+    public void The_macOS_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var at = macos.IndexOf($"\n{name}() {{\n", StringComparison.Ordinal);
+            Assert.True(at >= 0, $"test-installation-macos.sh has no function {name}");
+            var body = macos[at..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        string Step(string name, string next)
+        {
+            var at = macos.IndexOf($"\n{name})\n", StringComparison.Ordinal);
+            Assert.True(at >= 0, $"test-installation-macos.sh has no step {name}");
+            var body = macos[at..];
+            return body[..body.IndexOf($"\n{next})\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\nPREVIOUS_OWN_NAME='agents skills/.jason-skills.json'\nPREVIOUS_OWN_FILE=\"$HOME/.agents/skills/.jason-skills.json\"\n", macos, StringComparison.Ordinal);
+        var isOwn = Function("is_previous_own");
+        Assert.Contains("grep -qxF -- \"$1\" \"$OUT/previous-legs.txt\" 2>/dev/null || return 1", isOwn, StringComparison.Ordinal);
+        Assert.Contains("grep -qxF -- \"$1\t$2\" \"$OUT/previous-own.txt\"", isOwn, StringComparison.Ordinal);
+        var take = Function("take_previous_own");
+        Assert.Contains("is_previous_own \"$by\" \"$line\" || return 0", take, StringComparison.Ordinal);
+        Assert.Contains("[ \"${GITHUB_ACTIONS:-}\" != true ] || [ \"${RUNNER_ENVIRONMENT:-}\" != github-hosted ]", take, StringComparison.Ordinal);
+        Assert.Contains(">> \"$OUT/resets.txt\"", take, StringComparison.Ordinal);
+        Assert.Contains("if is_previous_own \"$by\" \"$line\"; then own_here=", Step("compare", "begin"), StringComparison.Ordinal);
+
+        // The one writer of a row: the way-back leg's own end, outside 'again', after the record is read as the previous release's.
+        Assert.Single(Regex.Matches(macos, @">> ""\$OUT/previous-own\.txt"""));
+        var wayBack = Step("way-back", "over-previous-desktop");
+        var otherwise = wayBack.IndexOf("        say \"$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0\"\n", StringComparison.Ordinal);
+        var refs = wayBack.IndexOf("is not $old's own skills record", StringComparison.Ordinal);
+        var row = wayBack.IndexOf(">> \"$OUT/previous-own.txt\"", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("say \"going back leaves $PREVIOUS_OWN_FILE", StringComparison.Ordinal);
+        var ownSkill = wayBack.IndexOf("    if [ \"$way\" = put-back ]; then\n        own4=", StringComparison.Ordinal);
+        Assert.True(otherwise >= 0 && refs > otherwise && row > refs && said > row && ownSkill > said, "the macOS way-back leg does not record the previous release's own record only after reading it as that release's, in its own end and outside 'again', and say so");
+
+        var begin = Step("begin", "end");
+        var scratch = begin.IndexOf("\n        take_scratch \"$LEG\"\n", StringComparison.Ordinal);
+        var prior = begin.IndexOf("\n        prior=\"$(cat \"$OUT/last-leg.txt\" 2>/dev/null || true)\"\n", StringComparison.Ordinal);
+        var taken = begin.IndexOf("\n        take_previous_own \"$LEG\" \"$prior\"\n", StringComparison.Ordinal);
+        var read = begin.IndexOf("\n        found=\"$(left_over)\"\n", StringComparison.Ordinal);
+        Assert.True(scratch >= 0 && prior > scratch && taken > prior && read > taken, "a clean macOS begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
+    /// After going back and moving again on macOS, this build's own uninstall keeps the person's own quick-start, which it
+    /// reports edited, and the skills record naming it. The leg excuses that record's line by attribution to this build's
+    /// own uninstall only where that uninstall's own report names exactly the person's own SKILL.md as the one edited file
+    /// it kept under ~/.agents/skills: the reader is run on a report the product's own types and serializer wrote, among
+    /// the words the verb says on stderr, beside a report that names another file or another root. The leg says what a
+    /// person is left with, records the line once, and a compare excuses exactly the recorded line.
+    /// </summary>
+    [Fact]
+    public void The_macOS_second_way_back_leg_excuses_this_build_s_own_record_only_where_its_uninstall_reports_the_person_s_file_edited()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = macos.IndexOf("\nis_this_build_own() {\n", StringComparison.Ordinal);
+        Assert.True(function >= 0, "test-installation-macos.sh has no is_this_build_own");
+        var isOwn = macos[function..];
+        isOwn = isOwn[..isOwn.IndexOf("\n}\n", StringComparison.Ordinal)];
+        Assert.Contains("grep -qxF -- \"$1\t$2\" \"$OUT/this-build-own.txt\"", isOwn, StringComparison.Ordinal);
+        var compare = macos[macos.IndexOf("\ncompare)\n", StringComparison.Ordinal)..];
+        compare = compare[..compare.IndexOf("\nbegin)\n", StringComparison.Ordinal)];
+        Assert.Contains("elif is_this_build_own \"$by\" \"$line\"; then own_here=", compare, StringComparison.Ordinal);
+
+        // The one writer of a row: the second way-back leg's own end, after its uninstall's report is read, before 'else'.
+        Assert.Single(Regex.Matches(macos, @">> ""\$OUT/this-build-own\.txt"""));
+        var wayBack = macos[macos.IndexOf("\nway-back)\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\nover-previous-desktop)\n", StringComparison.Ordinal)];
+        var ended = wayBack.IndexOf("        say \"$version's own uninstall --purge-data --yes, after moving again, ended 0\"\n", StringComparison.Ordinal);
+        var reader = Regex.Match(wayBack, @"kept_read=""\$\(python3 -c '(?<code>[^']*)' ""\$OUT/way-back-end\.txt"" ""\$HOME/\.agents/skills""\)""");
+        var held = wayBack.IndexOf("[ \"$kept_read\" = \"edited: $OWN_SKILL/SKILL.md\" ] || fail ", StringComparison.Ordinal);
+        var row = wayBack.IndexOf(">> \"$OUT/this-build-own.txt\"", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("say \"a person who went back and moved again with a skill of their own under one of Jason's names is left with ", StringComparison.Ordinal);
+        var otherwise = wayBack.IndexOf("\n    else\n        # The leg's own end: the runtime stopped", StringComparison.Ordinal);
+        Assert.True(reader.Success, "the second way-back leg reads no report of its uninstall by one python3 reader");
+        Assert.True(ended >= 0 && reader.Index > ended && held > reader.Index && row > held && said > row && otherwise > said, "the second way-back leg does not record this build's own record only after its uninstall's report names the person's own file edited, and say what a person is left with, in its own end");
+
+        // The reader, run on what the verb printed: a line of stderr, then the report the product's types and serializer make.
+        const string home = "/Users/someone";
+        UninstallReport Report(params RootRemoval[] roots) => new(
+            new UninstallPlan(false, null, null, null, roots, [], null, null, null, null, null, true, $"{home}/.jason"),
+            ["Removed 66 file(s)."],
+            [],
+            [],
+            null,
+            null);
+        RootRemoval Root(string root, params (string File, bool Edited)[] files) =>
+            new(root, ["jason-runtime-skills", "jason-business-skills"], [.. files.Select(file => new FileRemoval($"{root}/{file.File}", true, file.Edited))]);
+        var agents = $"{home}/.agents/skills";
+        var claude = $"{home}/.claude/skills";
+        var cases = new (string Name, UninstallReport Report, string Said)[]
+        {
+            ("the person's own file edited", Report(Root(claude, ("quick-start/SKILL.md", false)), Root(agents, ("quick-start/SKILL.md", true), ("inbox-triage/SKILL.md", false))), $"edited: {agents}/quick-start/SKILL.md"),
+            ("another file edited", Report(Root(agents, ("quick-start/SKILL.md", false), ("inbox-triage/SKILL.md", true))), $"edited: {agents}/inbox-triage/SKILL.md"),
+            ("the person's own file edited under another root alone", Report(Root(claude, ("quick-start/SKILL.md", true)), Root(agents, ("quick-start/SKILL.md", false))), "edited: "),
+            ("two files edited", Report(Root(agents, ("quick-start/SKILL.md", true), ("inbox-triage/SKILL.md", true))), $"edited: {agents}/quick-start/SKILL.md | {agents}/inbox-triage/SKILL.md"),
+        };
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        var folder = tree.NewDirectory("said");
+        foreach (var (name, report, expected) in cases)
+        {
+            var printed = Path.Combine(folder, "way-back-end.txt");
+            File.WriteAllText(printed, "Stopping the runtime...\n" + JsonSerializer.Serialize(report, JasonJson.Options) + "\n");
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-c", reader.Groups["code"].Value, printed, agents);
+            Assert.True(exit == 0, $"{name}: {stderr}");
+            Assert.True(expected == stdout.TrimEnd('\r', '\n'), $"{name}: the reader said '{stdout.Trim()}', not '{expected}'");
+        }
+
+        // Only the first is the one the leg excuses: the person's own SKILL.md, exactly, and nothing else.
+        Assert.Contains("OWN_SKILL=\"$HOME/.agents/skills/quick-start\"", macos, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The macOS way-back leg reads the skills record going back leaves as the previous release's own only where it has a
+    /// pack and every pack names that release, as "v0.48.5" or "0.48.5": a pack with no ref, an empty ref or another
+    /// release's makes the leg fail. The leg's own reader is run on such records and its count of packs naming anything
+    /// else is held.
+    /// </summary>
+    [Fact]
+    public void The_macOS_way_back_leg_reads_a_record_as_the_previous_release_s_own_only_where_every_pack_names_that_release()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var reader = Regex.Match(macos, @"record_read=""\$\(python3 -c '(?<code>[^']*)' ""\$PREVIOUS_OWN_FILE"" ""\$old""\)""");
+        Assert.True(reader.Success, "the way-back leg does not read the record by one python3 reader handed the previous release's version");
+        Assert.Contains("[ \"$(printf '%s\\n' \"$record_read\" | sed -n 5p)\" = 0 ] || fail \"after $remover, $PREVIOUS_OWN_FILE is left, and it is not $old's own skills record", macos, StringComparison.Ordinal);
+
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        var folder = tree.NewDirectory("records");
+        var cases = new (string Name, string Record, bool Own)[]
+        {
+            ("every pack at v0.48.5", """{"packs":[{"ref":"v0.48.5","files":[{"path":"quick-start/SKILL.md"}]},{"ref":"v0.48.5","files":[]}]}""", true),
+            ("every pack at 0.48.5", """{"packs":[{"ref":"0.48.5","files":[]}]}""", true),
+            ("a pack with no ref", """{"packs":[{"ref":"v0.48.5","files":[]},{"files":[]}]}""", false),
+            ("a pack with an empty ref", """{"packs":[{"ref":"v0.48.5","files":[]},{"ref":"","files":[]}]}""", false),
+            ("a pack of another release", """{"packs":[{"ref":"v0.48.5","files":[]},{"ref":"v0.49.0","files":[]}]}""", false),
+            ("no pack", """{"packs":[]}""", false),
+        };
+        foreach (var (name, record, own) in cases)
+        {
+            var file = Path.Combine(folder, ".jason-skills.json");
+            File.WriteAllText(file, record);
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-c", reader.Groups["code"].Value, file, "0.48.5");
+            Assert.True(exit == 0, $"{name}: {stderr}");
+            var lines = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            Assert.True(lines.Length >= 5, $"{name}: the reader said '{stdout.Trim()}'");
+            Assert.True(own == (lines[4] == "0"), $"{name}: the reader counts {lines[4]} pack(s) naming another release, so the leg would {(own ? "refuse" : "take")} it");
         }
     }
 

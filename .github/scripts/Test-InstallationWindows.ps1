@@ -131,6 +131,14 @@ $scratchRecords = Join-Path $Out 'scratch-pids.txt'
 # that leg takes it (Take-PreviousOwn). Nothing else is ever recorded there.
 $previousOwn = [ordered]@{ 'agents skills\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json') }
 $previousOwnRows = Join-Path $Out 'previous-own.txt'
+# What this build's own uninstall keeps by its own design, by the listing's name for it and the place it is: the skills
+# record in ~\.agents\skills, kept beside a file it names that the person changed, which the uninstall reports as edited
+# and keeps without --force. Only the leg that moves again records its listing line, exactly ("<leg><TAB><line>",
+# -Out\kept-own.txt), and only where that uninstall's own report names the person's file under that root as the one edited
+# file and the record names it: that leg's compare excuses that line alone, and the held step's whole compare excuses it
+# where it is attributed to that leg. Nothing else is ever recorded there.
+$thisBuildKept = [ordered]@{ 'agents skills\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json') }
+$thisBuildKeptRows = Join-Path $Out 'kept-own.txt'
 
 # The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
 # nothing where none.
@@ -772,6 +780,12 @@ function Test-PreviousOwn([string] $leg, [string] $line) {
     ($previousLegs -ccontains $leg) -and (@(Get-Content -LiteralPath $previousOwnRows) -ccontains "$leg`t$line")
 }
 
+# Whether $line is this build's own kept record that the leg $leg recorded, exactly (see $thisBuildKept).
+function Test-ThisBuildKept([string] $leg, [string] $line) {
+    if (-not $leg -or -not (Test-Path -LiteralPath $thisBuildKeptRows)) { return $false }
+    @(Get-Content -LiteralPath $thisBuildKeptRows) -ccontains "$leg`t$line"
+}
+
 # The previous release's own lines the leg that last changed the machine, $by, recorded (see $previousOwn), taken before a
 # clean leg reads the machine: each file removed only while its listing line is still exactly the one recorded. On a
 # GitHub-hosted runner alone, as the reset; each act said and logged in -Out\resets.txt, never a proof. $false where the
@@ -992,18 +1006,23 @@ function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
     }
     # The previous release's own lines (see $previousOwn): excused exactly where the leg that left them recorded them, the
     # open leg in its own compare, the leg a line is attributed to in the held step's whole one.
+    # This build's own kept record (see $thisBuildKept), by the same rule.
     $own = [System.Collections.Generic.List[string]]::new()
+    $keptOwn = [System.Collections.Generic.List[string]]::new()
     $ownBy = if ($Final) { '' } elseif (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
     foreach ($line in @($left)) {
         $by = if ($Final) { Get-InheritedBy "+ $line" (Join-Path $Out 'final-attributed.txt') } else { $ownBy }
         if (Test-PreviousOwn $by $line) { $own.Add("+ $line  (left by '$by', the previous release's own, as its uninstall leaves it)"); [void] $left.Remove($line) }
+        elseif (Test-ThisBuildKept $by $line) { $keptOwn.Add("+ $line  (left by '$by', this build's own uninstall keeping it beside the person's file it names, reported edited)"); [void] $left.Remove($line) }
     }
     if ($own.Count -gt 0) { Say "expected in ${listed}, the previous release's own as its uninstall leaves it, each recorded by the leg that left it: $(($own | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    if ($keptOwn.Count -gt 0) { Say "expected in ${listed}, this build's own uninstall keeping it beside the person's file it names, which its report says is edited, each recorded by the leg that left it: $(($keptOwn | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
     foreach ($line in $own) { $excused.Add($line) }
+    foreach ($line in $keptOwn) { $excused.Add($line) }
     $diff = Join-Path $Out "$base-to-$listed.diff.txt"
     Set-Content -LiteralPath $diff -Value (@("only in $base (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $listed (after):") + @($left | ForEach-Object { "+ $_" }) +
         @(if ($inheritedHere.Count -gt 0) { "inherited at this leg's begin, not counted here (each by the leg that left it):"; $inheritedHere }) +
-        @(if ($excused.Count -gt 0) { "expected, each left by a leg of the previous release:"; $excused }))
+        @(if ($excused.Count -gt 0) { "expected, each by the leg that left it, with why:"; $excused }))
     Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
     $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
     Say "$listed against ${base}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
@@ -1813,22 +1832,65 @@ switch ($Step) {
         # jason uninstall's waiter (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff): where its
         # silent uninstaller ends 3 because Jason Desktop was opened after the verb's own check, it runs the uninstaller
         # once more without /S, which shows the person its question. Here: this build installed by the stand-in script,
-        # a runtime started, jason uninstall started, and the window opened once the verb has stopped that runtime, past
-        # its own check. The second run is found, its window seen, and it is ended without an answer; the folder is still
+        # a runtime started, jason uninstall started with a skill file it removes held open, and the window opened once the
+        # verb has stopped that runtime, past its own check, while the hold keeps the verb running. The second run is found, its window seen, and it is ended without an answer; the folder is still
         # there, and the waiter's line is in the desktop's log of the day. Installed apps then takes the application off.
         if (-not $Script -or -not $Feed) { Fail '-Script and -Feed are needed.' }
         $installed = Invoke-InstallScript $Script
         if ($installed.Exit -ne 0) { Fail "install.ps1 exited with $($installed.Exit): $($installed.Said)" }
         if ((Invoke-Program $carried @('runtime', 'start')).Exit -ne 0) { Fail 'a runtime could not be started' }
         $descriptor = Join-Path $data 'run\runtime.json'
-        $verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden
-        $null = $verb.Handle
-        Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited } 120 'jason uninstall stopping the runtime'
-        if ($verb.HasExited) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window could be opened past its check: the leg proves nothing" }
-        Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
-        Say 'the window opened once jason uninstall had stopped the runtime, past its own check'
+        # A hold the leg controls, the silent leg's own: a file of this build's skills, which the verb removes after it stops
+        # the runtime, held open sharing read alone, so the verb tries it again for its wait (InstallationRemovers.HeldFiles)
+        # and is still running when the window opens; let go once the window's process runs. Without it the verb could end
+        # before the window opened, and the leg would prove nothing.
+        $skillsRecord = Join-Path $env:USERPROFILE '.claude\skills\.jason-skills.json'
+        $skillsRoot = Split-Path -Parent $skillsRecord
+        $named = @(try { @((Get-Content -LiteralPath $skillsRecord -Raw | ConvertFrom-Json).packs) | ForEach-Object { @($_.files) } | ForEach-Object { [string]$_.path } } catch { })
+        $held = $named | Where-Object { $_ } | ForEach-Object { Join-Path $skillsRoot ($_ -replace '/', '\') } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $held) { Fail "no file named by this build's skills record at $skillsRecord to hold the verb by" }
+        $release = $scratchHeldFile
+        Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
+        $holder = $null
+        $noProof = $null
+        try {
+            $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
+            Register-Scratch 'the process holding a skill file jason uninstall removes' $holder
+            Wait-Until { try { ([System.IO.File]::Open($held, 'Open', 'ReadWrite', 'ReadWrite')).Dispose(); $false } catch { $true } } 30 "$held held, refusing a writer"
+            Say "$held held open by process $($holder.Id), sharing read alone"
+            $verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden
+            $null = $verb.Handle
+            Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited } 120 'jason uninstall stopping the runtime'
+            if ($verb.HasExited) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window could be opened past its check, with $held held: the leg proves nothing" }
+            Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
+            Wait-Until { $verb.HasExited -or @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 30 'the window''s process starting'
+            $landed = -not $verb.HasExited
+            New-Item -ItemType File -Path $release -Force | Out-Null
+            $null = $holder.WaitForExit(15000)
+            $noProof = if (-not $landed) { "jason uninstall ended (exit $($verb.ExitCode)) before the window's process ran, with $held held: the leg proves nothing" } else { $null }
+            if ($landed) { Say "the window opened once jason uninstall had stopped the runtime, past its own check, while the verb was still running, held at $held; then let go" }
+        } finally {
+            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null
+            if ($holder) { $null = $holder.WaitForExit(15000) }
+        }
         if (-not $verb.WaitForExit(300000)) { Fail 'jason uninstall did not end within 300 s' }
         Say "jason uninstall ended, exit $($verb.ExitCode)"
+        if (-not $noProof -and (Test-Path -LiteralPath $held)) { $noProof = "jason uninstall ended and $held, which it was held at, is still there: it was let go after the verb's wait ran out, and the leg proves nothing" }
+        if ($noProof) {
+            # The leg proved nothing, and the window was opened: its clean-up still runs, so the next leg meets neither the
+            # window nor an uninstaller's question. The window closed first, so a silent run the waiter starts finds none; then,
+            # while the waiter this verb left still runs (up to 120 s), every uninstaller run it shows ended by its id.
+            Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            $waiterLine = "Wait-Process -Id $($verb.Id) -Timeout 600;"
+            $until = (Get-Date).AddSeconds(120)
+            do {
+                $waiters = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'powershell.exe' -and "$($_.CommandLine)".Contains($waiterLine) })
+                Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                if ($waiters.Count -gt 0) { Start-Sleep -Milliseconds 500 }
+            } while ($waiters.Count -gt 0 -and (Get-Date) -lt $until)
+            Say "the leg proved nothing; the window was closed and the waiter $(if ($waiters.Count -gt 0) { 'still runs after 120 s' } else { 'has ended' }), every uninstaller run it showed ended, before it fails"
+            Fail $noProof
+        }
         $shown = $null
         $until = (Get-Date).AddSeconds(150)
         while ((Get-Date) -lt $until -and -not $shown) {
@@ -2235,6 +2297,26 @@ switch ($Step) {
             Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
             $remover = "the moved install's own uninstall"
             Say "$Version's own uninstall --purge-data --yes, after moving again, ended 0 and the application's folder went"
+
+            # What going back and forward again leaves where the person's own quick-start stands under Jason's name: this
+            # build's uninstall reports that file as edited, keeps it without --force, and keeps the record that names it
+            # (see $thisBuildKept). Recorded by its listing line, exactly, only where that uninstall's own report names the
+            # person's file under that root as the one edited file and the record names it; anything wider fails the leg.
+            $keptRecord = $thisBuildKept['agents skills\.jason-skills.json']
+            if (Test-Path -LiteralPath $keptRecord -PathType Leaf) {
+                $keptRoot = Split-Path -Parent $keptRecord
+                $keptFile = Join-Path $ownSkill 'SKILL.md'
+                $report = Read-Document $ran.Said
+                $roots = @(if ($report -and $report.PSObject.Properties['plan'] -and $report.plan.PSObject.Properties['roots']) { @($report.plan.roots) })
+                $edited = @($roots | ForEach-Object { $root = $_; @($root.files) | Where-Object { $_.edited -eq $true } | ForEach-Object { "$($root.root)`t$($_.path)" } })
+                if ($edited.Count -ne 1 -or $edited[0] -ine "$keptRoot`t$keptFile") { Fail "after $remover, $keptRecord is left, and its report does not name $keptFile under $keptRoot as the one edited file: it names '$(($edited | ForEach-Object { $_ -replace "`t", ' ' }) -join "', '")'" }
+                $recorded = @(try { @((Get-Content -LiteralPath $keptRecord -Raw | ConvertFrom-Json).packs) | ForEach-Object { @($_.files) } | ForEach-Object { [string]$_.path } } catch { })
+                if ($recorded -cnotcontains 'quick-start/SKILL.md') { Fail "after $remover, $keptRecord is left, and it does not name quick-start/SKILL.md, the file its uninstall reports as edited" }
+                $openLeg = if (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
+                if (-not $openLeg) { Fail "no leg is open to record $keptRecord as this build's own kept record" }
+                Add-Content -LiteralPath $thisBuildKeptRows -Value "$openLeg`tagents skills\.jason-skills.json`t$((Get-Item -LiteralPath $keptRecord -Force).Length)"
+                Say "going back and forward again leaves the person who put a quick-start of their own under Jason's name with $keptFile as they wrote it and $keptRecord beside it: $remover reports that file as edited and keeps it without --force, and keeps the record because it names that file; this leg's compare excuses exactly that line as this build's own"
+            }
         } else {
             # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.
             foreach ($words in @(@('runtime', 'stop'), @('runtime', 'autostart', 'disable'), @('uninstall', '--purge-data', '--yes'))) {
