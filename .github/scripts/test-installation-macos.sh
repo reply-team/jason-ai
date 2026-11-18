@@ -107,6 +107,17 @@ app() {
     elif [ -e /Applications/Jason.app ]; then echo /Applications/Jason.app
     else echo ""; fi
 }
+# Where an application of a release before 0.49.0 is moved out of its place, as a person moves it to the Trash: by the
+# leg that installs over the previous release's Jason Desktop, and by the reset after a failed leg. The runner's temporary
+# folder, which no listing reads; the Trash itself is protected on the runner.
+OLD_APPS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/over-previous-trash"
+# Whether a version is one before 0.49.0; an unknown one is not.
+before_049() {
+    case "$1" in
+        0.[0-9]*) local minor="${1#0.}"; minor="${minor%%.*}"; case "$minor" in ''|*[!0-9]*) return 1 ;; esac; [ "$minor" -lt 49 ] ;;
+        *) return 1 ;;
+    esac
+}
 version_of() { sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Contents/Resources/bundle/version.json" 2>/dev/null | head -n 1; }
 
 # A login shell as a new terminal starts one: the environment the system gives, not this job's, whose PATH names
@@ -451,6 +462,35 @@ begin)
             done
             sleep 3
             placed="$(app)"
+            # An application of a release before 0.49.0 cannot be taken off by its own jason, which refuses as the one the
+            # application carries, and is never set up or replaced from a terminal: quit above, it is moved out of its place
+            # as a person moves it to the Trash, said, and never for 0.49.0 or later, which keeps its own removal. In the
+            # same act its preferences go as this build's removal takes them, by the one identifier and nothing wider:
+            # through the preferences system first (defaults delete, which would otherwise write back a copy it holds), then
+            # the file, where it is a file of its own and not a link.
+            if [ -n "$placed" ] && before_049 "$(version_of "$placed")"; then
+                moved_to="$OLD_APPS/moved-by-the-reset-$(date +%s)"
+                mkdir -p "$moved_to"
+                if mv "$placed" "$moved_to/Jason.app"; then line="  moved the application $placed, $(version_of "$moved_to/Jason.app"), a release before 0.49.0, out of its place to $moved_to"; else line="  could not move the application $placed, a release before 0.49.0, out of its place"; fi
+                echo "$line"
+                printf '%s\n' "$line" >> "$resets"
+                if [ ! -e "$placed" ]; then
+                    preferences="$HOME/Library/Preferences/ai.jasonharness.desktop.plist"
+                    status=0
+                    ( within 10 'defaults delete ai.jasonharness.desktop' defaults delete ai.jasonharness.desktop > "$OUT/reset-defaults.txt" 2>&1 ) || status=$?
+                    line="  defaults delete ai.jasonharness.desktop ended $status: $({ grep . "$OUT/reset-defaults.txt" || true; } | tail -n 1)"
+                    echo "$line"
+                    printf '%s\n' "$line" >> "$resets"
+                    if [ -f "$preferences" ] && [ ! -L "$preferences" ]; then
+                        if rm -f "$preferences"; then line="  removed $preferences"; else line="  could not remove $preferences"; fi
+                    else
+                        line="  $preferences: $(if [ -L "$preferences" ]; then echo 'a link, left'; else echo 'not there'; fi)"
+                    fi
+                    echo "$line"
+                    printf '%s\n' "$line" >> "$resets"
+                fi
+                placed="$(app)"
+            fi
             for jason in "${placed:+$placed/Contents/Resources/bundle/jason}" "$WRAPPER"; do
                 [ -n "$jason" ] && [ -x "$jason" ] || continue
                 status=0
@@ -995,9 +1035,14 @@ PY
 
 over-previous-desktop)
     # The previous release's Jason Desktop placed as a person places its download, opened and quit as a person leaves it,
-    # then this build installed over it by install.sh as an agent runs it: the application replaced in its own place at
-    # this version, one application only, the terminal command the application's wrapper naming no data directory, and a
-    # new login shell finding it. The uninstall and the compare after it are the leg's next steps.
+    # then this build's install.sh run over it as an agent runs it. A Jason.app before 0.49.0 is never replaced from a
+    # terminal (docs/INSTALL.md, "an earlier one is left as it is, and the script ends non-zero saying to update it from
+    # its own menu"): asserted, the refusal by its words and nothing changed, held before against after. Then the person
+    # takes the old application out instead of updating it from its menu: quit, and moved out of its place as to the Trash
+    # (into the runner's temporary folder, which no listing reads; the Trash itself is protected on the runner); and the
+    # line, run again, installs: this build in that place, one application only, the terminal command the application's
+    # wrapper naming no data directory, and a new login shell finding it, on a machine the previous release's Desktop
+    # set up at its first start. The uninstall and the compare after it are the leg's next steps.
     previous="$1"; feed="$2"; version="$3"; script="$4"
     zip="$previous/jason-desktop-macos-arm64.zip"
     [ -f "$zip" ] || fail "no $zip: the step fetching the previous release did not take it"
@@ -1024,19 +1069,55 @@ over-previous-desktop)
     sleep 3
     say "the previous release's Jason Desktop quit, as a person closes it before installing"
 
-    # This build over it, by install.sh as an agent runs it.
+    # This build's line over it, as an agent runs it: refused, and nothing changed. The previous release's first start may
+    # have placed a terminal command and profile lines of its own, so nothing is held absent: each is held the same, by
+    # its bytes and its modification time, before the line and after it, an absent one staying absent; and the
+    # application's version and signature the same.
+    held_files() {
+        for file in "$WRAPPER" "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.zshrc" "$HOME/.zlogin" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.bashrc"; do
+            if [ -e "$file" ]; then printf '%s\t%s\t%s\n' "$file" "$(shasum -a 256 < "$file" | cut -d' ' -f1)" "$(stat -f %m "$file")"; else printf '%s\tabsent\n' "$file"; fi
+        done
+    }
+    held_files > "$OUT/over-previous-files-before.txt"
+    write_listing "$OUT/over-previous-refusal-before.txt" quiet
     status=0
-    within 300 'install.sh over the previous Jason Desktop' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-install.txt" 2>&1 || status=$?
+    within 300 'install.sh over the previous Jason Desktop' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-refused.txt" 2>&1 || status=$?
+    cat "$OUT/over-previous-refused.txt"
+    [ "$status" -ne 0 ] || fail "install.sh over the previous Jason Desktop $old ended 0, where a Jason.app before 0.49.0 is left as it is and the script ends non-zero"
+    # The sentence as install.sh writes it on stderr, whole, as its own line.
+    refusal="install.sh: Jason Desktop $old at $placed is older than 0.49.0 and cannot be set up from a terminal; nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again."
+    grep -qxF -- "$refusal" "$OUT/over-previous-refused.txt" || fail "install.sh over the previous Jason Desktop exited $status without the line '$refusal': $(tail -n 3 "$OUT/over-previous-refused.txt")"
+    held_files > "$OUT/over-previous-files-after.txt"
+    cmp -s "$OUT/over-previous-files-before.txt" "$OUT/over-previous-files-after.txt" || fail "install.sh said nothing was changed, and the terminal command or a profile changed: $(diff "$OUT/over-previous-files-before.txt" "$OUT/over-previous-files-after.txt" | grep '^[<>]' | tr '\t\n' ' ;')"
+    [ "$(version_of "$placed")" = "$old" ] || fail "after the refusal $placed is $(version_of "$placed"), not $old"
+    write_listing "$OUT/over-previous-refusal-after.txt" quiet
+    # The data directory and the harness root aside, as every reading of a leg's leftovers sets them aside: a runtime the
+    # previous release's window started may still be writing there.
+    for when in before after; do grep -vE '^(data directory|harness root)' "$OUT/over-previous-refusal-$when.txt" > "$OUT/over-previous-refusal-$when-held.txt" || true; done
+    cmp -s "$OUT/over-previous-refusal-before-held.txt" "$OUT/over-previous-refusal-after-held.txt" || fail "install.sh said nothing was changed, and the machine differs: $(diff "$OUT/over-previous-refusal-before-held.txt" "$OUT/over-previous-refusal-after-held.txt" | grep '^[<>]' | tr '\t\n' ' ;')"
+    within 300 "codesign verifying the previous release's application after the refusal" codesign --verify --deep --strict "$placed" || fail "after the refusal the signature of $placed does not verify"
+    say "this build's install.sh over Jason Desktop $old exited $status with its refusal, naming Check for Updates; the terminal command and the profiles the same by bytes and time, $placed still $old with its signature verifying, and the machine outside the data directory and the harness root listed the same before and after"
+
+    # The person takes the old application out instead of updating it from its menu: quit, and moved out of its place as
+    # to the Trash, into the runner's temporary folder, out of every place a listing reads. Then the line again.
+    aside="$OLD_APPS/moved-by-the-leg"
+    [ ! -e "$aside" ] || fail "$aside is there before the leg makes it"
+    mkdir -p "$aside"
+    mv "$placed" "$aside/Jason.app" || fail "$placed could not be moved out of $place"
+    [ -z "$(app)" ] || fail "after the previous release's application was moved out, an application stands at $(app)"
+    say "the previous release's Jason Desktop $old moved out of $place, as to the Trash"
+    status=0
+    within 300 'install.sh once the previous Jason Desktop is moved out' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-install.txt" 2>&1 || status=$?
     cat "$OUT/over-previous-install.txt"
-    [ "$status" -eq 0 ] || fail "install.sh over the previous Jason Desktop exited with $status: $(tail -n 3 "$OUT/over-previous-install.txt")"
-    [ "$(app)" = "$placed" ] || fail "install.sh over the previous Jason Desktop at $placed left the application at '$(app)'"
+    [ "$status" -eq 0 ] || fail "install.sh once the previous Jason Desktop was moved out exited with $status: $(tail -n 3 "$OUT/over-previous-install.txt")"
+    [ "$(app)" = "$placed" ] || fail "install.sh once the previous Jason Desktop was moved out of $placed put the application at '$(app)'"
     for other in /Applications/Jason.app "$HOME/Applications/Jason.app"; do
         [ "$other" = "$placed" ] || [ ! -e "$other" ] || fail "a second application stands at $other beside $placed"
     done
     [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed") after install.sh, not $version"
     carried="$placed/Contents/Resources/bundle/jason"
     [ "$(within 60 'the carried jason --version' "$carried" --version | cut -d+ -f1)" = "$version" ] || fail "the carried jason does not say $version"
-    say "install.sh put Jason Desktop $version in the previous release's place, $placed, and no second application stands"
+    say "install.sh run again put Jason Desktop $version in the previous release's place, $placed, and no second application stands"
 
     # The terminal command: the application's wrapper, naming no data directory, and a new login shell finds it.
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
@@ -1157,6 +1238,236 @@ print("" if doc is None else doc)' "$@"; }
     [ "$(read_field "$OUT/over-running-cli-autostart.json" registered)" = true ] || fail "no login registration after the one line: $(cat "$OUT/over-running-cli-autostart.json")"
     [ "$(read_field "$OUT/over-running-cli-autostart.json" executable)" = "$carried" ] || fail "the login registration names $(read_field "$OUT/over-running-cli-autostart.json" executable), not $carried"
     say "after the one line: the same $after_count campaign(s), by id, and the login registration names $carried"
+    ;;
+
+bundle-swap)
+    # The previous release's Jason Desktop, its bundle replaced by this build's as its updater replaces it, sets the
+    # machine up at its first start. Its real download placed where applications are kept, its signature verified, started
+    # once and let do what its first start does, then quit; the machine as it then stands listed, a fact. Then the swap an
+    # update makes, made by the leg: a runtime of the old application's own jason stopped by it, as its updater does
+    # first; this build's application copied beside it by ditto, keeping the signature the test build has, and renamed
+    # into the same place, the old bundle moved out. Then this build's application started, and
+    # held by name once its first start's set-up has run: the wrapper at ~/.local/bin/jason running the carried jason and
+    # naming no data directory; a new login shell's jason saying this build; one jason found by name and no runtime but
+    # the carried one's; the skills recorded for the hosts found, the person's own quick-start left alone and named by
+    # jason status; where the previous release had its start at login, the registration naming the carried jason; and
+    # jason status printed whole. With running-cli, the same over a command-line install of the previous release at
+    # ~/.local/bin/jason whose runtime runs before the swap, and also held: a runtime answering from the carried jason
+    # (looked for 120 s, since it starts only once the set-up's finishing step returns), the note that a start is owed
+    # gone, the old executable now the wrapper, its notice files gone, and the campaigns the same by id. In both, the
+    # set-up's routine ended 0 and completed. Without it, the set-up record the first start writes once the set-up
+    # completes; with it, no record is held, since the finishing step reads the public feed, where a test build has no
+    # release, and writes none. Whether the previous release's quit left its own runtime running is said either way. Not proved here: the old
+    # application's own updater, its download, its signature check and its swap; the swap is the leg's. The uninstall and
+    # the compare after it are the leg's next steps.
+    previous="$1"; built="$2"; version="$3"; mode="${4:-}"
+    case "$mode" in ''|running-cli) ;; *) fail "bundle-swap takes running-cli or nothing after the version, not '$mode'" ;; esac
+    zip="$previous/jason-desktop-macos-arm64.zip"
+    [ -f "$zip" ] || fail "no $zip: the step fetching the previous release did not take it"
+    [ -d "$built" ] || fail "no application at $built"
+    [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
+    [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
+    read_field() { python3 -c 'import json,sys
+doc = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.lstrip().startswith("{")][-1])
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    campaign_ids() {
+        within 120 "jason campaign list with $1" "$1" campaign list --include-archived --limit 1000 > "$OUT/bundle-swap-campaigns.json" || fail "jason campaign list with $1 failed"
+        python3 -c 'import json,sys
+doc = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.lstrip().startswith("{")][-1])
+if doc.get("next_cursor"): sys.exit("more than one page of campaigns")
+print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap-campaigns.json" > "$2" || fail "the campaigns $1 lists could not be read"
+    }
+    runtimes_of() { ps -axo pid=,command= | grep -F "$1 runtime run" | grep -v grep || true; }
+    # The desktop's machine_setup_ran lines of a start, counted; and the last one's exit and whether it completed.
+    ran_lines() {
+        python3 -c 'import glob,json,os,sys
+lines = []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == "machine_setup_ran" and event.get("Why") == "start":
+            lines.append(event)
+last = lines[-1] if lines else {}
+print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Completed", "none")).lower()))' "$DATA"
+    }
+    state_of() { if [ -e "$1" ]; then printf '%s %s' "$(shasum -a 256 < "$1" | cut -d' ' -f1)" "$(stat -f %m "$1")"; else printf absent; fi; }
+    record="$DATA/desktop/machine-setup.json"
+    owed="$DATA/run/start-owed.json"
+
+    # With running-cli: the previous release's command-line Jason by its own script, a runtime running from it, its login
+    # start registered and one campaign made; the notice files and the runtime held first to be there.
+    if [ "$mode" = running-cli ]; then
+        within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/bundle-swap-cli.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/bundle-swap-cli.txt")"
+        cli_old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
+        { [ -n "$cli_old" ] && [ "$cli_old" != "$version" ]; } || fail "the previous release's jason says '$cli_old', where it must be a version before $version"
+        within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
+        within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+        within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before the swap' > "$OUT/bundle-swap-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/bundle-swap-campaign.json")"
+        made="$(read_field "$OUT/bundle-swap-campaign.json" id)" || fail "the campaign made under the previous release has no id"
+        [ -n "$made" ] || fail "the campaign made under the previous release has no id: $(cat "$OUT/bundle-swap-campaign.json")"
+        campaign_ids "$WRAPPER" "$OUT/bundle-swap-ids-before.txt"
+        grep -qx "$made" "$OUT/bundle-swap-ids-before.txt" || fail "the campaign $made made under the previous release is not listed"
+        for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ -f "$HOME/.local/bin/$notice" ] || fail "the previous release's install.sh placed no $notice in ~/.local/bin"; done
+        [ -n "$(runtimes_of "$WRAPPER")" ] || fail "no process runs '$WRAPPER runtime run' after the previous release's runtime start; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+        say "the previous release's command-line Jason $cli_old installed by its own script at $WRAPPER, a runtime running from it, its login start registered, $(wc -l < "$OUT/bundle-swap-ids-before.txt" | tr -d ' ') campaign(s)"
+    fi
+
+    # The previous release's Jason Desktop, from its own download, started once and quit.
+    place=/Applications
+    [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
+    within 300 "unpacking $zip" ditto -x -k "$zip" "$place" || fail "$zip could not be unpacked into $place"
+    placed="$place/Jason.app"
+    within 300 "codesign verifying the previous release's application" codesign --verify --deep --strict "$placed" || fail "the signature of the previous release's $placed does not verify"
+    old="$(version_of "$placed")"
+    { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the previous release's application says '$old', where it must be a version before $version"
+    "$placed/Contents/MacOS/Jason" > "$OUT/bundle-swap-previous-window.log" 2>&1 &
+    window=$!
+    sleep 30
+    kill -0 "$window" 2>/dev/null || fail "the previous release's Jason Desktop did not stay running: $(tail -n 20 "$OUT/bundle-swap-previous-window.log")"
+    end_process "$window" "the previous release's Jason Desktop"
+    pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
+    sleep 3
+    # Whether the previous release's quit left a runtime of its own running: a fact, either way.
+    if [ -n "$(runtimes_of "$placed/Contents/Resources/bundle/jason")" ]; then
+        say "the previous release's quit left its own runtime running (pid $(runtimes_of "$placed/Contents/Resources/bundle/jason" | awk '{print $1}' | tr '\n' ' '))"
+    else
+        say "the previous release's quit left no runtime of its own running"
+    fi
+    write_listing "$OUT/bundle-swap-before-swap.txt" quiet
+    say "the previous release's Jason Desktop $old placed at $placed from its own download, its signature verified, started once for 30 s and quit; the machine then, $(grep -c . "$OUT/bundle-swap-before-swap.txt") line(s), is in bundle-swap-before-swap.txt"
+    cat "$OUT/bundle-swap-before-swap.txt"
+    # Whether the previous release had its start at login, by its own jason: the command-line one's with running-cli,
+    # else the application's.
+    if [ "$mode" = running-cli ]; then asked="$WRAPPER"; else asked="$placed/Contents/Resources/bundle/jason"; fi
+    within 60 "the previous release's jason runtime autostart status" "$asked" runtime autostart status > "$OUT/bundle-swap-autostart-before.json" 2>/dev/null || fail "the previous release's jason runtime autostart status failed"
+    had_login="$(read_field "$OUT/bundle-swap-autostart-before.json" registered)"
+    say "before the swap the previous release's start at login is registered: ${had_login:-unknown}; launchd's records: $(launchd_records | tr '\t\n' ' ;' || true)"
+    if [ "$mode" = running-cli ]; then
+        [ -n "$(runtimes_of "$WRAPPER")" ] || fail "the previous release's command-line runtime no longer runs before the swap; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+        say "the previous release's command-line runtime still runs from $WRAPPER before the swap"
+    fi
+
+    # The swap an update makes, made here: a runtime the old application's own jason runs stopped by that jason first, as
+    # its updater stops it (a runtime of another executable, the command-line one, it leaves running); this build's
+    # application copied beside the old one by ditto, which keeps the signature the test build has, then renamed into its
+    # place, the old bundle moved out.
+    old_carried="$placed/Contents/Resources/bundle/jason"
+    if [ -n "$(runtimes_of "$old_carried")" ]; then
+        within 120 "the previous application's jason runtime stop" "$old_carried" runtime stop > "$OUT/bundle-swap-old-stop.txt" 2>&1 || fail "the previous application's jason could not stop its runtime: $(cat "$OUT/bundle-swap-old-stop.txt")"
+        say "a runtime ran from the previous application's own jason; stopped by it, as its updater stops it before the swap"
+    else
+        say "no runtime ran from the previous application's own jason before the swap"
+    fi
+    staged="$place/.Jason-swap.app"
+    swapped="$OLD_APPS/swapped-out-by-the-leg"
+    [ ! -e "$staged" ] && [ ! -e "$swapped" ] || fail "$staged or $swapped is there before the leg makes it"
+    within 300 'ditto copying this build beside the previous application' ditto "$built" "$staged" || fail "this build's application could not be copied to $staged"
+    mkdir -p "$swapped"
+    mv "$placed" "$swapped/Jason.app" || fail "the previous release's application could not be moved out of $placed"
+    mv "$staged" "$placed" || fail "this build's application could not be renamed into $placed"
+    within 300 "codesign verifying this build's application after the swap" codesign --verify --deep --strict "$placed" || fail "this build's application at $placed does not verify after the swap"
+    [ "$(version_of "$placed")" = "$version" ] || fail "after the swap $placed is $(version_of "$placed"), not $version"
+    carried="$placed/Contents/Resources/bundle/jason"
+    say "the bundle at $placed swapped for this build's $version, its signature verifying, the previous release's moved out to $swapped"
+
+    # This build's application started: its first start's set-up read in its log, looked for for 180 s.
+    ran_before="$(ran_lines)" || fail "the desktop's log could not be read before the start"
+    record_before="$(state_of "$record")"
+    "$placed/Contents/MacOS/Jason" > "$OUT/bundle-swap-window.log" 2>&1 &
+    window=$!
+    until=$(( $(date +%s) + 180 ))
+    ran_after="$ran_before"
+    while [ "${ran_after%% *}" -le "${ran_before%% *}" ] && [ "$(date +%s)" -lt "$until" ]; do
+        kill -0 "$window" 2>/dev/null || fail "this build's application did not stay running after the swap: $(tail -n 20 "$OUT/bundle-swap-window.log")"
+        sleep 2
+        ran_after="$(ran_lines)" || fail "the desktop's log could not be read after the start"
+    done
+    [ "${ran_after%% *}" -gt "${ran_before%% *}" ] || fail "this build's application wrote no machine_setup_ran line at its start within 180 s of it"
+    set -- $ran_after
+    ran_exit="$2"; ran_completed="$3"
+    say "this build's first start after the swap ran the set-up: jason install exited $ran_exit, completed $ran_completed"
+    [ "$ran_exit" = 0 ] || fail "the set-up at this build's first start after the swap exited $ran_exit"
+    # Completed is the routine's own (jason install, which runs offline), never the finishing step's: held in both halves.
+    [ "$ran_completed" = true ] || fail "the set-up at this build's first start after the swap did not complete"
+    # The runtime: looked for for 120 s from the carried jason, since it starts only once the finishing step returns.
+    until=$(( $(date +%s) + 120 ))
+    answered=""
+    while [ "$(date +%s)" -lt "$until" ]; do
+        if within 20 'jason runtime status from the carried jason' "$carried" runtime status > "$OUT/bundle-swap-runtime.txt" 2>&1 && [ -n "$(runtimes_of "$carried")" ]; then answered=1; break; fi
+        sleep 2
+    done
+    if [ "$mode" = running-cli ]; then
+        [ -n "$answered" ] || fail "no runtime answered from $carried within 120 s of the set-up: $(cat "$OUT/bundle-swap-runtime.txt"); the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+        say "a runtime answers from $carried (pid $(runtimes_of "$carried" | awk '{print $1}' | tr '\n' ' '))"
+    else
+        say "a runtime from $carried after the first start: $(if [ -n "$answered" ]; then echo "answering (pid $(runtimes_of "$carried" | awk '{print $1}' | tr '\n' ' '))"; else echo 'none within 120 s'; fi)"
+    fi
+
+    # The terminal command: the application's wrapper, naming no data directory; a new login shell finds it, saying this
+    # build; one jason by that name; no runtime but the carried jason's.
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER after this build's first start"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    every="$(within 60 'a new login shell listing every jason' fresh 'which -a jason')" || true
+    [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+    others="$(ps -axo pid=,command= | grep -E '/jason runtime run' | grep -v grep | grep -vF "$carried runtime run" || true)"
+    [ -z "$others" ] || fail "a runtime runs from another jason than $carried: $others"
+    say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory; a new zsh login shell finds it alone by that name, saying $version; and no runtime runs from another jason"
+
+    # The skills of the hosts found, recorded; the person's own quick-start left alone and named by jason status.
+    for root in .claude/skills .agents/skills; do [ -f "$HOME/$root/.jason-skills.json" ] || fail "no skills record in ~/$root after this build's first start"; done
+    within 120 'jason status' "$carried" status > "$OUT/bundle-swap-status.json" 2>/dev/null || true
+    if grep -q "person's own" "$OUT/failed-legs.txt" 2>/dev/null; then
+        say "the skills of Claude Code and Codex are recorded in both folders; the person's own quick-start was lost in a leg before, as recorded, so this start's handling of it is not seen"
+    elif [ -f "$OWN_SKILL/SKILL.md" ]; then
+        [ "$(cat "$OWN_SKILL/SKILL.md")" = "a person's own skill" ] || fail "the person's own skill at $OWN_SKILL was changed by this build's first start"
+        if grep -q '"quick-start/' "$HOME/.agents/skills/.jason-skills.json"; then fail "the record in ~/.agents/skills claims the person's own quick-start"; fi
+        names_own_skill "$OUT/bundle-swap-status.json" "$OWN_SKILL" || fail "jason status does not name the person's own quick-start, $OWN_SKILL, as a folder Jason did not deploy"
+        say "the skills of Claude Code and Codex are recorded in both folders, and the person's own quick-start is left alone, named by jason status"
+    else
+        say "the skills of Claude Code and Codex are recorded in both folders; the person's own quick-start is gone already, so this start's handling of it is not seen"
+    fi
+
+    # The start at login: where the previous release had one, it now names the carried jason.
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/bundle-swap-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after this build's first start"
+    if [ "$had_login" = true ]; then
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = true ] || fail "the previous release had its start at login, and after the swap none is registered: $(cat "$OUT/bundle-swap-autostart.json")"
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" executable)" = "$carried" ] || fail "the start at login names $(read_field "$OUT/bundle-swap-autostart.json" executable), not $carried"
+        say "the previous release had its start at login, and it now names $carried"
+    else
+        say "the previous release had no start at login; after the swap it is registered: $(read_field "$OUT/bundle-swap-autostart.json" registered)"
+    fi
+
+    if [ "$mode" = running-cli ]; then
+        # The command-line install retired: the note that a start is owed gone, the old executable now the wrapper (held
+        # above), its notice files gone, no runtime from it, and the campaigns the same by id.
+        [ ! -e "$owed" ] || fail "the note that a start is owed stands at $owed after this build's first start: $(cat "$owed")"
+        for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
+        [ -z "$(runtimes_of "$WRAPPER")" ] || fail "a runtime still runs from the retired $WRAPPER: $(runtimes_of "$WRAPPER")"
+        campaign_ids "$carried" "$OUT/bundle-swap-ids-after.txt"
+        cmp -s "$OUT/bundle-swap-ids-before.txt" "$OUT/bundle-swap-ids-after.txt" || fail "after the swap the campaigns listed are not the ones listed before it: $(diff "$OUT/bundle-swap-ids-before.txt" "$OUT/bundle-swap-ids-after.txt" | tr '\n' ' ')"
+        say "the command-line install is retired: no note of an owed start, no notice file in ~/.local/bin, no runtime from $WRAPPER; the same $(wc -l < "$OUT/bundle-swap-ids-after.txt" | tr -d ' ') campaign(s), by id"
+        say "the set-up record at $record: $(state_of "$record") (not held: the finishing step reads the public feed, where a test build has no release)"
+    else
+        record_after="$(state_of "$record")"
+        [ "$record_after" != absent ] && [ "$record_after" != "$record_before" ] || fail "this build's first start wrote no set-up record at $record (before: $record_before; after: $record_after)"
+        say "this build's first start wrote the set-up record at $record"
+    fi
+
+    say "jason status after this build's first start, whole:"
+    cat "$OUT/bundle-swap-status.json"
+    end_process "$window" "this build's application"
+    pkill -f "$placed/Contents/MacOS/" 2>/dev/null || true
+    sleep 3
     ;;
 
 vanishing-place)

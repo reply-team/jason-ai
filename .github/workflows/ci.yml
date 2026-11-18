@@ -2426,8 +2426,10 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
-    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 135
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run. 180 for
+    # this rehearsal, which adds the legs over the previous release's Jason Desktop; set again after the first run that
+    # runs every leg, to that run's time and half again.
+    timeout-minutes: 180
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2642,14 +2644,16 @@ jobs:
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
-      # Over the previous release's Jason Desktop: its own download placed and opened as a person does, then this build
-      # installed over it by install.sh as an agent runs it, and taken off from a new terminal.
-      - name: Install this build by install.sh over the previous release's Jason Desktop
+      # Over the previous release's Jason Desktop: its own download placed and opened as a person does; this build's
+      # install.sh, as an agent runs it, refuses an application before 0.49.0 and changes nothing (docs/INSTALL.md); the
+      # person then takes the old application out as to the Trash, and the line run again installs; then taken off from a
+      # new terminal.
+      - name: This build's install.sh refuses the previous release's Jason Desktop, then installs once it is moved out
         if: ${{ !cancelled() }}
         timeout-minutes: 25
         shell: bash
         env:
-          LEG: "Install this build by install.sh over the previous release's Jason Desktop"
+          LEG: "This build's install.sh refuses the previous release's Jason Desktop, then installs once it is moved out"
         run: |
           bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
           [ ! -e "$OUT/skip" ] || exit 0
@@ -2699,6 +2703,42 @@ jobs:
           bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-over-running-cli-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-over-running-cli-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # The previous release's Jason Desktop as its own updater leaves it: its bundle replaced by this build's at the same
+      # place, the swap the leg's own (no updater of the old application runs), then this build started; its first start's
+      # set-up held by name; then taken off from a new terminal.
+      - name: The previous release's Jason Desktop, its bundle replaced by this build's as its updater replaces it, sets the machine up at its first start
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "The previous release's Jason Desktop, its bundle replaced by this build's as its updater replaces it, sets the machine up at its first start"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh bundle-swap "$PREVIOUS" desktop/dist/mac-arm64/Jason.app "$VERSION"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-bundle-swap-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # The same, over a command-line install of the previous release whose runtime runs before the swap: the runtime from
+      # the carried jason after the first start, the note of an owed start gone, the old executable the wrapper, the
+      # campaigns the same; then taken off from a new terminal.
+      - name: The previous release's Jason Desktop and its running command-line Jason, the bundle replaced by this build's as its updater replaces it, set up at its first start
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "The previous release's Jason Desktop and its running command-line Jason, the bundle replaced by this build's as its updater replaces it, set up at its first start"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh bundle-swap "$PREVIOUS" desktop/dist/mac-arm64/Jason.app "$VERSION" running-cli
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-bundle-swap-cli-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-cli-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # Opened from its disk image: this build's application in a read-only image, its jason install refused with
@@ -2792,6 +2832,7 @@ jobs:
             echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job updates a signed build to a signed next one."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- The previous release's own Desktop updater reaching this version: it reads only the published releases."
+            echo "- The old application's own updater replacing its bundle: its download, its signature check and its swap. The two legs that replace the previous release's bundle make the swap themselves, by ditto and a rename."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the listings
