@@ -227,7 +227,7 @@ public partial class PageClaimsTests
         Assert.Contains("!macro customInstall", installer, StringComparison.Ordinal);
         Assert.Contains("nsExec::Exec '\"$INSTDIR\\resources\\bundle\\jason.exe\" install'", installer, StringComparison.Ordinal);
 
-        Assert.Contains("Installed by hand from either, it sets the machine up as the script does (§2): the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
+        Assert.Contains("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
         Assert.Contains("the Windows installer runs it too, at every install and update.", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
         Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found.", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.Contains("and so does the package for your system below, installed by hand: the application's first start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
@@ -275,14 +275,28 @@ public partial class PageClaimsTests
     /// install page names that note by the path the command line writes it to.
     /// </summary>
     [Fact]
-    public void The_install_page_names_the_note_of_a_start_that_is_owed()
+    public async Task The_install_page_names_the_note_of_a_start_that_is_owed_and_both_ways_it_goes()
     {
         using var dir = new TempPaths();
         var relative = Path.GetRelativePath(dir.Paths.Root, dir.Paths.StartOwedFile).Replace('\\', '/');
         Assert.Equal("run/start-owed.json", relative);
 
         var start = Flat(Section(Page("docs", "INSTALL.md"), "## 6. Start it, and keep it started"));
-        Assert.Contains($"An install, an update or Jason Desktop's set-up that stops it leaves a note that a start is owed, `<data>/{relative}`, until a runtime starts on that data directory again, and Jason Desktop's next start starts one from the `jason` it carries where it finds the note and no runtime answering", start, StringComparison.Ordinal);
+        Assert.Contains($"An install, an update or Jason Desktop's set-up that stops the runtime leaves a note that a start is owed, `<data>/{relative}`, and Jason Desktop's next start starts one from the `jason` it carries where it finds the note and no runtime answering", start, StringComparison.Ordinal);
+        Assert.Contains("The note goes in two ways: when a runtime starts on that data directory again, and when you stop the runtime yourself with `jason runtime stop`, so a stop of your own is never taken for one an install owes.", start, StringComparison.Ordinal);
+
+        // The second way is the stop's own: a person's `jason runtime stop` that succeeded takes the note back.
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        dir.WriteDescriptor(Commands.RuntimeVerbs.Descriptor("rt_LIVE"));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(dir.Paths.DescriptorFile);
+            return Commands.RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, Commands.RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (person, _, _) = Commands.RuntimeVerbs.Environment(dir, handler, new Process.FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], person, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a person's own stop left the note that a start is owed");
     }
 
     /// <summary>

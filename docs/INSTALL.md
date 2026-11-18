@@ -349,11 +349,12 @@ have done their work: you may delete those three — only those — with `rm -r 
 installation itself: one installation, Jason Desktop and the `jason` it carries, which the install script above
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
-`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from either,
-it sets the machine up as the script does (§2): the application's first start of each version runs the `jason install`
-it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and
-its Command Line item says what that placed ([desktop.md](desktop.md#the-command-line-and-the-login-items)); the
-Windows installer runs it too, at every install and update. The Windows and macOS packages are signed.
+`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from one of
+them, it sets the machine up as the script does (§2): the application's first start of each version runs the
+`jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each
+is found, and its Command Line item says what that placed
+([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install
+and update. The Windows and macOS packages are signed.
 
 On Linux, Jason Desktop is a separate download beside the command line: `jason-desktop-linux-x64.deb`
 (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or
@@ -660,15 +661,18 @@ jason runtime autostart status
 ```
 
 The registration carries the data directory it was made under, and nothing supervises it afterwards: a
-runtime that stops stays stopped until somebody starts it. An install, an update or Jason Desktop's set-up that stops
-it leaves a note that a start is owed, `<data>/run/start-owed.json`, until a runtime starts on that data directory
-again, and Jason Desktop's next start starts one from the `jason` it carries where it finds the note and no runtime
-answering ([desktop.md](desktop.md), "The start that is owed"). It needs no administrator rights anywhere, and it
+runtime that stops stays stopped until somebody starts it. It needs no administrator rights anywhere, and it
 is this account's alone: on a machine several people sign in to, each registers their own. On Windows the
 runtime then runs in your own session when you sign in, shows no window on Windows 11 24H2 and later, and ends
 when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
+
+An install, an update or Jason Desktop's set-up that stops the runtime leaves a note that a start is owed,
+`<data>/run/start-owed.json`, and Jason Desktop's next start starts one from the `jason` it carries where it finds the
+note and no runtime answering ([desktop.md](desktop.md), "The start that is owed"). The note goes in two ways: when a
+runtime starts on that data directory again, and when you stop the runtime yourself with `jason runtime stop`, so a
+stop of your own is never taken for one an install owes.
 
 That is the installation. An agent that installed Jason tells you where it keeps your files and what it ran, then starts
 the [`quick-start`](../skills/runtime/quick-start/SKILL.md) skill, which asks you one question and takes you to your
