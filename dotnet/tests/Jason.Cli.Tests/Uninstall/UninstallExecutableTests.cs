@@ -833,6 +833,238 @@ public class UninstallExecutableTests
         Assert.DoesNotContain("no executable", output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where a session has a numbered temporary folder of its own, as Remote Desktop Session Host gives one inside the
+    /// account's Temp folder, a build run from outside that session's environment unpacks under the account's Temp folder
+    /// instead. The uninstall, run in the session, removes what it unpacked under its own; what the builds unpacked under
+    /// the account's Temp folder and its other numbered folders is named, each with why it is left, and stands: nothing
+    /// there is removed.
+    /// </summary>
+    [Fact]
+    public async Task What_builds_unpacked_under_the_account_s_other_temporary_folders_is_named_and_stands()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only on Windows do builds unpack under the temporary folder, and only there is it looked under.");
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        var root = UnpackedUnder(temp, "Xq7tzCSumrk");
+        var older = UnpackedUnder(temp, "a0Bc1De2Fg3");
+        var third = UnpackedUnder(Path.Combine(temp, "3"), "Xq7tzCSumrk");
+        var remover = new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = own };
+
+        var (exit, report) = await RunAsync(dir, executable, remover);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(Directory.Exists(own));
+        Assert.Equal([Path.Combine(temp, "2"), temp, Path.Combine(temp, "3")], report.Plan.ExtractedLibraryBases);
+        Assert.Equal([root, older, third], report.Plan.ExtractedLibrariesElsewhere);
+        foreach (var left in new[] { root, older, third })
+        {
+            Assert.True(Directory.Exists(left), $"'{left}', under another temporary folder of this account, was removed.");
+            Assert.DoesNotContain($"extracted.remove {left}", remover.Calls);
+            Assert.Contains(UninstallRunner.LeftElsewhere(left), report.Kept);
+        }
+
+        Assert.Empty(report.Problems);
+        var json = JsonSerializer.Serialize(report.Plan, JasonJson.Options);
+        Assert.Contains("\"extracted_library_bases\":", json, StringComparison.Ordinal);
+        Assert.Contains("\"extracted_libraries_elsewhere\":", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Run from the account's Temp folder itself, the look goes down instead: each numbered folder in it is a base, and what
+    /// a build unpacked there is named.
+    /// </summary>
+    [Fact]
+    public void Run_from_the_account_s_temporary_folder_its_numbered_folders_are_looked_under()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(temp, "Xq7tzCSumrk");
+        var session = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(env, own, Path.GetDirectoryName(executable), windows: true, extractBase: null);
+
+        Assert.Equal([temp, Path.Combine(temp, "2")], bases);
+        Assert.Equal([session], left);
+    }
+
+    /// <summary>
+    /// A base whose program folder is there and empty is one looked under, and names nothing; a numbered folder no build
+    /// unpacked under is no base at all.
+    /// </summary>
+    [Fact]
+    public void An_empty_base_is_looked_under_and_names_nothing()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        Directory.CreateDirectory(Path.Combine(temp, "4", ".net", "jason"));
+        Directory.CreateDirectory(Path.Combine(temp, "5"));
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(env, own, Path.GetDirectoryName(executable), windows: true, extractBase: null);
+
+        Assert.Equal([Path.Combine(temp, "2"), Path.Combine(temp, "4")], bases);
+        Assert.Empty(left);
+    }
+
+    /// <summary>
+    /// A base that cannot be read is skipped, and is not among those looked under; the rest are still read.
+    /// </summary>
+    [Fact]
+    public void A_base_that_cannot_be_read_is_skipped_and_the_rest_are_still_read()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        UnpackedUnder(Path.Combine(temp, "3"), "Xq7tzCSumrk");
+        var fourth = UnpackedUnder(Path.Combine(temp, "4"), "Xq7tzCSumrk");
+        var unreadable = Path.Combine(temp, "3", ".net", "jason");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(
+            env,
+            own,
+            Path.GetDirectoryName(executable),
+            windows: true,
+            extractBase: null,
+            directory => string.Equals(Path.GetFullPath(directory), unreadable, StringComparison.OrdinalIgnoreCase)
+                ? throw new UnauthorizedAccessException($"the row refuses to list '{directory}'")
+                : Directory.EnumerateDirectories(directory));
+
+        Assert.Equal([Path.Combine(temp, "2"), Path.Combine(temp, "4")], bases);
+        Assert.Equal([fourth], left);
+    }
+
+    /// <summary>
+    /// With DOTNET_BUNDLE_EXTRACT_BASE_DIR set the host was told where to unpack, and nothing changes: no other base is
+    /// looked under, the field is null, and what stands under the account's Temp folder is neither named nor touched.
+    /// </summary>
+    [Fact]
+    public async Task With_the_unpack_base_moved_no_other_temporary_folder_is_looked_under()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        var root = UnpackedUnder(temp, "Xq7tzCSumrk");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(env, own, Path.GetDirectoryName(executable), windows: true, extractBase: Path.Combine(temp, "2"));
+
+        Assert.Null(bases);
+        Assert.Empty(left);
+
+        var (_, report) = await RunAsync(
+            dir,
+            executable,
+            new RecordingRemover { ReallyRemoves = true, ExtractedLibraries = own },
+            new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.Combine(temp, "2") });
+
+        Assert.Null(report.Plan.ExtractedLibraryBases);
+        Assert.Null(report.Plan.ExtractedLibrariesElsewhere);
+        Assert.True(Directory.Exists(root));
+        Assert.DoesNotContain(report.Kept, line => line.Contains(root, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// What is not shaped as a build's unpacked libraries under a base, and what is no base, is never named, and stays: a
+    /// folder holding a folder, a link, a loose file, a folder whose name is not a number, another program's folder in a
+    /// numbered one, and a numbered folder that is a link. And a path the host named that is not
+    /// <c>&lt;base&gt;\.net\&lt;program&gt;\&lt;id&gt;</c> widens nothing.
+    /// </summary>
+    [Fact]
+    public void What_is_not_a_base_or_not_shaped_as_a_build_s_libraries_is_never_named()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        var nested = UnpackedUnder(temp, "L5GxzH7oZwh");
+        Directory.CreateDirectory(Path.Combine(nested, "inside"));
+        var target = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "elsewhere", "flat")).FullName;
+        File.WriteAllText(Path.Combine(target, "mine.txt"), "somebody's own");
+        var link = Path.Combine(temp, ".net", "jason", "a0Bc1De2Fg3");
+        DataDirectoryBeltTests.Link(link, target);
+        var loose = Path.Combine(temp, ".net", "jason", "notes.txt");
+        File.WriteAllText(loose, "somebody's own");
+        var named = UnpackedUnder(Path.Combine(temp, "logs"), "Xq7tzCSumrk");
+        var otherProgram = Directory.CreateDirectory(Path.Combine(temp, "3", ".net", "other", "Xq7tzCSumrk")).FullName;
+        var linkedTarget = UnpackedUnder(Path.Combine(dir.Paths.Root, "elsewhere", "base"), "Xq7tzCSumrk");
+        DataDirectoryBeltTests.Link(Path.Combine(temp, "7"), Path.Combine(dir.Paths.Root, "elsewhere", "base"));
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(env, own, Path.GetDirectoryName(executable), windows: true, extractBase: null);
+
+        Assert.Equal([Path.Combine(temp, "2"), temp], bases);
+        Assert.Empty(left);
+        foreach (var stays in new[] { nested, target, named, otherProgram, linkedTarget })
+        {
+            Assert.True(Directory.Exists(stays));
+        }
+
+        Assert.True(File.Exists(loose));
+
+        var unshaped = Directory.CreateDirectory(Path.Combine(temp, "2", "cache", "jason", "Xq7tzCSumrk")).FullName;
+        var (unshapedBases, unshapedLeft) = UninstallReader.OtherBases(env, unshaped, Path.GetDirectoryName(executable), windows: true, extractBase: null);
+        Assert.Null(unshapedBases);
+        Assert.Empty(unshapedLeft);
+    }
+
+    /// <summary>
+    /// Elsewhere than Windows a build unpacks under the home directory, one folder per account, so there is no other base
+    /// to look under: nothing changes.
+    /// </summary>
+    [Fact]
+    public void Elsewhere_than_Windows_no_other_base_is_looked_under()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var own = UnpackedUnder(Path.Combine(temp, "2"), "Xq7tzCSumrk");
+        UnpackedUnder(temp, "Xq7tzCSumrk");
+        var env = Environment(dir, executable, new RecordingRemover(), new StringWriter());
+
+        var (bases, left) = UninstallReader.OtherBases(env, own, Path.GetDirectoryName(executable), windows: false, extractBase: null);
+
+        Assert.Null(bases);
+        Assert.Empty(left);
+    }
+
+    /// <summary>
+    /// The line that names what stands under another temporary folder says only what the look knows: a build of Jason
+    /// unpacked it there, under that folder; this removal takes only what stands under its own; and it is safe to remove
+    /// once nothing runs from it. Nothing in the folder says which session or account made it, so the line claims neither.
+    /// </summary>
+    [Fact]
+    public void The_line_naming_what_another_temporary_folder_holds_names_that_folder_and_claims_no_maker()
+    {
+        using var dir = new TempPaths();
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var left = UnpackedUnder(temp, "Xq7tzCSumrk");
+
+        var line = UninstallRunner.LeftElsewhere(left);
+
+        Assert.Equal(
+            $"Left '{left}': a build of Jason unpacked it under another temporary folder, '{temp}'. This removal takes only what stands under its own temporary folder; it is safe to remove once nothing runs from it.",
+            line);
+        Assert.DoesNotContain("session", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("this account", line, StringComparison.Ordinal);
+    }
+
+    private static string UnpackedUnder(string temporary, string bundle)
+    {
+        var extracted = Directory.CreateDirectory(Path.Combine(temporary, ".net", "jason", bundle)).FullName;
+        File.WriteAllText(Path.Combine(extracted, "e_sqlite3.dll"), "not really a library");
+        return extracted;
+    }
+
     private static string Unpacked(TempPaths dir, string bundle)
     {
         var extracted = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp", ".net", "jason", bundle)).FullName;
