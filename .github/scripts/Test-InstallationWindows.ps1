@@ -90,7 +90,8 @@ $temporary = [IO.Path]::GetTempPath().TrimEnd('\')
 # %TEMP%\.net\jason is another release's (the previous release's jason runs in several legs).
 $thisBuild = Join-Path $Out 'this-build-extracted.txt'
 # SOFT UNTIL U19. The carried removal does not yet take this build's extraction folder or a retired folder, so a compare
-# prints those lines under "seen, and expected until the removal takes them" and fails no leg. The commit that merges into
+# prints those lines under "seen, and expected until the removal takes them" and fails no leg, and the clean check at a
+# leg's start (Get-LeftOver) ignores them. The commit that merges into
 # this branch the release/49 head holding U19 (the carried removal taking or naming %TEMP%\.net\jason\<id> and the retired
 # folders) sets this to $false in the same commit, and test-installation-macos.sh's EXTRACTED_SOFT to 0; the gate run is
 # made with both hard.
@@ -480,9 +481,20 @@ function Get-LeftOver {
     Write-Listing $now -Quiet
     $before = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
     $after = @(Get-Content -LiteralPath $now)
-    # The extraction and retired folders change nothing a leg starts from; the compares judge them, never a leg's start.
-    $kept = '^(data directory|harness root|extracted\t|retired\t)'
-    @(@($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "- $_" }))
+    # Another release's extraction folder is excused here as in the compares. This build's and the retired folders follow
+    # $extractedSoft, as the compares do: ignored while it is soft, since no product door takes them before U19 and a reset
+    # could not, so every later leg would go unrun; counted once it is hard, so that no leg starts on a machine a removal
+    # left dirty. The one commit that flips $extractedSoft makes both hard.
+    $kept = '^(data directory|harness root)'
+    $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
+    $counts = {
+        param([string] $line)
+        if ($line -match $kept) { return $false }
+        if ($line -match '^extracted\t(?<id>.+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { return $false }
+        if ($line -match '^(extracted|retired)\t' -and $extractedSoft) { return $false }
+        return $true
+    }
+    @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "- $_" }))
 }
 
 switch ($Step) {

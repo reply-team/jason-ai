@@ -52,7 +52,8 @@ OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
 # SOFT UNTIL U19. The application's removal does not yet take this build's ~/.net/jason/<id>, so a compare prints that line
-# under "seen, and expected until the removal takes them" and fails no leg. The commit that merges into this branch the
+# under "seen, and expected until the removal takes them" and fails no leg, and the clean check at a leg's start
+# (left_over) ignores it. The commit that merges into this branch the
 # release/49 head holding U19 (the carried removal taking or naming the extraction folder) sets this to 0 in the same
 # commit, and Test-InstallationWindows.ps1's $extractedSoft to $false; the gate run is made with both hard.
 EXTRACTED_SOFT=1
@@ -225,9 +226,22 @@ left_over() {
     local empty
     empty="$(printf '' | shasum -a 256 | cut -d' ' -f1)"
     { comm -13 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/+ /'; comm -23 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/- /'; } \
-        | grep -vE '^[+-] (data directory|harness root|launchd record |extracted	)' \
+        | grep -vE '^[+-] (data directory|harness root|launchd record )' \
         | grep -vE "^\+ profile \.(zprofile|zshrc)	$empty\$" \
-        | grep -vE '^- profile \.(zprofile|zshrc)	absent$' || true
+        | grep -vE '^- profile \.(zprofile|zshrc)	absent$' \
+        | while IFS= read -r line; do
+            # Another release's extraction folder is excused here as in the compares. This build's follows EXTRACTED_SOFT,
+            # as the compares do: ignored while it is soft, since no product door takes it before U19 and a reset could
+            # not; counted once it is hard, so that no leg starts on a machine a removal left dirty. The one commit that
+            # flips EXTRACTED_SOFT makes both hard.
+            case "$line" in
+                "+ extracted	"*|"- extracted	"*)
+                    id="${line#? extracted	}"
+                    if [ -s "$OUT/this-build-extracted.txt" ] && ! grep -qxF -- "$id" "$OUT/this-build-extracted.txt"; then continue; fi
+                    [ "$EXTRACTED_SOFT" = 1 ] && continue ;;
+            esac
+            printf '%s\n' "$line"
+        done || true
 }
 
 step="${1:-}"; shift || true
