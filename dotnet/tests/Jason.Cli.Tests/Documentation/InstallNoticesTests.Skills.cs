@@ -156,6 +156,56 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
+    /// On Windows the line every real install takes reads its feed over the web in Windows PowerShell 5.1, which a feed in a
+    /// directory never reaches. The proof's Windows job holds it in a leg of its own: the job's feed served on this machine
+    /// by the proof's one feed server, install.ps1 run by <c>powershell.exe</c> with that address and that shell said and
+    /// held to Windows PowerShell 5.1, the server's own record
+    /// of the manifest, the checksums and the setup each answered, and a runtime over the installed role skills saying
+    /// <c>role_skills</c> is ok. The role skills come from the skills beside the application's jason, so their record is
+    /// held to a folder of the application and never to the feed.
+    /// </summary>
+    [Fact]
+    public void The_windows_proof_installs_from_a_feed_served_on_the_machine_in_Windows_PowerShell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
+        var job = ci.IndexOf("\n  union-windows:\n", StringComparison.Ordinal);
+        Assert.True(job >= 0, "ci.yml no longer has the union-windows job.");
+        var leg = ci.IndexOf("- name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal\n", job, StringComparison.Ordinal);
+        Assert.True(leg > job, "union-windows no longer installs from a feed served on this machine in Windows PowerShell 5.1.");
+        var next = ci.IndexOf("\n      - ", leg + 1, StringComparison.Ordinal);
+        var step = next < 0 ? ci[leg..] : ci[leg..next];
+        var begin = step.IndexOf("-Step Begin -Out $env:OUT -Leg $env:LEG -Clean ", StringComparison.Ordinal);
+        var served = step.IndexOf("-Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script ", StringComparison.Ordinal);
+        var end = step.IndexOf("-Step End -Out $env:OUT -Leg $env:LEG", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && served > begin && end > served, $"the served feed's leg is not framed by a clean begin and its end:\n{step}");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).ReplaceLineEndings("\n");
+        var at = script.IndexOf("\n    'ServedFeed' {\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Test-InstallationWindows.ps1 has no ServedFeed step.");
+        var body = script[at..script.IndexOf("\n    }\n", at, StringComparison.Ordinal)];
+        foreach (var said in new[]
+        {
+            "$server = Start-FeedServer $Feed 8099 ",
+            "Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }",
+            "$served = 'http://127.0.0.1:8099'",
+            "Say \"install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition\"",
+            "$shellEdition -cne 'Desktop' -or -not \"$shellVersion\".StartsWith('5.1.')",
+            "@('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')",
+            "' HTTP/1\\.[01]\" 200'",
+            "skills\\roles\\.jason-skills.json",
+            "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
+        })
+        {
+            Assert.True(body.Contains(said, StringComparison.Ordinal), $"Test-InstallationWindows.ps1's ServedFeed step does not say: {said}");
+        }
+
+        // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
+        Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
+    }
+
+    /// <summary>
     /// The step comes after the PATH step and before the licence in both scripts. Windows' PATH step is never run here, so
     /// that half is the order in the text, as the licence line's is.
     /// </summary>
