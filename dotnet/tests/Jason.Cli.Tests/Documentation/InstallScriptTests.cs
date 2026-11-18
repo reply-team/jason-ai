@@ -647,6 +647,10 @@ public partial class InstallScriptTests
         var version = silent.IndexOf("if ((Read-Version $carried) -ne $Version) { $failures.Add(\"after this build was put back", StringComparison.Ordinal);
         var end = silent.IndexOf("if ($failures.Count -gt 0) { Fail ($failures -join '; ') }", StringComparison.Ordinal);
         Assert.True(fifth >= 0 && back > fifth && version > back && end > version, "the silent setups leg does not put this build back after its sub-leg 5 and before it ends");
+        // Sub-leg 5's holder is released and waited for even where the sub-leg throws, before the put-back.
+        var cleared = silent.IndexOf("\n        $holder = $null\n        try {\n            From-Previous $false\n", StringComparison.Ordinal);
+        var released = silent.IndexOf("} finally {\n            # Released, and waited for as the sub-leg's own release waits, so the put-back below never meets the file held.\n            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null\n            if ($holder) { $null = $holder.WaitForExit(15000) }\n        }\n", StringComparison.Ordinal);
+        Assert.True(cleared >= 0 && fifth > cleared && released > fifth && back > released, "sub-leg 5 does not release its holder and wait for it in its finally, before the put-back");
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.Contains("-Step SilentUpdateLegs -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS\n          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT\n", ci, StringComparison.Ordinal);
     }

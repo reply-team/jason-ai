@@ -1700,6 +1700,7 @@ switch ($Step) {
 
         # 5. The old uninstaller refusing: a file of the application's folder held by another process, no delete shared.
         # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        $holder = $null
         try {
             From-Previous $false
             $held = @('LICENSE.electron.txt', 'LICENSES.chromium.html', 'resources\app.asar') | ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
@@ -1720,7 +1721,9 @@ switch ($Step) {
         } catch {
             $failures.Add("leg 5 did not finish: $($_.Exception.Message)")
         } finally {
+            # Released, and waited for as the sub-leg's own release waits, so the put-back below never meets the file held.
             New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null
+            if ($holder) { $null = $holder.WaitForExit(15000) }
         }
 
         # This build put back over the previous release leg 5 leaves, the application not running, as leg 4 puts it: the
