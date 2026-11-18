@@ -1048,6 +1048,83 @@ over-previous-desktop)
     say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
     ;;
 
+over-running-cli)
+    # The one line over a running command-line install of the previous release: its own install.sh from its own assets,
+    # a runtime running, its login start registered and one campaign made; then this build's install.sh, as an agent runs
+    # it, with that runtime still running. Asserted: the application at this version; ~/.local/bin/jason the
+    # application's wrapper, naming no data directory, and a new login shell finding it; the command-line install retired,
+    # no runtime running from it; the login registration naming the carried jason; and the campaigns as many. The
+    # uninstall and the compare after it are the leg's next steps.
+    previous="$1"; feed="$2"; version="$3"; script="$4"
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    # The campaigns a jason lists, archived included, counted from one page of a thousand; more than one page is refused.
+    campaigns() {
+        within 120 "jason campaign list with $1" "$1" campaign list --include-archived --limit 1000 > "$OUT/over-running-cli-campaigns.json" || fail "jason campaign list with $1 failed"
+        python3 -c 'import json,sys
+doc = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.lstrip().startswith("{")][-1])
+if doc.get("next_cursor"): sys.exit("more than one page of campaigns")
+print(len(doc["items"]))' "$OUT/over-running-cli-campaigns.json"
+    }
+    within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/over-running-cli-previous.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/over-running-cli-previous.txt")"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
+    # The previous release, held: an empty or this build's own version would prove this build over itself.
+    { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the previous release's jason says '$old', where it must be a version before $version"
+    within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
+    within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+    within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before the one line' > "$OUT/over-running-cli-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/over-running-cli-campaign.json")"
+    before_count="$(campaigns "$WRAPPER")" || fail "the campaigns could not be counted under $old"
+    [ "$before_count" -ge 1 ] || fail "the campaign made under the previous release is not listed"
+    within 60 "the previous release's runtime answering" "$WRAPPER" runtime status > /dev/null || fail "no runtime answers under the previous release before the one line"
+    say "the previous release's command-line Jason $old installed by its own script at $WRAPPER, a runtime running, its login start registered, $before_count campaign(s)"
+
+    # This build's line, as an agent runs it, with that runtime still running.
+    status=0
+    within 300 'install.sh over the running command-line install' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-running-cli-install.txt" 2>&1 || status=$?
+    cat "$OUT/over-running-cli-install.txt"
+    [ "$status" -eq 0 ] || fail "this build's install.sh over the running $old exited with $status"
+    say "this build's install.sh ran over the running command-line $old and ended 0"
+
+    # The application in place, at this version.
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications after the one line"
+    carried="$placed/Contents/Resources/bundle/jason"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+
+    # The terminal command: the application's wrapper, naming no data directory, and a new login shell finds it.
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is still an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    say "Jason Desktop $version is at $placed; ~/.local/bin/jason is its wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
+
+    # The command-line install retired: its notice files gone, no runtime running from its executable.
+    for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
+    if ps -axo command= | grep -F "$WRAPPER runtime run" | grep -v grep > /dev/null; then fail "a runtime still runs from the retired $WRAPPER: $(ps -axo pid,command | grep -F "$WRAPPER runtime run" | grep -v grep || true)"; fi
+    say "the command-line install is retired: no notice file in ~/.local/bin, and no runtime runs from $WRAPPER"
+
+    # The runtime: the one answering after the install, else one started from the carried jason, said which.
+    if within 60 'a runtime answering after the one line' "$carried" runtime status > /dev/null 2>&1; then say 'a runtime answers after the install'
+    else
+        within 120 'jason runtime start from the carried jason' "$carried" runtime start > "$OUT/over-running-cli-start.txt" 2>&1 || fail "no runtime ran after the install, and the carried jason could not start one: $(cat "$OUT/over-running-cli-start.txt")"
+        say 'no runtime ran after the install; one was started from the carried jason'
+    fi
+
+    # The data kept, and the login registration naming the carried file.
+    after_count="$(campaigns "$carried")" || fail "the campaigns could not be counted after the one line"
+    [ "$after_count" = "$before_count" ] || fail "after the one line $after_count campaign(s) are listed, not the $before_count listed before it"
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/over-running-cli-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after the one line"
+    [ "$(read_field "$OUT/over-running-cli-autostart.json" registered)" = true ] || fail "no login registration after the one line: $(cat "$OUT/over-running-cli-autostart.json")"
+    [ "$(read_field "$OUT/over-running-cli-autostart.json" executable)" = "$carried" ] || fail "the login registration names $(read_field "$OUT/over-running-cli-autostart.json" executable), not $carried"
+    say "after the one line: $after_count campaign(s), as before, and the login registration names $carried"
+    ;;
+
 previous-removal)
     # The previous release's own removal of its logon registration, said in launchd's records: its command-line Jason
     # installed by its own script, its logon registration, and its own jason uninstall. Facts for the release before this
@@ -1142,7 +1219,7 @@ intel)
     ;;
 
 *)
-    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|assess|quarantine|intel ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac
