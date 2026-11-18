@@ -9,5 +9,5 @@ namespace Jason.Runtime.Tests.Plugins;
 /// </summary>
 public sealed class JasonDllLocator : IPluginHostLocator
 {
-    public IReadOnlyList<string> Command => ["dotnet", Path.Combine(AppContext.BaseDirectory, "jason.dll")];
+    public IReadOnlyList<string> Command => [Muxer.Path, Path.Combine(AppContext.BaseDirectory, "jason.dll")];
 }

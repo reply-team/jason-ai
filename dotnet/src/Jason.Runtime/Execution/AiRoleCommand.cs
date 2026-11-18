@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Contracts.Programs;
 using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
@@ -32,8 +33,19 @@ public sealed class AiRoleCommand(
     LiveSettings<RolesOptions> roles,
     IEnumerable<IAgentHost> hosts,
     PluginRegistry plugins,
-    ILogger<AiRoleCommand> logger) : ICommand
+    ILogger<AiRoleCommand> logger,
+    ISearchPath? searchPath = null) : ICommand
 {
+    /// <summary>
+    /// The full path an entry command's program is started by: a full path as it is, and a bare name as the runtime's
+    /// search path's full entries give it (<see cref="ProgramLookup.FullPathOf"/>); null for anything else.
+    /// </summary>
+    internal static string? StartedBy(string program, ISearchPath searchPath)
+    {
+        ArgumentNullException.ThrowIfNull(searchPath);
+        return ProgramLookup.FullPathOf(program, new ProgramSearchPath(searchPath.Path, searchPath.PathExt));
+    }
+
     /// <summary>What the envelope names where the claim handed over no memory files: every level unknown.</summary>
     private static readonly MemoryFileLocations NoMemoryFiles = new(null, null, null);
 
@@ -100,7 +112,13 @@ public sealed class AiRoleCommand(
 
         // An agent speaks to Jason, and writes UTF-8: its transcript and the words it ends with are read as UTF-8,
         // whatever this console's code page.
-        var startInfo = ChildProcess.StartInfo(context.EntryCommand[0], ChildKind.SpeaksToJason);
+        // Started by its full path, and a program found nowhere is a launch that failed, as one that is not there is.
+        if (StartedBy(context.EntryCommand[0], searchPath ?? new EnvironmentSearchPath()) is not { } program)
+        {
+            return new CommandOutcome.LaunchFailed($"'{context.EntryCommand[0]}' is not a program on the search path, nor a full path to one.", launch);
+        }
+
+        var startInfo = ChildProcess.StartInfo(program, ChildKind.SpeaksToJason);
         startInfo.WorkingDirectory = context.WorkDir;
 
         // The first element is the program; the rest are arguments, passed one by one so nothing has to be

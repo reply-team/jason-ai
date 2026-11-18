@@ -108,6 +108,25 @@ public static partial class ProgramLookup
     }
 
     /// <summary>
+    /// The full path a program is started by: a full path as it is, and a bare name the first program the search path
+    /// gives for it (<see cref="Find"/>); null for a name found nowhere there, for one that resolves only to a shim, and
+    /// for a path that is not a full one. Every child is started by its full path at the door, and this is how a caller
+    /// that is handed a name comes by one.
+    /// </summary>
+    public static string? FullPathOf(string program, ProgramSearchPath searchPath)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(searchPath);
+
+        if (IsPath(program))
+        {
+            return Path.IsPathFullyQualified(program) ? program : null;
+        }
+
+        return Find(program, searchPath, searchPath) is { Outcome: ProgramLookupOutcome.Program, Path: { } found } ? found : null;
+    }
+
+    /// <summary>
     /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
     /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
     /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell

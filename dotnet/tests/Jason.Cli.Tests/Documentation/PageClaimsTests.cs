@@ -745,6 +745,17 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Where a declared program is looked for: only the entries of the search path that are full paths. An entry that is not
+    /// one names wherever the runtime stands, and every program Jason starts by name is started by its full path.
+    /// </summary>
+    [Fact]
+    public void The_plugins_page_says_an_entry_of_the_search_path_that_is_not_a_full_path_is_not_searched() =>
+        Assert.Contains(
+            "Only the entries of the search path that are full paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a program found only there is `executable_missing`.",
+            Flat(Page("docs", "plugins.md")),
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// Wherever a page walks the role skills in, or says what follows an older applier, the UI follows: the install
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>

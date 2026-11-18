@@ -24,19 +24,18 @@ public class ChildProcessModulePathTests
     [Theory]
     [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", false)]
     [InlineData(@"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\POWERSHELL.EXE", false)]
-    [InlineData("powershell", false)]
-    [InlineData("PowerShell.exe", false)]
+    [InlineData(@"C:\Tools\powershell", false)]
+    [InlineData(@"D:\PowerShell.exe", false)]
     [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe", true)]
-    [InlineData("pwsh", true)]
+    [InlineData(@"C:\Tools\pwsh", true)]
     [InlineData(@"C:\Windows\System32\conhost.exe", true)]
-    [InlineData("program", true)]
+    [InlineData(@"C:\Tools\program", true)]
     public void On_Windows_a_Windows_PowerShell_child_is_given_no_inherited_module_path_and_every_other_child_keeps_it(string program, bool keeps)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows PowerShell is Windows' own; elsewhere powershell may name PowerShell 7, which is left as it is.");
         WithModulePath(PowerShell7Folders, () =>
         {
-            // A system tool is named by its full path alone, so a bare name is held to the kinds that take one.
-            ChildKind?[] kinds = ChildProcess.IsFullPath(program) ? [null, ChildKind.SpeaksToJason, ChildKind.SystemTool, ChildKind.SystemToolWithInput] : [null, ChildKind.SpeaksToJason];
+            ChildKind?[] kinds = [null, ChildKind.SpeaksToJason, ChildKind.SystemTool, ChildKind.SystemToolWithInput];
             foreach (var kind in kinds)
             {
                 var start = kind is { } known ? ChildProcess.StartInfo(program, known) : ChildProcess.StartInfo(program);
@@ -59,7 +58,7 @@ public class ChildProcessModulePathTests
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows' own rows are above.");
         WithModulePath(PowerShell7Folders, () =>
         {
-            foreach (var program in new[] { "powershell", "pwsh", "program" })
+            foreach (var program in new[] { "/usr/bin/powershell", "/usr/bin/pwsh", "/usr/bin/program" })
             {
                 Assert.Equal(PowerShell7Folders, ChildProcess.StartInfo(program).Environment[Variable]);
             }

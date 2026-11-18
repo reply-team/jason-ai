@@ -53,18 +53,8 @@ public static class ProgramRunners
     /// gives for it (<see cref="ProgramLookup.Find"/>); null for a name found nowhere there, and for a path that is not a
     /// full one. The door starts a system tool by its full path alone.
     /// </summary>
-    internal static string? FullPathOf(string program, string? searchPath, string? pathExtensions)
-    {
-        ArgumentNullException.ThrowIfNull(program);
-
-        if (ProgramLookup.IsPath(program))
-        {
-            return Path.IsPathFullyQualified(program) ? program : null;
-        }
-
-        var path = new ProgramSearchPath(searchPath, pathExtensions);
-        return ProgramLookup.Find(program, path, path) is { Outcome: ProgramLookupOutcome.Program, Path: { } found } ? found : null;
-    }
+    internal static string? FullPathOf(string program, string? searchPath, string? pathExtensions) =>
+        ProgramLookup.FullPathOf(program, new ProgramSearchPath(searchPath, pathExtensions));
 
     /// <summary>How long a stopped program's tree is waited for before the stop gives up waiting.</summary>
     internal static TimeSpan StopGrace => TimeSpan.FromSeconds(5);

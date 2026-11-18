@@ -16,8 +16,8 @@ public class ConfinedStartTests
     {
         using var dir = new TempPaths();
         var started = Confined(() => (
-            RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], updateLaunch: null),
-            RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started")));
+            RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], updateLaunch: null),
+            RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started")));
 
         Assert.False(started.Item1.Environment.ContainsKey(Confinement.Variable), "A plain launch passed the variable on.");
         Assert.False(started.Item2.Environment.ContainsKey(Confinement.Variable), "The update's launch passed the variable on.");

@@ -352,16 +352,15 @@ public sealed partial class PluginInvoker(
         var workDir = paths.PluginInvocationDirectory(provenance.InvocationId);
         Directory.CreateDirectory(workDir);
         var command = PluginHostCommand.Build(locator, plugin.Manifest.Id, request.Operation, request.CorrelationId);
-        var startInfo = StartInfo(command, workDir, grants);
 
         var startedAt = clock.GetUtcNow();
         var watch = Stopwatch.StartNew();
         Process process;
         try
         {
-            process = Jason.Contracts.Discovery.ChildProcess.Start(startInfo) ?? throw new IOException($"Starting '{command[0]}' produced no process.");
+            process = Jason.Contracts.Discovery.ChildProcess.Start(StartInfo(command, workDir, grants)) ?? throw new IOException($"Starting '{command[0]}' produced no process.");
         }
-        catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException)
+        catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException or ArgumentException)
         {
             Refused(logger, provenance.InvocationId, plugin.Manifest.Id, request.Operation, ProtocolCodes.PluginLaunchFailed, null);
             return new PluginInvocationResult(

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Programs;
 
 namespace Jason.Cli.Process;
 
@@ -72,16 +73,26 @@ public sealed class PlatformUrlOpener : IUrlOpener
         }
     }
 
+    /// <summary>
+    /// The opener, by its full path: Windows' own handler in the system folder, macOS's opener where macOS keeps it, and
+    /// on Linux xdg-open as the search path's full entries give it, or null where they give none, which is a link not
+    /// handed on, as with no xdg-open at all.
+    /// </summary>
+    internal static string? Opener(string? searchPath, string? pathExtensions) =>
+        OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "rundll32.exe")
+        : OperatingSystem.IsMacOS() ? "/usr/bin/open"
+        : ProgramLookup.FullPathOf("xdg-open", new ProgramSearchPath(searchPath, pathExtensions));
+
     private static System.Diagnostics.Process? Start(string url)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
-        var (program, arguments) = OperatingSystem.IsWindows()
-            ? ("rundll32", new[] { "url.dll,FileProtocolHandler", url })
-            : OperatingSystem.IsMacOS()
-                ? ("open", new[] { url })
-                : ("xdg-open", new[] { url });
+        if (Opener(Environment.GetEnvironmentVariable("PATH"), Environment.GetEnvironmentVariable("PATHEXT")) is not { } opener)
+        {
+            return null;
+        }
 
-        var start = ChildProcess.StartInfo(program);
+        var arguments = OperatingSystem.IsWindows() ? new[] { "url.dll,FileProtocolHandler", url } : new[] { url };
+        var start = ChildProcess.StartInfo(opener);
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);

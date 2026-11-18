@@ -497,6 +497,55 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Null(TerminalPlan.Find(TerminalPlatform.Linux, null, null, searchPath: null));
     }
 
+    /// <summary>
+    /// An entry of the search path that is not a full path, a relative folder, names wherever the process happens to
+    /// stand and is not searched: a terminal there is never found, and the system's emulator is taken from the full
+    /// entries alone.
+    /// </summary>
+    [Fact]
+    public void Linux_never_searches_an_entry_of_the_search_path_that_is_not_a_full_path()
+    {
+        var relative = "jason-terminal-" + Guid.NewGuid().ToString("N");
+        var decoys = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), relative)).FullName;
+        try
+        {
+            StandIn(decoys, "kitty");
+            StandIn(decoys, "x-terminal-emulator");
+            var emulator = StandIn(Folder("bin"), "x-terminal-emulator");
+
+            Assert.Null(TerminalPlan.Find(TerminalPlatform.Linux, null, "kitty", relative));
+            Assert.Null(TerminalPlan.Find(TerminalPlatform.Linux, null, null, relative));
+            Assert.Equal(emulator, TerminalPlan.Find(TerminalPlatform.Linux, null, "kitty", string.Join(Path.PathSeparator, relative, Folder("bin")))!.Program);
+        }
+        finally
+        {
+            Directory.Delete(decoys, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Every terminal found is named by its full path on the system it is found for: the console host in the system folder
+    /// on Windows, the opener on macOS, and on Linux the program the terminal variable names by its full path, or the one
+    /// the search path's full entries give for its name or for the system's emulator. The terminal starter hands that
+    /// path to the door as it is.
+    /// </summary>
+    [Fact]
+    public void Every_terminal_found_is_named_by_its_full_path()
+    {
+        var system = Folder("System32");
+        StandIn(system, "conhost.exe");
+        var bin = Folder("bin");
+        var kitty = StandIn(bin, "kitty");
+        StandIn(bin, "x-terminal-emulator");
+
+        Assert.True(Path.IsPathFullyQualified(TerminalPlan.Find(TerminalPlatform.Windows, system, null, null)!.Program));
+        Assert.StartsWith("/", TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!.Program, StringComparison.Ordinal);
+        foreach (var variable in new[] { null, "kitty", kitty })
+        {
+            Assert.True(Path.IsPathFullyQualified(TerminalPlan.Find(TerminalPlatform.Linux, null, variable, bin)!.Program));
+        }
+    }
+
     /// <summary>The script's name is made from the item's id, so an id that is not one is refused before it names a file.</summary>
     [Theory]
     [InlineData("apr_../../x")]
@@ -520,15 +569,15 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData(TerminalPlatform.Windows, false)]
     public void On_linux_and_macos_the_terminal_is_given_a_start_on_pipes_of_its_own(TerminalPlatform os, bool redirected)
     {
-        // A system tool is started by its full path, and a macOS or Linux one names none on Windows: those rows run on their own systems.
-        Assert.SkipWhen(OperatingSystem.IsWindows() && os != TerminalPlatform.Windows, "A macOS or Linux terminal's path is no full path on Windows.");
-        var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex", Prompt], "/home/marta/Jason");
+        // Every child is started by its full path, so the terminal is named by one this machine reads as full.
+        var terminal = Path.Combine(Path.GetTempPath(), "x-terminal-emulator");
+        var start = TerminalStartInfo.For(os, [terminal, "-e", "/usr/local/bin/codex", Prompt], "/home/marta/Jason");
 
         Assert.Equal(redirected, start.RedirectStandardInput);
         Assert.Equal(redirected, start.RedirectStandardOutput);
         Assert.Equal(redirected, start.RedirectStandardError);
         Assert.False(start.UseShellExecute);
-        Assert.Equal("/usr/bin/x-terminal-emulator", start.FileName);
+        Assert.Equal(terminal, start.FileName);
         Assert.Equal(["-e", "/usr/local/bin/codex", Prompt], start.ArgumentList);
         Assert.Equal("/home/marta/Jason", start.WorkingDirectory);
     }

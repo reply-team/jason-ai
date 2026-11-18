@@ -58,10 +58,19 @@ public static class ChildProcess
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window, no shell and no stream redirected; on Windows, for Windows
-    /// PowerShell, without the inherited <see cref="ModulePathVariable"/>.
+    /// PowerShell, without the inherited <see cref="ModulePathVariable"/>. Every child is started by its full path, and a
+    /// name that is not one is refused here, before anything is started (<see cref="IsFullPath"/>): a name the operating
+    /// system looked up would be looked up in places no caller chose, the working folder among them, and on Windows the
+    /// folder of the program starting it.
     /// </summary>
+    /// <exception cref="ArgumentException">A <paramref name="fileName"/> that is not a full path.</exception>
     public static ProcessStartInfo StartInfo(string fileName)
     {
+        if (!IsFullPath(fileName))
+        {
+            throw new ArgumentException($"A child is started by its full path, and '{fileName}' is not one.", nameof(fileName));
+        }
+
         var start = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
@@ -87,17 +96,12 @@ public static class ChildProcess
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window and no shell, and the standard streams of a child of
-    /// that <paramref name="kind"/>; the caller adds the rest. A system tool is started by its full path, and a name
-    /// that is not one is refused here, before anything is started (<see cref="IsFullPath"/>).
+    /// that <paramref name="kind"/>; the caller adds the rest. Under every kind the child is started by its full path, as
+    /// <see cref="StartInfo(string)"/> holds it.
     /// </summary>
-    /// <exception cref="ArgumentException">A system-tool kind with a <paramref name="fileName"/> that is not a full path.</exception>
+    /// <exception cref="ArgumentException">A <paramref name="fileName"/> that is not a full path.</exception>
     public static ProcessStartInfo StartInfo(string fileName, ChildKind kind)
     {
-        if (kind is ChildKind.SystemTool or ChildKind.SystemToolWithInput && !IsFullPath(fileName))
-        {
-            throw new ArgumentException($"A system tool is started by its full path, and '{fileName}' is not one.", nameof(fileName));
-        }
-
         var start = StartInfo(fileName);
         switch (kind)
         {
