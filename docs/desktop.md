@@ -110,9 +110,12 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
-  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
-  could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
+  channel, and narrows to All, Approvals or Questions. A paid search is named "Find people" and shows, under what it
+  will do, its definition by its own names and values, with what it leaves out on a line of its own, and the search's
+  own arguments in plain words. An approval's **Approve** is live only once Needs you has read that approval whole,
+  with any doubt about a send shown
+  above it; until then the row says it is being read, or why it could not be, and **Details** stays. Under the mailbox
+  an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
   and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
@@ -120,8 +123,9 @@ shows before anything is typed and what you send waits, while the window is open
   agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
-  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
-  and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
+  channel, and the subject and text, or a search's definition and arguments as in Needs you, with **Approve**, **Edit**
+  (a message written as text), **Reject**, which asks once, and **Details**, which opens it in Needs you; a question's
+  card has its options as buttons and a box for your own
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
   when the card is drawn, never from what the AI wrote, and not part of what you approve, so it changes no button. A

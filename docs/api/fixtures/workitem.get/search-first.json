@@ -1,0 +1,129 @@
+{
+  "operation": "workitem.get",
+  "case": "search-first",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_1",
+    "campaign_id": "cmp_1",
+    "contact_id": null,
+    "kind": "provider_op",
+    "role": null,
+    "operation": "audience.search",
+    "execution_profile": null,
+    "status": "awaiting_approval",
+    "eligible": false,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "role",
+      "id": "planner"
+    },
+    "context": {
+      "input": {
+        "definition": {
+          "jobTitles": [
+            {
+              "value": "Head of Operations",
+              "type": "include"
+            },
+            {
+              "value": "Operations Director",
+              "type": "include"
+            },
+            {
+              "value": "Operations Intern",
+              "type": "exclude"
+            }
+          ],
+          "contactLocations": [
+            {
+              "value": "Portugal",
+              "type": "include"
+            }
+          ],
+          "industries": [
+            {
+              "value": "Logistics",
+              "type": "include"
+            },
+            {
+              "value": "Staffing and Recruiting",
+              "type": "exclude"
+            }
+          ],
+          "companySizes": [
+            "fifty",
+            "twoHundred"
+          ]
+        },
+        "count": 50,
+        "people_per_company": 2,
+        "include_without_email": false,
+        "find_phones": true
+      },
+      "audience": {
+        "id": "aud_1",
+        "number": 1,
+        "definition": {
+          "jobTitles": [
+            {
+              "value": "Head of Operations",
+              "type": "include"
+            },
+            {
+              "value": "Operations Director",
+              "type": "include"
+            },
+            {
+              "value": "Operations Intern",
+              "type": "exclude"
+            }
+          ],
+          "contactLocations": [
+            {
+              "value": "Portugal",
+              "type": "include"
+            }
+          ],
+          "industries": [
+            {
+              "value": "Logistics",
+              "type": "include"
+            },
+            {
+              "value": "Staffing and Recruiting",
+              "type": "exclude"
+            }
+          ],
+          "companySizes": [
+            "fifty",
+            "twoHundred"
+          ]
+        }
+      }
+    },
+    "result_format": null,
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "external_reports": [],
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Spring launch",
+    "contact_name": null
+  }
+}

@@ -387,6 +387,15 @@ export const en = {
     'agent.kind.adaptive': 'Adaptive',
     'agent.kind.paths': 'Paths',
     'waiting.unanswered': 'The runtime did not answer within {seconds} seconds.',
+    // A paid people search's own arguments, one plain line per argument, or per argument and value. A value with no line
+    // here is shown as the argument's name and the value, never guessed.
+    'approval.arg.count': 'People to find: up to {value}',
+    'approval.arg.people_per_company': 'At most {value} per company',
+    'approval.arg.include_without_email.false': 'Only people with an email address',
+    'approval.arg.include_without_email.true': 'People without an email address too',
+    'approval.arg.find_phones.true': 'Phone numbers too, which may cost extra',
+    'approval.arg.find_phones.false': 'No phone numbers',
+    'approval.arg.audience': 'More people for audience {value}',
 } as const;
 
 export type MessageKey = keyof typeof en;

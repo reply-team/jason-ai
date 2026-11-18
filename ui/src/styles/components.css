@@ -250,6 +250,8 @@
 }
 .preview p { margin: 0 0 var(--space-2); }
 .preview p:last-child { margin: 0; }
+/* A search's definition and arguments, under what will happen, as the runtime returned them. */
+.search-lines { margin-top: var(--space-2); overflow-wrap: anywhere; }
 
 details.fold { border: 1px solid var(--border); border-radius: var(--radius); }
 details.fold summary {
