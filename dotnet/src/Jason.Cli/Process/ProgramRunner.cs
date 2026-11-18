@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Programs;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Process;
@@ -46,6 +47,24 @@ public interface IProgramRunner
 public static class ProgramRunners
 {
     public static IProgramRunner ForThisMachine() => MachineProgramRunner.Instance;
+
+    /// <summary>
+    /// The full path a program is started by: a full path as it is, and a bare name the first program the search path
+    /// gives for it (<see cref="ProgramLookup.Find"/>); null for a name found nowhere there, and for a path that is not a
+    /// full one. The door starts a system tool by its full path alone.
+    /// </summary>
+    internal static string? FullPathOf(string program, string? searchPath, string? pathExtensions)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+
+        if (ProgramLookup.IsPath(program))
+        {
+            return Path.IsPathFullyQualified(program) ? program : null;
+        }
+
+        var path = new ProgramSearchPath(searchPath, pathExtensions);
+        return ProgramLookup.Find(program, path, path) is { Outcome: ProgramLookupOutcome.Program, Path: { } found } ? found : null;
+    }
 
     /// <summary>How long a stopped program's tree is waited for before the stop gives up waiting.</summary>
     internal static TimeSpan StopGrace => TimeSpan.FromSeconds(5);
@@ -104,7 +123,13 @@ public static class ProgramRunners
             ArgumentException.ThrowIfNullOrWhiteSpace(program);
             ArgumentNullException.ThrowIfNull(arguments);
 
-            var startInfo = ChildProcess.StartInfo(program, ChildKind.SystemTool);
+            // Started by its full path: a bare name as this process's search path gives it, and nothing else.
+            if (FullPathOf(program, Environment.GetEnvironmentVariable("PATH"), Environment.GetEnvironmentVariable("PATHEXT")) is not { } fullPath)
+            {
+                return new ProgramResult(-1, string.Empty, $"'{program}' is not a program on the search path, nor a full path to one.", false, NotStarted: true);
+            }
+
+            var startInfo = ChildProcess.StartInfo(fullPath, ChildKind.SystemTool);
             startInfo.WorkingDirectory = workingDirectory ?? string.Empty;
 
             // One by one, so nothing has to be quoted and no shell ever sees them.

@@ -87,10 +87,17 @@ public static class ChildProcess
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window and no shell, and the standard streams of a child of
-    /// that <paramref name="kind"/>; the caller adds the rest.
+    /// that <paramref name="kind"/>; the caller adds the rest. A system tool is started by its full path, and a name
+    /// that is not one is refused here, before anything is started (<see cref="IsFullPath"/>).
     /// </summary>
+    /// <exception cref="ArgumentException">A system-tool kind with a <paramref name="fileName"/> that is not a full path.</exception>
     public static ProcessStartInfo StartInfo(string fileName, ChildKind kind)
     {
+        if (kind is ChildKind.SystemTool or ChildKind.SystemToolWithInput && !IsFullPath(fileName))
+        {
+            throw new ArgumentException($"A system tool is started by its full path, and '{fileName}' is not one.", nameof(fileName));
+        }
+
         var start = StartInfo(fileName);
         switch (kind)
         {
@@ -116,6 +123,15 @@ public static class ChildProcess
 
         return start;
     }
+
+    /// <summary>
+    /// Whether <paramref name="fileName"/> names a program by its full path: from the root on macOS and Linux; on Windows
+    /// with its drive or share, or from the top of the current drive, which a start composed for macOS or Linux names.
+    /// A bare name, a relative path and a path relative to a drive's current folder (<c>C:tool.exe</c>) are not.
+    /// </summary>
+    public static bool IsFullPath(string? fileName) =>
+        !string.IsNullOrEmpty(fileName)
+        && (Path.IsPathFullyQualified(fileName) || (OperatingSystem.IsWindows() && fileName[0] is '/' or '\\'));
 
     /// <summary>
     /// Starts a child from a start this class made, under <see cref="StartErrorMode"/>: every child is started here,

@@ -55,12 +55,54 @@ public class ChildProcessTests
     [InlineData(ChildKind.SystemToolWithInput, true)]
     public void A_system_tool_is_read_in_the_console_s_code_page(ChildKind kind, bool input)
     {
-        var start = ChildProcess.StartInfo("program", kind);
+        var start = ChildProcess.StartInfo(FullPath, kind);
 
         Assert.True(start.CreateNoWindow);
         Assert.False(start.UseShellExecute);
         Assert.Equal((input, true, true), (start.RedirectStandardInput, start.RedirectStandardOutput, start.RedirectStandardError));
         Assert.Equal<Encoding?>([null, null, null], [start.StandardInputEncoding, start.StandardOutputEncoding, start.StandardErrorEncoding]);
+    }
+
+    /// <summary>A program named by its full path on whichever system runs the row.</summary>
+    private static readonly string FullPath = Path.Combine(Path.GetTempPath(), "program");
+
+    /// <summary>
+    /// A system tool is started by its full path in the system's own folder, so the door refuses a name that is not one
+    /// for either system-tool kind: a bare name, a relative path, nothing at all.
+    /// </summary>
+    [Theory]
+    [InlineData(ChildKind.SystemTool, "schtasks")]
+    [InlineData(ChildKind.SystemTool, "launchctl")]
+    [InlineData(ChildKind.SystemToolWithInput, "powershell.exe")]
+    [InlineData(ChildKind.SystemToolWithInput, "bin/tool")]
+    [InlineData(ChildKind.SystemTool, "")]
+    public void A_system_tool_named_by_anything_but_its_full_path_is_refused(ChildKind kind, string program)
+    {
+        var refused = Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo(program, kind));
+
+        Assert.Equal("fileName", refused.ParamName);
+    }
+
+    /// <summary>
+    /// On Windows a path from the top of a drive is one too, the current one's where it names none, as a start info composed
+    /// for macOS or Linux on a Windows machine names its tool; a path relative to a drive's current folder is not.
+    /// </summary>
+    [Fact]
+    public void On_windows_a_path_from_a_drive_s_top_is_taken_and_one_from_its_current_folder_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Drives are Windows' own.");
+
+        Assert.Equal("/usr/bin/x-terminal-emulator", ChildProcess.StartInfo("/usr/bin/x-terminal-emulator", ChildKind.SystemToolWithInput).FileName);
+        Assert.Equal(@"\Windows\System32\schtasks.exe", ChildProcess.StartInfo(@"\Windows\System32\schtasks.exe", ChildKind.SystemTool).FileName);
+        Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo("C:schtasks.exe", ChildKind.SystemTool)).ParamName);
+    }
+
+    /// <summary>A child that speaks to Jason is named as its caller resolved it; the full-path rule is the system tools' own.</summary>
+    [Fact]
+    public void A_full_path_is_the_system_tools_rule_alone()
+    {
+        Assert.Equal(FullPath, ChildProcess.StartInfo(FullPath, ChildKind.SystemTool).FileName);
+        Assert.Equal("program", ChildProcess.StartInfo("program", ChildKind.SpeaksToJason).FileName);
     }
 
     [Fact]

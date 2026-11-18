@@ -23,6 +23,47 @@ public class AutostartArtifactsTests
     private const string Unix = "/home/ada/.jason";
     private const string Home = "/home/ada";
 
+    /// <summary>Where each system keeps the tool a registration is made with.</summary>
+    private static readonly string Schtasks = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+
+    private const string Launchctl = "/bin/launchctl";
+
+    private const string Systemctl = "/usr/bin/systemctl";
+
+    /// <summary>
+    /// Every command a registration holds, on each of the three systems, names its program by the full path the system
+    /// keeps it at: schtasks in Windows' system directory, launchctl in <c>/bin</c>, systemctl in <c>/usr/bin</c>. The one
+    /// door a system tool is started through refuses a bare name.
+    /// </summary>
+    [Fact]
+    public void Every_command_a_registration_holds_names_its_program_by_its_full_path()
+    {
+        var task = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], Windows, @"C:\Users\ada", Sid);
+        var agent = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/usr/local/bin/jason"], Unix, Home, "ada");
+        var unit = AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/home/ada/.local/bin/jason"], Unix, Home, "ada");
+
+        IReadOnlyList<string>[] windows =
+        [
+            .. task.Apply, .. task.Remove, task.Query, AutostartArtifacts.QueryFor(AutostartPlatform.Windows, Sid),
+            AutostartArtifacts.TaskQuery(AutostartArtifacts.LegacyTaskName), AutostartArtifacts.TaskDelete(AutostartArtifacts.LegacyTaskName),
+        ];
+        IReadOnlyList<string>[] mac =
+        [
+            .. agent.Apply, .. agent.Remove, agent.Query, AutostartArtifacts.QueryFor(AutostartPlatform.MacOs, "ada"),
+            .. AutostartArtifacts.LeavingNoMark(agent, 501).Remove, .. AutostartArtifacts.LeavingNoMark(agent, null).Remove,
+        ];
+        IReadOnlyList<string>[] linux = [.. unit.Apply, .. unit.Remove, unit.Query, AutostartArtifacts.QueryFor(AutostartPlatform.Linux, string.Empty)];
+
+        Assert.All(windows, command => Assert.Equal(Schtasks, command[0]));
+        Assert.All(mac, command => Assert.Equal(Launchctl, command[0]));
+        Assert.All(linux, command => Assert.Equal(Systemctl, command[0]));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(Path.IsPathFullyQualified(Schtasks), Schtasks);
+            Assert.True(File.Exists(Schtasks), Schtasks);
+        }
+    }
+
     /// <summary>
     /// The Windows registration is a task document, not a command line: <c>/TR</c> carries the invocation as one
     /// string with a documented length limit and cannot say what kind of logon this is. The kind is interactive —
@@ -59,10 +100,10 @@ public class AutostartArtifactsTests
         // sentence in the language Windows happens to be installed in. The query had it from the start; the two
         // that act got it after a real machine refused one of them and the code could not say why.
         // AutostartInterpretationTests is where what the codes mean is asserted.
-        Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", Task, "/F", "/HRESULT"]], task.Apply);
-        Assert.Equal([["schtasks", "/Delete", "/TN", Task, "/F", "/HRESULT"]], task.Remove);
+        Assert.Equal([[Schtasks, "/Create", "/XML", task.ArtifactPath, "/TN", Task, "/F", "/HRESULT"]], task.Apply);
+        Assert.Equal([[Schtasks, "/Delete", "/TN", Task, "/F", "/HRESULT"]], task.Remove);
         Assert.Equal([AutostartArtifacts.TaskDelete(Task)], task.Remove);
-        Assert.Equal(["schtasks", "/Query", "/TN", Task, "/XML", "ONE", "/HRESULT"], task.Query);
+        Assert.Equal([Schtasks, "/Query", "/TN", Task, "/XML", "ONE", "/HRESULT"], task.Query);
     }
 
     /// <summary>
@@ -97,7 +138,7 @@ public class AutostartArtifactsTests
     /// </summary>
     [Fact]
     public void A_task_is_deleted_by_name_without_being_asked() =>
-        Assert.Equal(["schtasks", "/Delete", "/TN", "Jason", "/F", "/HRESULT"], AutostartArtifacts.TaskDelete("Jason"));
+        Assert.Equal([Schtasks, "/Delete", "/TN", "Jason", "/F", "/HRESULT"], AutostartArtifacts.TaskDelete("Jason"));
 
     /// <summary>
     /// The whole document, for fixed inputs. Two things changed from what 0.1.0 registered, and only two: the
@@ -236,8 +277,8 @@ public class AutostartArtifactsTests
         // Loaded plainly: what brings the job back at the next login is the file in LaunchAgents with RunAtLoad and no
         // Disabled key, and no override record is needed for it.
         Assert.DoesNotContain("<key>Disabled</key>", agent.Artifact, StringComparison.Ordinal);
-        Assert.Equal([["launchctl", "load", agent.ArtifactPath]], agent.Apply);
-        Assert.Equal([["launchctl", "unload", "-w", agent.ArtifactPath]], agent.Remove);
+        Assert.Equal([[Launchctl, "load", agent.ArtifactPath]], agent.Apply);
+        Assert.Equal([[Launchctl, "unload", "-w", agent.ArtifactPath]], agent.Remove);
         Assert.Empty(agent.ClearsDisabledIn);
     }
 
@@ -255,12 +296,12 @@ public class AutostartArtifactsTests
 
         var leaving = AutostartArtifacts.LeavingNoMark(agent, 501);
 
-        Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], leaving.Remove);
+        Assert.Equal([[Launchctl, "unload", agent.ArtifactPath]], leaving.Remove);
         Assert.Equal(["gui/501", "user/501"], leaving.ClearsDisabledIn);
         Assert.Equal(agent.Apply, leaving.Apply);
         Assert.Equal(agent.Artifact, leaving.Artifact);
         Assert.Empty(AutostartArtifacts.LeavingNoMark(agent, null).ClearsDisabledIn);
-        Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], AutostartArtifacts.LeavingNoMark(agent, null).Remove);
+        Assert.Equal([[Launchctl, "unload", agent.ArtifactPath]], AutostartArtifacts.LeavingNoMark(agent, null).Remove);
 
         foreach (var platform in new[] { AutostartPlatform.Windows, AutostartPlatform.Linux })
         {
@@ -398,12 +439,12 @@ public class AutostartArtifactsTests
         Assert.Contains("WantedBy=default.target", unit.Artifact, StringComparison.Ordinal);
 
         Assert.Equal(
-            [["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", "jason.service"]],
+            [[Systemctl, "--user", "daemon-reload"], [Systemctl, "--user", "enable", "jason.service"]],
             unit.Apply);
         Assert.Equal(
-            [["systemctl", "--user", "disable", "jason.service"], ["systemctl", "--user", "daemon-reload"]],
+            [[Systemctl, "--user", "disable", "jason.service"], [Systemctl, "--user", "daemon-reload"]],
             unit.Remove);
-        Assert.Equal(["systemctl", "--user", "is-enabled", "jason.service"], unit.Query);
+        Assert.Equal([Systemctl, "--user", "is-enabled", "jason.service"], unit.Query);
     }
 
     /// <summary>

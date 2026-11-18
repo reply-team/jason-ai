@@ -35,7 +35,9 @@ public class ChildProcessModulePathTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows PowerShell is Windows' own; elsewhere powershell may name PowerShell 7, which is left as it is.");
         WithModulePath(PowerShell7Folders, () =>
         {
-            foreach (var kind in new ChildKind?[] { null, ChildKind.SpeaksToJason, ChildKind.SystemTool, ChildKind.SystemToolWithInput })
+            // A system tool is named by its full path alone, so a bare name is held to the kinds that take one.
+            ChildKind?[] kinds = ChildProcess.IsFullPath(program) ? [null, ChildKind.SpeaksToJason, ChildKind.SystemTool, ChildKind.SystemToolWithInput] : [null, ChildKind.SpeaksToJason];
+            foreach (var kind in kinds)
             {
                 var start = kind is { } known ? ChildProcess.StartInfo(program, known) : ChildProcess.StartInfo(program);
 

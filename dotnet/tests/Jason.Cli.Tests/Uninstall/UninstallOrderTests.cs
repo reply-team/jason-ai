@@ -515,12 +515,12 @@ public class UninstallOrderTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var uninstalled = Assert.Single(registrar.Removed);
-        Assert.Equal([["launchctl", "unload", uninstalled.ArtifactPath]], uninstalled.Remove);
+        Assert.Equal([[LaunchdJobs.Launchctl, "unload", uninstalled.ArtifactPath]], uninstalled.Remove);
         Assert.Equal(AutostartArtifacts.LeavingNoMark(uninstalled, AccountDatabase.UserId()).ClearsDisabledIn, uninstalled.ClearsDisabledIn);
 
         var env = new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths, Autostart: registrar, InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"));
         Assert.Equal(ExitCodes.Success, RuntimeAutostartCommands.Disable(env, human: false));
-        Assert.Equal([["launchctl", "unload", "-w", registrar.Removed[^1].ArtifactPath]], registrar.Removed[^1].Remove);
+        Assert.Equal([[LaunchdJobs.Launchctl, "unload", "-w", registrar.Removed[^1].ArtifactPath]], registrar.Removed[^1].Remove);
         Assert.Empty(registrar.Removed[^1].ClearsDisabledIn);
     }
 
