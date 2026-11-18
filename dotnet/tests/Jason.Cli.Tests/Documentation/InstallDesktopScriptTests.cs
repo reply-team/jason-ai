@@ -761,7 +761,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
         // And the way on, which every run again would otherwise meet the same refusal without: that application out of the
         // way, the next run downloads one and puts it in its place.
         var app = Path.Combine(mac.Shared, "Jason.app");
-        Assert.Contains($"Move {app} to the Bin, then run the install line again: it downloads Jason Desktop and puts it there.", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains($"Move {app} to the Trash, then run the install line again: it downloads Jason Desktop and puts it there.", run.Stderr, StringComparison.Ordinal);
         Assert.Equal([VerifyCall], mac.PathlessCalls());
         Assert.True(File.Exists(mac.Carried));
     }

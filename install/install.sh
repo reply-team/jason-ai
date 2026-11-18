@@ -376,7 +376,7 @@ install_desktop() {
         # only then. An earlier one cannot be set up from a terminal at all.
         PLACED_VERSION="$(app_version "$DEST")"
         if [ -n "$PLACED_VERSION" ] && from_minor 49 "$PLACED_VERSION" && [ -f "$CARRIED" ]; then
-            signed_as_jason "$DEST" || fail "the Jason.app at $DEST does not verify as signed by $APP_TEAM, the team that signs Jason (said above), so its jason was not run; nothing was changed. Move $DEST to the Bin, then run the install line again: it downloads Jason Desktop and puts it there."
+            signed_as_jason "$DEST" || fail "the Jason.app at $DEST does not verify as signed by $APP_TEAM, the team that signs Jason (said above), so its jason was not run; nothing was changed. Move $DEST to the Trash, then run the install line again: it downloads Jason Desktop and puts it there."
             KEPT=1
             if [ "$PLACED_VERSION" = "$LATEST" ]; then
                 echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
