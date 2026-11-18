@@ -19,58 +19,81 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.48.5
+# Jason 0.49.0-rc.1
 
-## What is new since 0.48.4
+This is a release candidate, published for a walk before 0.49.0 and not for general use: it is never the latest release,
+so no install line and no update reaches it, and it is installed only by naming its version.
 
-- **Settings shows Jason Desktop's version and its update.** The foot of Settings' list, in Jason Desktop's window,
-  shows the desktop's version and the same update item the tray's menu (on a Mac, the menu bar) shows: Check for
-  Updates…, Download, or Restart to Install. Pressing it does exactly what the menu's item does.
-- **Turn one notification channel on or off.** Settings › Notifications has a switch for each channel, and
-  `jason notification enable <channel>` and `jason notification disable <channel>` do the same from the command line,
-  for the system's own notifications (`toast`, on Windows, macOS and Linux) or a notification plugin. Whoever
-  switches a channel is named, and the change is recorded. This release publishes the journal forwarder 1.7.0, whose
-  manifest declares the kind a channel's switch writes (`notification_channel_updated`): a grant of every kind
-  forwards it from the first load, and a grant that names kinds does not until you add it, with
-  `jason plugin grant journal-forwarder --subscription notification_channel_updated`.
-- **A Full access card says why it asks.** In the desktop chat, a card titled "Full access asks about this one" now
-  says in one line why this request still asks, for example a command whose wildcard the shell expands only as it runs.
-- **Approvals in plain words.** An approval's detail says what the act does in words a person reads at a glance:
-  whether it contacts anyone, whether it can be undone, and what it costs. A message that was doubted is shown under
-  "Why this message was flagged". A reply in a conversation says it goes from the account the conversation is in.
-- **The chat queues what you send while it works.** While a turn runs, the round button sends your words when the
-  turn ends, and what you send waits below the conversation, where **Take back** returns it to the box. Messages sent
-  meanwhile go together as the next turn. Escape in the message box stops the turn.
-- **The chat reads the command line's own help.** The desktop chat may run `jason <noun> --help` for the nouns it
-  works with, instead of guessing at a verb or an option.
-- **Change Jason itself opens the program you use.** Open in › Change Jason itself opens the agent host your
-  preference names, else the one marked **In use** in Settings › Models, else Claude Code, as before.
-- **A wiring check for a direct send.** The golden path has a section that checks a single email sent outside any
-  provider campaign: one real send, to your own address, run only when you ask for it.
-- **The Live start page** says the interface is optional and links the open-source repository.
+On macOS and Windows, Jason is now one installation: Jason Desktop and the `jason` it carries, the command line your
+terminal and your agents use. One line installs it, one update moves it on, and one removal takes it off. On Linux,
+Jason is installed, updated and removed as it was.
 
-## Fixed since 0.48.4
+## What is new since 0.48.5
 
-- **Jason Desktop's update installs.** The update the desktop offers no longer stops with "a copy of this version
-  could not be kept aside to go back to". If keeping that copy ever fails, the message now says where to download the
-  new version to install it yourself. See **Known issues** for a desktop of 0.48.4 or earlier.
-- **The Demo | Live switch at start.** The Demo's page enters the window once its styles are in, so the switch no
-  longer answers as the window's drag area while the Demo starts.
-- **`jason status` and Windows' notification settings.** On Windows, `jason status` reads Windows' notification
-  switches as they stand when it runs: a switch that is off now is said so, whatever the last notification did, and
-  one switched back on is no longer reported as off. A failed notification is still reported first.
+- **The install line installs Jason Desktop.** On macOS and Windows the one line installs the application, puts `jason`
+  in the terminal and deploys Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and
+  `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too); it opens no window. Another agent host takes the
+  skills with `jason skills install --host <your host>`. On a Mac the line installs on Apple silicon; on an Intel Mac
+  the application is installed from its
+  [disk image](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md#jason-desktop) and opened from
+  Applications. [INSTALL.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md) §2 says what
+  each script does.
+- **The scripts take fewer options on macOS and Windows.** `--install-dir` and `--no-modify-path` (`-InstallDir` and
+  `-NoModifyPath` in PowerShell) chose a folder for the command line and left the PATH alone. The application has its
+  own place and puts `jason` in the terminal itself, so on macOS and Windows the scripts no longer take them; on Linux
+  they are taken as before.
+- **The install runs as you.** On macOS and Windows, Jason Desktop and everything it sets up are your account's own,
+  so `install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or
+  another account's than the one signed in — stop before anything is downloaded, and say to run the line again as
+  yourself; `jason install` run so refuses with `install_elevated`. On Linux a run as root installs as any run does.
+- **One update.** `jason update apply` updates Jason Desktop and the `jason` it carries together, through the
+  application's own updater, one update at a time. Check for Updates… in Jason Desktop's menu updates the same way. An
+  installer that finds Jason Desktop running waits for it to quit or refuses, and never closes it.
+- **A command-line install moves into Jason Desktop.** On macOS and Windows, `jason update apply` in a command-line
+  install of an earlier version updates it and then moves it into Jason Desktop, so that the terminal's `jason` is the
+  one the application carries. The update never fails because of the move: where the move cannot go on, the install is
+  left as it was and `jason status` says where the move stands. How to go back to 0.48.5 afterwards, with your data
+  kept, is in
+  [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049).
+- **One removal.** `jason uninstall` takes off Jason Desktop, the terminal command, the skills it deployed, the start at
+  logon and an older command-line install; Installed apps on Windows and **Uninstall Jason…** in the Jason menu on macOS
+  do the same. It keeps the data directory unless you add `--purge-data`.
+- **Jason Desktop finishes each version at its first start.** It puts `jason` in the terminal and the skills in place,
+  finishes an update a terminal started, and starts the runtime an install or an update stopped. An application opened
+  from its disk image, or from where it was downloaded, sets nothing up: move it into Applications and open it there.
+  [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md) says what the first start does.
+- **`jason status` says which `jason` a terminal finds.** On macOS and Windows, where `jason` by name is another file
+  than the `jason` answering, its `path` check fails, naming both files, and `ready` is false until that file is removed
+  or its folder taken off the PATH. On Linux the check passes there and says that two installations are on this
+  machine.
+- **`jason runtime drain` and `jason runtime resume`.** A drained runtime answers every question and claims no new work
+  until it is resumed or restarted, and `jason status` says when the runtime is draining.
+- **A runtime never starts on data a newer Jason changed.** It refuses with `data_newer`, changes nothing in the data
+  directory, and says to update Jason.
+- **Programs are found only through full entries of the search path.** Jason starts every program by its full path,
+  and only the entries of the search path that are full paths are searched: an empty entry, `.` or a relative folder
+  names wherever the runtime happens to stand, and a program found only there is `executable_missing`.
+- **Approval cards for a paid people search show its definition** and arguments, in Jason Desktop's chat as on
+  Attention.
 
-## Upgrading from 0.48.4
+## Upgrading from 0.48.5
 
-Nothing stops, no setting is renamed and no migration runs.
-
-- **The desktop:** on Windows and macOS, install this release from its installer once (see **Known issues**). On
-  Linux, and from 0.48.5 on everywhere, the desktop's own update works.
-- **The executable:** `jason update`, as for every release.
-- **From 0.48.3 or earlier,** the notes of each release in between apply as well.
-
-## Known issues
-
-- **A Jason Desktop of 0.48.4 or earlier on Windows and macOS cannot take this release by its own update,** since
-  the code that fails is the installed one. Install 0.48.5 from its installer once; from 0.48.5 on, the
-  application's own update works.
+- **Installing this candidate.** It is installed by naming its version. On macOS:
+  ```sh
+  curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
+  ```
+  On Windows (PowerShell):
+  ```powershell
+  & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
+  ```
+  A command-line install of 0.48 takes it with `jason update apply --version {{version}}`, and moves into Jason Desktop
+  as above.
+- **Going back.** `jason update rollback` does not undo the move into Jason Desktop. Going back is taking Jason off with
+  `jason uninstall`, keeping the data directory, and installing 0.48.5 by its own pinned line: 0.49 adds no migration to
+  the database, so 0.48.5 opens the same data as it is.
+  [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049)
+  lists the steps.
+- **Homebrew.** The Homebrew formula carries the command line alone and stays at 0.48.5; on a Mac and on Linux the one
+  line is the way to 0.49, and
+  [the update page](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#6-installing)
+  says how to come from a Homebrew install.
