@@ -1166,8 +1166,8 @@ vanishing-place)
     # start running the setup and refused, and quit; the image ejected. Asserted: the refusal by its code and its words,
     # nothing placed, the start's setup run and refused and no setup record written, the image gone, and no jason in a new
     # terminal after the eject. The listing and the compare after it are the leg's next steps. On any failure between the
-    # attach and the detach, the application from the image is ended and the image detached, so that no later leg finds
-    # it holding the data directory.
+    # staging and the detach, the staged copy and the image are removed, the application from the image ended and the image
+    # detached, so that no later leg finds it holding the data directory.
     built="$1"
     [ -d "$built" ] || fail "no application at $built"
     [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
@@ -1178,14 +1178,15 @@ vanishing-place)
     mount="$RUNNER_TEMP/jason-vanishing-place"
     stage="$RUNNER_TEMP/jason-vanishing-stage"
     [ ! -e "$image" ] && [ ! -e "$mount" ] && [ ! -e "$stage" ] || fail "$image, $mount or $stage is there before the leg makes it"
+    # From here to the detach, a failure leaves nothing behind: the staged copy and the image removed, the application
+    # from the image ended, the image detached.
+    trap 'pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true; hdiutil detach -force "$mount" > /dev/null 2>&1 || true; rm -f "$image"; rm -rf "$stage"' EXIT
     # The volume's root holds Jason.app, as a download's image does: the application staged in a folder of its own.
     mkdir -p "$stage"
     ditto "$built" "$stage/Jason.app" || fail "this build's application could not be staged at $stage"
     within 300 'hdiutil create' hdiutil create -srcfolder "$stage" -volname 'Jason Test' -format UDZO "$image" > "$OUT/vanishing-create.txt" 2>&1 || fail "hdiutil create failed: $(tail -n 3 "$OUT/vanishing-create.txt")"
     rm -rf "$stage"
     within 120 'hdiutil attach' hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$image" > "$OUT/vanishing-attach.txt" 2>&1 || fail "hdiutil attach failed: $(tail -n 3 "$OUT/vanishing-attach.txt")"
-    # From here to the detach, a failure leaves nothing behind: the application from the image ended, the image detached.
-    trap 'pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true; hdiutil detach -force "$mount" > /dev/null 2>&1 || true; rm -f "$image"' EXIT
     mounted="$mount/Jason.app"
     [ -d "$mounted" ] || fail "no Jason.app at the root of the mounted image at $mount"
     say "this build's application put in a read-only disk image (UDZO), at its root, and mounted at $mount"
