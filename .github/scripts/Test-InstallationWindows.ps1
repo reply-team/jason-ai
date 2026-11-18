@@ -278,7 +278,7 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
 function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600) {
     $saved = @{}
-    foreach ($name in $environment.Keys) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $environment[$name]) }
+    foreach ($variable in $environment.Keys) { $saved[$variable] = [Environment]::GetEnvironmentVariable($variable); [Environment]::SetEnvironmentVariable($variable, $environment[$variable]) }
     try {
         $job = Start-ThreadJob -ArgumentList $file, $arguments -ScriptBlock {
             param($program, $words)
@@ -298,7 +298,7 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
         $said = $result.Said
         $code = $result.Code
     } finally {
-        foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+        foreach ($variable in $saved.Keys) { [Environment]::SetEnvironmentVariable($variable, $saved[$variable]) }
     }
     Write-Host $said
     return [pscustomobject]@{ Exit = $code; Said = $said; Flat = ($said -replace '\s+', '') }
@@ -330,8 +330,8 @@ function Read-All([string] $jason, [string[]] $words) {
         if ($lines.Count -eq 0) { Fail "jason $($words -join ' ') printed no page" }
         $root = ([System.Text.Json.JsonDocument]::Parse($lines[-1])).RootElement
         foreach ($item in $root.GetProperty('items').EnumerateArray()) { $items.Add($item.Clone()) }
-        $next = $root.GetProperty('next_cursor')
-        $cursor = if ($next.ValueKind -eq [System.Text.Json.JsonValueKind]::String) { $next.GetString() } else { $null }
+        $nextCursor = $root.GetProperty('next_cursor')
+        $cursor = if ($nextCursor.ValueKind -eq [System.Text.Json.JsonValueKind]::String) { $nextCursor.GetString() } else { $null }
         if (-not $cursor) { return $items.ToArray() }
     }
     Fail "jason $($words -join ' ') still had pages after 1000"
@@ -385,6 +385,17 @@ function Wait-Until([scriptblock] $condition, [int] $seconds, [string] $what) {
 
 function Get-OwnProcesses([string] $folder) {
     @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
+}
+
+# For the reset's record: every process whose image is under the application's folder, and every uninstaller process
+# (one named Uninstall Jason*.exe, or one whose image is under the account's temporary folder, where NSIS relaunches its
+# own copy), each with its command line.
+function Write-ResetProcesses([string] $resets, [string] $when) {
+    $root = (Join-Path $env:LOCALAPPDATA 'Temp').TrimEnd('\') + '\'
+    $all = @(Get-CimInstance -ClassName Win32_Process)
+    $own = @($all | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($app.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
+    $uninstallers = @($all | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) })
+    Add-Content -LiteralPath $resets -Value "  $when, the processes of the application's folder: $(if ($own) { ($own | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join ' | ' } else { 'none' }); the uninstaller processes: $(if ($uninstallers) { ($uninstallers | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join ' | ' } else { 'none' })"
 }
 
 # An Installed apps entry's quiet uninstall line; empty where the entry has none.
@@ -470,8 +481,8 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     Folder 'agents skills' (Join-Path $env:USERPROFILE '.agents\skills')
     Folder 'data directory' $data
     Folder 'harness root' $harnessRoot
-    foreach ($name in @('jason', 'jason.cmd', 'jason-desktop', 'jason-desktop.cmd', 'jason.exe')) {
-        $lines.Add("WindowsApps\$name`t$(if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\$name")) { 'present' } else { 'absent' })")
+    foreach ($command in @('jason', 'jason.cmd', 'jason-desktop', 'jason-desktop.cmd', 'jason.exe')) {
+        $lines.Add("WindowsApps\$command`t$(if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\$command")) { 'present' } else { 'absent' })")
     }
     $path = Get-UserPath
     $lines.Add("user Path kind`t$($path.Kind)")
@@ -780,7 +791,9 @@ switch ($Step) {
                 Add-Content -LiteralPath $resets -Value "before '$Leg', after '$last' $(if ($ended) { 'ended leaving it' } else { 'failed' }), found: $($found -join '; ')"
                 Say "before this leg the machine is not the machine before ($($found.Count) line(s)), after '$last' $(if ($ended) { 'ended leaving it, recorded as its failure' } else { 'failed' }); found: $($found -join '; ')"
                 if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg 'not run: the reset after a failed leg runs on a GitHub-hosted runner alone, and this is not one'; return }
+                # One door at a time, each waited to its end: two uninstallers on one folder each skip what the other holds.
                 try {
+                    Write-ResetProcesses $resets 'before the reset'
                     foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) {
                         Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
                         Add-Content -LiteralPath $resets -Value "  quit the application's process $($process.ProcessId)"
@@ -791,15 +804,42 @@ switch ($Step) {
                             $said = "  $jason uninstall --purge-data --yes ended $($removed.Exit): $(($removed.Said -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 3) -join ' / ')"
                             Write-Host $said
                             Add-Content -LiteralPath $resets -Value $said
+                            if ($jason -ne $carried) { continue }
+                            # The application's removal hands the folder to its own uninstaller, run by a waiter once the verb
+                            # has ended: that waiter, by the process its report names, is waited for to its end; where none
+                            # is named, the folder and its Installed apps entry, both gone. Bounded at 300 s.
+                            $waiters = @([regex]::Matches([string]$removed.Said, 'process (\d+) waits') | ForEach-Object { [int]$_.Groups[1].Value } | Sort-Object -Unique)
+                            $deadline = [DateTime]::UtcNow.AddSeconds(300)
+                            if ($waiters.Count -gt 0) {
+                                foreach ($waiter in $waiters) {
+                                    $process = Get-Process -Id $waiter -ErrorAction SilentlyContinue
+                                    $left = [int][Math]::Max(0, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+                                    $ended = (-not $process) -or $process.WaitForExit($left)
+                                    Add-Content -LiteralPath $resets -Value "  the waiter $waiter the removal named $(if ($ended) { 'has ended' } else { 'had not ended within 300 s' })"
+                                }
+                            } else {
+                                while ([DateTime]::UtcNow -lt $deadline -and ((Test-Path -LiteralPath $app) -or @(Get-JasonUninstallEntries).Count -gt 0)) { Start-Sleep -Seconds 2 }
+                                Add-Content -LiteralPath $resets -Value "  the removal named no waiter; the application's folder $(if (Test-Path -LiteralPath $app) { 'still stands' } else { 'is gone' }) and its Installed apps entries number $(@(Get-JasonUninstallEntries).Count), after waiting for both to go"
+                            }
                         }
                     }
+                    # Installed apps' door, only where an entry still stands: as the product's waiter runs it, a copy of the
+                    # uninstaller in a folder of its own, given the application's folder by _?=, so that NSIS runs that copy
+                    # in place and to its end instead of relaunching one and returning at once.
+                    Write-ResetProcesses $resets 'before Installed apps'
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
                         $quietLine = Get-QuietUninstall $entry
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
-                            $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
-                            $said = "  Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                            $uninstaller = $Matches['file']; $arguments = $Matches['arguments']
+                            $copyFolder = Join-Path $temporary "jason-reset-uninstaller-$([Guid]::NewGuid().ToString('N'))"
+                            New-Item -ItemType Directory -Path $copyFolder | Out-Null
+                            $copy = Join-Path $copyFolder (Split-Path -Leaf $uninstaller)
+                            Copy-Item -LiteralPath $uninstaller -Destination $copy
+                            $quiet = Wait-Program $copy (@(@($arguments -split '\s+') | Where-Object { $_ }) + @("_?=$(Split-Path -Parent $uninstaller)"))
+                            $said = "  Installed apps' quiet uninstall of $($entry.DisplayName), a copy run in place with _?=$(Split-Path -Parent $uninstaller), ended $quiet"
                             Write-Host $said
                             Add-Content -LiteralPath $resets -Value $said
+                            Remove-Item -LiteralPath $copyFolder -Recurse -Force -ErrorAction SilentlyContinue
                         }
                     }
                 } catch {
@@ -810,6 +850,7 @@ switch ($Step) {
                 $deadline = [DateTime]::UtcNow.AddSeconds(120)
                 while ([DateTime]::UtcNow -lt $deadline -and @(Get-LeftOver).Count -gt 0) { Start-Sleep -Seconds 2 }
                 $left = @(Get-LeftOver)
+                if ($left.Count -gt 0) { Write-ResetProcesses $resets 'when the poll gave up' }
                 $removedLines = @($found | Where-Object { $left -cnotcontains $_ })
                 Add-Content -LiteralPath $resets -Value "  removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
                 Say "the reset removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
@@ -931,9 +972,9 @@ switch ($Step) {
         # version already installed, which downloads nothing.
         # The pinned one-liner runs the text as a script block given -Version, as the page's pinned line does.
         $text = if ($Pinned) { "& ([scriptblock]::Create((Get-Content -LiteralPath '$Script' -Raw))) -Version $Version" } else { "Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw)" }
-        $again = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "$text; if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { 'Install-Jason is still defined'; exit 9 }") @{ JASON_INSTALL_FEED = $Feed }
-        if ($again.Exit -ne 0) { Fail "install.ps1's text run as the one-liner runs it exited with $($again.Exit)" }
-        if (-not $again.Flat.Contains(("Jason Desktop $Version is already installed" -replace '\s+', ''))) { Fail 'the second run did not say the version is already installed' }
+        $runAgain = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "$text; if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { 'Install-Jason is still defined'; exit 9 }") @{ JASON_INSTALL_FEED = $Feed }
+        if ($runAgain.Exit -ne 0) { Fail "install.ps1's text run as the one-liner runs it exited with $($runAgain.Exit)" }
+        if (-not $runAgain.Flat.Contains(("Jason Desktop $Version is already installed" -replace '\s+', ''))) { Fail 'the second run did not say the version is already installed' }
         if ((Count-Entry $bundle) -ne 1) { Fail 'a second run added a second Path entry' }
         Say 'run again as the one-liner runs it, it downloads nothing, adds nothing to the Path and leaves no function behind'
 
@@ -1200,9 +1241,9 @@ switch ($Step) {
         # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
         try {
             From-Previous
-            $leg = Test-Leg 'leg 1, --updated /S over a window that never quits' @('--updated', '/S') @(3)
-            if ($leg.Ended -and $leg.Exit -eq 2 -and $leg.Seconds -lt 30) { $failures.Add('leg 1 ended 2 within 30 s: the include''s look missed the window, and the old uninstaller refused') }
-            if ($leg.Ended -and $leg.Exit -eq 3 -and $leg.Seconds -lt 45) { $failures.Add("leg 1 ended 3 after $($leg.Seconds) s, before the include's bound of about 60 s") }
+            $firstLeg = Test-Leg 'leg 1, --updated /S over a window that never quits' @('--updated', '/S') @(3)
+            if ($firstLeg.Ended -and $firstLeg.Exit -eq 2 -and $firstLeg.Seconds -lt 30) { $failures.Add('leg 1 ended 2 within 30 s: the include''s look missed the window, and the old uninstaller refused') }
+            if ($firstLeg.Ended -and $firstLeg.Exit -eq 3 -and $firstLeg.Seconds -lt 45) { $failures.Add("leg 1 ended 3 after $($firstLeg.Seconds) s, before the include's bound of about 60 s") }
             Assert-Untouched 'leg 1' $true
             End-Application
             $null = Test-Leg 'leg 1, the same setup again once the window ended' @('--updated', '/S') @(0)
