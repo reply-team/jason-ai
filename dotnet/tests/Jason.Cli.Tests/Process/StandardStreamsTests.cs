@@ -41,6 +41,25 @@ public sealed class StandardStreamsTests
     }
 
     /// <summary>
+    /// A list whose handles are not handles - one zero, one not a multiple of four, as a list read at the wrong layout
+    /// gives - is no list, whatever its count says, and the three standard streams are kept out instead.
+    /// </summary>
+    [Theory]
+    [InlineData(8, 0x0)]
+    [InlineData(8, 0x2ca)]
+    [InlineData(4, 0x0)]
+    [InlineData(4, 0x2ca)]
+    public void Where_a_handle_the_list_gives_is_no_handle_it_is_no_list_and_the_three_standard_streams_are_kept_out(int pointerSize, long notAHandle)
+    {
+        var list = Snapshot(pointerSize, (0x14, true), (notAHandle, false), (0x5f0, true));
+        Assert.Null(StandardStreams.Inheritable(list, pointerSize));
+
+        var cleared = new List<IntPtr>();
+        StandardStreams.KeepOutOfChildren(() => StandardStreams.Inheritable(list, pointerSize), () => Standard, cleared.Add);
+        Assert.Equal(Standard, cleared);
+    }
+
+    /// <summary>
     /// The list as the system writes it, at either width a process's pointers have: the handles it marks inheritable are
     /// kept out, every one of them, and those it does not mark are never touched, a standard stream that is not
     /// inheritable among them.

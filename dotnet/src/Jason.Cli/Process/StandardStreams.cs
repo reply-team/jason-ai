@@ -59,8 +59,7 @@ public static class StandardStreams
     /// and starts on the same thread, and the CLI starts no process on another thread.
     /// </para>
     /// <para>
-    /// Unix needs none of this: the child's descriptors 0, 1 and 2 are replaced outright and everything else
-    /// the runtime might have inherited is closed on exec.
+    /// Unix needs none of this for the three streams: the child's descriptors 0, 1 and 2 are replaced outright.
     /// </para>
     /// </remarks>
     public static void KeepOutOfChildren()
@@ -131,7 +130,9 @@ public static class StandardStreams
 
     /// <summary>
     /// The inheritable handles of a <c>PROCESS_HANDLE_SNAPSHOT_INFORMATION</c> as the system wrote it for a process whose
-    /// pointers are <paramref name="pointerSize"/> bytes wide; null where its count and its length do not fit each other.
+    /// pointers are <paramref name="pointerSize"/> bytes wide; null where its count does not fit its length, or where any
+    /// handle it gives is zero or not a multiple of four, which no handle of a process is and a list read at the wrong
+    /// layout gives at once.
     /// </summary>
     /// <remarks>
     /// The list is two pointer-wide numbers (the count of handles and one reserved), then one entry per handle: the handle,
@@ -162,9 +163,15 @@ public static class StandardStreams
         var handles = new List<IntPtr>();
         for (var at = header; at < header + ((int)count * entry); at += entry)
         {
+            var handle = Pointer(list[at..], pointerSize);
+            if (handle == 0 || handle % 4 != 0)
+            {
+                return null;
+            }
+
             if ((BinaryPrimitives.ReadUInt32LittleEndian(list[(at + attributes)..]) & ObjectInherit) != 0)
             {
-                handles.Add(new IntPtr((long)Pointer(list[at..], pointerSize)));
+                handles.Add(new IntPtr((long)handle));
             }
         }
 
