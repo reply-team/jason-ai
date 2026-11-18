@@ -1,5 +1,5 @@
-// The install page: the text of docs/INSTALL.md as the one fixed address serves it, as plain text, with its relative
-// links made whole against that address, the same for every request.
+// The install page: the text of docs/INSTALL.md as it is served, as plain text, with its relative links made whole against
+// the address it was read from, the same for every request. Which release's page that is: released.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,19 +7,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { GUIDE, fakeDb, fakeFetch, send } from '../fakes.mjs';
 import { wholeLinks } from '../src/install.mjs';
-import { INSTALL_PAGE } from '../src/paths.mjs';
+import { INSTALL_PAGE, LATEST_RELEASE } from '../src/paths.mjs';
 
 const repository = new URL('../../', import.meta.url);
 const installText = readFileSync(new URL('docs/INSTALL.md', repository), 'utf8');
 const rawMain = 'https://raw.githubusercontent.com/reply-team/jason-ai/main/';
 const page = (text) => () => new Response(text, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 
-test('the page is read from the one fixed address, which is the install page of main', async () => {
+test("where the latest release cannot be learnt, the page is read from main's fixed address, and nothing a request carries is read", async () => {
   assert.equal(INSTALL_PAGE, `${rawMain}docs/INSTALL.md`);
-  const fetch = fakeFetch({ [INSTALL_PAGE]: page(GUIDE) });
+  const fetch = fakeFetch({ [LATEST_RELEASE]: new Error('unreachable'), [INSTALL_PAGE]: page(GUIDE) });
   await send('/install?ref=x&url=https%3A%2F%2Fexample.com%2F', { fetch, headers: { referer: 'https://example.com/' } });
-  assert.deepEqual(fetch.asked.map((ask) => ask.address), [INSTALL_PAGE]);
-  assert.equal(fetch.asked[0].init.cf.cacheTtl, 300);
+  assert.deepEqual(fetch.asked.map((ask) => ask.address), [LATEST_RELEASE, INSTALL_PAGE]);
+  assert.equal(fetch.asked[1].init.cf.cacheTtl, 300);
 });
 
 test('the page is plain text that is never sniffed, never cached on the way and never a download', async () => {

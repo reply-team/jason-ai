@@ -4,8 +4,9 @@ using static Jason.Runtime.Tests.Documentation.Workflows;
 namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
-/// The Homebrew tap: once a tag's release is published, a job of its own asks the tap to bump its formula, with the one
-/// token it holds. Its PowerShell is run here with <c>Invoke-WebRequest</c> standing in.
+/// The Homebrew tap: once a tag's release is published, a job of its own would ask the tap to bump its formula, with the
+/// one token it holds. The job is switched off, by the last clause of its condition, with its reason beside it; its step
+/// is still held here, with <c>Invoke-WebRequest</c> standing in, so that it comes back as it was.
 /// </summary>
 public partial class ReleaseWorkflowTests
 {
@@ -19,9 +20,44 @@ public partial class ReleaseWorkflowTests
     private const string TapRequest =
         $$"""POST {{TapDispatch}} application/json {"ref":"main"} | Accept=application/vnd.github+json | Authorization=Bearer {{TapRequestToken}} | X-GitHub-Api-Version=2022-11-28""";
 
+    /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
+    private const string TapOffReason =
+        "Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at 0.48.5, the last release it carries; this job comes back, bumping a cask, with the release that carries one.";
+
     /// <summary>
-    /// The tap is told once the release is published, by a job after the release job that runs only when that job
-    /// succeeded, only for a tag and only in the public repository. It is a job of its own so that "Re-run failed jobs"
+    /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is
+    /// <c>false</c>, joined to the rest by <c>&amp;&amp;</c>, so no event, input or repository runs it, and the comment
+    /// above the job begins with the reason. The workflow's head says the job is switched off and no longer that a last
+    /// job asks the tap.
+    /// </summary>
+    [Fact]
+    public void The_tap_s_job_is_switched_off_by_the_last_clause_of_its_condition_and_says_why()
+    {
+        var condition = Scalar(TapJob(), "if");
+        Assert.NotNull(condition);
+        Assert.EndsWith(" && false }}", condition, StringComparison.Ordinal);
+        Assert.DoesNotContain("||", condition, StringComparison.Ordinal);
+
+        var lines = Read(Release).ReplaceLineEndings("\n").Split('\n');
+        var job = Array.IndexOf(lines, "  tap:");
+        Assert.True(job > 0, "release.yml has no job 'tap'.");
+        var first = job;
+        while (first > 0 && lines[first - 1].StartsWith("  #", StringComparison.Ordinal))
+        {
+            first--;
+        }
+
+        var comment = string.Join(' ', lines[first..job].Select(line => line.TrimStart()[1..].Trim()));
+        Assert.StartsWith(TapOffReason, comment, StringComparison.Ordinal);
+
+        var head = string.Join(' ', lines.TakeWhile(line => line.StartsWith('#')).Select(line => line[1..].Trim()));
+        Assert.Contains("The job after it, which asked the Homebrew tap to bump its formula, is switched off.", head, StringComparison.Ordinal);
+        Assert.DoesNotContain("a last job asks the Homebrew tap", head, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The tap would be told once the release is published, by a job after the release job that runs only when that job
+    /// succeeded, only for a tag and only in the public repository, and is switched off. It is a job of its own so that "Re-run failed jobs"
     /// after a refused dispatch runs the dispatch alone, never the publication again, which would refuse a release that is
     /// already published. It holds no permission of this repository's, checks nothing out and uses no action: its one step
     /// sends one request with the tap's token, which only this job holds, in the environment that admits release tags.
@@ -32,7 +68,7 @@ public partial class ReleaseWorkflowTests
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var tap = TapJob();
         Assert.Equal(PublishingJobName(jobs), Scalar(tap, "needs"));
-        Assert.Equal(TagHere, Scalar(tap, "if"));
+        Assert.Equal(TapSwitchedOff, Scalar(tap, "if"));
         Assert.Equal(SigningEnvironment, Scalar(tap, "environment"));
         Assert.Empty(Assert.IsType<YamlMappingNode>(Node(tap, "permissions")).Children);
         Assert.Equal("ubuntu-latest", Scalar(tap, "runs-on"));

@@ -412,4 +412,16 @@ public partial class PageClaimsTests
         Assert.Contains("Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/` (`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder, then run `jason runtime start`.", restoring, StringComparison.Ordinal);
         Assert.Contains("`~/.jason/update/previous/jason` is not that version there: after a move into Jason Desktop it is the command-line executable the move's update replaced, a release before 0.49.", restoring, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The application goes to <c>/Applications</c> where this account may write there, and an application there is one for
+    /// every account of the Mac: §9 says, in the row that deletes it, that taking it off takes it from all of them.
+    /// </summary>
+    [Fact]
+    public void Taking_the_application_off_says_one_in_Applications_is_every_account_s()
+    {
+        var off = Flat(Section(Page("docs", "release-and-update.md"), "## 9. "));
+        Assert.Contains("macOS: the `Jason.app` the `jason` is inside, deleted by this verb", off, StringComparison.Ordinal);
+        Assert.Contains("An application in `/Applications` is one for every account of the Mac, and taking it off takes it from all of them.", off, StringComparison.Ordinal);
+    }
 }

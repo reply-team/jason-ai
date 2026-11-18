@@ -75,8 +75,15 @@ public static class UninstallReader
         var descriptor = new DescriptorReader(env.Paths).Read();
         var (notificationKeys, registryUnreadable) = NotificationKeys(env);
         var (link, linkUnreadable) = Link(env);
-        var extracted = Extracted(env, executable, directory);
-        var (others, othersLeft) = Others(env, extracted, directory, OperatingSystem.IsWindows(), ExtractBase(env));
+
+        // What the running build unpacked is planned whoever placed the file it runs from, a package manager aside: the
+        // jason the application carries is a single file like any other, and its first run unpacks the same way. With the
+        // application's plan the executable was not planned, and this field went with it, so its directory was neither
+        // removed nor named. The belt is the file's own folder, the application's bundle where it carries the file.
+        var image = owner is null ? executable ?? env.InstallPath ?? SelfExecutable.InstalledImage : null;
+        var imageDirectory = image is null ? null : Path.GetDirectoryName(image);
+        var extracted = Extracted(env, image, imageDirectory);
+        var (others, othersLeft) = Others(env, extracted, imageDirectory, OperatingSystem.IsWindows(), ExtractBase(env));
 
         return new UninstallPlan(
             autostart.Registered,

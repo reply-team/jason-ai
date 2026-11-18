@@ -99,8 +99,10 @@ The conventions the code follows — the layout, the boundaries the build enforc
 API, of persistence and of the logs — are in `CLAUDE.md`, which every AI session reads and which holds for people just
 the same. This section is how a change travels from a branch to a release.
 
-**Three kinds of branch.** `main` is what has been released: it changes when a release merges, and the release's tag
-follows that merge. A release branch, `release/<name>`, carries one release's scope, and several can run at once. A
+**Three kinds of branch.** `main` is what has been released: a release is tagged on its pull request's head and
+published from that tag, and the pull request merges into `main` only once the publication is checked, so `main`,
+whose README and pages GitHub shows, never describes a release that is not out; a hotfix is tagged on its merge
+instead ("A hotfix", below). A release branch, `release/<name>`, carries one release's scope, and several can run at once. A
 change is made on a feature branch cut from its release branch, and its pull request targets that release branch.
 When no release branch is open, a change starts as an issue or a discussion; `CONTRIBUTING.md` says where. The third
 kind is a hotfix's branch, `hotfix/<name>`, cut from `main` for a small fix that cannot wait for the next release; "A
@@ -125,9 +127,10 @@ on Ubuntu, an update on linux-x64, the UI's checks and the desktop's — and mer
 tests it touched, the tests that check a list or a table it edits (for a page, the tests that read every page), a
 review by whoever leads the release and one by a reviewer who reads only the change, and that Linux set; the whole suite
 runs once per release, at the release's pull request into `main`. That pull request runs every check, the whole suite included, on Linux,
-Windows and macOS, and the release merges only when that run is green. At the tag, the release workflow runs the
+Windows and macOS, and its head is tagged only when that run is green. At the tag, the release workflow runs the
 critical tier again and packages and smoke-tests the executable for each platform; it does not run the whole suite
-again, since the tag is the tree that run tested. `.github/workflows/ci.yml` says which run each event gets,
+again, since the tag is the tree that run tested. The pull request merges into `main` once the release published from
+that tag is checked. `.github/workflows/ci.yml` says which run each event gets,
 `CiRunsTests` holds the workflow to that rule, and `docs/release-and-update.md` is the release's contract.
 
 **A hotfix.** A hotfix is a small, local fix of what was released that cannot wait for the next release: no database

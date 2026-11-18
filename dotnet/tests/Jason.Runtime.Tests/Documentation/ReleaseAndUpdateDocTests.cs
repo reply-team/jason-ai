@@ -135,8 +135,79 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// One repository builds and publishes a release: the tag pushed on the merge of the release pull request builds it
-    /// and publishes it at once, and the same tag anywhere else publishes nothing; the button's draft is for reading and
+    /// The order a release goes in: the release pull request's run on every platform, then the tag on that pull request's
+    /// head, the release published from it, and the merge into <c>main</c> only once the publication is checked, because
+    /// <c>main</c> is what the README and every page GitHub shows are read from. The page and DEVELOPMENT.md say it, and
+    /// neither still says the tag is pushed on the merge; the hotfix's own order, a tag on its merge, is left as it is.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_a_release_is_published_from_its_pull_request_s_head_and_merged_after()
+    {
+        var first = Flat(Section(Read(), "## 1. What a release is"));
+        Assert.Contains("A merge to `main` is not a release: a tag is the statement that one commit is worth installing.", first, StringComparison.Ordinal);
+        Assert.Contains("Once that run is green, the tag `v<version>` is pushed on the pull request's head and builds the release from it:", first, StringComparison.Ordinal);
+        Assert.Contains("The pull request is merged into `main` only after the publication is checked: the README and every page GitHub shows are read from `main`, so `main` never describes a release that is not out, and a release run that fails leaves `main` as it was.", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("pushed on that merge", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("merging it is the last review a release has", first, StringComparison.Ordinal);
+
+        var development = Flat(Source("DEVELOPMENT.md"));
+        Assert.Contains("`main` is what has been released: a release is tagged on its pull request's head and published from that tag, and the pull request merges into `main` only once the publication is checked, so `main`, whose README and pages GitHub shows, never describes a release that is not out; a hotfix is tagged on its merge instead (\"A hotfix\", below).", development, StringComparison.Ordinal);
+        Assert.Contains("and its head is tagged only when that run is green.", development, StringComparison.Ordinal);
+        Assert.Contains("The pull request merges into `main` once the release published from that tag is checked.", development, StringComparison.Ordinal);
+        Assert.DoesNotContain("the release's tag follows that merge", development, StringComparison.Ordinal);
+        Assert.DoesNotContain("the release merges only when that run is green", development, StringComparison.Ordinal);
+        Assert.Contains("Then the merge is tagged and the release runs.", development, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Homebrew's formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so no release
+    /// asks the tap to bump it any more: the page says the formula stays at 0.48.5, that the one line is the way to 0.49 on
+    /// a Mac, and how an installation Homebrew made reaches it, the data directory kept. Section 1 no longer says a last
+    /// job asks the tap.
+    /// </summary>
+    [Fact]
+    public void The_page_says_the_formula_stays_at_0_48_5_and_a_homebrew_install_moves_by_the_one_line()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+        var start = installing.IndexOf("### Through a package manager\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "§6 has no subsection 'Through a package manager'.");
+        var end = installing.IndexOf("\n### ", start + 1, StringComparison.Ordinal);
+        var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
+
+        Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at 0.48.5, the last release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds nothing newer.", package, StringComparison.Ordinal);
+        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
+        Assert.Contains("jason uninstall brew uninstall jason curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh", package, StringComparison.Ordinal);
+        Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("follows the latest release", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("asks the tap to bump it at once", package, StringComparison.Ordinal);
+
+        var first = Flat(Section(Read(), "## 1. What a release is"));
+        Assert.Contains("A release no longer asks the Homebrew tap to bump its formula (§6).", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("a last job asks the Homebrew tap", first, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Homebrew installs Jason on macOS and Linux, so the way from its install covers both: on a Mac the one line installs
+    /// Jason Desktop, on Linux the command line, and the three lines are the way from Homebrew's install on either system.
+    /// </summary>
+    [Fact]
+    public void The_way_from_homebrew_s_install_covers_a_mac_and_linux()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+        var start = installing.IndexOf("### Through a package manager\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "§6 has no subsection 'Through a package manager'.");
+        var end = installing.IndexOf("\n### ", start + 1, StringComparison.Ordinal);
+        var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
+
+        Assert.Contains("Homebrew on macOS and Linux", package, StringComparison.Ordinal);
+        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
+        Assert.Contains("the one line installs Jason Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("On a Mac, the one line at the top of this section is the way", package, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// One repository builds and publishes a release: the tag pushed on the release pull request's head builds it and
+    /// publishes it at once, and the same tag anywhere else publishes nothing; the button's draft is for reading and
     /// is deleted, never published. The page says so where it says what a release is, and no longer speaks of a second
     /// repository, a publication token or a pull request that publishes.
     /// </summary>
@@ -146,8 +217,8 @@ public class ReleaseAndUpdateDocTests
         var page = Regex.Replace(Read(), @"\s+", " ");
 
         Assert.Contains("Everything about a release happens in one repository, `reply-team/jason-ai`: the source, its tags and its releases.", page, StringComparison.Ordinal);
-        Assert.Contains("A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and Windows; merging it is the last review a release has.", page, StringComparison.Ordinal);
-        Assert.Contains("publishes the release at once, with the assets below and its notes, as the latest release unless a newer one already is or the version is a release candidate;", page, StringComparison.Ordinal);
+        Assert.Contains("A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and Windows.", page, StringComparison.Ordinal);
+        Assert.Contains("publishes the release at once, with the assets below and its notes, as the latest release unless a newer one already is or the version is a release candidate.", page, StringComparison.Ordinal);
         Assert.Contains("The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that holds them assembles the release and says in one line that it publishes nothing.", page, StringComparison.Ordinal);
         Assert.Contains("The button's draft is made in `reply-team/jason-ai` alone, names the commit the run built, is never the latest release, and asks nothing of the tap.", page, StringComparison.Ordinal);
         Assert.Contains("The draft is for reading and is deleted afterwards: a release is published only by its tag, never by publishing the button's draft.", page, StringComparison.Ordinal);
