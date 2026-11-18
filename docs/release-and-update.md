@@ -1742,8 +1742,10 @@ jason install --terminal-path <PATH>
 
 Run by the `jason` the desktop application carries (a `version.json` beside it), it sets this machine up for the
 application: the terminal command, the skills for Claude Code and Codex where each is found, and an older command-line install retired. Any
-other `jason` is refused with `install_not_carried`, and a system other than macOS and Windows with
-`install_unsupported`, before anything is read or written. Where the data directory has an update folder it holds the
+other `jason` is refused with `install_not_carried`, a system other than macOS and Windows with
+`install_unsupported`, and a `jason` run elevated with `install_elevated` — on Windows as an administrator above the
+account's ordinary rights or as another account than the one signed in to the session, on macOS as root, by the rule
+`update_elevated` follows (§7) — each before anything is read or written. Where the data directory has an update folder it holds the
 update's lock, `<data>/update/update.lock`, while it runs, naming itself beside it as `install` (§7), and while another
 `jason` holds it — an update, its finish or a rollback — it refuses with `update_in_progress` and sets nothing up, since an
 update's own finish sets the machine up itself; while another `jason install` holds it, it refuses with

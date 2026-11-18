@@ -251,6 +251,11 @@ to the folder it starts in — read the root's and the project's with a campaign
 | `%LOCALAPPDATA%\Programs\jason-desktop\`; `jason.exe` in its `resources\bundle` | Windows |
 | `~/.local/bin/jason` | Linux |
 
+On macOS and Windows the line runs as you. Jason Desktop and everything it sets up are your account's own, so
+`install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another
+account's than the one signed in — stop before anything is downloaded, and say to run the line again as yourself.
+On Linux a run as root installs as any run does, where it is told to.
+
 Three flags matter on Linux — spelled `--version`, `--install-dir` and `--no-modify-path`. On macOS and Windows
 `--version` (`-Version` for `install.ps1`) is the one taken, from 0.49.0: `--install-dir` and `--no-modify-path`
 (`-InstallDir`, `-NoModifyPath`) are refused there before anything is read or written, since the application has its

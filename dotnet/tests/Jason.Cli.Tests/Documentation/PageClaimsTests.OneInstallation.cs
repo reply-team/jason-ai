@@ -377,6 +377,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The install line runs as the person on macOS and Windows: install.sh stops as root in its macOS block alone, and
+    /// install.ps1 in an elevated PowerShell, both before the feed; on Linux root installs. §2 of the install page says so.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_line_runs_as_you_on_macOS_and_Windows()
+    {
+        var sh = Page("install", "install.sh");
+        var macOnly = sh.IndexOf("if [ \"$RID\" = macos ]; then\n    [ -z \"$INSTALL_DIR_GIVEN\" ]", StringComparison.Ordinal);
+        var root = sh.IndexOf("[ \"$(id -u)\" != 0 ] || fail \"this script runs as root", StringComparison.Ordinal);
+        Assert.True(macOnly > 0 && root > macOnly && root < sh.IndexOf("\nfi\n", macOnly, StringComparison.Ordinal), "install.sh refuses root outside its macOS block.");
+        Assert.Equal(1, sh.Split("id -u").Length - 1);
+
+        var ps1 = Page("install", "install.ps1");
+        var elevated = ps1.IndexOf("    if (Test-Elevated) {", StringComparison.Ordinal);
+        Assert.True(elevated > 0 && elevated < ps1.IndexOf("# --- the feed ---", StringComparison.Ordinal), "install.ps1 does not refuse an elevated PowerShell before the feed.");
+
+        var install = Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release"));
+        Assert.Contains("On macOS and Windows the line runs as you. Jason Desktop and everything it sets up are your account's own, so `install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another account's than the one signed in — stop before anything is downloaded, and say to run the line again as yourself. On Linux a run as root installs as any run does, where it is told to.", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Restoring a database by hand starts the version the backup was written by. A command-line install's update kept that
     /// version under <c>update/previous</c>; where Jason Desktop carries jason, the copy of the application the Desktop kept
     /// is that version, as the rollback's own line says, and <c>update/previous</c> there holds what a move retired.

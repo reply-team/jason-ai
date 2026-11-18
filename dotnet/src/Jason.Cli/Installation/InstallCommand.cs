@@ -28,10 +28,12 @@ public static class InstallCommand
     private static readonly string Contract =
         """
         Run by the jason Jason Desktop carries (a version.json beside the executable); any other jason is refused
-        (install_not_carried), and so is a system other than macOS and Windows (install_unsupported). It is
-        idempotent: a second run changes nothing and says so. It starts no process that outlives it, and prints
-        one JSON document (--human: lines), always: a step that fails part-way is named under problems and the
-        steps after it still run.
+        (install_not_carried), and so is a system other than macOS and Windows (install_unsupported), and a
+        jason run elevated, as an administrator or as another account than the session's on Windows, as root on
+        macOS (install_elevated), each before anything is read or written. It is idempotent: a second run
+        changes nothing and says so. It starts no process that outlives it, and prints one JSON document
+        (--human: lines), always: a step that fails part-way is named under problems and the steps after it
+        still run.
 
         Done, in this order, each step reported:
           1. A command-line install of Jason, where one is found, has its runtime drained and stopped: the
@@ -177,6 +179,14 @@ public static class InstallCommand
                 + "On Linux, install.sh places jason, and `jason skills install` deploys the skills.");
         }
 
+        // An elevated setup would write the terminal command, the skills and a logon registration as that account, or into
+        // another account's profile, which the person's own jason then cannot change: refused before anything is read, its
+        // own version.json and the update's lock included.
+        if (places.Elevated)
+        {
+            return Refuse(env, options.Human, CliErrors.InstallElevated, Elevated(places.Platform));
+        }
+
         if (CarriedExecutable.Of(env) is not { } carried)
         {
             return Refuse(
@@ -276,6 +286,16 @@ public static class InstallCommand
 
         return ExitCodes.Success;
     }
+
+    /// <summary>Why an elevated setup is refused, and the way on: the same run from the account's own ordinary terminal.</summary>
+    private static string Elevated(SetupSystem platform) =>
+        (platform is SetupSystem.Windows
+            ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
+            : "This jason runs as root")
+        + ", and the terminal command, the skills and a logon registration would be set up the same way or in another account's profile, so nothing was read or written. "
+        + (platform is SetupSystem.Windows
+            ? "Run `jason install` again from an ordinary terminal of the account signed in here, not run as an administrator."
+            : "Run `jason install` again from an ordinary terminal, without sudo.");
 
     private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)
     {
