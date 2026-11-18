@@ -140,7 +140,10 @@ public static class UninstallCommand
             installation taken off none is.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
             Windows: a waiter is started, which once this command has ended runs the application's own
-            uninstaller silently on its folder, so the folder goes after this ends; the report says so.
+            uninstaller silently on its folder, so the folder goes after this ends; the report names the
+            waiter's process. Once that process has ended, and only if Jason is then still listed in
+            Installed apps in Settings, uninstall Jason there; do not start that uninstall before then,
+            since two at once can leave part of the folder behind.
             --keep-application leaves it: the Windows uninstaller in Installed apps calls this so, and removes
             the folder itself next. --keep-application with --purge-data is refused (uninstall_refused).
             macOS: the bundle is deleted only where its Contents/Info.plist names ai.jasonharness.desktop. If

@@ -788,8 +788,12 @@ public sealed class UninstallCarriedTests : IDisposable
         Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
         // The waiter is handed this data directory's log folder, for the one line it writes where the uninstaller refused.
         Assert.Equal(env.Paths.LogsDirectory, remover.WaiterLogs);
-        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("once this command has ended", StringComparison.Ordinal)
-            && line.GetString()!.Contains("If Jason is still listed in Installed apps in Settings afterwards", StringComparison.Ordinal));
+        // The report names the waiter's process and gives what follows its moment, in the help's and the page's wording.
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains(
+            $"which removes it once this command has ended: process {remover.Waiter} waits for that. {Documentation.PageClaimsTests.AfterTheWaiter} "
+            + "Still listed then, a jason started from its folder in the meantime kept the uninstaller from removing it.",
+            StringComparison.Ordinal));
+        Assert.DoesNotContain(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("afterwards", StringComparison.Ordinal));
     }
 
     [Fact]

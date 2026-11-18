@@ -48,7 +48,8 @@ uploads, and they are what a person reads.
   InstallOverCommandLine   the previous release's command-line Jason, a runtime running and its logon start registered, then
                     this build's unpinned line run over it: the old runtime stopped before the install is retired, a runtime
                     again from the carried jason, the Path, a new shell, and the campaigns the same by id
-  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, both on the Path, a runtime
+  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, the command-line folder on
+                    the Path and the Desktop placing nothing there, as that release leaves them, a runtime
                     started by the command-line jason and left running, then this build's setup run silently as an update
                     without --force-run: at its exit one installation, the command-line one retired and its runtime ended,
                     the note that a start is owed standing; then the application started by the leg: a runtime answering
@@ -106,6 +107,17 @@ $thisBuild = Join-Path $Out 'this-build-extracted.txt'
 # expected until the removal takes them" and fail nothing: for a build whose removal takes neither alone. test-installation-macos.sh's
 # EXTRACTED_SOFT is the same switch there, and the two are flipped together.
 $extractedSoft = $false
+
+# The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
+# nothing where none.
+function Get-InheritedBy([string] $line, [string] $rows = (Join-Path $Out 'inherited.txt')) {
+    if (-not (Test-Path -LiteralPath $rows)) { return '' }
+    foreach ($row in @(Get-Content -LiteralPath $rows)) {
+        $at = $row.IndexOf("`t")
+        if ($at -gt 0 -and $row.Substring($at + 1) -ceq $line) { return $row.Substring(0, $at) }
+    }
+    return ''
+}
 
 # A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
 function Fail([string] $why) {
@@ -273,6 +285,43 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
         Fail "$file $($arguments -join ' ') had not ended after $seconds seconds"
     }
     return $process.ExitCode
+}
+
+# The previous release's runtime started by its own jason. 0.48.5's start gives up after 30 s while the runtime it started
+# still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
+# v0.48.5: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
+# answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
+# start failed otherwise.
+function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    $start = Invoke-Program $jason @('runtime', 'start') $environment
+    if ($start.Exit -eq 0) { Say "the previous release's runtime answered its start $([int]$clock.Elapsed.TotalSeconds) s after it was asked"; return $true }
+    if (-not ("$($start.Said)".Contains('"runtime_start_failed"') -and "$($start.Said)".Contains('is still running'))) { return $false }
+    while ($clock.Elapsed.TotalSeconds -lt 180) {
+        Start-Sleep -Seconds 5
+        if ((Invoke-Program $jason @('runtime', 'status') $environment 60).Exit -eq 0) {
+            Say "the previous release's runtime answered jason runtime status $([int]$clock.Elapsed.TotalSeconds) s after its start was asked, past the start's own 30 s"
+            return $true
+        }
+    }
+    Say "the previous release's runtime never answered within 180 s of its start"
+    return $false
+}
+
+# The data directory's logs, copied into -Out before anything purges them, under the name of the leg they tell about; once a
+# leg. Nothing where there are none.
+function Save-JasonLogs([string] $leg) {
+    $logs = Join-Path $data 'logs'
+    if (-not $leg -or -not (Test-Path -LiteralPath $logs -PathType Container)) { return }
+    $slug = ($leg -replace '[^A-Za-z0-9]+', '-').Trim('-')
+    $kept = Join-Path $Out "logs-$($slug.Substring(0, [Math]::Min(80, $slug.Length)))"
+    if (Test-Path -LiteralPath $kept) { return }
+    try {
+        Copy-Item -LiteralPath $logs -Destination $kept -Recurse -Force -ErrorAction Stop
+        Write-Host "the data directory's logs, as '$leg' left them, are kept at $kept"
+    } catch {
+        Write-Host "the data directory's logs could not be kept for '$leg': $($_.Exception.Message)"
+    }
 }
 
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
@@ -532,6 +581,7 @@ function Close-Leg {
     $why = if (Test-Path -LiteralPath $words) { "it said: $((Get-Content -LiteralPath $words) -join ' / ')" } else { 'its own lines are in its step' }
     Write-Host "::error title=Installation::the leg '$open' failed; $why"
     Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value "the leg '$open' failed; $why"
+    Save-JasonLogs $open
 }
 
 # This leg not run, said by why: recorded for Held, and -Out\skip left for the job's step to end on.
@@ -588,6 +638,25 @@ function Get-LeftOver {
     @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch '^(extracted|retired)\t' -and (& $counts $_) } | ForEach-Object { "- $_" }))
 }
 
+# What a clean leg's begin found and excused: the machine then, listed to -Out\<listing>.txt, against the machine before, the
+# data directory and the harness root aside. One row per line, "<leg><TAB><+ or -> <line>", in the file $rows; a line
+# recorded at an earlier begin keeps the leg it was attributed to there (-Out\inherited.txt), and a new one is attributed to
+# $by, the leg that last changed the machine. The held step reads the machine at the end the same way, into a file of its own.
+function Write-Inherited([string] $by, [string] $listing, [string] $rows) {
+    if (-not $by) { $by = 'no leg, before any leg ran' }
+    $now = Join-Path $Out "$listing.txt"
+    Write-Listing $now -Quiet
+    $was = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
+    $is = @(Get-Content -LiteralPath $now)
+    $kept = '^(data directory|harness root)'
+    $changes = @(@($is | Where-Object { $was -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "+ $_" }) + @($was | Where-Object { $is -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "- $_" }))
+    $written = @(foreach ($change in $changes) {
+        $earlier = Get-InheritedBy $change
+        "$(if ($earlier) { $earlier } else { $by })`t$change"
+    })
+    Set-Content -LiteralPath $rows -Value $written
+}
+
 # --- the readers of the legs over a previous release ----------------------------------------------------------------
 
 # Every jason runtime running on this machine: the processes of jason.exe whose command line runs `runtime run`.
@@ -629,6 +698,90 @@ function Get-WindowsAppsCommandFiles {
     if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return @() }
     try { return @([IO.Directory]::GetFileSystemEntries($folder, 'jason*') | ForEach-Object { [IO.Path]::GetFileName($_) }) }
     catch { Fail "the WindowsApps folder $folder could not be read: $($_.Exception.Message)" }
+}
+
+# A listing compared with another one, by name, under -Out: what the later one left and what went, each line said, and a
+# divergence recorded for the held step. A leg's compare sets aside what its own clean begin found (the lens); the held
+# step's whole compare (-Final) sets aside nothing but the previous release's own lines left by a leg that ran it.
+function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
+    $before = @(Get-Content -LiteralPath (Join-Path $Out "$base.txt"))
+    $after = @(Get-Content -LiteralPath (Join-Path $Out "$listed.txt"))
+    # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
+    $kept = '^(data directory|harness root)'
+    # An extraction folder or a retired folder gone since the listing against is the removal's taking: on Windows it takes
+    # this build's extraction folder and every other build's, and sweeps the retired folders. Said, and not counted.
+    $goneAll = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
+    $taken = @($goneAll | Where-Object { $_ -match '^(extracted|retired)\t' })
+    $gone = @($goneAll | Where-Object { $_ -notmatch '^(extracted|retired)\t' })
+    if ($taken.Count -gt 0) { Say "taken by the removal in ${listed}: $(($taken | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (a removal takes what every build unpacked here and sweeps the retired folders)" }
+    $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
+    # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
+    # this build's ids, and every retired folder, count (softly only while $extractedSoft says so, as a section of their own).
+    $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
+    # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
+    # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
+    if (-not $extractedSoft -and $ours.Count -eq 0) {
+        $why = "${listed} against ${base}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
+        Write-Host "::error title=Uninstall::$why"
+        Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
+    }
+    $left = [System.Collections.Generic.List[string]]::new()
+    $expectedLines = [System.Collections.Generic.List[string]]::new()
+    $softLines = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in $candidates) {
+        if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
+        elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
+        else { $left.Add($line) }
+    }
+    if ($expectedLines.Count -gt 0 -and -not $Final) { Say "expected in ${listed}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job after this build's last removal; that release's own removal leaves it, and on Windows this build's removal takes it when it next runs)" }
+    if ($softLines.Count -gt 0) {
+        Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set), in ${listed}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+        Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${listed}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+    }
+    $gone = [System.Collections.Generic.List[string]]::new([string[]] @($gone))
+    # The lens: a leg is charged for what it does, against the machine its own clean begin found. A line that machine
+    # already had, recorded there with the leg that left it (-Out\inherited.txt), is printed under its own heading by that
+    # leg and not counted here; that leg is held to it by its own compare and stays failed by name, and the held step's
+    # whole compare counts it again. One limit: a line this leg leaves that is the same as an inherited one cannot be told
+    # apart from it, and is attributed to the earlier leg.
+    $inheritedHere = [System.Collections.Generic.List[string]]::new()
+    $excused = [System.Collections.Generic.List[string]]::new()
+    if ($Final) {
+        # The held step's whole compare: the lines the previous release's own acts leave - its jason's extraction folder,
+        # which that release's removal never takes - are expected only where the leg they are attributed to
+        # (-Out\final-attributed.txt) is one that ran the previous release (-Out\previous-legs.txt), named beside it; the same
+        # lines left by a leg of this build alone count.
+        $attributed = Join-Path $Out 'final-attributed.txt'
+        $previousLegs = @(if (Test-Path -LiteralPath (Join-Path $Out 'previous-legs.txt')) { Get-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') })
+        foreach ($line in $expectedLines) {
+            $by = Get-InheritedBy "+ $line" $attributed
+            if ($by -and $previousLegs -ccontains $by) { $excused.Add("+ $line  (left by '$by', a leg of the previous release)") } else { $left.Add($line) }
+        }
+        if ($excused.Count -gt 0) { Say "expected in ${listed}, each left by a leg of the previous release, as that release's own removal leaves it: $(($excused | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    } elseif (Test-Path -LiteralPath (Join-Path $Out 'inherited.txt')) {
+        foreach ($line in @($left)) {
+            $by = Get-InheritedBy "+ $line"
+            if ($by) { $inheritedHere.Add("+ $line  (left by '$by')"); [void] $left.Remove($line) }
+        }
+        foreach ($line in @($gone)) {
+            $by = Get-InheritedBy "- $line"
+            if ($by) { $inheritedHere.Add("- $line  (left by '$by')"); [void] $gone.Remove($line) }
+        }
+        if ($inheritedHere.Count -gt 0) { Say "inherited at this leg's begin and not counted in ${listed}, each by the leg that left it: $(($inheritedHere | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    }
+    $diff = Join-Path $Out "$base-to-$listed.diff.txt"
+    Set-Content -LiteralPath $diff -Value (@("only in $base (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $listed (after):") + @($left | ForEach-Object { "+ $_" }) +
+        @(if ($inheritedHere.Count -gt 0) { "inherited at this leg's begin, not counted here (each by the leg that left it):"; $inheritedHere }) +
+        @(if ($excused.Count -gt 0) { "expected, each left by a leg of the previous release:"; $excused }))
+    Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
+    $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
+    Say "$listed against ${base}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
+    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
+    # the end fails the job on any divergence recorded.
+    if ($gone.Count -gt 0 -or $left.Count -gt 0) {
+        Write-Host "::error title=Uninstall::the machine after '$listed' is not the machine before '${base}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
+        Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$listed against ${base}: see $diff"
+    }
 }
 
 # ONE GUARD, AT THE ENTRY. Every step but the five that read the machine or this job's own files and write only those
@@ -688,51 +841,7 @@ switch ($Step) {
     }
 
     'Compare' {
-        $before = @(Get-Content -LiteralPath (Join-Path $Out "$Against.txt"))
-        $after = @(Get-Content -LiteralPath (Join-Path $Out "$Name.txt"))
-        # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
-        $kept = '^(data directory|harness root)'
-        # An extraction folder or a retired folder gone since the listing against is the removal's taking: on Windows it takes
-        # this build's extraction folder and every other build's, and sweeps the retired folders. Said, and not counted.
-        $goneAll = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
-        $taken = @($goneAll | Where-Object { $_ -match '^(extracted|retired)\t' })
-        $gone = @($goneAll | Where-Object { $_ -notmatch '^(extracted|retired)\t' })
-        if ($taken.Count -gt 0) { Say "taken by the removal in ${Name}: $(($taken | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (a removal takes what every build unpacked here and sweeps the retired folders)" }
-        $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
-        # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
-        # this build's ids, and every retired folder, count (softly only while $extractedSoft says so, as a section of their own).
-        $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
-        # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
-        # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
-        if (-not $extractedSoft -and $ours.Count -eq 0) {
-            $why = "${Name} against ${Against}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
-            Write-Host "::error title=Uninstall::$why"
-            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
-        }
-        $left = [System.Collections.Generic.List[string]]::new()
-        $expectedLines = [System.Collections.Generic.List[string]]::new()
-        $softLines = [System.Collections.Generic.List[string]]::new()
-        foreach ($line in $candidates) {
-            if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
-            elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
-            else { $left.Add($line) }
-        }
-        if ($expectedLines.Count -gt 0) { Say "expected in ${Name}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job after this build's last removal; that release's own removal leaves it, and on Windows this build's removal takes it when it next runs)" }
-        if ($softLines.Count -gt 0) {
-            Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set), in ${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
-            Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
-        }
-        $diff = Join-Path $Out "$Against-to-$Name.diff.txt"
-        Set-Content -LiteralPath $diff -Value (@("only in $Against (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $Name (after):") + @($left | ForEach-Object { "+ $_" }))
-        Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
-        $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
-        Say "$Name against ${Against}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
-        # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
-        # the end fails the job on any divergence recorded.
-        if ($gone.Count -gt 0 -or $left.Count -gt 0) {
-            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
-            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$Name against ${Against}: see $diff"
-        }
+        Compare-Listings $Name $Against
     }
 
     'Begin' {
@@ -762,6 +871,10 @@ switch ($Step) {
             Skip-Leg $(if ($outcome -ceq 'failure') { "not run: the leg it needs failed, $needed" } else { "not run: the leg it needs did not run ($outcome), $needed" })
             return
         }
+        # A leg that needs the previous release's fetch runs the previous release: recorded, for the held step's compare.
+        if (@($Needs | Where-Object { $_.Substring(0, [Math]::Max(0, $_.LastIndexOf('='))) -ceq 'Fetch the previous release' }).Count -gt 0) {
+            Add-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') -Value $Leg
+        }
 
         # The machine this leg starts from is the machine before anything was installed. Where it is not:
         #  - the leg that last changed the machine ENDED: that leg left it, which is that leg's own failure, said and
@@ -774,6 +887,7 @@ switch ($Step) {
         # doors cannot remove makes this leg not run, naming the lines left.
         if ($Clean) {
             if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
+            $prior = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
             $found = @(Get-LeftOver)
             if ($found.Count -gt 0) {
                 $resets = Join-Path $Out 'resets.txt'
@@ -792,6 +906,7 @@ switch ($Step) {
                 Say "before this leg the machine is not the machine before ($($found.Count) line(s)), after '$last' $(if ($ended) { 'ended leaving it, recorded as its failure' } else { 'failed' }); found: $($found -join '; ')"
                 if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg 'not run: the reset after a failed leg runs on a GitHub-hosted runner alone, and this is not one'; return }
                 # One door at a time, each waited to its end: two uninstallers on one folder each skip what the other holds.
+                Save-JasonLogs $last
                 try {
                     Write-ResetProcesses $resets 'before the reset'
                     foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) {
@@ -805,6 +920,13 @@ switch ($Step) {
                             Write-Host $said
                             Add-Content -LiteralPath $resets -Value $said
                             if ($jason -ne $carried) { continue }
+                            # Refused outright, as a release before 0.49 refuses for the jason its Jason Desktop carries
+                            # (uninstall_carried_by_desktop): nothing was handed to a waiter, so Installed apps is next, at once.
+                            $refusal = Read-Document $removed.Said
+                            if ($refusal -and $refusal.PSObject.Properties['error']) {
+                                Add-Content -LiteralPath $resets -Value "  the carried jason refused the uninstall outright ($($refusal.error.code)): Installed apps is next, with no wait"
+                                continue
+                            }
                             # The application's removal hands the folder to its own uninstaller, run by a waiter once the verb
                             # has ended: that waiter, by the process its report names, is waited for to its end; where none
                             # is named, the folder and its Installed apps entry, both gone. Bounded at 300 s.
@@ -827,8 +949,12 @@ switch ($Step) {
                     # uninstaller in a folder of its own, given the application's folder by _?=, so that NSIS runs that copy
                     # in place and to its end instead of relaunching one and returning at once.
                     Write-ResetProcesses $resets 'before Installed apps'
+                    $before049 = $false
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
                         $quietLine = Get-QuietUninstall $entry
+                        $entryVersion = "$(if ($entry.PSObject.Properties.Name -contains 'DisplayVersion') { $entry.DisplayVersion } else { ($entry.DisplayName -replace '^Jason\s*', '') })"
+                        $parsedVersion = $null
+                        if ([version]::TryParse(($entryVersion -replace '[^0-9.].*$', ''), [ref] $parsedVersion) -and $parsedVersion -lt [version] '0.49') { $before049 = $true }
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
                             $uninstaller = $Matches['file']; $arguments = $Matches['arguments']
                             $copyFolder = Join-Path $temporary "jason-reset-uninstaller-$([Guid]::NewGuid().ToString('N'))"
@@ -841,6 +967,17 @@ switch ($Step) {
                             Add-Content -LiteralPath $resets -Value $said
                             Remove-Item -LiteralPath $copyFolder -Recurse -Force -ErrorAction SilentlyContinue
                         }
+                    }
+                    # A release before 0.49 keeps the updater's folder by its own design (its uninstall says the updater's
+                    # cache stays), and its setup stored itself there (electron-builder's installer.nsh): after Installed
+                    # apps' uninstall of one, and only then, the reset itself removes that folder, directly, with nothing of
+                    # this build involved, logging what it found and what it removed. Never a proof of anything.
+                    $updaterFolder = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
+                    if ($before049 -and (Test-Path -LiteralPath $updaterFolder)) {
+                        $foundThere = @(Get-ChildItem -LiteralPath $updaterFolder -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($updaterFolder.Length).TrimStart('')) $($_.Length)" })
+                        Add-Content -LiteralPath $resets -Value "  found $updaterFolder, which Installed apps' uninstall of a release before 0.49 keeps by its own design, holding: $(if ($foundThere) { $foundThere -join '; ' } else { 'no file' })"
+                        Remove-Item -LiteralPath $updaterFolder -Recurse -Force
+                        Add-Content -LiteralPath $resets -Value "  removed ${updaterFolder}: it is $(if (Test-Path -LiteralPath $updaterFolder) { 'still there' } else { 'gone' })"
                     }
                 } catch {
                     Add-Content -LiteralPath $resets -Value "  the reset failed: $($_.Exception.Message)"
@@ -856,6 +993,8 @@ switch ($Step) {
                 Say "the reset removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
                 if ($left.Count -gt 0) { Skip-Leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $($left -join '; ')"; return }
             }
+            # What this begin found and excused, for this leg's compare to set aside by the leg that left it.
+            Write-Inherited $prior 'leg-start' (Join-Path $Out 'inherited.txt')
         }
 
         # This leg now changes the machine, and is the one a later leg's start holds to what it leaves; a reading changes
@@ -872,6 +1011,15 @@ switch ($Step) {
 
     'Held' {
         Close-Leg
+        # The final compare: the machine now against the true machine before, through no leg's begin, so that a line any leg
+        # left counts here whichever leg was charged for it. Each line is attributed as a begin attributes it, the last leg
+        # taking what no begin saw (-Out\final-attributed.txt); the previous release's own lines are expected only where
+        # that leg is one of the previous release, and named beside it. Its divergence, recorded, fails the job below.
+        if (Test-Path -LiteralPath (Join-Path $Out 'before.txt')) {
+            $lastNow = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
+            Write-Inherited $lastNow 'final' (Join-Path $Out 'final-attributed.txt')
+            Compare-Listings 'final' 'before' -Final
+        }
         $divergent = Join-Path $Out 'divergent.txt'
         $failedLegs = Join-Path $Out 'failed-legs.txt'
         $notRun = Join-Path $Out 'not-run.txt'
@@ -1096,8 +1244,7 @@ switch ($Step) {
         # has one running from the carried jason, which the updater then stops, so one is started from it here.
         $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
-            $started = Invoke-Program $carried @('runtime', 'start')
-            if ($started.Exit -ne 0) { Fail "the previous release's carried jason could not start a runtime ($($started.Exit)): $($started.Said)" }
+            if (-not (Start-PreviousRuntime $carried)) { Fail "the previous release's carried jason could not start a runtime" }
         }
         Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
@@ -1480,7 +1627,7 @@ switch ($Step) {
         $jason = Join-Path $commandLine 'jason.exe'
         $previousVersion = ((& $jason --version) -split '\+')[0]
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         Say "the previous release's command-line Jason $previousVersion installed by its own script at $jason, with a runtime running and a logon registration"
@@ -1605,7 +1752,7 @@ switch ($Step) {
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
         $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made before going back') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
@@ -1666,6 +1813,10 @@ switch ($Step) {
 
         # Step 3: its skills, its UI, its runtime and its logon start.
         foreach ($words in @(@('skills', 'install'), @('ui', 'install'), @('runtime', 'start'), @('runtime', 'autostart', 'enable'))) {
+            if ($words[0] -ceq 'runtime' -and $words[1] -ceq 'start') {
+                if (-not (Start-PreviousRuntime $jason $quiet)) { Fail "jason runtime start under $previousVersion did not bring up a runtime that answers" }
+                continue
+            }
             $ran = Invoke-Program $jason $words $quiet 600
             if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
         }
@@ -1795,7 +1946,7 @@ switch ($Step) {
         Assert-CommandLineFiles 'the previous release''s install.ps1'
         $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
         if ($previousVersion -ceq $Version) { Fail "the previous release's jason says $previousVersion, the version this build is" }
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made before the line ran over it') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
@@ -1849,10 +2000,11 @@ switch ($Step) {
 
     'OverBothPrevious' {
         # The previous release's Jason Desktop, installed by its own setup /S, and its command-line Jason, installed by its own
-        # install.ps1, side by side, both on the Path; then this build's setup run silently as an update (/S --updated), whose
-        # own last step, jason install with no flags, retires the command-line one, and nothing else: without --force-run a
-        # silent one-click setup starts no application (electron-builder's installSection.nsh, ONE_CLICK: doStartApp only where
-        # not Silent or isForceRun), so what stands at the setup's exit is the setup's own doing.
+        # install.ps1, side by side: the command-line folder on the Path, the Desktop placing nothing there; then this build's
+        # setup run silently as an update (/S --updated), whose own last step, jason install with no flags, retires the
+        # command-line one, and nothing else: without --force-run a silent one-click setup starts no application
+        # (electron-builder's installSection.nsh, ONE_CLICK: doStartApp only where not Silent or isForceRun), so what stands at
+        # the setup's exit is the setup's own doing.
         # The runtime is started by the command-line jason and left running: the previous release's updater stops only a
         # runtime it judges its own, one started from the jason it carries, so a real update hands the setup a machine where
         # the command-line install's runtime still runs from its folder, and nothing here stops it first.
@@ -1886,16 +2038,21 @@ switch ($Step) {
         $cliVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
         if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
-        # Both on the Path: the command-line folder's entry, and whatever the previous Jason Desktop put there.
+        # Side by side as that release leaves them: the command-line folder's own entry on the Path, and nothing of the
+        # Desktop's there. Its setup runs no step of its own at install (v0.48.5's desktop/installer holds only uninstall.nsh,
+        # with no customInstall), and its application places its command, jason.cmd and a Git Bash wrapper in WindowsApps,
+        # only on the person's word and never as a Path entry (v0.48.5's desktop/src/path-command.ts). Held, so that what
+        # this build's setup puts there after is its own doing.
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         $commandFiles = @(Get-WindowsAppsCommandFiles)
-        if ((Count-Entry $bundle) -lt 1 -and $commandFiles.Count -eq 0) { Fail "the previous release's Jason Desktop put nothing on the Path: no entry naming $bundle, no command file in WindowsApps" }
+        if ((Count-Entry $bundle) -ne 0) { Fail "the previous release's Jason Desktop is named on the user Path ($bundle), which its setup never writes" }
+        if ($commandFiles.Count -ne 0) { Fail "the previous release's Jason Desktop has command files in WindowsApps ($($commandFiles -join ', ')), which its application places only on the person's word" }
         $first = @(Find-InNewShell 'jason')
-        Say "side by side: Jason Desktop $desktopVersion at $app ($(if ((Count-Entry $bundle) -ge 1) { "its bundle folder on the Path" } else { "its command files in WindowsApps: $($commandFiles -join ', ')" })) and the command-line Jason $cliVersion at $jason on the Path; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
+        Say "side by side, as the previous release leaves them: Jason Desktop $desktopVersion at $app, named nowhere on the Path and with no command file in WindowsApps, and the command-line Jason $cliVersion at $jason, its folder on the Path once; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
 
         # The runtime, started by the command-line jason as a person using it starts it, its logon start registered, and one
         # campaign made.
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release''s command-line jason could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release''s command-line jason could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release''s command-line jason could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made beside both previous installs') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
