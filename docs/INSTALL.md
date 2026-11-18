@@ -89,7 +89,8 @@ That yes covers your own host and nothing else this page marks **Ask first.** Wh
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
 that line names only a host the install script did not give its skills.
 
-This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names, as the
+latest published release has it, so what it says matches what its `latest` addresses install.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
@@ -594,7 +595,9 @@ Jason from 0.49.0 on refuses to start on (`data_newer`).
 
 `dispatcher` fails while the runtime is draining: it answers every question and claims no new work. A drain is what
 `jason runtime drain` does, and what an update or an install leaves where it ended part-way; it lasts until
-`jason runtime resume`, the check's repair, or a restart of the runtime. While an update stands unfinished the drain
+`jason runtime resume`, the check's repair, or a restart of the runtime. For a draining runtime of an older build than
+this `jason` the repair is `jason runtime restart` alone, as `runtime_version`'s is: where another build has replaced its
+executable, a resume would start its plugin hosts from that file. While an update stands unfinished the drain
 is the update's: the check says the runtime is draining for the update, and its repair is `jason update apply`, never a
 resume in the middle of it. A dispatcher the settings turn off (`Dispatcher:Enabled`) is said there and never failed.
 

@@ -108,13 +108,8 @@ public static class UninstallRunner
                 return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
             }
 
-            // And the application's own start at sign-in, beside it, for the same reason.
             var desktop = plan.Desktop;
             var places = env.Setup;
-            if (desktop is not null && places is not null)
-            {
-                DesktopRemoval.RemoveOpenAtLogin(env, places, desktop, done, problems);
-            }
 
             // 2. The runtime, and only then.
             if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
@@ -126,6 +121,15 @@ public static class UninstallRunner
             if (registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAfterTheStop.Code, refusedAfterTheStop.Message);
+            }
+
+            // And the application's own start at sign-in, only now, so a runtime that will not stop leaves it where it was
+            // and the refusal's "as it was" holds of it. It went before the stop, "for the same reason" as the runtime's
+            // registration, and nothing needs that: what it starts is the window, which refuses this verb up front while it
+            // is open, and a sign-in of the account this runs in, already signed in, starts nothing again.
+            if (desktop is not null && places is not null)
+            {
+                DesktopRemoval.RemoveOpenAtLogin(env, places, desktop, done, problems);
             }
 
             // The note that a start is owed, where the data is kept: with this installation taken off no start is owed, and a
@@ -179,6 +183,16 @@ public static class UninstallRunner
             {
                 Step5RemoveExecutable(env, plan, done, kept, problems);
             }
+            else
+            {
+                // The application's jason goes with the application, and what its build unpacked here, by the same
+                // routine: it maps nothing of that directory, which only a runtime loads, and the runtime has stopped.
+                RemoveExtractedLibraries(env, plan, done, kept, problems);
+            }
+
+            // And the folders an install or a move renamed a running executable into, which no later run of this
+            // installation would sweep once it is off the machine.
+            SweepRetired(env, plan, done, problems);
 
             // 7. And the data directory, only on the explicit word, after everything else.
             Step6Data(env, plan, purge, done, kept, problems);
@@ -612,6 +626,35 @@ public static class UninstallRunner
         ArgumentNullException.ThrowIfNull(owner);
         return $"Left to {owner.Manager}, which installed them: '{owner.Executable}', the directory '{owner.Directory}' and the "
             + $"PATH entry that reaches it. `{owner.UninstallCommand}` takes them off.";
+    }
+
+    /// <summary>
+    /// The <c>jason-retired-&lt;id&gt;</c> folders, by the sweep an install, an update's finish and a move run: each goes once
+    /// the process running its executable has ended, and is said; one still held is a problem, named with what to do, since
+    /// nothing of Jason sweeps it after this. Windows only, where the sweep is; and only where the system's places are known.
+    /// </summary>
+    private static void SweepRetired(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> problems)
+    {
+        if (env.Setup is not { } places)
+        {
+            return;
+        }
+
+        // Where the routine renames into: the temporary directory, beside the default install's folder, and beside the folder of
+        // the executable this removal takes, or of the older command-line install the application's removal found, where a
+        // rename aside on another volume puts its folder.
+        var outcome = RetiredSweep.Sweep(places, plan.Executable ?? plan.Desktop?.CommandLineInstall);
+        foreach (var folder in outcome.Swept)
+        {
+            done.Add($"Removed '{folder}', where an earlier install or move set aside a jason.exe a process was still running.");
+        }
+
+        foreach (var folder in outcome.Left)
+        {
+            problems.Add(
+                $"'{folder}' was not removed: an earlier install or move set aside there a jason.exe a process is still running, and "
+                + "nothing of Jason sweeps it after this. Remove the folder once that process has ended.");
+        }
     }
 
     /// <summary>
