@@ -2106,6 +2106,25 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-waiter-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # The line every real install takes reads its feed over the web, in Windows PowerShell 5.1: the same feed served on
+      # this machine, and install.ps1 given its address. The role skills come from the skills beside the application's
+      # jason whatever the feed, and a runtime over them says role_skills is ok.
+      - name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          LEG: "Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-served-feed-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-served-feed-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       # The pinned line: a pin naming another version refused, then -Version naming this one, asserted as the unpinned
       # install is, and taken off from a new terminal.
       - name: Install by the pinned line, and uninstall from a new terminal
@@ -2124,20 +2143,22 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-pinned-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
-      # to until that is published, read from where the public releases' latest redirects, and its files from its public
-      # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
+      # The previous release, named: these legs begin in the world before one installation, and v0.48.5 is the last release
+      # of that world, whose install puts a command-line Jason of its own where every leg that starts from a previous
+      # release expects one. Never the latest published release: once 0.49.0 is published that is a release that installs
+      # Jason Desktop alone, and every such leg would fail on it. Its files come from its public downloads. No token: the
+      # repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: pwsh
+        env:
+          PREVIOUS_RELEASE: v0.48.5
         run: |
           $release = "v$($env:VERSION -replace '-.*$', '')"
-          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing -TimeoutSec 60).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
-          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
-          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
-          if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
+          $tag = $env:PREVIOUS_RELEASE
+          if ($tag -ceq $release) { throw "the previous release named, $tag, is the one this tree builds: there is no previous release to update from here" }
           New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
           # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
           # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
@@ -2293,7 +2314,8 @@ jobs:
       # This build's silent setups over the previous release (desktop/installer/uninstall.nsh): over a window that never
       # quits, 3 at the include's bound and the next setup not blocked; plain /S over a window and over the tray, 3; the old
       # application quitting 20 s late, 0; the old uninstaller refusing, 2. None may show a window, and each sub-leg runs
-      # whatever the one before it did. Then Installed apps takes it off again, and the listing is held to the machine before.
+      # whatever the one before it did. Then this build is put back over the previous release by its own silent setup, so
+      # Installed apps takes this build off again, and the listing is held to the machine before.
       - name: Install this build silently over the previous release
         if: ${{ !cancelled() }}
         timeout-minutes: 25
@@ -2629,16 +2651,22 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-by-hand-uninstall before
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The previous release, named: these legs begin in the world before one installation, and v0.48.5 is the last release
+      # of that world, whose install puts a command-line Jason of its own where every leg that starts from a previous
+      # release expects one. Never the latest published release: once 0.49.0 is published that is a release that installs
+      # Jason Desktop alone, and every such leg would fail on it. Its files come from its public downloads. No token: the
+      # repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
+        env:
+          PREVIOUS_RELEASE: v0.48.5
         run: |
           release="v${VERSION%%-*}"
-          tag="$(curl -sS --max-time 60 -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
-          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
-          [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
+          tag="$PREVIOUS_RELEASE"
+          [ "$tag" != "$release" ] || { echo "::error::the previous release named, $tag, is the one this tree builds: there is no previous release to update from here"; exit 1; }
           mkdir -p "$PREVIOUS"
           # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
           # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
@@ -2853,7 +2881,7 @@ jobs:
           {
             echo '### What this job does not prove'
             echo "- The release's signature and Gatekeeper: the application here is signed ad hoc, and install.sh is run as a copy naming that signature. The release's proof job runs the released script on the signed, notarized packages, with a quarantined variant."
-            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job updates a signed build to a signed next one."
+            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job makes no next build either, so a signed build updating to a signed next one is proven by no job."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- The previous release's own Desktop updater reaching this version: it reads only the published releases."
             echo "- The old application's own updater replacing its bundle: its download, its signature check and its swap. The two legs that replace the previous release's bundle make the swap themselves, by ditto and a rename."

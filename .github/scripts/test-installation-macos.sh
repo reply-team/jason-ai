@@ -216,13 +216,41 @@ report_profiles() {
 command = (json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}).get("command") or {}
 print("\n".join(str(item) for item in (command.get("profiles") or [])))' "$1" > "$2"
 }
+# Every profile a shell of the account may read, by PathEntry's own list (ProfileCandidates).
+PROFILE_CANDIDATES=".profile .bash_profile .bash_login .zprofile .bashrc .zshrc"
+# Before this build's application is opened: the PATH a new login shell of the account's shell answers, said, and whether
+# it names ~/.local/bin already; and every profile's hash, or absent. The product writes no profile where that PATH names
+# the folder (MachineSetup: "is on the PATH a terminal has already, so no profile was written"), so the hold after the
+# start (hold_account_terminal) takes its branch from this reading, never from what the product did.
+read_terminal_before() {
+    local shell answered entry
+    shell="$(account_shell)"
+    [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
+    answered="$(within 60 "a new login shell of $shell saying its PATH" fresh_in "$shell" 'printf "%s\n" "$PATH"' | tail -n 1)" || fail "a new login shell of $shell did not say its PATH"
+    [ -n "$answered" ] || fail "a new login shell of $shell said no PATH"
+    printf '%s\n' "$answered" > "$OUT/terminal-before-path.txt"
+    : > "$OUT/terminal-before-names-local-bin.txt"
+    while IFS= read -r entry; do
+        if [ "${entry%/}" = "$HOME/.local/bin" ]; then echo yes > "$OUT/terminal-before-names-local-bin.txt"; fi
+    done < <(printf '%s\n' "$answered" | tr ':' '\n')
+    : > "$OUT/terminal-before-profiles.txt"
+    for name in $PROFILE_CANDIDATES; do
+        printf '%s\t%s\n' "$name" "$(if [ -f "$HOME/$name" ]; then shasum -a 256 < "$HOME/$name" | cut -d' ' -f1; else echo absent; fi)" >> "$OUT/terminal-before-profiles.txt"
+    done
+    say "before open: a new login shell of $shell answers the PATH '$answered', which $(if [ -s "$OUT/terminal-before-names-local-bin.txt" ]; then echo names; else echo 'does not name'; fi) ~/.local/bin; the profiles: $(tr '\t\n' ' ;' < "$OUT/terminal-before-profiles.txt")"
+}
 # The terminal command as the account's own new terminal finds it, after a start of this build's application: the
-# account's login shell as a login shell finds ~/.local/bin/jason saying the version $1, alone by that name; and the
-# profiles the product names for that shell carry its line. For a shell that is neither zsh nor bash the product names
-# ~/.profile alone, and its promise is the terminal, not a file: there the profiles the set-up's report says it wrote (the
-# file $2, where there is one) are said, and the leg fails only where that login shell does not find jason.
+# account's login shell as a login shell finds ~/.local/bin/jason saying the version $1, alone by that name. Then the
+# profiles, by the PATH a new login shell answered before the open (read_terminal_before):
+#  - where it named ~/.local/bin already, the product writes none: the profiles the set-up's report says it wrote (the
+#    file $2) are none, every profile's hash is its hash before the open, and the report's done says no profile was
+#    written (the set-up record $3, where the leg has one);
+#  - where it did not, every profile the product names for that shell carries its line.
+# For a shell that is neither zsh nor bash the product names ~/.profile alone, and its promise is the terminal, not a
+# file: there the profiles the report says it wrote are said, and the leg fails only where that login shell does not find
+# jason.
 hold_account_terminal() {
-    local version="$1" written="${2:-}" shell found every profile listed
+    local version="$1" written="${2:-}" record="${3:-}" shell found every profile listed name hashed now done_list said_done
     shell="$(account_shell)"
     [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
     found="$(within 60 "a new login shell of $shell finding jason" fresh_in "$shell" 'command -v jason; jason --version')" || true
@@ -232,13 +260,34 @@ hold_account_terminal() {
             [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell of $shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
             [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell of $shell does not say $version: $found"
             [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell of $shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
-            listed="$(product_profiles "$shell")" || fail "the product's profile functions could not be read from install/install.sh"
-            [ -n "$listed" ] || fail "the product names no profile for $shell"
-            while IFS= read -r profile; do
-                [ -n "$profile" ] || continue
-                grep -qx '# added by jason install' "$profile" 2>/dev/null || fail "$profile, which the product names for $shell, carries no line for ~/.local/bin"
-            done <<< "$listed"
-            say "the account's login shell is $shell: a new login shell of it finds jason at $WRAPPER alone by that name, saying $version, and the profiles the product names for it carry the line: $(printf '%s' "$listed" | tr '\n' ' ')"
+            [ -f "$OUT/terminal-before-profiles.txt" ] || fail "the PATH a new login shell answered before the open was not read (read_terminal_before)"
+            if [ -s "$OUT/terminal-before-names-local-bin.txt" ]; then
+                [ -z "$written" ] || [ ! -s "$written" ] || [ -z "$(grep . "$written" || true)" ] || fail "a new login shell's PATH named ~/.local/bin before the open, and the set-up's report says it wrote the profiles $(tr '\n' ' ' < "$written")"
+                while IFS=$'\t' read -r name hashed; do
+                    [ -n "$name" ] || continue
+                    now="$(if [ -f "$HOME/$name" ]; then shasum -a 256 < "$HOME/$name" | cut -d' ' -f1; else echo absent; fi)"
+                    [ "$now" = "$hashed" ] || fail "a new login shell's PATH named ~/.local/bin before the open, and ~/$name changed: $hashed before, $now after"
+                done < "$OUT/terminal-before-profiles.txt"
+                if [ -n "$record" ]; then
+                    [ -f "$record" ] || fail "no set-up record at $record, so its report's done cannot be read"
+                    done_list="$(python3 -c 'import json,sys
+command = (json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}).get("command") or {}
+print("\n".join(str(item) for item in (command.get("done") or [])))' "$record")" || fail "the done of the set-up record at $record could not be read"
+                    printf '%s\n' "$done_list" | grep -qxF "$HOME/.local/bin is on the PATH a terminal has already, so no profile was written." || fail "a new login shell's PATH named ~/.local/bin before the open, and the set-up's report does not say no profile was written: $(printf '%s' "$done_list" | tr '\n' ' ')"
+                    said_done="and the report's done says no profile was written"
+                else
+                    said_done="and this leg has no set-up record to read the report's done from"
+                fi
+                say "the account's login shell is $shell: a new login shell of it finds jason at $WRAPPER alone by that name, saying $version; its PATH named ~/.local/bin before the open, so the product wrote no profile: the report names none, every profile is as it was, $said_done"
+            else
+                listed="$(product_profiles "$shell")" || fail "the product's profile functions could not be read from install/install.sh"
+                [ -n "$listed" ] || fail "the product names no profile for $shell"
+                while IFS= read -r profile; do
+                    [ -n "$profile" ] || continue
+                    grep -qx '# added by jason install' "$profile" 2>/dev/null || fail "$profile, which the product names for $shell, carries no line for ~/.local/bin"
+                done <<< "$listed"
+                say "the account's login shell is $shell: a new login shell of it finds jason at $WRAPPER alone by that name, saying $version, and the profiles the product names for it carry the line: $(printf '%s' "$listed" | tr '\n' ' ')"
+            fi
             ;;
         *)
             say "the account's login shell is $shell, neither zsh nor bash: the profiles the set-up's report says it wrote: $(if [ -n "$written" ] && [ -s "$written" ]; then while IFS= read -r profile; do [ -n "$profile" ] || continue; printf '%s (%s) ' "$profile" "$(if grep -qx '# added by jason install' "$profile" 2>/dev/null; then echo 'carries the line'; else echo 'no line'; fi)"; done < "$written"; else printf 'none read'; fi)"
@@ -332,6 +381,36 @@ wait_until() {
 }
 gone() { [ ! -e "$1" ]; }
 
+# The folder $1 served on 127.0.0.1:8099 by .github/scripts/serve-feed.py, its log in $2 (bound and listening, each with
+# its moment, then every request), its process in $server for the caller's trap to end; waited for for 30 s to answer
+# manifest.json. Where it does not, what was there is printed before anything is ended: the server's log, whether its
+# process lives, what holds the port (lsof and netstat), and a sample of the server where taking one costs under 5 s.
+serve_feed() {
+    local folder="$1" log="$2" until
+    python3 "$(dirname "$0")/serve-feed.py" "$folder" 8099 "$log" &
+    server=$!
+    until=$(( $(date +%s) + 30 ))
+    while [ "$(date +%s)" -lt "$until" ]; do
+        if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json 2> /dev/null; then
+            say "the feed at $folder answers on 127.0.0.1:8099 (server process $server): $(grep -E ' (bound|listening) ' "$log" | tr '\n' ' ')"
+            return 0
+        fi
+        sleep 0.5
+    done
+    echo "--- the feed server's log, $log:"
+    cat "$log" 2>/dev/null || echo '(no log)'
+    echo "--- the feed server's process $server: $(if kill -0 "$server" 2>/dev/null; then echo "lives: $(ps -o pid=,etime=,command= -p "$server")"; else echo 'not running'; fi)"
+    echo '--- lsof -nP -iTCP:8099:'
+    lsof -nP -iTCP:8099 2>&1 || true
+    echo '--- netstat -anv -p tcp, the lines naming port 8099:'
+    netstat -anv -p tcp 2>&1 | grep -E '(Proto|\.8099 )' || true
+    if kill -0 "$server" 2>/dev/null; then
+        echo "--- sample of the feed server $server, for 1 s, given 5 s:"
+        ( within 5 "sample of the feed server $server" sample "$server" 1 -mayDie 2>&1 ) || echo '(no sample within 5 s)'
+    fi
+    fail "the feed on 127.0.0.1:8099 answering did not happen within 30 s; its server's log, process and port are printed above"
+}
+
 # --- the listing -----------------------------------------------------------------------------------------------------
 
 folder() {
@@ -397,6 +476,74 @@ close_leg() {
     if [ -s "$OUT/leg-failure.txt" ]; then why="it said: $(tr '\n' ' ' < "$OUT/leg-failure.txt")"; else why="its own lines are in its step"; fi
     echo "::error title=Installation::the leg '$open' failed; $why"
     printf '%s\n' "the leg '$open' failed; $why" >> "$OUT/failed-legs.txt"
+}
+
+# Every leg's own scratch, which a leg that fails part way can leave and no product door takes, by name: the copy of
+# this build staged beside an application to swap it in (bundle-swap), the old bundles a leg moved out of their place
+# (bundle-swap, over-previous-desktop), the folder the person's own quick-start is moved out to while the previous
+# release is installed (way-back), the disk image, its mount and its stage (ran-from-image, whose own trap takes them
+# unless it is cut off), and a feed server still serving. Every leg that makes one of them refuses to start where it is
+# there already, so a clean begin takes them all, before it reads the machine: the processes running from the bundles
+# quit, the image detached, the person's own quick-start put back where it is missing from its place, then the rest
+# removed. On a GitHub-hosted runner alone, as the reset; each act logged in $OUT/resets.txt, never a proof.
+SCRATCH_STAGED="/Applications/.Jason-swap.app $HOME/Applications/.Jason-swap.app"
+SCRATCH_ASIDE="$OLD_APPS/swapped-out-by-the-leg $OLD_APPS/moved-by-the-leg"
+SCRATCH_OWN_OUT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/own-quick-start-out"
+SCRATCH_MOUNT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/jason-vanishing-place"
+SCRATCH_IMAGE="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/jason-vanishing-place.dmg ${RUNNER_TEMP:-${TMPDIR:-/tmp}}/jason-vanishing-stage $SCRATCH_MOUNT"
+take_scratch() {
+    local leg="$1" found="" place line pid
+    for place in $SCRATCH_STAGED $SCRATCH_ASIDE $SCRATCH_OWN_OUT $SCRATCH_IMAGE; do { [ -e "$place" ] || [ -L "$place" ]; } && found="$found $place"; done
+    [ -n "$(pgrep -f 'serve-feed\.py' || true)" ] && found="$found feed-server"
+    [ -n "$found" ] || return 0
+    if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then skip_leg "not run: an earlier leg's scratch is there ($found), and it is taken on a GitHub-hosted runner alone"; exit 0; fi
+    printf "before '%s': an earlier leg's scratch:%s\n" "$leg" "$found" >> "$OUT/resets.txt"
+    for pid in $(pgrep -f 'serve-feed\.py' || true) $(pgrep -f '/\.Jason-swap\.app/' || true) $(pgrep -f "$OLD_APPS/" || true) $(pgrep -f "$SCRATCH_MOUNT/" || true); do
+        printf '  quit the process %s: %s\n' "$pid" "$(ps -o command= -p "$pid" 2>/dev/null || echo 'ended')" >> "$OUT/resets.txt"
+        kill "$pid" 2>/dev/null || true
+    done
+    sleep 2
+    if mount | grep -qF " on $SCRATCH_MOUNT "; then
+        if ( within 60 "hdiutil detach $SCRATCH_MOUNT" hdiutil detach -force "$SCRATCH_MOUNT" > /dev/null 2>&1 ); then line="  detached the disk image at $SCRATCH_MOUNT"; else line="  could not detach the disk image at $SCRATCH_MOUNT"; fi
+        say "$line"
+        printf '%s\n' "$line" >> "$OUT/resets.txt"
+    fi
+    # While the person's own quick-start is out of its place, whatever stands there is a stand-in (the previous release's
+    # skills write one): removed, then the person's copy put back, as the leg's own put-back does. Where it cannot be put
+    # back, nothing is removed and this leg is not run, so the person's copy is never taken with the scratch.
+    if [ -d "$SCRATCH_OWN_OUT/quick-start" ]; then
+        if [ -e "$OWN_SKILL" ] || [ -L "$OWN_SKILL" ]; then
+            if rm -rf "$OWN_SKILL"; then line="  removed $OWN_SKILL, a stand-in while the person's own quick-start was out of its place"; else line="  could not remove $OWN_SKILL, a stand-in while the person's own quick-start was out of its place"; fi
+            say "$line"
+            printf '%s\n' "$line" >> "$OUT/resets.txt"
+        fi
+        mkdir -p "$(dirname "$OWN_SKILL")"
+        if [ ! -e "$OWN_SKILL" ] && mv "$SCRATCH_OWN_OUT/quick-start" "$OWN_SKILL"; then line="  put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start to $OWN_SKILL"; else line="  could not put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start"; fi
+        say "$line"
+        printf '%s\n' "$line" >> "$OUT/resets.txt"
+        if [ -d "$SCRATCH_OWN_OUT/quick-start" ]; then skip_leg "not run: the person's own quick-start could not be put back from $SCRATCH_OWN_OUT/quick-start to $OWN_SKILL"; exit 0; fi
+    fi
+    for place in $SCRATCH_STAGED $SCRATCH_ASIDE $SCRATCH_OWN_OUT $SCRATCH_IMAGE; do
+        { [ -e "$place" ] || [ -L "$place" ]; } || continue
+        if rm -rf "$place"; then line="  removed $place"; else line="  could not remove $place"; fi
+        say "$line"
+        printf '%s\n' "$line" >> "$OUT/resets.txt"
+    done
+    for place in $SCRATCH_STAGED $SCRATCH_ASIDE $SCRATCH_OWN_OUT $SCRATCH_IMAGE; do
+        if [ -e "$place" ] || [ -L "$place" ]; then skip_leg "not run: an earlier leg's scratch, $place, could not be removed"; exit 0; fi
+    done
+}
+
+# The open leg's own compare differed: the leg is recorded as failed by its name at once, and as dirty, so that its end
+# fails its step and a later begin treats the machine it left as a failed leg's. Outside a leg (the held step's whole
+# compare) nothing is recorded here: the held step fails the job on the divergence itself.
+dirty_leg() {
+    [ -s "$OUT/leg-open.txt" ] || return 0
+    local open
+    open="$(cat "$OUT/leg-open.txt")"
+    grep -qxF -- "$open" "$OUT/legs-dirty.txt" 2>/dev/null && return 0
+    printf '%s\n' "the leg '$open' failed: $1" >> "$OUT/failed-legs.txt"
+    printf '%s\n' "$open" >> "$OUT/legs-dirty.txt"
 }
 
 # This leg not run, said by why: recorded for the held step, and $OUT/skip left for the job's step to end on.
@@ -584,6 +731,7 @@ compare)
         why="$1 against $2: no id of this build is recorded ($OUT/this-build-extracted.txt is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
         echo "::error title=Uninstall::$why"
         printf '%s\n' "$why" >> "$OUT/divergent.txt"
+        dirty_leg "$why"
     fi
     expected_x=""; soft_x=""; rest=""
     while IFS= read -r line; do
@@ -629,11 +777,13 @@ compare)
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
-    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the held step at the
-    # end fails the job on any divergence recorded.
+    # A divergence is recorded and the leg goes on to its end, so that what it does after the compare still runs and one
+    # run reads every leg; the leg is recorded as failed by its name at once, and its end fails its step (dirty_leg). The
+    # held step at the end fails the job on any divergence recorded.
     if [ -n "$left" ] || [ -n "$went" ]; then
         echo "::error title=Uninstall::the machine after '$1' is not the machine before '$2': $(cat "$diffed" | tr '\n' ' ')"
         echo "$1 against $2: see $diffed" >> "$OUT/divergent.txt"
+        dirty_leg "its compare differs, $1 against $2: see $diffed"
     fi
     ;;
 
@@ -672,6 +822,7 @@ begin)
     for need in "$@"; do [ "${need%=*}" != 'Fetch the previous release' ] || { printf '%s\n' "$LEG" >> "$OUT/previous-legs.txt"; break; }; done
     if [ -n "$clean" ]; then
         [ -f "$OUT/before.txt" ] || { skip_leg 'not run: the leg it needs failed, The machine before anything is installed'; exit 0; }
+        take_scratch "$LEG"
         prior="$(cat "$OUT/last-leg.txt" 2>/dev/null || true)"
         found="$(left_over)"
         if [ -n "$found" ]; then
@@ -767,6 +918,12 @@ begin)
 end)
     printf '%s\n' "$1" >> "$OUT/legs-ended.txt"
     rm -f "$OUT/leg-open.txt"
+    # A leg whose own compare differed ran to its end and is recorded as failed already: its step fails here, so that no
+    # leg reads as succeeded with a divergence in it.
+    if grep -qxF -- "$1" "$OUT/legs-dirty.txt" 2>/dev/null; then
+        echo "::error title=Installation::$1 - ended, but its compare differs: it is recorded as failed"
+        exit 1
+    fi
     say "$1 - ended"
     ;;
 
@@ -974,6 +1131,33 @@ uninstall-menu)
     status=0
     wait "$verb" || status=$?
     cat "$OUT/uninstall-menu.json"
+    # The door writes both streams into the one file: the report is its JSON line, kept apart in uninstall-menu-report.json;
+    # every other line (a wait's sentence, on standard error) is said as such. Read to be SAID, never held: the report's
+    # completed, refusal code, kept and problems printed, so what the uninstall says of itself is in the log and not only
+    # in the kept file; where there is no JSON line, that is said. The leg is held by the uninstall's exit and the files.
+    python3 -c 'import json,sys
+reports, said = [], []
+for line in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines():
+    try:
+        value = json.loads(line)
+    except ValueError:
+        value = None
+    (reports if isinstance(value, dict) else said).append(line)
+for line in said:
+    if line.strip():
+        print(f"the menu item'"'"'s uninstall also said, beside its report: {line}")
+if not reports:
+    print("the menu item'"'"'s uninstall wrote no JSON line, so no report is read")
+    sys.exit(0)
+if len(reports) > 1:
+    print(f"the menu item'"'"'s uninstall wrote {len(reports)} JSON lines; the last is read as its report")
+open(sys.argv[2], "w", encoding="utf-8").write(reports[-1] + "\n")
+report = json.loads(reports[-1])
+completed, refusal = json.dumps(report.get("completed")), json.dumps(report.get("refusal_code"))
+print(f"the menu item'"'"'s uninstall reports: completed {completed}, refusal code {refusal}")
+for name in ("kept", "problems"):
+    items = report.get(name) or []
+    print(f"  {name}: " + ("none" if not items else " | ".join(str(item) for item in items)))' "$OUT/uninstall-menu.json" "$OUT/uninstall-menu-report.json" || say "the menu item's uninstall's report could not be read; the file is printed above"
     [ "$status" -eq 0 ] || fail "the uninstall the menu item starts exited with $status"
     [ ! -e "$placed" ] || fail "$placed is left"
     [ -e "$DATA" ] || fail "the data directory went, which only --purge-data takes"
@@ -996,10 +1180,9 @@ from-previous)
 
     # Its own update, pinned to this version, from the feed served on this machine. The update is the previous
     # release's; the move is this version's, which it hands the rest to.
-    python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/feed-server.log" 2>&1 &
-    server=$!
-    trap 'kill "$server" 2>/dev/null || true' EXIT
-    wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
+    server=""
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true' EXIT
+    serve_feed "$feed" "$OUT/feed-server.log"
     status=0
     within 900 "the previous release's jason update apply --version $version" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/update-from-previous.json" 2> "$OUT/update-from-previous.err" || status=$?
     cat "$OUT/update-from-previous.err"
@@ -1137,10 +1320,9 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before going back' > "$OUT/way-back-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/way-back-campaign.json")"
     say "the previous release's command-line Jason $old installed by its own script, a runtime running, its login start registered and one campaign made"
 
-    python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/way-back-feed-server.log" 2>&1 &
-    server=$!
-    trap 'kill "$server" 2>/dev/null || true' EXIT
-    wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
+    server=""
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true' EXIT
+    serve_feed "$feed" "$OUT/way-back-feed-server.log"
     status=0
     within 900 "the previous release's jason update apply --version $version" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/way-back-update.json" 2> "$OUT/way-back-update.err" || status=$?
     kill "$server" 2>/dev/null || true
@@ -1259,9 +1441,7 @@ PY
 
     if [ "$again" = again ]; then
         # Moving again: the previous release's own update apply, pinned to this version, from the feed served here.
-        python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/way-back-again-feed-server.log" 2>&1 &
-        server=$!
-        wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
+        serve_feed "$feed" "$OUT/way-back-again-feed-server.log"
         status=0
         within 900 "$old's jason update apply --version $version after going back" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/way-back-again.json" 2> "$OUT/way-back-again.err" || status=$?
         kill "$server" 2>/dev/null || true
@@ -1653,6 +1833,7 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
     # The desktop's log kept from the start on, whatever the leg comes to.
     desktop_log="bundle-swap${mode:+-$mode}-desktop-log.jsonl"
     say_open_environment
+    read_terminal_before
     window="$(open_app "$placed" "$OUT/bundle-swap-window.log")" || fail "this build's application could not be opened from $placed after the swap: $(cat "$OUT/open-app-failure.txt" 2>/dev/null)"
     say "this build's application opened by open from $placed, its process $window running from that bundle, with SHELL '$(app_shell_of "$window")'"
     until=$(( $(date +%s) + 180 ))
@@ -1706,7 +1887,8 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
     ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
     : > "$OUT/bundle-swap-report-profiles.txt"
     if [ -f "$record" ]; then report_profiles "$record" "$OUT/bundle-swap-report-profiles.txt" || true; fi
-    hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt"
+    # With running-cli the finishing step writes no record (it reads the public feed), so there is no done to read.
+    if [ "$mode" = running-cli ]; then hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt"; else hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt" "$record"; fi
     others="$(ps -axo pid=,command= | grep -E '/jason runtime run' | grep -v grep | grep -vF "$carried runtime run" || true)"
     [ -z "$others" ] || fail "a runtime runs from another jason than $carried: $others"
     say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and no runtime runs from another jason"
@@ -1989,6 +2171,7 @@ by-hand)
     desktop_log=by-hand-desktop-log.jsonl
     trap 'keep_desktop_log "$desktop_log"' EXIT
     say_open_environment
+    read_terminal_before
     window="$(open_app "$placed" "$OUT/by-hand-window.log")" || fail "this build's application could not be opened from $placed: $(cat "$OUT/open-app-failure.txt" 2>/dev/null)"
     say "this build's application opened by open from $placed, its process $window running from that bundle, with SHELL '$(app_shell_of "$window")'"
     until=$(( $(date +%s) + 180 ))
@@ -2035,7 +2218,7 @@ print(str(command.get("finds_this")).lower())' "$record" > "$OUT/by-hand-report.
     if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
     report_profiles "$record" "$OUT/by-hand-report-profiles.txt" || fail "the profiles in the set-up record at $record could not be read"
-    hold_account_terminal "$version" "$OUT/by-hand-report-profiles.txt"
+    hold_account_terminal "$version" "$OUT/by-hand-report-profiles.txt" "$record"
     say "~/.local/bin/jason is the application's wrapper running $carried"
 
     # The skills of the hosts found, recorded; the person's own quick-start left alone and named by jason status.

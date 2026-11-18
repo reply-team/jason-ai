@@ -389,8 +389,9 @@ shows it as it was built. It is not an installation and has nothing to do with t
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
 writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
 Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
-reaches the network there: Demo runs no runtime, checks for no update (a terminal's `jason update apply` is refused while
-it shows, as `demo_open`: leave the demo or quit the desktop, then run it again) and loads nothing but the application's own files,
+reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply` is
+refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, before anything is checked, so nothing is
+stopped, kept or downloaded: leave the demo or quit the desktop, then run it again) and loads nothing but the application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
 
