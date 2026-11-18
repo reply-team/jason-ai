@@ -2,13 +2,14 @@
 // loopback feed, the request's file and its steps, the switch a window obeys, and how the main module starts it.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import {
     applyExit,
     applyExits,
+    asksForWindow,
     awaitGoFlag,
     busyRecord,
     createRequestFile,
@@ -20,8 +21,11 @@ import {
     isRequestId,
     isVersion,
     loopbackFeed,
+    openAfterRequest,
     readRequestFile,
     refusalMessage,
+    renamePauseMs,
+    renameTries,
     requestFile,
     requestOf,
     requestRefusals,
@@ -30,11 +34,13 @@ import {
     takeRequest,
     UpdateRequests,
     updateStart,
+    updatingWords,
     usageRecord,
     waitForGo,
     windowOpenUpdate,
     writeRequestFile,
     type GoWait,
+    type RequestFileIo,
     type RequestRecord,
     type TakeDeps,
     type UpdateRequest,
@@ -533,7 +539,7 @@ test('the main module decides the update starts after the uninstaller’s, as an
     assert.equal(applyExits.handedOver, 3);
     assert.equal(applyExits.usage, 2);
     // While it holds the lock, a second start's request is refused as busy.
-    assert.ok(update.includes("app.on('second-instance', (_event, _argv, _directory, data) => {\n        const other = requestOf(data);\n        if (other !== null) requests.arrived(other);"));
+    assert.ok(update.includes("app.on('second-instance', (_event, argv, _directory, data) => {\n        const other = requestOf(data);\n        if (other !== null) return requests.arrived(other);"));
     assert.ok(update.includes('const requests = new UpdateRequests((other) => refuseBusy(other, false));'));
 });
 
@@ -560,7 +566,10 @@ test('a window’s run takes requests with its own updater; the Demo makes one f
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const live = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
     assert.ok(live.includes('serveRequests(log, paths.data, updates !== null, () => updates ?? requestUpdater({ data: paths.data, log }));'));
-    assert.ok(main.includes('takeRequest(request, { data, from: app.getVersion(), where: { window: { menu } }, unsupported: requestSupport(app.isPackaged, process.platform), updater, windowOpen: windowOpenUpdate, log })'));
+    const served = main.slice(main.indexOf('function serveRequests('), main.indexOf('\n}\n', main.indexOf('function serveRequests(')));
+    for (const member of ['data,', 'where: { window: { menu } },', 'unsupported: requestSupport(app.isPackaged, process.platform),', 'updater,', 'windowOpen: windowOpenUpdate,', 'log,']) {
+        assert.ok(served.includes(member), member);
+    }
     assert.equal(existsSync(new URL('../src/update-start.ts', import.meta.url)), true);
 });
 
@@ -757,4 +766,254 @@ test('the wait for the go ends when the request has ended meanwhile, its bound p
     };
     assert.equal(await waitForGo('/nowhere.go', wait, () => over), false);
     assert.equal(await waitForGo('/nowhere.go', { ...wait, exists: () => true }, () => false), true);
+});
+
+test('a person who opens Jason Desktop while a window-less request holds the lock is remembered, and the application opens as the request ends short of an install', () => {
+    const atLogin = (argv: readonly string[]) => argv.includes('--opened-at-login');
+    // A plain start, a link's start: a window asked for. A request handed over, an update start, a start at sign-in: not.
+    assert.equal(asksForWindow(['Jason'], undefined, atLogin), true);
+    assert.equal(asksForWindow(['Jason'], { link: 'jason://open' }, atLogin), true);
+    assert.equal(asksForWindow(['Jason', '--update-apply'], handedData({ id: 'r2', to: '0.49.0', feed: null }), atLogin), false);
+    assert.equal(asksForWindow(['Jason', '--update-settle'], undefined, atLogin), false);
+    assert.equal(asksForWindow(['Jason', '--opened-at-login'], undefined, atLogin), false);
+    // Opened as the start exits with any code; never where nothing exits because the installer has the application.
+    assert.equal(openAfterRequest(true, applyExits.answered), true);
+    assert.equal(openAfterRequest(true, applyExits.failed), true);
+    assert.equal(openAfterRequest(false, applyExits.answered), false);
+    assert.equal(openAfterRequest(true, applyExit({ request: 'r', state: 'installing' } as never)), false);
+    // main: the window-less start remembers it on second-instance and relaunches only on its own exit path.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = main.slice(main.indexOf('function startUpdate('), main.indexOf('\n}\n', main.indexOf('function startUpdate(')));
+    assert.ok(start.includes('if (!asksForWindow(argv, data, openedAtLogin)) return;'));
+    // (f) The holding start says once that Jason is updating, waits for no answer, and promises no window after an install.
+    const said = start.indexOf("if (!windowAsked) void dialog.showMessageBox({ type: 'info', title: windowTitle, ...updatingWords, buttons: ['OK'] }).catch(() => undefined);");
+    assert.ok(said > 0 && said < start.indexOf('windowAsked = true;'));
+    assert.equal(start.split('showMessageBox(').length - 1, 1);
+    assert.equal(updatingWords.message, 'Jason is updating.');
+    assert.match(updatingWords.detail, /^Jason Desktop opens once the update is done; where it installs a new version, that version opens the next time you start Jason\.$/);
+    assert.ok(start.includes('if (openAfterRequest(windowAsked, code)) {'));
+    assert.ok(start.indexOf('app.relaunch(') < start.indexOf('app.exit(code);'));
+    assert.equal(start.split('app.relaunch(').length - 1, 1);
+});
+
+// ---- A step the verb's poll holds, and a step that cannot be written ------------------------------------------------
+
+const refusal = (code: string): Error => Object.assign(new Error(`${code}: operation not permitted, rename`), { code });
+
+/**
+ * The disk, but a rename over a file a reader holds is refused as Windows refuses it (EPERM), however the reader opened
+ * it. On Windows the reader's handle is a real one and the refusal is the system's own; elsewhere the seam says it.
+ */
+function heldDisk() {
+    let held: number | null = null;
+    const seen = { refused: 0, renamed: 0, inPlace: 0, slept: 0 };
+    const io: RequestFileIo = {
+        write: (file, text) => {
+            if (!file.endsWith('.tmp')) seen.inPlace += 1;
+            writeFileSync(file, text);
+        },
+        rename: (from, to) => {
+            try {
+                if (held !== null && process.platform !== 'win32') throw refusal('EPERM');
+                renameSync(from, to);
+                seen.renamed += 1;
+            } catch (error) {
+                seen.refused += 1;
+                throw error;
+            }
+        },
+        remove: (file) => rmSync(file, { force: true }),
+        sleep: () => void (seen.slept += 1),
+    };
+    return {
+        io,
+        seen,
+        hold: (file: string) => {
+            held = existsSync(file) ? openSync(file, 'r') : null;
+        },
+        letGo: () => {
+            if (held !== null) closeSync(held);
+            held = null;
+        },
+    };
+}
+
+test('a reader holding the request’s file while each step is written: the rename is refused, tried again, then written in place and read whole', async (t) => {
+    assert.ok(renameTries * renamePauseMs >= 250, 'the moment tried again outlasts one read of a small file');
+    assert.ok(renameTries * renamePauseMs <= 1_000, 'and is short beside the verb’s poll');
+    const data = scratch(t);
+    const disk = heldDisk();
+    const { updater, calls } = realUpdater(data);
+    const ways: string[] = [];
+    const { all, written } = deps(data, () => updater, {
+        go: goWaitOf(100, (look) => {
+            if (look === 3) writeFileSync(goFile(data, request.id), '');
+        }),
+        write: (file, record) => {
+            written.push(record);
+            // The verb's poll has the file open at the moment the step is written, for longer than the rename is tried.
+            disk.hold(file);
+            const before = disk.seen.refused;
+            try {
+                ways.push(writeRequestFile(file, record, disk.io, 'win32'));
+            } finally {
+                disk.letGo();
+            }
+            assert.equal(disk.seen.refused - before, renameTries, `${record.state}: every rename refused while the reader holds the file`);
+            // The next poll reads the step whole: the in-place write is the record, not a part of it.
+            assert.deepEqual(readRequestFile(file), record, `${record.state}: read whole`);
+        },
+    });
+    const end = await taken(waits, all);
+    assert.equal(end.state, 'installing');
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'checking', 'downloading', 'downloaded', 'installing']);
+    // The first record makes the file (`createRequestFile`); every step after it is written over a file the reader holds.
+    assert.deepEqual(ways, ['in_place', 'in_place', 'in_place', 'in_place'], 'the fallback taken for every step');
+    assert.equal(disk.seen.inPlace, ways.length);
+    assert.equal(disk.seen.slept, ways.length * (renameTries - 1), 'a pause between tries, none after the last');
+    assert.deepEqual(readdirSync(join(data, 'update')).filter((name) => name.endsWith('.tmp')), [], 'no file beside it is left');
+    assert.ok(calls.includes('quitAndInstall(true, false)'), '`installing` was on disk, so the installer was started');
+});
+
+test('the rename stays the normal case: a reader that lets go is waited for, and macOS renames once and is refused as before', (t) => {
+    const data = scratch(t);
+    const file = requestFile(data, 'req_01JA');
+    const record = usageRecord('req_01JA', 'why', '0.49.0', new Date('2026-11-17T10:00:00Z'));
+    // Nobody holds it: renamed at once, on both systems, with no pause.
+    const free = heldDisk();
+    assert.equal(writeRequestFile(file, record, free.io, 'win32'), 'renamed');
+    assert.equal(writeRequestFile(file, record, free.io, 'darwin'), 'renamed');
+    assert.deepEqual(free.seen, { refused: 0, renamed: 2, inPlace: 0, slept: 0 });
+    // A reader that lets go after two refusals: the third rename goes through, and nothing is written in place.
+    let refusals = 0;
+    const brief: RequestFileIo = {
+        ...free.io,
+        rename: (from, to) => {
+            if (refusals < 2) {
+                refusals += 1;
+                throw refusal('EBUSY');
+            }
+            renameSync(from, to);
+        },
+    };
+    assert.equal(writeRequestFile(file, { ...record, message: 'second' }, brief, 'win32'), 'renamed');
+    assert.equal(readRequestFile(file)?.message, 'second');
+    assert.equal(free.seen.inPlace, 0);
+    // macOS is unchanged: one rename, its refusal thrown, the file beside it removed, nothing written in place.
+    refusals = 0;
+    assert.throws(() => writeRequestFile(file, { ...record, message: 'third' }, brief, 'darwin'), /EBUSY/);
+    assert.equal(refusals, 1);
+    assert.equal(readRequestFile(file)?.message, 'second');
+    // A refusal of another kind is never taken for a reader's handle, on Windows either.
+    const full: RequestFileIo = {
+        ...free.io,
+        rename: () => {
+            throw refusal('ENOSPC');
+        },
+    };
+    assert.throws(() => writeRequestFile(file, record, full, 'win32'), /ENOSPC/);
+    assert.equal(free.seen.inPlace, 0);
+    assert.deepEqual(readdirSync(join(data, 'update')), ['desktop-req_01JA.json'], 'no file beside it is left');
+});
+
+/** A write of the request's file that neither way can do for the states named: the disk refuses, the in-place write too. */
+function unwritable(states: string[], written: RequestRecord[]): TakeDeps['write'] {
+    return (file, record) => {
+        written.push(record);
+        if (states.includes(record.state)) throw refusal('EPERM');
+        writeRequestFile(file, record);
+    };
+}
+
+test('`installing` that cannot be written: no installer is started, and the request ends refused where that can still be written', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    const written: RequestRecord[] = [];
+    const { all, log } = deps(data, () => updater, { write: unwritable(['installing'], written) });
+    const end = await taken(request, all);
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')), 'no installer started');
+    assert.deepEqual(order, ['stopRuntime'], 'the runtime was stopped, and nothing was let go to the installer');
+    // The first `checking` made the file; these are the steps written over it.
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'downloading', 'installing', 'refused']);
+    assert.equal(end.state, 'refused');
+    assert.equal(end.reason, 'failed');
+    assert.equal(end.runtime_stopped, true);
+    assert.match(end.message ?? '', /jason runtime start starts it again/);
+    assert.deepEqual(readRequestFile(requestFile(data, request.id)), end, 'the end is on disk for the verb');
+    assert.deepEqual(updater.current, { step: 'downloaded', version: '0.49.1' }, 'the download waits under the install item');
+    assert.ok(log.lines.some((line) => line.name === 'update_request_unwritten' && line.fields['State'] === 'installing'));
+});
+
+test('neither `installing` nor the refusal can be written: it ends without installing, and the verb sees no answer of either', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    const written: RequestRecord[] = [];
+    const { all, log } = deps(data, () => updater, { write: unwritable(['installing', 'refused'], written) });
+    await takeRequest(request, all);
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')), 'no installer started');
+    assert.deepEqual(order, ['stopRuntime']);
+    assert.equal(readRequestFile(requestFile(data, request.id))?.state, 'downloading', 'the file still says the last step it was told');
+    assert.deepEqual(
+        log.lines.filter((line) => line.name === 'update_request_unwritten').map((line) => line.fields['State']),
+        ['installing', 'refused'],
+    );
+});
+
+test('`downloaded` that cannot be written: refused at once, no go waited for, nothing stopped, kept or installed', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    const written: RequestRecord[] = [];
+    const wait = goWaitOf(100, (look) => assert.equal(look, 1, 'only the look before the request was taken'));
+    const { all } = deps(data, () => updater, { go: wait, write: unwritable(['downloaded'], written) });
+    const end = await taken(waits, all);
+    assert.equal(end.state, 'refused');
+    assert.equal(end.reason, 'failed');
+    assert.equal(end.runtime_stopped, false);
+    assert.equal(end.kept, null);
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'downloading', 'downloaded', 'refused']);
+    assert.deepEqual(order, []);
+    assert.equal(existsSync(join(data, 'desktop', 'rollback', '0.49.0')), false, 'nothing kept');
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')));
+    assert.equal(wait.looked(), 1);
+});
+
+test('R1: the runtime the updater stopped is started again by the desktop where the file could be told nothing, and left to the verb where `failed` was written', async (t) => {
+    // Neither `installing` nor the refusal written: the verb never learns the runtime was stopped, so the desktop starts it.
+    const data = scratch(t);
+    const { updater, calls } = realUpdater(data);
+    const starts: string[] = [];
+    const { all, log } = deps(data, () => updater, {
+        write: unwritable(['installing', 'refused'], []),
+        startRuntime: async () => (starts.push('runtime start'), 'started'),
+    });
+    await takeRequest(request, all);
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')));
+    assert.deepEqual(starts, ['runtime start'], 'started again at once, once');
+    assert.ok(log.lines.some((line) => line.name === 'update_request_runtime_started' && line.fields['Outcome'] === 'started'));
+    // The refusal written, `runtime_stopped` in it: the verb is told, and restarting it stays the verb's.
+    const told = scratch(t);
+    const second = realUpdater(told);
+    const none: string[] = [];
+    const end = await taken(request, deps(told, () => second.updater, {
+        write: unwritable(['installing'], []),
+        startRuntime: async () => (none.push('runtime start'), 'started'),
+    }).all);
+    assert.equal(end.runtime_stopped, true);
+    assert.deepEqual(none, [], 'the desktop starts nothing where the verb was told');
+    // Nothing stopped, nothing to start: a `downloaded` it could not write stops nothing.
+    const early = scratch(t);
+    const third = realUpdater(early);
+    const nothing: string[] = [];
+    await takeRequest(waits, deps(early, () => third.updater, {
+        go: goWaitOf(100),
+        write: unwritable(['downloaded', 'refused'], []),
+        startRuntime: async () => (nothing.push('runtime start'), 'started'),
+    }).all);
+    assert.deepEqual(nothing, []);
+    // Both doors give it the carried jason's start: a window's requests and a window-less start's.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = readFileSync(new URL('../src/update-start.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes('startRuntime: carriedRuntimeStart(data, log),'));
+    assert.ok(start.includes('startRuntime: carriedRuntimeStart(data, log),'));
+    assert.ok(start.includes('return (await startAgain(runtimeDoor(cli, desktopPaths(data).runFile))).act;'));
 });

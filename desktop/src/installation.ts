@@ -73,6 +73,25 @@ export class DataNewerRefused extends StartFailed {
     }
 }
 
+/**
+ * `jason runtime start` refused because another jason holds the update's lock, or an update stands in flight from `kept`
+ * on (`update_in_progress`, `install_in_progress`): the update's finish starts the runtime once it ends. Never a failed
+ * first start of a version (`startPastUpdate`).
+ */
+export class UpdateBusy extends StartFailed {
+    readonly code: string;
+
+    constructor(result: CliResult, code: string, message: string) {
+        super('runtime start', result, message);
+        this.code = code;
+    }
+}
+
+/** The refusal a failed `jason runtime start` printed where an update holds it, or null for any other failure. */
+export function updateBusyIn(stdout: string): { code: 'update_in_progress' | 'install_in_progress'; message: string } | null {
+    return refusalIn(stdout, ['update_in_progress', 'install_in_progress'] as const);
+}
+
 /** The error a failed CLI run printed on stdout, where its code is one of `codes` and it says a sentence; null otherwise. */
 function refusalIn<Code extends string>(stdout: string, codes: readonly Code[]): { code: Code; message: string } | null {
     let parsed: unknown;
@@ -159,6 +178,12 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
             if (newer !== null) {
                 log.error('data_newer_refused', { Code: dataNewerCode });
                 throw new DataNewerRefused(start, newer);
+            }
+            // And so is an update that holds the start: waited for, never a failed start.
+            const busy = updateBusyIn(start.stdout);
+            if (busy !== null) {
+                log.info('runtime_start_update_busy', { Code: busy.code });
+                throw new UpdateBusy(start, busy.code, busy.message);
             }
             throw new StartFailed('runtime start', start, said(start) || 'jason runtime start did not start a runtime.');
         }

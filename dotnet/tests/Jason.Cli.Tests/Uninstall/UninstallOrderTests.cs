@@ -1,5 +1,8 @@
 using System.Net;
 using Jason.Cli;
+using Jason.Cli.Autostart;
+using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
@@ -492,6 +495,33 @@ public class UninstallOrderTests
         {
             Assert.DoesNotContain("No logon registration was registered", output.ToString(), StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// On macOS the uninstall's first step asks for the removal that leaves no mark for the label - unloaded without
+    /// <c>-w</c>, which would leave it disabled for a later install's job - where <c>jason runtime autostart disable</c> asks
+    /// for the one that keeps <c>-w</c>, a person's wish that the runtime not start at logon.
+    /// </summary>
+    [Fact]
+    public async Task On_macOS_the_uninstall_unloads_the_runtimes_job_without_w_and_disable_keeps_it()
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar(Cli.Autostart.AutostartPlatform.MacOs)
+        {
+            State = new Cli.Autostart.AutostartState(true, ["jason"], "ai.jason.runtime.plist"),
+        };
+
+        var (exit, _, _) = await RunAsync(dir, new StepLog(), RuntimeVerbs.NeverCalled(), registrar, running: false);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var uninstalled = Assert.Single(registrar.Removed);
+        Assert.Equal([["launchctl", "unload", uninstalled.ArtifactPath]], uninstalled.Remove);
+        Assert.Equal(AutostartArtifacts.LeavingNoMark(uninstalled, AccountDatabase.UserId()).Forget, uninstalled.Forget);
+
+        var env = new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths, Autostart: registrar, InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"));
+        Assert.Equal(ExitCodes.Success, RuntimeAutostartCommands.Disable(env, human: false));
+        Assert.Equal([["launchctl", "unload", "-w", registrar.Removed[^1].ArtifactPath]], registrar.Removed[^1].Remove);
+        Assert.Empty(registrar.Removed[^1].Forget);
     }
 
     /// <summary>

@@ -310,6 +310,8 @@ public sealed class UpdateCarriedHandOverTests
 
         Assert.Equal(UpdateCodes.DesktopNotInstalled, refused.Code);
         Assert.Contains($"names {installation.From}", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Nothing was installed. The likely cause is a Jason Desktop that is running, one of another data directory included", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("quit it, then run `jason update apply` again.", refused.Message, StringComparison.Ordinal);
         Assert.Contains($"was started again from {installation.InstallPath}", refused.Message, StringComparison.Ordinal);
         Assert.True(installation.Running);
         Assert.Null(installation.Ledger());
@@ -453,6 +455,36 @@ public sealed class UpdateCarriedHandOverTests
         var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
         Assert.Equal(code, refusal.Code);
         Assert.Contains("stands at 'stopped'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
+        Assert.Empty(desktop.Starts);
+    }
+
+    /// <summary>
+    /// A carried rollback at kept, where the installer never landed the new version and the application is still the version
+    /// the update left: nothing the command line changed stands and the application is already that version, so it refuses
+    /// with nothing_to_roll_back, advises no step by hand that would put that version back over itself, and leaves the
+    /// record as it stood.
+    /// </summary>
+    [Fact]
+    public async Task A_carried_rollback_at_kept_with_the_application_still_the_old_version_is_refused()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        // The Desktop kept the application and handed the update to its installer, which did not put the new one in place.
+        installation.Killed(UpdateStep.Stopped).At(UpdateStep.Kept).Write(installation.Update.Ledger);
+        desktop.Keep();
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        var before = File.ReadAllText(installation.Update.Ledger);
+
+        var exit = await CliApp.RunAsync(["update", "rollback"], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.NothingToRollBack, refusal.Code);
+        Assert.Contains("stands at 'kept'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"is {installation.From} already", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("by hand", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
         Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
         Assert.Empty(desktop.Starts);
@@ -717,6 +749,69 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     /// <summary>
+    /// An earlier hand-over whose files were written in the future - the clock stepped back since - is treated as aged, so
+    /// the refusal that waits for an installer holds nobody for longer than the install's own wait: Jason Desktop is asked
+    /// again at once. And the files of the earlier request, which nothing reads once a newer request is recorded, are swept
+    /// when the newer one is: only the newer request's answer is left in the update folder.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_over_written_in_the_future_is_aged_and_an_earlier_requests_files_are_swept()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        const string Id = "cli-earlier";
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        installation.OnHandOver = command =>
+        {
+            if (command[0] != copy)
+            {
+                return;
+            }
+
+            File.WriteAllText(installation.Update.DesktopRequest, Id);
+            installation.Ledger()!.At(UpdateStep.Kept).Write(installation.Update.Ledger);
+            desktop.Keep();
+            desktop.Write(Id, installation.To.ToString(), "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+            File.WriteAllText(Path.Combine(installation.Update.Root, $"desktop-{Id}.go"), string.Empty);
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        };
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token));
+
+        // Older requests still lying about from runs before that one.
+        File.WriteAllText(Path.Combine(installation.Update.Root, "desktop-cli-older.json"), "{}");
+        File.WriteAllText(Path.Combine(installation.Update.Root, "desktop-cli-older.go"), string.Empty);
+
+        // The clock stepped back three hours after the hand-over: its files are written in the future.
+        var ahead = DateTime.UtcNow + TimeSpan.FromHours(3);
+        foreach (var file in Directory.EnumerateFiles(installation.Update.Root, "desktop-*"))
+        {
+            File.SetLastWriteTimeUtc(file, ahead);
+        }
+
+        installation.OnHandOver = null;
+        desktop.Before = (id, to) =>
+        {
+            desktop.Write(id, to, "refused", reason: "version_mismatch", message: "The releases offer another version.", offered: "0.0.1");
+            return 1;
+        };
+        installation.Out.GetStringBuilder().Clear();
+        var asked = desktop.Requests.Count;
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+
+        Assert.Equal(asked + 1, desktop.Requests.Count);
+        Assert.NotEqual(UpdateCodes.InProgress, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        var newer = desktop.Requests[^1][desktop.Requests[^1].ToList().IndexOf("--request") + 1];
+        Assert.NotEqual(Id, newer);
+        var left = Directory.EnumerateFiles(installation.Update.Root, "desktop-*")
+            .Select(Path.GetFileName)
+            .Where(name => name!.EndsWith(".json", StringComparison.Ordinal) || name.EndsWith(".go", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal);
+        Assert.Equal([$"desktop-{newer}.json"], left);
+    }
+
+    /// <summary>
     /// After a cancel the copy is given its hold to run its own way out, since a terminal's Ctrl+C reaches it too: one that
     /// answers within it is passed on as it answered, and the carried process puts back and starts nothing of its own.
     /// </summary>
@@ -729,9 +824,9 @@ public sealed class UpdateCarriedHandOverTests
         const string Answer = "{\"error\":{\"code\":\"update_cancelled\",\"message\":\"The copy put everything back.\",\"retryable\":true}}";
         installation.Processes.OnRun = async (_, command, _, token) =>
         {
+            // Once the cancel has run its callbacks the copy's token is still live: it is ended only once its hold has passed.
             await cancel.CancelAsync();
-            await Task.Delay(200, CancellationToken.None);
-            Assert.False(token.IsCancellationRequested, "the copy was ended before its hold");
+            Assert.False(token.IsCancellationRequested, "the copy was ended with the cancel, before its hold");
             return new FinishedCommand(ExitCodes.ApiError, Answer + "\n");
         };
 
@@ -786,13 +881,23 @@ public sealed class UpdateCarriedHandOverTests
         var (installation, _) = FakeDesktop.Carried();
         using var __ = installation;
         TimeSpan? ended = null;
-        Task? closed = null;
+        Task<(bool Answered, bool LockFree)>? closed = null;
         var since = new System.Diagnostics.Stopwatch();
         installation.Processes.OnRun = async (_, _, _, token) =>
         {
             var closing = UpdateCommands.Closing.Current ?? throw new InvalidOperationException("the update runs under no close");
-            since.Start();
-            closed = Task.Run(() => closing.Closed(null), Ct);
+
+            // Timed from the close's cancel, not from the start of the thread that delivers it, which a loaded machine delays.
+            using var timed = closing.Token.Register(since.Start);
+
+            // What stands at the moment the close is let through: the answer given and the lock let go, or not yet.
+            closed = Task.Run(
+                () =>
+                {
+                    closing.Closed(null);
+                    return (installation.Out.ToString().Length > 0, LockFree(installation.Update));
+                },
+                Ct);
             try
             {
                 await Task.Delay(Timeout.Infinite, token);
@@ -806,13 +911,17 @@ public sealed class UpdateCarriedHandOverTests
         };
 
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
-        await closed!.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        var settled = since.Elapsed;
+        var (answered, lockFree) = await closed!.WaitAsync(TimeSpan.FromSeconds(30), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(UpdateCodes.Cancelled, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+
+        // The close's hold, not the cancel's: ended from the close at the shorter of the two, and well before the longer.
         Assert.True(ended >= UpdateCommands.CloseChildHold - TimeSpan.FromMilliseconds(100) && ended < UpdateCommands.ChildHold, $"the child was ended after {ended}");
-        Assert.True(settled < UpdateCommands.Closing.Hold, $"the way out had not run within the close's hold: {settled}");
+
+        // The way out ran before the close was let through: the close is held until it settles, and that is when it went.
+        Assert.True(answered, "the close was let through before the answer was given");
+        Assert.True(lockFree, "the close was let through with the update's lock still held");
         Assert.Null(installation.Ledger());
         using var free = UpdateLock.Take(installation.Update, "the next update");
     }
@@ -1029,6 +1138,20 @@ public sealed class UpdateCarriedHandOverTests
         Assert.False(File.Exists(installation.Update.LockHolder), "a holder was left named beside a lock no one holds");
     }
 
+    /// <summary>Whether the update's lock can be taken now, by a look that lets it go at once.</summary>
+    private static bool LockFree(UpdatePaths update)
+    {
+        try
+        {
+            using var _ = UpdateLock.Take(update, "a look at the lock");
+            return true;
+        }
+        catch (UpdateException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// A console's close cancels the update as Ctrl+C does and is held until the way out has run, a few seconds at most.
     /// </summary>
@@ -1036,13 +1159,23 @@ public sealed class UpdateCarriedHandOverTests
     public async Task A_consoles_close_cancels_the_update_and_is_held_until_it_settled()
     {
         using var closing = new UpdateCommands.Closing(Ct);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var since = new System.Diagnostics.Stopwatch();
+        using var seen = closing.Token.Register(() =>
+        {
+            since.Start();
+            cancelled.TrySetResult();
+        });
         var closed = Task.Run(() => closing.Closed(null), Ct);
 
-        await Task.Delay(200, Ct);
+        // The close cancels the update: waited for as it happens, however late a loaded machine runs the close's thread.
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
         Assert.True(closing.Token.IsCancellationRequested);
-        Assert.False(closed.IsCompleted, "the close was let through before the way out ran");
+
+        // And it is held: not let through while the way out has not settled, unless its own hold has run out by then.
+        Assert.True(!closed.IsCompleted || since.Elapsed >= UpdateCommands.Closing.Hold - TimeSpan.FromMilliseconds(100), $"the close was let through {since.Elapsed} after it cancelled, before the way out ran");
         closing.Settled();
-        await closed.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        await closed.WaitAsync(TimeSpan.FromSeconds(30), Ct);
         Assert.True(UpdateCommands.Closing.Hold < TimeSpan.FromSeconds(5), "Windows ends a process five seconds after a close");
     }
 }

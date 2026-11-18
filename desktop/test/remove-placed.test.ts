@@ -652,7 +652,7 @@ test('the act is offered on Linux only, in the Jason menu and the tray’s, by a
     assert.equal(desk.split('...this.removalItems(),').length - 1, 2, 'the Jason menu and the tray');
     assert.ok(desk.includes('{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }'));
     // While it runs the installation's other acts are off, and after it the menu reads the start at logon again.
-    assert.equal(desk.split('!this.removing()').length - 1, 5, 'login, start at logon, the update, the command’s acts and the act itself');
+    assert.equal(desk.split('!this.removing()').length - 1, 6, 'login, start at logon, the update, the command’s acts, put back and the act itself');
     assert.ok(desk.includes('await this.removal.run();') && desk.includes('await this.readAutostart().catch(() => undefined);'));
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('const removal = offers.removal && removalOffered(process.platform)\n        ? placedRemoval({'));

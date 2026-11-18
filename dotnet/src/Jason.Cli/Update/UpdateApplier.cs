@@ -390,6 +390,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             version.ToString(),
             env.Paths.Root,
             DataDirFound: true,
+            InstallationFound: true,
             Complete: parts.All(part => part.State != UpdateFinishStates.NotDone),
             parts);
     }
@@ -402,6 +403,23 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             version.ToString(),
             root,
             DataDirFound: false,
+            InstallationFound: false,
+            Complete: false,
+            [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
+    }
+
+    /// <summary>
+    /// The report of a finishing step whose data directory holds nothing of an installation but Jason Desktop's own, as on its
+    /// first start: nothing done, no release read, nothing made, and each part says so.
+    /// </summary>
+    internal static UpdateFinishResponse NothingInstalled(SemanticVersion version, string root)
+    {
+        var reason = $"The data directory at {root} holds nothing of an installation but Jason Desktop's own, so nothing belongs to {version} there yet: no release was read and nothing was made.";
+        return new UpdateFinishResponse(
+            version.ToString(),
+            root,
+            DataDirFound: true,
+            InstallationFound: false,
             Complete: false,
             [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
     }
