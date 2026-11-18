@@ -656,12 +656,75 @@ public sealed class UninstallCarriedTests : IDisposable
                 Assert.NotEqual(self.SessionId, seen.SessionId);
             }
 
-            Assert.Contains(child.Id, found);
+            Assert.True(found.Contains(child.Id), $"The look did not find process {child.Id}: it was given '{image}' and read '{ImageReadFor(child.Id)}' for the process.");
         }
         finally
         {
             child.Kill();
             child.WaitForExit();
+        }
+    }
+
+    /// <summary>
+    /// The application reached through a linked folder, as an application folder can be: the look is given the path through
+    /// the link, the system reports the process at the path the link leads to, and the two are one file, so it is found. On
+    /// macOS the temporary folder itself is reached through a link, <c>/var</c> to <c>/private/var</c>; this row adds one of
+    /// its own on top, on macOS and on Linux, where the system reports a process's image at its real path too.
+    /// </summary>
+    [Fact]
+    public void Off_Windows_the_application_reached_through_a_linked_folder_is_found()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows' own look reads the image by another call; this is the look macOS and Linux share.");
+
+        var real = Path.Combine(_tree.Paths.Root, "Real");
+        var folder = Path.Combine(real, "Jason.app", "Contents", "MacOS");
+        Directory.CreateDirectory(folder);
+        File.Copy("/bin/sleep", Path.Combine(folder, "Jason"));
+        var linked = Path.Combine(_tree.Paths.Root, "Linked");
+        Directory.CreateSymbolicLink(linked, real);
+        var image = Path.Combine(linked, "Jason.app", "Contents", "MacOS", "Jason");
+
+        var start = new System.Diagnostics.ProcessStartInfo(image)
+        {
+            ArgumentList = { "120" },
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var remover = InstallationRemovers.ForThisMachine();
+            IReadOnlyList<int> found = [];
+            var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < until && !found.Contains(child.Id))
+            {
+                Thread.Sleep(100);
+                found = remover.RunningFrom(image);
+            }
+
+            Assert.False(child.HasExited, "the stand-in for the application ended before it was looked for");
+            Assert.True(found.Contains(child.Id), $"The look did not find process {child.Id}: it was given '{image}' and read '{ImageReadFor(child.Id)}' for the process.");
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
+    }
+
+    /// <summary>What the look reads as a process's image off Windows, for a failure to name: its main module's file.</summary>
+    private static string? ImageReadFor(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return process.MainModule?.FileName;
+        }
+        catch (Exception unread) when (unread is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return $"nothing ({unread.GetType().Name})";
         }
     }
 
