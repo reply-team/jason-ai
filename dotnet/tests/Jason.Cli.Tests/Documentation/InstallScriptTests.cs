@@ -660,6 +660,47 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows leg that opens the window while jason uninstall runs, so the waiter asks, holds the verb where the window
+    /// can open rather than hoping for the moment: a skill file the verb removes after it stops the runtime is held open,
+    /// sharing read alone, before the verb starts, and the hold is seen refusing a writer; the verb then tries that file
+    /// again for its wait, and the leg lets go only once the window's process runs and the verb has not ended. A verb that
+    /// ended before that fails the leg, and so does a held file still there after the verb, so the leg cannot end green
+    /// having proven nothing.
+    /// </summary>
+    [Fact]
+    public void The_Windows_waiter_leg_holds_the_verb_while_the_window_opens_and_cannot_end_green_having_proven_nothing()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = windows[windows.IndexOf("\n    'UninstallWaiterShown' {\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    'UpdateApply' {\n", StringComparison.Ordinal)];
+
+        // The hold, the silent leg's own: a file of this build's skills record, held sharing read alone, seen refusing a writer.
+        var record = leg.IndexOf("$skillsRecord = Join-Path $env:USERPROFILE '.claude\\skills\\.jason-skills.json'", StringComparison.Ordinal);
+        var holder = leg.IndexOf("$holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', \"`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()\" -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        var registered = leg.IndexOf("Register-Scratch ", StringComparison.Ordinal);
+        var refusing = leg.IndexOf("[System.IO.File]::Open($held, 'Open', 'ReadWrite', 'ReadWrite')", StringComparison.Ordinal);
+        var verb = leg.IndexOf("$verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        Assert.True(record >= 0 && holder > record && registered > holder && refusing > registered && verb > refusing, "the waiter leg does not hold a file of this build's skills, recorded, and see the hold refuse a writer, before jason uninstall starts");
+
+        // Past the stop, the window opened; the verb must still run once the window's process does, and only then is it let go.
+        var stopped = leg.IndexOf("Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited }", StringComparison.Ordinal);
+        var early = leg.IndexOf("if ($verb.HasExited) { Fail ", StringComparison.Ordinal);
+        var window = leg.IndexOf("Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null", StringComparison.Ordinal);
+        var seen = leg.IndexOf("Wait-Until { $verb.HasExited -or @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 }", StringComparison.Ordinal);
+        var landed = leg.IndexOf("$landed = -not $verb.HasExited", StringComparison.Ordinal);
+        var release = leg.IndexOf("New-Item -ItemType File -Path $release -Force | Out-Null", StringComparison.Ordinal);
+        var unlanded = leg.IndexOf("if (-not $landed) { Fail ", StringComparison.Ordinal);
+        var ended = leg.IndexOf("if (-not $verb.WaitForExit(300000)) { Fail ", StringComparison.Ordinal);
+        var taken = leg.IndexOf("if (Test-Path -LiteralPath $held) { Fail ", StringComparison.Ordinal);
+        Assert.True(stopped > verb && early > stopped && window > early && seen > window && landed > seen && release > landed && unlanded > release && ended > unlanded && taken > ended,
+            "the waiter leg does not open the window past the stop, see its process while the verb still runs, let go only then, and fail where the verb ended first or the held file outlived the verb");
+        Assert.DoesNotContain("Start-Sleep", leg[verb..release], StringComparison.Ordinal);
+
+        // Let go and waited for even where the leg fails.
+        Assert.Contains("} finally {\n            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null\n            if ($holder) { $null = $holder.WaitForExit(15000) }\n        }", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
     /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
     /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,

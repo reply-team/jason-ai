@@ -1813,22 +1813,49 @@ switch ($Step) {
         # jason uninstall's waiter (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff): where its
         # silent uninstaller ends 3 because Jason Desktop was opened after the verb's own check, it runs the uninstaller
         # once more without /S, which shows the person its question. Here: this build installed by the stand-in script,
-        # a runtime started, jason uninstall started, and the window opened once the verb has stopped that runtime, past
-        # its own check. The second run is found, its window seen, and it is ended without an answer; the folder is still
+        # a runtime started, jason uninstall started with a skill file it removes held open, and the window opened once the
+        # verb has stopped that runtime, past its own check, while the hold keeps the verb running. The second run is found, its window seen, and it is ended without an answer; the folder is still
         # there, and the waiter's line is in the desktop's log of the day. Installed apps then takes the application off.
         if (-not $Script -or -not $Feed) { Fail '-Script and -Feed are needed.' }
         $installed = Invoke-InstallScript $Script
         if ($installed.Exit -ne 0) { Fail "install.ps1 exited with $($installed.Exit): $($installed.Said)" }
         if ((Invoke-Program $carried @('runtime', 'start')).Exit -ne 0) { Fail 'a runtime could not be started' }
         $descriptor = Join-Path $data 'run\runtime.json'
-        $verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden
-        $null = $verb.Handle
-        Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited } 120 'jason uninstall stopping the runtime'
-        if ($verb.HasExited) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window could be opened past its check: the leg proves nothing" }
-        Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
-        Say 'the window opened once jason uninstall had stopped the runtime, past its own check'
+        # A hold the leg controls, the silent leg's own: a file of this build's skills, which the verb removes after it stops
+        # the runtime, held open sharing read alone, so the verb tries it again for its wait (InstallationRemovers.HeldFiles)
+        # and is still running when the window opens; let go once the window's process runs. Without it the verb could end
+        # before the window opened, and the leg would prove nothing.
+        $skillsRecord = Join-Path $env:USERPROFILE '.claude\skills\.jason-skills.json'
+        $skillsRoot = Split-Path -Parent $skillsRecord
+        $named = @(try { @((Get-Content -LiteralPath $skillsRecord -Raw | ConvertFrom-Json).packs) | ForEach-Object { @($_.files) } | ForEach-Object { [string]$_.path } } catch { })
+        $held = $named | Where-Object { $_ } | ForEach-Object { Join-Path $skillsRoot ($_ -replace '/', '\') } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $held) { Fail "no file named by this build's skills record at $skillsRecord to hold the verb by" }
+        $release = $scratchHeldFile
+        Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
+        $holder = $null
+        try {
+            $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
+            Register-Scratch 'the process holding a skill file jason uninstall removes' $holder
+            Wait-Until { try { ([System.IO.File]::Open($held, 'Open', 'ReadWrite', 'ReadWrite')).Dispose(); $false } catch { $true } } 30 "$held held, refusing a writer"
+            Say "$held held open by process $($holder.Id), sharing read alone"
+            $verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden
+            $null = $verb.Handle
+            Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited } 120 'jason uninstall stopping the runtime'
+            if ($verb.HasExited) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window could be opened past its check, with $held held: the leg proves nothing" }
+            Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
+            Wait-Until { $verb.HasExited -or @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 30 'the window''s process starting'
+            $landed = -not $verb.HasExited
+            New-Item -ItemType File -Path $release -Force | Out-Null
+            $null = $holder.WaitForExit(15000)
+            if (-not $landed) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window's process ran, with $held held: the leg proves nothing" }
+            Say "the window opened once jason uninstall had stopped the runtime, past its own check, while the verb was still running, held at $held; then let go"
+        } finally {
+            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null
+            if ($holder) { $null = $holder.WaitForExit(15000) }
+        }
         if (-not $verb.WaitForExit(300000)) { Fail 'jason uninstall did not end within 300 s' }
         Say "jason uninstall ended, exit $($verb.ExitCode)"
+        if (Test-Path -LiteralPath $held) { Fail "jason uninstall ended and $held, which it was held at, is still there: it was let go after the verb's wait ran out" }
         $shown = $null
         $until = (Get-Date).AddSeconds(150)
         while ((Get-Date) -lt $until -and -not $shown) {
