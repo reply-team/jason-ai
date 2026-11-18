@@ -79,6 +79,132 @@ public sealed class InstallCommandTests : IDisposable
     }
 
     /// <summary>
+    /// From a place that goes away - a copy macOS runs translocated, or a volume that is read-only, as a mounted disk image
+    /// is - the setup refuses with install_vanishing_place before anything is stopped, written or retired: no update lock
+    /// taken, so no holder file; the command-line install at ~/.local/bin/jason, its profile and its runtime as they were.
+    /// The sentence names both Applications folders and says nothing was placed, retired or stopped.
+    /// </summary>
+    [Theory]
+    [InlineData("translocated")]
+    [InlineData("read_only_volume")]
+    public async Task From_a_vanishing_place_the_setup_refuses_before_it_stops_writes_or_retires_anything(string place)
+    {
+        var translocated = Path.Combine(_tree.Paths.Root, "private", "var", "folders", "x", "T", "AppTranslocation", "6F1C2E0A", "d");
+        var executable = place == "translocated" ? Carried(under: translocated) : Carried();
+        var oldInstall = Path.Combine(Home, ".local", "bin", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(oldInstall)!);
+        File.WriteAllText(oldInstall, "jason 0.48.5");
+        File.WriteAllText(Path.Combine(Home, ".zprofile"), "export PATH=\"$HOME/.local/bin:$PATH\"\n");
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        var before = Snapshot(Home);
+        var asked = new List<string>();
+        var places = MacPlaces() with { ReadOnlyVolume = folder => { asked.Add(folder); return place == "read_only_volume"; } };
+        var (env, output) = Environment(places, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(CliErrors.InstallVanishingPlace, refusal.Code);
+        Assert.False(refusal.Retryable);
+        Assert.Contains("Nothing was placed, retired or stopped", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Applications", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("~/Applications", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot(Home));
+        Assert.False(File.Exists(update.LockHolder), "the update's lock was taken before the gate");
+        Assert.Equal([update.Root], Directory.EnumerateFileSystemEntries(_data.Paths.Root));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(update.Root));
+        if (place == "read_only_volume")
+        {
+            Assert.Equal([Path.GetDirectoryName(executable)!], asked);
+        }
+    }
+
+    /// <summary>
+    /// A second disk a person keeps is no vanishing place by its path's spelling: a jason under a volume's folder whose
+    /// volume is writable sets the machine up.
+    /// </summary>
+    [Fact]
+    public async Task A_second_disk_a_person_keeps_is_not_refused_by_its_path()
+    {
+        var executable = Carried(under: Path.Combine(_tree.Paths.Root, "Volumes", "Jason 0.49.0"));
+        var (env, output) = Environment(MacPlaces() with { ReadOnlyVolume = _ => false }, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(Report(output).GetProperty("completed").GetBoolean());
+    }
+
+    /// <summary>
+    /// Windows is not gated: nothing publishes a build of Jason Desktop that can sit on read-only media, so the look is
+    /// never asked there, and a translocation mark means nothing on it.
+    /// </summary>
+    [Fact]
+    public void Windows_is_never_asked_whether_its_place_goes_away()
+    {
+        var executable = Carried(under: Path.Combine(_tree.Paths.Root, "AppTranslocation", "d"));
+        var asked = false;
+        var places = WindowsPlaces("unused") with { ReadOnlyVolume = _ => asked = true };
+
+        Assert.Null(VanishingPlace.Refusal(CarriedExecutable.Of(executable)!, places));
+        Assert.False(asked);
+        Assert.False(SetupPlacesDefaults().ReadOnlyVolume(Home), "the seam answers false on this machine's own places unless it is macOS with a read-only volume");
+    }
+
+    /// <summary>
+    /// The update's door runs the routine in its own process with no InstallCommand before it: the routine refuses at its
+    /// own entry with the same sentence as its one problem, nothing placed and nothing retired.
+    /// </summary>
+    [Fact]
+    public async Task The_routine_itself_refuses_from_a_vanishing_place_for_every_door()
+    {
+        var executable = Carried();
+        var oldInstall = Path.Combine(Home, ".local", "bin", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(oldInstall)!);
+        File.WriteAllText(oldInstall, "jason 0.48.5");
+        var before = Snapshot(Home);
+        var places = MacPlaces() with { ReadOnlyVolume = _ => true };
+        var (env, _) = Environment(places, executable);
+
+        var report = await MachineSetup.RunAsync(env, CarriedExecutable.Of(executable)!, places, new InstallOptions(false, false, null), Ct);
+
+        Assert.False(report.Completed);
+        Assert.Null(report.Command);
+        Assert.Null(report.Retired);
+        Assert.Empty(report.Skills);
+        Assert.Equal([VanishingPlace.Refusal(CarriedExecutable.Of(executable)!, places)!], report.Problems);
+        Assert.Equal(before, Snapshot(Home));
+    }
+
+    /// <summary>
+    /// The gate stands first in both places, so a later reorder goes red here: in the verb before the update's lock is
+    /// read or taken, and in the routine before the sweep of what earlier runs renamed aside.
+    /// </summary>
+    [Fact]
+    public void The_gate_stands_before_the_lock_and_before_the_sweep()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        var installation = Path.Combine(root.FullName, "dotnet", "src", "Jason.Cli", "Installation");
+        var verb = File.ReadAllText(Path.Combine(installation, "InstallCommand.cs"));
+        var body = verb[verb.IndexOf("public static async Task<int> RunAsync(", StringComparison.Ordinal)..];
+        Assert.True(body.IndexOf("VanishingPlace.Refusal(", StringComparison.Ordinal) is > 0 and var gate && gate < body.IndexOf("UpdateLock.Handed(", StringComparison.Ordinal), "the verb's gate stands before the lock");
+        var routine = File.ReadAllText(Path.Combine(installation, "MachineSetup.cs"));
+        var entry = routine[routine.IndexOf("public static async Task<InstallReport> RunAsync(", StringComparison.Ordinal)..];
+        Assert.True(entry.IndexOf("VanishingPlace.Refusal(", StringComparison.Ordinal) is > 0 and var first && first < entry.IndexOf("RetiredSweep.Sweep(", StringComparison.Ordinal), "the routine's gate stands before the sweep");
+    }
+
+    private static SetupPlaces SetupPlacesDefaults() =>
+        new(OperatingSystem.IsMacOS() ? SetupSystem.MacOs : SetupSystem.Windows, Path.GetTempPath(), null, UserPathValue.EnvironmentKey, null);
+
+    /// <summary>
     /// One at a time with an update: while another jason holds the update's lock - an update whose finish sets the machine up
     /// itself, or the installer's own run beside it - the setup refuses with update_in_progress and sets nothing up; once the
     /// lock is let go it runs, and takes the lock while it does.
@@ -1554,9 +1680,9 @@ public sealed class InstallCommandTests : IDisposable
     // --- the fixture ---------------------------------------------------------------------------------------
 
     /// <summary>A carried folder of the test's own: the executable, its version.json, and the skills beside it.</summary>
-    private string Carried(string name = "jason")
+    private string Carried(string name = "jason", string? under = null)
     {
-        var bundle = Path.Combine(_tree.Paths.Root, "Jason.app", "Contents", "Resources", "bundle");
+        var bundle = Path.Combine(under ?? _tree.Paths.Root, "Jason.app", "Contents", "Resources", "bundle");
         Directory.CreateDirectory(bundle);
         var executable = Path.GetFullPath(Path.Combine(bundle, name));
         File.WriteAllText(executable, "jason 0.34.0");

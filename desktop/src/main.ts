@@ -45,7 +45,7 @@ import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, fi
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
-import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths, namedDataDirectory, type DesktopPaths } from './paths.ts';
 import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
@@ -423,7 +423,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
         executable,
-        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        dataDirectory: namedDataDirectory(process.env, home, process.platform),
         path: () => process.env.PATH ?? '',
         pathext: process.env['PATHEXT'],
         isProgram: (file) => isProgramFile(file, process.platform),
@@ -699,7 +699,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         ...(command !== null
             ? { jason: () => command.onPath() }
             : machineSetup !== null && offers.command && carried.outlives
-              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: process.env['JASON_DATA_DIR'] || null, isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
+              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: namedDataDirectory(process.env, home, process.platform), isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
               : {}),
         icon: (path) => icons.icon(path),
         changeJason: {
