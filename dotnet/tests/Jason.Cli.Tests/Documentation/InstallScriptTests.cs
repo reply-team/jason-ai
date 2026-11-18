@@ -753,6 +753,10 @@ public partial class InstallScriptTests
             "Watch-Setup does not read once, after its loop, by HasExited whether the setup ended, wait for its handle where it did before reading its exit code, and end it only where it did not");
         Assert.Single(Regex.Matches(watch, @"\$ended = "));
         Assert.Single(Regex.Matches(watch, @"Stop-Process"));
+        // The one Stop-Process is inside the block for a setup that did not end, never after it.
+        var block = watch[notEnded..];
+        block = block[..(block.IndexOf("\n    }\n", StringComparison.Ordinal) + 1)];
+        Assert.True(block.Contains("Stop-Process -Id $process.Id", StringComparison.Ordinal), "Watch-Setup ends the setup outside the block for a setup that did not end");
     }
 
     /// <summary>
