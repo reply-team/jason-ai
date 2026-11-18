@@ -89,7 +89,8 @@ That yes covers your own host and nothing else this page marks **Ask first.** Wh
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
 that line names only a host the install script did not give its skills.
 
-This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names, as the
+latest published release has it, so what it says matches what its `latest` addresses install.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and

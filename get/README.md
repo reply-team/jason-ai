@@ -9,7 +9,7 @@ GitHub, and never reaches this code.
 
 | Path | Answer |
 | --- | --- |
-| `https://get.jasonharness.ai/install` | 200, `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`: the text of [`docs/INSTALL.md`](../docs/INSTALL.md) of `main`, read from one fixed address on `raw.githubusercontent.com` and kept at Cloudflare's edge for five minutes. Its relative links are made whole against that same address, so they lead to the files they name. When that address cannot be read, or answers anything but the guide (a body over 256 KB, or one that does not begin with the guide's first heading), a 302 to it. |
+| `https://get.jasonharness.ai/install` | 200, `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`: the text of [`docs/INSTALL.md`](../docs/INSTALL.md) as the latest published release has it. Its tag is read from the redirect of the fixed address `https://github.com/reply-team/jason-ai/releases/latest`, never followed, and used only when that redirect names this repository's page of a tag that is `v` and three numbers; the page is then read at that tag on `raw.githubusercontent.com`. Where the tag cannot be learnt or has any other shape, or the page at it is not the guide, the text of `docs/INSTALL.md` of `main` is read instead. Both reads are kept at Cloudflare's edge for five minutes, and the page's relative links are made whole against the address it was read from, so they lead to the files of that same tree. When neither read gives the guide (a body over 256 KB, or one that does not begin with the guide's first heading), a 302 to the page of `main`. |
 | `https://get.jasonharness.ai/desktop/windows` | 302 to the latest release's `jason-desktop-windows-x64-setup.exe` |
 | `https://get.jasonharness.ai/desktop/mac` | 302 to the latest release's `jason-desktop-macos-arm64.dmg` (Apple silicon) |
 | `https://get.jasonharness.ai/desktop/mac-intel` | 302 to the latest release's `jason-desktop-macos-x64.dmg` |
@@ -139,7 +139,7 @@ the address in the Worker's place. The install scripts' own addresses, `/release
 
 A change under `src/` is live only once it is deployed. The install page is served only while it begins with the heading
 in `src/paths.mjs`, so a release that retitles `docs/INSTALL.md` needs a deployment of that change, or `/install`
-answers the redirect to the raw file from then on.
+answers `main`'s page, and then the redirect to it, from then on.
 
 Redirect rules answer before a Worker does. No redirect rule may stand on the Worker's paths: a rule put on one of them
 for a while is removed in the same step that routes the Worker. The rule for `/releases/` and the root stays as it is.

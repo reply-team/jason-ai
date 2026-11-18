@@ -1,9 +1,34 @@
 // The paths this handler answers, and the fixed addresses behind them. Nothing a request carries ever chooses an
-// address: each one is a literal here.
+// address: each one is a literal here, and the one part that varies, the latest release's tag, is held to a release
+// tag's shape before it is written into one.
 
 /**
- * The one address the install page is read from: docs/INSTALL.md of main, which moves only when a release is
- * published. Its relative links are made whole against this same address.
+ * The fixed address of the latest published release. It answers with a redirect to that release's page, whose last part
+ * is the release's tag; that redirect is read and never followed. GitHub's latest release is never a pre-release.
+ */
+export const LATEST_RELEASE = 'https://github.com/reply-team/jason-ai/releases/latest';
+
+/**
+ * The one shape of a location the latest release's redirect is believed in: this repository's release page of a tag
+ * that is `v` and three numbers, nothing before and nothing after.
+ */
+export const LATEST_RELEASE_LOCATION = /^https:\/\/github\.com\/reply-team\/jason-ai\/releases\/tag\/(v(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))$/;
+
+const RELEASE_TAG = /^v(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/;
+
+/**
+ * The install page as the release of this tag published it: docs/INSTALL.md at the tag. A tag of any other shape names no
+ * address. Its relative links are made whole against this same address, so they name that release's files.
+ */
+export function installPageAt(tag) {
+  if (typeof tag !== 'string' || !RELEASE_TAG.test(tag)) throw new Error(`'${tag}' is not a release tag.`);
+  return `https://raw.githubusercontent.com/reply-team/jason-ai/${tag}/docs/INSTALL.md`;
+}
+
+/**
+ * The install page of main: read where the latest release's tag cannot be learnt or is not a release tag, or where the
+ * page at that tag is not the guide, and the address a request is redirected to when neither read gives the guide. Main
+ * moves when a release pull request is merged, which may come before or after that release is published.
  */
 export const INSTALL_PAGE = 'https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md';
 
