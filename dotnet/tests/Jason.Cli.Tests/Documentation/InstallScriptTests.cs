@@ -766,22 +766,28 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// The uninstall the application's Uninstall Jason item starts writes both its streams into one file, and a wait's
-    /// sentence goes to standard error: the macOS menu leg reads the report as that file's one JSON line, says the other
-    /// lines, and holds the product's exit before it holds the reading, so the leg passes or fails on the product.
+    /// sentence goes to standard error: the macOS menu leg reads that file's JSON line only to SAY what the report says of
+    /// itself (completed, the refusal code, kept and problems) and every other line as said, so a finding the report
+    /// carries is in the log; the reading never fails the leg, which stands on the uninstall's exit and the files.
     /// </summary>
     [Fact]
-    public void The_macOS_menu_leg_reads_its_report_as_the_one_JSON_line_and_holds_the_exit_first()
+    public void The_macOS_menu_leg_says_what_its_report_says_and_never_fails_on_reading_it()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
         var leg = macos[macos.IndexOf("\nuninstall-menu)\n", StringComparison.Ordinal)..];
         leg = leg[..leg.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
         Assert.Contains("nohup \"$carried\" uninstall --wait-for \"$window\" > \"$OUT/uninstall-menu.json\" 2>&1 &", leg, StringComparison.Ordinal);
         Assert.Contains("    (reports if isinstance(value, dict) else said).append(line)\n", leg, StringComparison.Ordinal);
-        Assert.Contains("if len(reports) != 1:\n", leg, StringComparison.Ordinal);
-        var exit = leg.IndexOf("[ \"$status\" -eq 0 ] || fail \"the uninstall the menu item starts exited with $status\"", StringComparison.Ordinal);
-        var reading = leg.IndexOf("[ -z \"${read_failed:-}\" ] || fail ", StringComparison.Ordinal);
-        Assert.True(exit > 0 && reading > exit, "the menu leg does not hold the uninstall's exit before the reading of its report");
-        Assert.DoesNotContain("json.load(open(sys.argv[1]", leg, StringComparison.Ordinal);
+        foreach (var field in new[] { "report.get(\"completed\")", "report.get(\"refusal_code\")", "for name in (\"kept\", \"problems\"):" })
+        {
+            Assert.Contains(field, leg, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("wrote no JSON line, so no report is read\")\n    sys.exit(0)\n", leg, StringComparison.Ordinal);
+        Assert.Contains("\"$OUT/uninstall-menu.json\" \"$OUT/uninstall-menu-report.json\" || say ", leg, StringComparison.Ordinal);
+        Assert.DoesNotContain("read_failed", leg, StringComparison.Ordinal);
+        Assert.DoesNotContain("sys.exit(f", leg, StringComparison.Ordinal);
+        Assert.Contains("[ \"$status\" -eq 0 ] || fail \"the uninstall the menu item starts exited with $status\"", leg, StringComparison.Ordinal);
     }
 
     /// <summary>

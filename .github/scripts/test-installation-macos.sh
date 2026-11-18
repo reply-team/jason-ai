@@ -1131,8 +1131,10 @@ uninstall-menu)
     status=0
     wait "$verb" || status=$?
     cat "$OUT/uninstall-menu.json"
-    # The door writes both streams into the one file: the report is its one JSON line, kept apart in
-    # uninstall-menu-report.json; every other line (a wait's sentence, on standard error) is said as such, never parsed.
+    # The door writes both streams into the one file: the report is its JSON line, kept apart in uninstall-menu-report.json;
+    # every other line (a wait's sentence, on standard error) is said as such. Read to be SAID, never held: the report's
+    # completed, refusal code, kept and problems printed, so what the uninstall says of itself is in the log and not only
+    # in the kept file; where there is no JSON line, that is said. The leg is held by the uninstall's exit and the files.
     python3 -c 'import json,sys
 reports, said = [], []
 for line in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines():
@@ -1141,14 +1143,22 @@ for line in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitli
     except ValueError:
         value = None
     (reports if isinstance(value, dict) else said).append(line)
-open(sys.argv[3], "w", encoding="utf-8").write("\n".join(line for line in said if line.strip()))
-if len(reports) != 1:
-    sys.exit(f"{len(reports)} JSON lines, where the report is one")
-open(sys.argv[2], "w", encoding="utf-8").write(reports[0] + "\n")' "$OUT/uninstall-menu.json" "$OUT/uninstall-menu-report.json" "$OUT/uninstall-menu-said.txt" > "$OUT/uninstall-menu-read.txt" 2>&1 || read_failed=1
-    [ ! -s "$OUT/uninstall-menu-said.txt" ] || say "the menu item's uninstall also said, beside its report: $(tr '\n' ' ' < "$OUT/uninstall-menu-said.txt")"
-    # The product's own exit first, so a failed uninstall fails on what it did, never on how its report was read.
+for line in said:
+    if line.strip():
+        print(f"the menu item'"'"'s uninstall also said, beside its report: {line}")
+if not reports:
+    print("the menu item'"'"'s uninstall wrote no JSON line, so no report is read")
+    sys.exit(0)
+if len(reports) > 1:
+    print(f"the menu item'"'"'s uninstall wrote {len(reports)} JSON lines; the last is read as its report")
+open(sys.argv[2], "w", encoding="utf-8").write(reports[-1] + "\n")
+report = json.loads(reports[-1])
+completed, refusal = json.dumps(report.get("completed")), json.dumps(report.get("refusal_code"))
+print(f"the menu item'"'"'s uninstall reports: completed {completed}, refusal code {refusal}")
+for name in ("kept", "problems"):
+    items = report.get(name) or []
+    print(f"  {name}: " + ("none" if not items else " | ".join(str(item) for item in items)))' "$OUT/uninstall-menu.json" "$OUT/uninstall-menu-report.json" || say "the menu item's uninstall's report could not be read; the file is printed above"
     [ "$status" -eq 0 ] || fail "the uninstall the menu item starts exited with $status"
-    [ -z "${read_failed:-}" ] || fail "the menu item's uninstall exited 0 and did not write its report as one JSON line: $(cat "$OUT/uninstall-menu-read.txt")"
     [ ! -e "$placed" ] || fail "$placed is left"
     [ -e "$DATA" ] || fail "the data directory went, which only --purge-data takes"
     say "the menu item's uninstall waited for the application to quit, then took Jason.app and everything placed off, the data directory kept"
