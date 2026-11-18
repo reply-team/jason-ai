@@ -123,6 +123,14 @@ $scratchHeldFile = Join-Path $scratchTemp 'release-held-file'
 $scratchStopReading = Join-Path $scratchTemp 'stop-reading-requests'
 $scratchSignals = @($scratchHeldFile, $scratchStopReading)
 $scratchRecords = Join-Path $Out 'scratch-pids.txt'
+# What the previous release's own uninstall leaves by that release's own design, by the listing's name for it and the place
+# it is: the skills record it wrote into ~\.agents\skills, which it keeps where the person's own quick-start, put back by
+# going back, stands in a place the record names. Only a leg of the previous release that has read the file as that
+# release's own records its listing line, exactly ("<leg><TAB><line>", -Out\previous-own.txt): that leg's compare excuses
+# that line alone, the held step's whole compare excuses it where it is attributed to that leg, and a clean begin after
+# that leg takes it (Take-PreviousOwn). Nothing else is ever recorded there.
+$previousOwn = [ordered]@{ 'agents skills\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json') }
+$previousOwnRows = Join-Path $Out 'previous-own.txt'
 
 # The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
 # nothing where none.
@@ -756,6 +764,33 @@ function Take-Scratch([string] $leg) {
     return $true
 }
 
+# Whether the listing line $line (without its "+ ") is one the leg $leg recorded as the previous release's own: exactly that
+# line, recorded by that leg, which is a leg of the previous release (-Out\previous-legs.txt).
+function Test-PreviousOwn([string] $leg, [string] $line) {
+    if (-not $leg -or -not (Test-Path -LiteralPath $previousOwnRows)) { return $false }
+    $previousLegs = @(if (Test-Path -LiteralPath (Join-Path $Out 'previous-legs.txt')) { Get-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') })
+    ($previousLegs -ccontains $leg) -and (@(Get-Content -LiteralPath $previousOwnRows) -ccontains "$leg`t$line")
+}
+
+# The previous release's own lines the leg that last changed the machine, $by, recorded (see $previousOwn), taken before a
+# clean leg reads the machine: each file removed only while its listing line is still exactly the one recorded. On a
+# GitHub-hosted runner alone, as the reset; each act said and logged in -Out\resets.txt, never a proof. $false where the
+# leg is not run.
+function Take-PreviousOwn([string] $leg, [string] $by) {
+    foreach ($ownName in $previousOwn.Keys) {
+        $file = $previousOwn[$ownName]
+        if (-not $by -or -not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+        $line = "$ownName`t$((Get-Item -LiteralPath $file -Force).Length)"
+        if (-not (Test-PreviousOwn $by $line)) { continue }
+        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg "not run: $file, the previous release's own left after '$by', is taken on a GitHub-hosted runner alone, and this is not one"; return $false }
+        try { Remove-Item -LiteralPath $file -Force } catch { Add-Content -LiteralPath (Join-Path $Out 'resets.txt') -Value "  could not remove ${file}: $($_.Exception.Message)" }
+        $state = if (Test-Path -LiteralPath $file) { 'still there' } else { 'gone' }
+        Add-Content -LiteralPath (Join-Path $Out 'resets.txt') -Value "before '$leg': removed $file, the previous release's own that '$by' recorded as its uninstall leaves it ($($line -replace "`t", ' ')): it is $state"
+        Say "$file, the previous release's own that '$by' recorded as its uninstall leaves it: removed, and it is $state"
+    }
+    return $true
+}
+
 # The updater's folder under the account's local application data (jason-desktop-updater), which a release before 0.49
 # keeps at its own uninstall by design and where its setup stores itself (electron-builder's installer.nsh): taken where
 # the leg that last changed the machine, $by, is one of the previous release (-Out\previous-legs.txt), whichever uninstall
@@ -955,6 +990,16 @@ function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
         }
         if ($inheritedHere.Count -gt 0) { Say "inherited at this leg's begin and not counted in ${listed}, each by the leg that left it: $(($inheritedHere | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
     }
+    # The previous release's own lines (see $previousOwn): excused exactly where the leg that left them recorded them, the
+    # open leg in its own compare, the leg a line is attributed to in the held step's whole one.
+    $own = [System.Collections.Generic.List[string]]::new()
+    $ownBy = if ($Final) { '' } elseif (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
+    foreach ($line in @($left)) {
+        $by = if ($Final) { Get-InheritedBy "+ $line" (Join-Path $Out 'final-attributed.txt') } else { $ownBy }
+        if (Test-PreviousOwn $by $line) { $own.Add("+ $line  (left by '$by', the previous release's own, as its uninstall leaves it)"); [void] $left.Remove($line) }
+    }
+    if ($own.Count -gt 0) { Say "expected in ${listed}, the previous release's own as its uninstall leaves it, each recorded by the leg that left it: $(($own | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    foreach ($line in $own) { $excused.Add($line) }
     $diff = Join-Path $Out "$base-to-$listed.diff.txt"
     Set-Content -LiteralPath $diff -Value (@("only in $base (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $listed (after):") + @($left | ForEach-Object { "+ $_" }) +
         @(if ($inheritedHere.Count -gt 0) { "inherited at this leg's begin, not counted here (each by the leg that left it):"; $inheritedHere }) +
@@ -1081,6 +1126,7 @@ switch ($Step) {
             if (-not (Take-Scratch $Leg)) { return }
             $prior = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
             if (-not (Take-UpdaterCache $Leg $prior)) { return }
+            if (-not (Take-PreviousOwn $Leg $prior)) { return }
             $found = @(Get-LeftOver)
             if ($found.Count -gt 0) {
                 $resets = Join-Path $Out 'resets.txt'
@@ -2197,6 +2243,22 @@ switch ($Step) {
             }
             $remover = "$previousVersion's own uninstall"
             Say "$previousVersion's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+
+            # What going back leaves: the previous release's own skills record in ~\.agents\skills, which its uninstall keeps
+            # where the person's own quick-start stands in a place the record names. Read as that release's own - every pack
+            # at its version - and only then recorded by its listing line, exactly, for this leg's compare to excuse and the
+            # next clean begin to take (see $previousOwn); a record that is not its own fails the leg.
+            $leftRecord = $previousOwn['agents skills\.jason-skills.json']
+            if (Test-Path -LiteralPath $leftRecord -PathType Leaf) {
+                $packs = @(try { @((Get-Content -LiteralPath $leftRecord -Raw | ConvertFrom-Json).packs) } catch { })
+                $refs = @($packs | ForEach-Object { if ($_ -and $_.PSObject.Properties['ref']) { [string]$_.ref } else { '' } })
+                if ($refs.Count -eq 0 -or @($refs | Where-Object { $_ -cne "v$previousVersion" -and $_ -cne $previousVersion }).Count -gt 0) { Fail "after $remover, $leftRecord is left, and it is not $previousVersion's own skills record: its packs' refs are '$($refs -join "', '")'" }
+                $named = @($packs | ForEach-Object { if ($_.PSObject.Properties['files']) { @($_.files) } } | ForEach-Object { if ($_ -and $_.PSObject.Properties['path']) { [string]$_.path } })
+                $openLeg = if (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
+                if (-not $openLeg) { Fail "no leg is open to record $leftRecord as the previous release's own" }
+                Add-Content -LiteralPath $previousOwnRows -Value "$openLeg`tagents skills\.jason-skills.json`t$((Get-Item -LiteralPath $leftRecord -Force).Length)"
+                Say "going back leaves $leftRecord, $previousVersion's own skills record ($($packs.Count) pack(s) at $previousVersion, naming $($named.Count) file(s)$(if ($named -ccontains 'quick-start/SKILL.md') { ', quick-start/SKILL.md among them' })): $remover keeps it where the person's own quick-start stands in a place it names; this leg's compare excuses exactly that line as the previous release's own, and the next clean begin takes it"
+            }
         }
         if ($way -ceq 'put-back') {
             $own4 = Read-OwnSkill $ownSkill
@@ -2221,9 +2283,13 @@ switch ($Step) {
     'InstallOverCommandLine' {
         # The previous release's command-line Jason, installed by its own script, a runtime running and its logon start
         # registered, one campaign made; then this build's unpinned line (the stand-in copy of install.ps1) run over it as an
-        # agent runs it, while that runtime runs. The application's jason install holds the command-line install until the
-        # old runtime's stop has answered, then retires it; the script starts a runtime again from the carried jason.
-        # Asserted: the report says the old runtime stopped and names the retired executable; the command-line install's
+        # agent runs it, while that runtime runs. The setup's own last step, its jason install with no flags (customInstall,
+        # desktop/installer/uninstall.nsh), holds the command-line install until the old runtime's stop has answered, then
+        # retires it; nsExec discards what it prints, so its report is kept nowhere. install.ps1 then runs the line's own jason
+        # install --roles, which finds nothing left to stop or retire, and starts a runtime again from the carried jason.
+        # Asserted: of the line's own report, what is true of it - no runtime running and nothing retired - and install.ps1's
+        # sentence that it starts a runtime again; the old runtime (by its process and its start) and the old executable both
+        # gone, with no order claimed: that order is held by MachineSetup's own rows; the command-line install's
         # files gone and no runtime running from it; the runtime answering from the carried jason and the logon registration
         # naming it; the Path naming the bundle folder once and the command-line folder no more; a new shell finding this
         # version; and the campaigns the same, by id. The uninstall from a new terminal is the next step.
@@ -2256,15 +2322,23 @@ switch ($Step) {
         if (-not $report) { Fail 'install.ps1 showed no report of jason install that could be read' }
         Say "install.ps1 ran unpinned over the command-line install while its runtime ran, and ended 0"
 
-        # The old runtime stopped, the install held until the stop answered, then retired.
-        if ([string]$report.runtime -cne 'stopped') { Fail "jason install's report says the old runtime is '$($report.runtime)', not stopped: the command-line install is retired only once its runtime's stop has answered" }
+        # The line's own report, run after the setup's own jason install had already stopped the old runtime and retired the
+        # install: no runtime running and nothing retired, and the script's sentence that it starts a runtime again.
+        if ([string]$report.runtime -cne 'not_running') { Fail "the line's own jason install --roles reports the runtime '$($report.runtime)', where the setup's own jason install had already stopped it: not_running" }
         $retired = $report.PSObject.Properties['retired']
-        if (-not $retired -or -not $retired.Value) { Fail "jason install's report names no retired install: $($over.Said)" }
-        if ([string]$retired.Value.executable -ine $jason) { Fail "jason install's report retired $($retired.Value.executable), not $jason" }
+        if ($retired -and $retired.Value) { Fail "the line's own jason install --roles reports a retirement, where the setup's own jason install had already retired the command-line install: $($retired.Value | ConvertTo-Json -Compress -Depth 6)" }
+        $startedAgain = "A runtime answered before the install and none answers now, so one is started again from $carried."
+        if (-not $over.Said.Contains($startedAgain)) { Fail "install.ps1 did not say it starts a runtime again: '$startedAgain'" }
+        Say "the line's own jason install --roles reports no runtime running and nothing retired, and install.ps1 said: $startedAgain"
+
+        # The old runtime and the old executable both gone, with no order claimed.
+        $oldAlive = @($oldRuntimes | Where-Object { Test-SameProcess $_ })
+        if ($oldAlive.Count -ne 0) { Fail "the previous release's runtime still runs: process $(($oldAlive | ForEach-Object { $_.ProcessId }) -join ', ')" }
+        if (Test-Path -LiteralPath $jason) { Fail "the command-line install's jason is still at $jason" }
         foreach ($file in 'jason.exe', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') {
             if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the retired install still holds $file at $commandLine" }
         }
-        Say "jason install's report says the old runtime stopped and the command-line install at $jason retired$(if ($retired.Value.aside) { ", renamed aside to $($retired.Value.aside)" }); its executable and notice files are gone"
+        Say "the previous release's runtime (process $(($oldRuntimes | ForEach-Object { $_.ProcessId }) -join ', ')) and $jason are both gone, with its notice files; that the install is retired only once the stop has answered is held by MachineSetup's own rows, not by this leg: the setup's own jason install made the stop, and its report is kept nowhere"
 
         # The runtime again, from the carried jason, and none from the retired one; the logon registration naming it.
         if ((Invoke-Program $carried @('runtime', 'status') $quiet).Exit -ne 0) { Fail 'no runtime answers after the line ran over the command-line install' }
