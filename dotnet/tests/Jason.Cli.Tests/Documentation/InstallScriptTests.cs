@@ -530,6 +530,128 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// A Windows leg that fails part way, or whose step is ended by its timeout, never keeps the next one from running
+    /// with what it made: every place a leg refuses to find there already is one of the places a clean begin takes
+    /// (Take-Scratch), and every helper process the script starts - a pwsh or a python of its own - is either waited for
+    /// at once, failing on a timeout, or recorded at its start (Register-Scratch) for a clean begin to stop by its id. A
+    /// clean begin takes the scratch and, after a leg of the previous release, the updater's folder that release keeps,
+    /// before it reads the machine, and moves the harness root aside after its reset, before it records what it found.
+    /// </summary>
+    [Fact]
+    public void A_clean_Windows_begin_takes_every_place_and_helper_a_leg_can_leave()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var placesLine = Regex.Match(windows, @"(?m)^\$scratchPlaces = @\((?<names>[^)]*)\)$");
+        Assert.True(placesLine.Success, "Test-InstallationWindows.ps1 no longer names its scratch places in one $scratchPlaces line.");
+        var places = Regex.Matches(placesLine.Groups["names"].Value, @"\$(?<name>scratch\w+)").Select(match => match.Groups["name"].Value).ToHashSet(StringComparer.Ordinal);
+        var wrong = new List<string>();
+
+        // Each place a refusal reads, by the assignment nearest before it.
+        var refused = Regex.Matches(windows, @"Fail ""\$(?<name>\w+) is there before ").ToList();
+        Assert.NotEmpty(refused);
+        foreach (var refusal in refused)
+        {
+            var name = refusal.Groups["name"].Value;
+            var assigned = Regex.Matches(windows[..refusal.Index], $@"(?m)^\s*\${name} = (?<value>.+)$").LastOrDefault()?.Groups["value"].Value.Trim();
+            if (assigned is null) wrong.Add($"${name} is refused and never assigned before");
+            else if (!Regex.IsMatch(assigned, @"^\$scratch\w+$") || !places.Contains(assigned[1..])) wrong.Add($"${name}, {assigned}, is refused where it is found, and is not one of the places Take-Scratch takes");
+        }
+
+        // Each helper the script starts: recorded on the next line, or waited for at once with a bound that fails.
+        var lines = windows.Split('\n');
+        var helpers = 0;
+        for (var at = 0; at < lines.Length; at++)
+        {
+            if (!Regex.IsMatch(lines[at], @"\bStart-Process (?:pwsh|python)\b")) continue;
+            helpers++;
+            var started = Regex.Match(lines[at], @"^\s*\$(?<name>\w+) = Start-Process ");
+            if (!started.Success) { wrong.Add($"line {at + 1} starts a helper and keeps no process to record or wait for: {lines[at].Trim()}"); continue; }
+            var name = started.Groups["name"].Value;
+            var next = at + 1 < lines.Length ? lines[at + 1] : string.Empty;
+            var recorded = Regex.IsMatch(next, $@"^\s*Register-Scratch (?:'[^']*(?:''[^']*)*'|""[^""]*"") \${name}$");
+            var waited = next.Trim() == $"$null = ${name}.Handle" && at + 2 < lines.Length && lines[at + 2].Contains($"if (-not ${name}.WaitForExit(", StringComparison.Ordinal) && lines[at + 2].Contains("Fail ", StringComparison.Ordinal);
+            if (!recorded && !waited) wrong.Add($"line {at + 1} starts a helper, ${name}, that is neither recorded by Register-Scratch on the next line nor waited for at once: {lines[at].Trim()}");
+        }
+
+        Assert.True(helpers >= 6, $"Test-InstallationWindows.ps1 starts {helpers} helper(s) by pwsh or python; the row reads too few to mean anything.");
+        Assert.True(wrong.Count == 0, string.Join("; ", wrong));
+
+        // The order of a clean begin.
+        var begin = windows[windows.IndexOf("\n    'Begin' {\n", StringComparison.Ordinal)..];
+        begin = begin[..begin.IndexOf("\n    'End' {\n", StringComparison.Ordinal)];
+        var clean = begin.IndexOf("\n        if ($Clean) {\n", StringComparison.Ordinal);
+        var take = begin.IndexOf("\n            if (-not (Take-Scratch $Leg)) { return }\n", StringComparison.Ordinal);
+        var prior = begin.IndexOf("\n            $prior = ", StringComparison.Ordinal);
+        var cache = begin.IndexOf("\n            if (-not (Take-UpdaterCache $Leg $prior)) { return }\n", StringComparison.Ordinal);
+        var read = begin.IndexOf("\n            $found = @(Get-LeftOver)\n", StringComparison.Ordinal);
+        var resetCache = begin.IndexOf("$null = Take-UpdaterCache $Leg $last", StringComparison.Ordinal);
+        var root = begin.IndexOf("Move-Item -LiteralPath $harnessRoot -Destination $aside", StringComparison.Ordinal);
+        var inherited = begin.IndexOf("Write-Inherited $prior 'leg-start'", StringComparison.Ordinal);
+        Assert.True(clean >= 0 && take > clean && prior > take && cache > prior && read > cache, "a clean Windows begin does not take the scratch, then the updater's folder by the leg before it, before it reads the machine");
+        Assert.True(resetCache > read && root > resetCache && inherited > root, "a clean Windows begin does not take the updater's folder after its reset's uninstalls, and move the harness root aside, before it records what it found");
+        Assert.DoesNotContain("$before049", windows, StringComparison.Ordinal);
+        var updater = windows[windows.IndexOf("\nfunction Take-UpdaterCache(", StringComparison.Ordinal)..];
+        updater = updater[..updater.IndexOf("\n}\n", StringComparison.Ordinal)];
+        Assert.Contains("if ($previousLegs -cnotcontains $by) { return $true }", updater, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A clean Windows begin stops a helper an earlier leg left by its recorded id alone, and only while that id still runs
+    /// the command line recorded at its start; it signals the holder and the reader first, so they let go by themselves; and
+    /// it puts the person's own quick-start back over a stand-in before it removes any place, never removing the folder it
+    /// was moved out to while the person's copy is still in it.
+    /// </summary>
+    [Fact]
+    public void A_clean_Windows_begin_stops_only_the_helpers_it_recorded_and_puts_the_person_s_own_quick_start_back_first()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        var running = Function("Get-RunningScratch");
+        Assert.Contains("if (-not $record.command_line) { continue }", running, StringComparison.Ordinal);
+        Assert.Contains("\"$($now[0].CommandLine)\" -ceq $record.command_line", running, StringComparison.Ordinal);
+        var take = Function("Take-Scratch");
+        Assert.Single(Regex.Matches(take, @"\bStop-Process\b"));
+        Assert.Contains("foreach ($record in $stopped) {\n            Stop-Process -Id ([int]$record.pid) -Force", take, StringComparison.Ordinal);
+        var signals = take.IndexOf("foreach ($signal in $scratchSignals) { New-Item", StringComparison.Ordinal);
+        var stop = take.IndexOf("Stop-Process -Id", StringComparison.Ordinal);
+        var check = take.IndexOf("if (Test-Path -LiteralPath $outSkill -PathType Container) {", StringComparison.Ordinal);
+        var standIn = take.IndexOf("Remove-Item -LiteralPath $ownSkill -Recurse -Force", StringComparison.Ordinal);
+        var back = take.IndexOf("Move-Item -LiteralPath $outSkill -Destination $ownSkill", StringComparison.Ordinal);
+        var kept = take.IndexOf("if (Test-Path -LiteralPath $outSkill) { Skip-Leg \"not run: the person's own quick-start could not be put back", StringComparison.Ordinal);
+        var removal = take.IndexOf("foreach ($place in $scratchPlaces) {\n        if (-not (Test-Path -LiteralPath $place)) { continue }\n", StringComparison.Ordinal);
+        Assert.True(signals >= 0 && stop > signals, "Take-Scratch does not signal the holder and the reader before it stops a helper");
+        Assert.True(check > stop && standIn > check && back > standIn && kept > back && removal > kept, "Take-Scratch does not remove the stand-in, then put the person's copy back, and stop where it could not, before it removes any place");
+        Assert.Contains("$outside = $scratchOwnOut", windows, StringComparison.Ordinal);
+        Assert.Contains("$release = $scratchHeldFile", windows, StringComparison.Ordinal);
+        Assert.Contains("$stopReading = $scratchStopReading", windows, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Windows leg of silent setups ends with the previous release in place (its sub-leg 5); this build is put back
+    /// over it by its own silent setup before the leg's closing uninstall, so that uninstall is this build's and the leg's
+    /// compare excuses nothing the previous release's own uninstall keeps.
+    /// </summary>
+    [Fact]
+    public void The_Windows_silent_setups_leg_puts_this_build_back_before_its_closing_uninstall()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var silent = windows[windows.IndexOf("\n    'SilentUpdateLegs' {\n", StringComparison.Ordinal)..];
+        silent = silent[..silent.IndexOf("\n    'UninstallWaiterShown' {\n", StringComparison.Ordinal)];
+        var fifth = silent.IndexOf("$null = Test-Leg 'leg 5, ", StringComparison.Ordinal);
+        var back = silent.IndexOf("$null = Test-Leg 'this build put back, --updated /S over the previous release not running' @('--updated', '/S') @(0)", StringComparison.Ordinal);
+        var version = silent.IndexOf("if ((Read-Version $carried) -ne $Version) { $failures.Add(\"after this build was put back", StringComparison.Ordinal);
+        var end = silent.IndexOf("if ($failures.Count -gt 0) { Fail ($failures -join '; ') }", StringComparison.Ordinal);
+        Assert.True(fifth >= 0 && back > fifth && version > back && end > version, "the silent setups leg does not put this build back after its sub-leg 5 and before it ends");
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("-Step SilentUpdateLegs -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS\n          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT\n", ci, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
     /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
     /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one
