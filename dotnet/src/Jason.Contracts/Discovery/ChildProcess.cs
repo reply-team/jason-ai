@@ -125,13 +125,12 @@ public static class ChildProcess
     }
 
     /// <summary>
-    /// Whether <paramref name="fileName"/> names a program by its full path: from the root on macOS and Linux; on Windows
-    /// with its drive or share, or from the top of the current drive, which a start composed for macOS or Linux names.
-    /// A bare name, a relative path and a path relative to a drive's current folder (<c>C:tool.exe</c>) are not.
+    /// Whether <paramref name="fileName"/> names a program by its full path, as <see cref="Path.IsPathFullyQualified(string)"/>
+    /// answers: from the root on macOS and Linux, with its drive or share on Windows. A bare name, a relative path, and on
+    /// Windows a path from the top of the current drive (<c>\Windows\System32\tool.exe</c>) or relative to a drive's current
+    /// folder (<c>C:tool.exe</c>) are not.
     /// </summary>
-    public static bool IsFullPath(string? fileName) =>
-        !string.IsNullOrEmpty(fileName)
-        && (Path.IsPathFullyQualified(fileName) || (OperatingSystem.IsWindows() && fileName[0] is '/' or '\\'));
+    public static bool IsFullPath(string? fileName) => !string.IsNullOrEmpty(fileName) && Path.IsPathFullyQualified(fileName);
 
     /// <summary>
     /// Starts a child from a start this class made, under <see cref="StartErrorMode"/>: every child is started here,

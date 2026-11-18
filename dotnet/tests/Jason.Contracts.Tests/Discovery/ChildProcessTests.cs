@@ -84,17 +84,23 @@ public class ChildProcessTests
     }
 
     /// <summary>
-    /// On Windows a path from the top of a drive is one too, the current one's where it names none, as a start info composed
-    /// for macOS or Linux on a Windows machine names its tool; a path relative to a drive's current folder is not.
+    /// On Windows a path that names no drive is no full path: one from the top of the current drive, which names whatever
+    /// drive the process stands on, and one relative to a drive's current folder are refused like a bare name; a path with
+    /// its drive is taken.
     /// </summary>
     [Fact]
-    public void On_windows_a_path_from_a_drive_s_top_is_taken_and_one_from_its_current_folder_is_refused()
+    public void On_windows_a_path_that_names_no_drive_is_refused()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Drives are Windows' own.");
 
-        Assert.Equal("/usr/bin/x-terminal-emulator", ChildProcess.StartInfo("/usr/bin/x-terminal-emulator", ChildKind.SystemToolWithInput).FileName);
-        Assert.Equal(@"\Windows\System32\schtasks.exe", ChildProcess.StartInfo(@"\Windows\System32\schtasks.exe", ChildKind.SystemTool).FileName);
-        Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo("C:schtasks.exe", ChildKind.SystemTool)).ParamName);
+        foreach (var program in new[] { @"\Windows\System32\schtasks.exe", "/usr/bin/x-terminal-emulator", "C:schtasks.exe" })
+        {
+            Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo(program, ChildKind.SystemTool)).ParamName);
+            Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo(program, ChildKind.SystemToolWithInput)).ParamName);
+        }
+
+        var schtasks = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+        Assert.Equal(schtasks, ChildProcess.StartInfo(schtasks, ChildKind.SystemTool).FileName);
     }
 
     /// <summary>A child that speaks to Jason is named as its caller resolved it; the full-path rule is the system tools' own.</summary>

@@ -520,6 +520,8 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData(TerminalPlatform.Windows, false)]
     public void On_linux_and_macos_the_terminal_is_given_a_start_on_pipes_of_its_own(TerminalPlatform os, bool redirected)
     {
+        // A system tool is started by its full path, and a macOS or Linux one names none on Windows: those rows run on their own systems.
+        Assert.SkipWhen(OperatingSystem.IsWindows() && os != TerminalPlatform.Windows, "A macOS or Linux terminal's path is no full path on Windows.");
         var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex", Prompt], "/home/marta/Jason");
 
         Assert.Equal(redirected, start.RedirectStandardInput);
