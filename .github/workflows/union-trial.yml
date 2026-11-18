@@ -12,6 +12,10 @@ permissions:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   POWERSHELL_TELEMETRY_OPTOUT: '1'
+  # The one switch of the going-back legs of both union jobs: what the page's going back says of the person's own
+  # quick-start, moved out of the skills folder before step 3 - put back after step 3 (put-back), or kept out while the
+  # previous release is installed (keep-out).
+  JASON_PROOF_OWN_SKILL_GOING_BACK: put-back
 
 jobs:
   version:
@@ -336,27 +340,6 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
-      # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
-      # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
-      # status; then its own uninstall, and the listing held to the machine before. The leg above keeps 0.49's own
-      # --purge-data uninstall of a moved machine.
-      - name: Move again from the previous release, then go back to it as the update page says
-        if: ${{ !cancelled() }}
-        timeout-minutes: 30
-        shell: pwsh
-        env:
-          LEG: "Move again from the previous release, then go back to it as the update page says"
-          JASON_Update__CheckEnabled: 'false'
-          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
-
       # The next version, packaged and built as a test build the same way at this version and one: its own jason, its
       # setup, its update feed and a manifest naming it, in a folder of its own that the update below reads.
       - name: Package jason at the next version
@@ -440,6 +423,28 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step UpdateApply -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}" -Next (Join-Path $env:GITHUB_WORKSPACE 'next')
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-update-apply-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
+      # LAST before the held step, so that whatever going back does to the machine takes no later leg.
+      # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
+      # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
+      # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
+      # status; then its own uninstall, and the listing held to the machine before. The leg above keeps 0.49's own
+      # --purge-data uninstall of a moved machine.
+      - name: Move again from the previous release, then go back to it as the update page says
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Move again from the previous release, then go back to it as the update page says"
+          JASON_Update__CheckEnabled: 'false'
+          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that
