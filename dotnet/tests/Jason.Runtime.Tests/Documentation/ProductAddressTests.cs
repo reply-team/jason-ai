@@ -81,6 +81,14 @@ public sealed partial class ProductAddressTests : IDisposable
             "dotnet/src/Jason.Cli/Skills/SkillsSource.cs",
             1,
             "the skills' default is read from GitHub directly, as the responsible-use page says they are, so their download is never a request to the address operated for the product"),
+        new(
+            ".github/workflows/ci.yml",
+            3,
+            "the installation proof takes the previous release's published files from GitHub directly, and checks each file that release's own checksums.txt lists against it; and install.sh's requirement is held against the application the latest release published, taken the same way and checked against that release's checksums.txt; both are CI's reads and no person's install, so neither is ever a request to the address operated for the product"),
+        new(
+            ".github/workflows/release.yml",
+            2,
+            "the installation proof takes the previous release's published files from GitHub directly, and checks each file that release's own checksums.txt lists against it; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));
