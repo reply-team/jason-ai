@@ -201,9 +201,15 @@ jobs:
           $exe = $env:EXECUTABLE
           $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke"
 
-          $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
+          $versionError = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke-version.err"
+          $elapsed = Measure-Command { & $exe --version 2> $versionError | Tee-Object -Variable version }
           if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
           Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+          # Not a test build: a test build says so on --version's standard error, and as test_build in the runtime's
+          # report below; the build a release publishes says neither.
+          $said = if (Test-Path -LiteralPath $versionError) { Get-Content -LiteralPath $versionError -Raw } else { '' }
+          if ("$said".Contains('a test build, not a release')) { throw "jason --version says on standard error that it is a test build: $said" }
 
           # What it prints is the tag's version plus build metadata (+<commit>), which SemVer says to ignore.
           if (($version -split '\+')[0] -ne $env:VERSION) { throw "jason --version says '$version', and the tag says $env:VERSION" }
@@ -225,6 +231,7 @@ jobs:
           & $exe runtime status | Tee-Object -Variable running | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
           if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          if ("$running".Contains('"test_build"')) { throw "the runtime's report says it is a test build: $running" }
           Write-Host "the runtime started, migrated and answered"
 
           & $exe runtime stop | Out-Null
@@ -302,9 +309,15 @@ jobs:
           $exe = $env:EXECUTABLE
           $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke"
 
-          $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
+          $versionError = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke-version.err"
+          $elapsed = Measure-Command { & $exe --version 2> $versionError | Tee-Object -Variable version }
           if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
           Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+          # Not a test build: a test build says so on --version's standard error, and as test_build in the runtime's
+          # report below; the build a release publishes says neither.
+          $said = if (Test-Path -LiteralPath $versionError) { Get-Content -LiteralPath $versionError -Raw } else { '' }
+          if ("$said".Contains('a test build, not a release')) { throw "jason --version says on standard error that it is a test build: $said" }
 
           # What it prints is the tag's version plus build metadata (+<commit>), which SemVer says to ignore.
           if (($version -split '\+')[0] -ne $env:VERSION) { throw "jason --version says '$version', and the tag says $env:VERSION" }
@@ -326,6 +339,7 @@ jobs:
           & $exe runtime status | Tee-Object -Variable running | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
           if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          if ("$running".Contains('"test_build"')) { throw "the runtime's report says it is a test build: $running" }
           Write-Host "the runtime started, migrated and answered"
 
           & $exe runtime stop | Out-Null
@@ -598,9 +612,15 @@ jobs:
           $exe = $env:EXECUTABLE
           $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke"
 
-          $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
+          $versionError = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke-version.err"
+          $elapsed = Measure-Command { & $exe --version 2> $versionError | Tee-Object -Variable version }
           if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
           Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+          # Not a test build: a test build says so on --version's standard error, and as test_build in the runtime's
+          # report below; the build a release publishes says neither.
+          $said = if (Test-Path -LiteralPath $versionError) { Get-Content -LiteralPath $versionError -Raw } else { '' }
+          if ("$said".Contains('a test build, not a release')) { throw "jason --version says on standard error that it is a test build: $said" }
 
           # What it prints is the tag's version plus build metadata (+<commit>), which SemVer says to ignore.
           if (($version -split '\+')[0] -ne $env:VERSION) { throw "jason --version says '$version', and the tag says $env:VERSION" }
@@ -622,6 +642,7 @@ jobs:
           & $exe runtime status | Tee-Object -Variable running | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
           if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          if ("$running".Contains('"test_build"')) { throw "the runtime's report says it is a test build: $running" }
           Write-Host "the runtime started, migrated and answered"
 
           & $exe runtime stop | Out-Null

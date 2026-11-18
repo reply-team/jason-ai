@@ -658,6 +658,13 @@ public static class UninstallRunner
     }
 
     /// <summary>
+    /// The line that names a directory a build unpacked under another temporary folder of this account, which this
+    /// uninstall leaves: where it is, and why it stays.
+    /// </summary>
+    internal static string LeftElsewhere(string directory) =>
+        $"Left '{directory}': a build of Jason unpacked it under another temporary folder, '{Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(directory)))}'. This removal takes only what stands under its own temporary folder; it is safe to remove once nothing runs from it.";
+
+    /// <summary>
     /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
     /// planned, and the directory holding them if that is now empty.
     /// </summary>
@@ -679,6 +686,13 @@ public static class UninstallRunner
         if (plan.ExtractedLibraries is not { } extracted)
         {
             return;
+        }
+
+        // What builds unpacked under this account's other temporary folders is named and left, whatever becomes of this
+        // build's own below: nothing there is removed.
+        foreach (var elsewhere in plan.ExtractedLibrariesElsewhere ?? [])
+        {
+            kept.Add(LeftElsewhere(elsewhere));
         }
 
         try

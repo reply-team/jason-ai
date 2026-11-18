@@ -1870,6 +1870,40 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("throw", run, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Each platform's smoke step holds the executable it just built to not being a test build, in both places a test build
+    /// says it is one: <c>--version</c>'s standard error, where a test build writes <see cref="Jason.Contracts.JasonVersion.TestBuildSentence"/>
+    /// and a released one nothing, and the runtime's own report, where a test build carries <c>test_build</c> and a released
+    /// one does not. The words are the code's, read here from it, so the step and the build cannot say it differently.
+    /// </summary>
+    [Theory]
+    [InlineData("linux-x64")]
+    [InlineData("macos")]
+    [InlineData("windows")]
+    public void Every_smoke_step_holds_the_built_executable_to_not_a_test_build(string platform)
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
+        var job = platform switch
+        {
+            "macos" => MacosJob(),
+            "windows" => WindowsJob(),
+            _ => building,
+        };
+        var smoke = JobSteps(job).Single(step => Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true);
+        var lines = Scalar(smoke, "run")!.Split('\n');
+
+        // --version's standard error is kept, and a line that finds the test-build words there fails the step.
+        Assert.Contains(lines, line => line.Contains("& $exe --version 2>", StringComparison.Ordinal));
+        var mark = Assert.Single(lines, line => line.Contains($"'{Jason.Contracts.JasonVersion.TestBuildMark}'", StringComparison.Ordinal));
+        Assert.Contains("throw", mark, StringComparison.Ordinal);
+
+        // And the running runtime's report, read whole, carries no test_build.
+        var report = Assert.Single(lines, line => line.Contains("'\"test_build\"'", StringComparison.Ordinal));
+        Assert.Contains("throw", report, StringComparison.Ordinal);
+        Assert.Contains("\"$running\"", report, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_release_names_every_platform_the_code_publishes()
     {
