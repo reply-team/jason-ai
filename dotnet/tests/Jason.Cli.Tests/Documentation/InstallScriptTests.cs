@@ -656,6 +656,38 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
+    /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
+    /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
+    /// read from install.ps1 itself; the old runtime, by its process and its start, and the old executable both gone, with no
+    /// order claimed; and it says that the order is held by the set-up's own rows, not by this leg.
+    /// </summary>
+    [Fact]
+    public void The_Windows_line_over_a_running_command_line_holds_of_its_own_report_what_is_true_of_it()
+    {
+        var root = RepositoryRoot();
+        var windows = File.ReadAllText(Path.Combine(root, ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var script = File.ReadAllText(Path.Combine(root, "install", "install.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = windows[windows.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    'OverBothPrevious' {\n", StringComparison.Ordinal)];
+
+        Assert.DoesNotContain("-cne 'stopped'", leg, StringComparison.Ordinal);
+        Assert.Contains("if ([string]$report.runtime -cne 'not_running') { Fail ", leg, StringComparison.Ordinal);
+        Assert.Contains("if ($retired -and $retired.Value) { Fail ", leg, StringComparison.Ordinal);
+
+        // The started-again sentence, as install.ps1 says it, with the application's jason in place of its variable.
+        var said = Regex.Match(script, @"Write-Host ""(?<sentence>A runtime answered before the install and none answers now, so one is started again from )\$from\.""");
+        Assert.True(said.Success, "install.ps1 no longer says, in one sentence, that it starts a runtime again from $from.");
+        Assert.Contains($"$startedAgain = \"{said.Groups["sentence"].Value}$carried.\"", leg, StringComparison.Ordinal);
+        Assert.Contains("if (-not $over.Said.Contains($startedAgain)) { Fail ", leg, StringComparison.Ordinal);
+
+        // Both gone, no order claimed, and the order said to be the set-up's own rows'.
+        Assert.Contains("@($oldRuntimes | Where-Object { Test-SameProcess $_ })", leg, StringComparison.Ordinal);
+        Assert.Contains("if (Test-Path -LiteralPath $jason) { Fail ", leg, StringComparison.Ordinal);
+        Assert.Contains("is held by MachineSetup's own rows, not by this leg", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Going back to the previous release on Windows leaves that release's own skills record, which its uninstall keeps where
     /// the person's own quick-start stands. One name is the previous release's own and no other; the way-back leg records
     /// its exact listing line only after reading the file as that release's own, outside the leg that moves again; a compare

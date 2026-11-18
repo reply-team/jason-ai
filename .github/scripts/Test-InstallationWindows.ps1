@@ -2283,9 +2283,13 @@ switch ($Step) {
     'InstallOverCommandLine' {
         # The previous release's command-line Jason, installed by its own script, a runtime running and its logon start
         # registered, one campaign made; then this build's unpinned line (the stand-in copy of install.ps1) run over it as an
-        # agent runs it, while that runtime runs. The application's jason install holds the command-line install until the
-        # old runtime's stop has answered, then retires it; the script starts a runtime again from the carried jason.
-        # Asserted: the report says the old runtime stopped and names the retired executable; the command-line install's
+        # agent runs it, while that runtime runs. The setup's own last step, its jason install with no flags (customInstall,
+        # desktop/installer/uninstall.nsh), holds the command-line install until the old runtime's stop has answered, then
+        # retires it; nsExec discards what it prints, so its report is kept nowhere. install.ps1 then runs the line's own jason
+        # install --roles, which finds nothing left to stop or retire, and starts a runtime again from the carried jason.
+        # Asserted: of the line's own report, what is true of it - no runtime running and nothing retired - and install.ps1's
+        # sentence that it starts a runtime again; the old runtime (by its process and its start) and the old executable both
+        # gone, with no order claimed: that order is held by MachineSetup's own rows; the command-line install's
         # files gone and no runtime running from it; the runtime answering from the carried jason and the logon registration
         # naming it; the Path naming the bundle folder once and the command-line folder no more; a new shell finding this
         # version; and the campaigns the same, by id. The uninstall from a new terminal is the next step.
@@ -2318,15 +2322,23 @@ switch ($Step) {
         if (-not $report) { Fail 'install.ps1 showed no report of jason install that could be read' }
         Say "install.ps1 ran unpinned over the command-line install while its runtime ran, and ended 0"
 
-        # The old runtime stopped, the install held until the stop answered, then retired.
-        if ([string]$report.runtime -cne 'stopped') { Fail "jason install's report says the old runtime is '$($report.runtime)', not stopped: the command-line install is retired only once its runtime's stop has answered" }
+        # The line's own report, run after the setup's own jason install had already stopped the old runtime and retired the
+        # install: no runtime running and nothing retired, and the script's sentence that it starts a runtime again.
+        if ([string]$report.runtime -cne 'not_running') { Fail "the line's own jason install --roles reports the runtime '$($report.runtime)', where the setup's own jason install had already stopped it: not_running" }
         $retired = $report.PSObject.Properties['retired']
-        if (-not $retired -or -not $retired.Value) { Fail "jason install's report names no retired install: $($over.Said)" }
-        if ([string]$retired.Value.executable -ine $jason) { Fail "jason install's report retired $($retired.Value.executable), not $jason" }
+        if ($retired -and $retired.Value) { Fail "the line's own jason install --roles reports a retirement, where the setup's own jason install had already retired the command-line install: $($retired.Value | ConvertTo-Json -Compress -Depth 6)" }
+        $startedAgain = "A runtime answered before the install and none answers now, so one is started again from $carried."
+        if (-not $over.Said.Contains($startedAgain)) { Fail "install.ps1 did not say it starts a runtime again: '$startedAgain'" }
+        Say "the line's own jason install --roles reports no runtime running and nothing retired, and install.ps1 said: $startedAgain"
+
+        # The old runtime and the old executable both gone, with no order claimed.
+        $oldAlive = @($oldRuntimes | Where-Object { Test-SameProcess $_ })
+        if ($oldAlive.Count -ne 0) { Fail "the previous release's runtime still runs: process $(($oldAlive | ForEach-Object { $_.ProcessId }) -join ', ')" }
+        if (Test-Path -LiteralPath $jason) { Fail "the command-line install's jason is still at $jason" }
         foreach ($file in 'jason.exe', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') {
             if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the retired install still holds $file at $commandLine" }
         }
-        Say "jason install's report says the old runtime stopped and the command-line install at $jason retired$(if ($retired.Value.aside) { ", renamed aside to $($retired.Value.aside)" }); its executable and notice files are gone"
+        Say "the previous release's runtime (process $(($oldRuntimes | ForEach-Object { $_.ProcessId }) -join ', ')) and $jason are both gone, with its notice files; that the install is retired only once the stop has answered is held by MachineSetup's own rows, not by this leg: the setup's own jason install made the stop, and its report is kept nowhere"
 
         # The runtime again, from the carried jason, and none from the retired one; the logon registration naming it.
         if ((Invoke-Program $carried @('runtime', 'status') $quiet).Exit -ne 0) { Fail 'no runtime answers after the line ran over the command-line install' }
