@@ -7,7 +7,7 @@
 import { accessAllows } from './access.mjs';
 import { NO_SOURCE, NOT_A_SOURCE, clientOf, dayOf, sourceOf } from './classify.mjs';
 import { readInstallPage } from './install.mjs';
-import { DESKTOP, INSTALL_PAGE, INSTALL_PATH, STATS_PATH } from './paths.mjs';
+import { DESKTOP, INSTALL_PAGE, INSTALL_PATH, INSTALL_SOURCE_HEADER, STATS_PATH } from './paths.mjs';
 import { FOLDED_SOURCE, readCounts, renderCsv, renderHtml, tabulate } from './stats.mjs';
 
 /**
@@ -107,8 +107,8 @@ export async function handle(request, env, ctx, deps) {
     response = await stats(request, env, url, deps);
   } else {
     if (path === INSTALL_PATH) {
-      const text = await readInstallPage(deps.fetch);
-      response = text === null ? redirect(INSTALL_PAGE) : answer(200, text);
+      const guide = await readInstallPage(deps.fetch);
+      response = guide === null ? redirect(INSTALL_PAGE) : answer(200, guide.text, { [INSTALL_SOURCE_HEADER]: guide.source });
     } else {
       response = redirect(DESKTOP[path]);
     }
