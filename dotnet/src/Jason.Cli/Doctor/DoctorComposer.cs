@@ -382,7 +382,7 @@ public static partial class DoctorComposer
 
     /// <summary>
     /// The fields of <c>system.info</c> a bundle withholds, in this order. A channel's detail is a helper's last line of error
-    /// output or pointers into somebody's binding; a presence's detail is the runtime's own word — one of
+    /// output or pointers into somebody's binding, and so is what its readiness says is missing — the word itself travels; a presence's detail is the runtime's own word — one of
     /// <see cref="ChannelPresence.Details"/> — or text nobody controls, and only the word travels; a skill problem is an
     /// operating system's exception message, so only that there is one travels; and the release notes' address names the
     /// host of a configured feed, whose own setting never travels, so only whether a release had notes is kept, as
@@ -393,6 +393,7 @@ public static partial class DoctorComposer
     [
         new("notifications.channels[].detail", WithheldAs.Dropped),
         new("notifications.channels[].presence_detail", WithheldAs.DroppedUnlessOwnWord, ChannelPresence.Details),
+        new("notifications.channels[].readiness_detail", WithheldAs.Dropped),
         new("skills.problem", WithheldAs.ReplacedByWord),
         new("skills.problem_code", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.All),
         new("skills.problem_exception", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.Exceptions),

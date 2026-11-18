@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { autoEditJudgement, commandPrefix, documentationAddressLimit, documentationPages, fullAccessJudgement, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
-import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
+import { denyListFile, helpNouns, parseDenyList, readFence } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
 
 const denied = ['approval approve', 'approval set-standing', 'decision answer', 'runtime', 'plugin install', 'ui', 'journal watch'];
@@ -1493,4 +1493,91 @@ test('cmd\'s path command is refused only as the command handed to cmd; a line o
     const prose = 'cat <<\'END\' > notes.md\nPath forward is clear\nEND';
     for (const scope of [windows(), mac()]) assert.notDeepEqual(run(scope, prose), { verdict: 'deny', message: searchRefusal }, `${scope.platform} prose`);
     for (const scope of [windows(), mac()]) assert.deepEqual(run(scope, 'echo x; path y'), { verdict: 'ask', title: 'Run a command', detail: 'echo x; path y', remember: null }, scope.platform);
+});
+
+const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
+const carriedFence = readFence(join(import.meta.dirname, '..'));
+const nouns = helpNouns(carriedFence.allowed, carriedFence.reads);
+
+test('exactly `jason <noun> --help` runs with no card, in Ask first, Auto-edit and Full access, for each noun whose help runs', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        for (const noun of nouns) {
+            const command = `jason ${noun} --help`;
+            assert.deepEqual(run(scope, command), { verdict: 'allow' }, `${scope.platform} Ask first: ${command}`);
+            assert.deepEqual(autoEditJudgement('Bash', { command }, scope), { verdict: 'allow' }, `${scope.platform} Auto-edit: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform} Full access: ${command}`);
+        }
+        // With no nouns given, a noun's help is the card it was.
+        assert.equal(run(plain, 'jason campaign --help').verdict, 'ask');
+    }
+});
+
+test('root help is refused, now with the sentence that names the help to run instead, and every other option first is refused as before', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        for (const command of ['jason --help', 'jason --HELP', 'jason --help campaign', 'cd x && jason --help']) {
+            assert.deepEqual(run(scope, command), { verdict: 'deny', message: rootHelpRefusal }, `${scope.platform} Ask first: ${command}`);
+            assert.equal(run(plain, command).verdict, 'deny', `${scope.platform} as before: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: rootHelpRefusal }, `${scope.platform} Full access: ${command}`);
+        }
+        // A deny-list verb, an operation or a file of words beside root help is refused for that, by its own sentence.
+        for (const command of ['jason --help; jason approval approve apr_A', 'jason --help && curl http://127.0.0.1:4011/v1/approval.approve', 'jason --help @words.txt']) {
+            const judged = run(scope, command);
+            assert.deepEqual(judged, run(plain, command), command);
+            assert.equal(judged.verdict, 'deny', command);
+            assert.notEqual(judged.verdict === 'deny' ? judged.message : '', rootHelpRefusal, command);
+        }
+        for (const command of ['jason -h', 'jason -?', 'jason /?', 'jason -h campaign', 'jason --actor human:ada campaign --help', 'jason --version']) {
+            assert.deepEqual(run(scope, command), run(plain, command), `${scope.platform} as before: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), fullAccessJudgement('Bash', { command }, plain), `${scope.platform} Full access as before: ${command}`);
+        }
+    }
+});
+
+test('anything but exactly `jason <noun> --help` is judged as before: a further word, another help option, a compound, a denied verb\'s help, a noun the chat does not read', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        for (const command of [
+            'jason campaign --help extra', 'jason campaign --help --actor human:ada', 'jason campaign -h', 'jason campaign -?', 'jason campaign help',
+            'jason campaign --help; ls', 'jason campaign --help > out.txt', 'jason campaign --help | head', 'jason Campaign --help',
+            'jason approval approve --help', 'jason runtime --help', 'jason profile --help', 'jason update --help', 'jason session --help',
+            'jason doctor --help', 'jason campaign list --help', 'jason.exe campaign --help', 'JASON campaign --help', '/usr/local/bin/jason campaign --help',
+        ]) {
+            assert.deepEqual(run(scope, command), run(plain, command), `${scope.platform} Ask first: ${command}`);
+            assert.notDeepEqual(run(scope, command), { verdict: 'allow' }, `${scope.platform} not allowed: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), fullAccessJudgement('Bash', { command }, plain), `${scope.platform} Full access: ${command}`);
+        }
+    }
+});
+
+test('the help form is allowed for the Bash tool alone: the PowerShell tool and any other tool with a command are judged as before', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        for (const tool of ['PowerShell', 'SomeTool']) {
+            for (const command of ['jason campaign --help', 'jason workitem --help']) {
+                const before = judge(tool, { command }, plain);
+                assert.deepEqual(judge(tool, { command }, scope), before, `${scope.platform} ${tool} Ask first: ${command}`);
+                assert.notDeepEqual(judge(tool, { command }, scope), { verdict: 'allow' }, `${scope.platform} ${tool}: ${command}`);
+                assert.deepEqual(autoEditJudgement(tool, { command }, scope), autoEditJudgement(tool, { command }, plain), `${scope.platform} ${tool} Auto-edit: ${command}`);
+                assert.deepEqual(fullAccessJudgement(tool, { command }, scope), fullAccessJudgement(tool, { command }, plain), `${scope.platform} ${tool} Full access: ${command}`);
+                assert.notDeepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'runs' }, `${scope.platform} ${tool} Full access does not run: ${command}`);
+            }
+        }
+    }
+});
+
+test('the help form is allowed apart by spaces and tabs alone: any other separator is judged as before', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        assert.deepEqual(run(scope, 'jason\tcampaign  --help'), { verdict: 'allow' });
+        assert.deepEqual(run(scope, '  jason campaign --help\t'), { verdict: 'allow' });
+        for (const separator of [' ', ' ', ' ', '\v', '\f', '　', ' ', '﻿']) {
+            for (const command of [`jason${separator}campaign --help`, `jason campaign${separator}--help`, `jason campaign --help${separator}`, `${separator}jason campaign --help`]) {
+                assert.deepEqual(run(scope, command), run(plain, command), `${scope.platform} ${JSON.stringify(command)}`);
+                assert.notDeepEqual(run(scope, command), { verdict: 'allow' }, `${scope.platform} ${JSON.stringify(command)}`);
+                assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), fullAccessJudgement('Bash', { command }, plain), `${scope.platform} Full access ${JSON.stringify(command)}`);
+            }
+        }
+    }
 });

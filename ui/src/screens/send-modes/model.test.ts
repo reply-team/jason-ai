@@ -97,10 +97,10 @@ describe('the doubts in the words every place draws them in', () => {
         const preview = fixtures['approval.get/park-doubted'].response.preview as Record<string, unknown>;
         const { doubts } = preview as { doubts: { note: string }[] };
         expect(doubtWords(preview)).toEqual({
-            heading: 'Doubts about this message',
+            heading: 'Why this message was flagged',
             doubts: [
                 {
-                    said: `The critic role doubted this: ${whyWords('unsupported_claim')}`,
+                    said: `The critic role flagged this: ${whyWords('unsupported_claim')}`,
                     note: `Their words: ${doubts[0]!.note}`,
                 },
             ],
@@ -111,7 +111,7 @@ describe('the doubts in the words every place draws them in', () => {
         expect(
             doubtWords({ doubts: [{ source: 'ask_person', by: { type: 'human', id: null }, code: 'x_y' }] }),
         ).toEqual({
-            heading: 'Doubts about this message',
+            heading: 'Why this message was flagged',
             doubts: [{ said: 'A person asked you to look at this: x_y', note: null }],
         });
     });

@@ -1363,7 +1363,7 @@ test('the instruction text holds the eighteen rules in plain words, and says not
     // A jason command not yet used in the conversation is preceded by the skill for its work; a verb is never guessed.
     assert.equal(
         rules[17],
-        "18. Before you type a jason command you have not used in this conversation, load the skill for that work and take the verb from it. Never guess a verb, and never try verbs to find out which one exists: a verb that does not exist fails, and one that no rule allows waits as a card the person may not see.",
+        "18. Before you type a jason command you have not used in this conversation, load the skill for that work and take the verb from it. Never guess a verb, and never try verbs to find out which one exists: a verb that does not exist fails, and one that no rule allows waits as a card the person may not see. To read a noun's verbs and their options, run `jason <noun> --help`, exactly those three words with nothing after them, with one of these nouns: `approval`, `audience`, `block`, `campaign`, `contact`, `decision`, `events`, `journal`, `operation`, `plugin`, `preference`, `project`, `reply`, `report`, `role`, `rolenote`, `route`, `sender`, `subscription`, `suppression`, `workitem`. `jason --help` itself is refused.",
     );
     assert.doesNotMatch(text, /language|english|russian|ukrainian|translat/i);
     assert.doesNotMatch(text, /[^\x09\x0a\x20-\x7e]/, 'plain text, no character a terminal or a host could take otherwise');

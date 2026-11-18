@@ -72,6 +72,18 @@ public static class ChannelKinds
     public const string Plugin = "plugin";
 }
 
+/// <summary>
+/// Whether a plugin channel could deliver now, as <c>system.info</c> says it: <see cref="Ready"/>, or one of
+/// <see cref="NotAttemptedReasons"/>' words for a reason decided before anything is launched.
+/// </summary>
+public static class ChannelReadiness
+{
+    public const string Ready = "ready";
+
+    /// <summary>Every word the reading can be: ready, or why a notification given to the channel now would not be tried.</summary>
+    public static IReadOnlyList<string> All { get; } = [Ready, NotAttemptedReasons.NotDeclared, NotAttemptedReasons.Unavailable, NotAttemptedReasons.BindingInvalid];
+}
+
 /// <summary>Whether the toast has a desktop to be shown on, as <c>system.info</c> says it.</summary>
 public static class ChannelPresence
 {

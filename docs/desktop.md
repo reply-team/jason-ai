@@ -105,7 +105,8 @@ shows before anything is typed and what you send waits, while the window is open
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
   narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
-  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
+  that approval whole, with any doubt about a send shown above it, under "Why this message was flagged" (flagged is
+  the screen's word for a doubt a role or a person raised); until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
@@ -724,9 +725,9 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
 chat is in. A mode applies to the turns you start by sending, from the next one on. **Ask first** is the mode of every new
 chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
-passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
-other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
-refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
+removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
+page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
@@ -801,14 +802,17 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test.
+  every time, held to the real tree by a test; and, for each noun with a verb on that list, its help, exactly
+  `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
+  itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
   everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
   subscription), everything that changes the installation, follows it without end or carries it off the machine
-  (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `ui`, `session`,
-  `journal watch`, `export`, `import`), and six more that decide who is reached or what runs (`suppression remove`,
-  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`). **`role add` and `project link` are
+  (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `ui`,
+  `session`, `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
+  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
+  `notification disable`). **`role add` and `project link` are
   typed in a terminal**: a role's
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
   its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):

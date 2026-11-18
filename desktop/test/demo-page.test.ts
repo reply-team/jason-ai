@@ -28,6 +28,8 @@ import {
     demoLayout,
     demoMacSheet,
     demoPageSheet,
+    demoPageBoundMs,
+    demoPageShowing,
     demoStrip,
     demoStripAt,
     demoStripSheets,
@@ -522,6 +524,153 @@ test('no drag region the page draws is the window’s: a user sheet makes every 
     // Our switch keeps its own: its strip is the window's drag region, its control is not.
     const ours = await sealed(demoSwitch);
     assert.equal(ours.on.has('dom-ready'), false);
+});
+
+// ---- When the page's view enters the window ------------------------------------------------------------------------------
+
+// The page's own script makes its strip a drag region as it runs, before the desktop's sheet that makes no drag region of
+// the page the window's can be put in; a view out of the window answers no hit test. So the page's view enters the
+// window only once its document's sheets have settled, under ours, or at a bound whatever happened. Nothing of it reads
+// the platform: the order is the same on Windows, macOS and Linux.
+
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test('the page’s view is told its document’s sheets settled only once every one has, landed or refused, at each document', async () => {
+    const made = stand();
+    const pending: (() => void)[] = [];
+    let refuse = false;
+    (made.contents as unknown as { insertCSS: (css: string) => Promise<string> }).insertCSS = (css) => {
+        made.calls.push(`insertCSS:${css}`);
+        return new Promise((resolve, reject) => pending.push(() => (refuse ? reject(new Error('The document is gone.')) : resolve('key'))));
+    };
+    let told = 0;
+    await sealView(made.contents, demoPage, { read: () => pageBytes, refused: () => undefined, sheet: 'p { color: red; }', landed: () => void told++ });
+    await flush();
+    assert.equal(told, 0, 'nothing before a document');
+    call(made.on.get('dom-ready'));
+    assert.deepEqual(made.calls.filter((name) => name.startsWith('insertCSS:')), [`insertCSS:${noDragSheet}`, 'insertCSS:p { color: red; }']);
+    pending.shift()!();
+    await flush();
+    assert.equal(told, 0, 'not while a sheet is still out');
+    pending.shift()!();
+    await flush();
+    assert.equal(told, 1, 'once both have landed');
+    // The next document's sheets are refused: settled all the same, so it is told.
+    refuse = true;
+    call(made.on.get('dom-ready'));
+    for (const run of pending.splice(0)) run();
+    await flush();
+    assert.equal(told, 2);
+    // A view with no such hook is told nothing and keeps the events it had: ours has no dom-ready at all.
+    const ours = await sealed(demoSwitch);
+    assert.equal(ours.on.has('dom-ready'), false);
+});
+
+/** `demoPageShowing` on a window and a clock of the test's own: what was added and taken off, and the timers set. */
+function showingRig() {
+    const done: string[] = [];
+    const timers = new Map<number, () => void>();
+    let made = 0;
+    const showing = demoPageShowing({
+        add: () => void done.push('add'),
+        remove: () => void done.push('remove'),
+        setTimer: (run, ms) => {
+            assert.equal(ms, demoPageBoundMs);
+            timers.set(++made, run);
+            return made;
+        },
+        clearTimer: (timer) => void timers.delete(timer as number),
+    });
+    const bound = () => {
+        const due = [...timers.values()];
+        timers.clear();
+        for (const run of due) run();
+    };
+    return { showing, done, timers, bound };
+}
+
+test('the page’s view enters the window once its document’s sheets have settled, once, and its bound is cleared then', () => {
+    assert.equal(demoPageBoundMs, 1500);
+    const { showing, done, timers } = showingRig();
+    showing.loading();
+    assert.deepEqual(done, [], 'nothing added before the sheets settle');
+    assert.equal(timers.size, 1, 'the bound runs from the load');
+    showing.landed();
+    assert.deepEqual(done, ['add']);
+    assert.equal(timers.size, 0, 'the bound cleared when the sheets came first');
+    showing.landed();
+    assert.deepEqual(done, ['add'], 'added once');
+});
+
+test('a sheet that never settles, or a load that fails and brings no document: the view is in the window at the bound', () => {
+    const { showing, done, timers, bound } = showingRig();
+    showing.loading();
+    // No `landed` comes: a sheet whose promise never settles, a dom-ready that never comes, a load that failed.
+    bound();
+    assert.deepEqual(done, ['add']);
+    assert.equal(timers.size, 0);
+    showing.landed();
+    assert.deepEqual(done, ['add'], 'a late settle adds nothing more');
+});
+
+test('a reload takes the view off and brings it back when the new document’s sheets settle, or at the bound', () => {
+    const { showing, done, timers, bound } = showingRig();
+    showing.loading();
+    showing.landed();
+    showing.loading();
+    assert.deepEqual(done, ['add', 'remove'], 'off until the new document’s sheets settle');
+    assert.equal(timers.size, 1);
+    showing.landed();
+    assert.deepEqual(done, ['add', 'remove', 'add']);
+    assert.equal(timers.size, 0);
+    showing.loading();
+    bound();
+    assert.deepEqual(done, ['add', 'remove', 'add', 'remove', 'add']);
+    // A reload before the view was shown takes nothing off and starts its bound again.
+    const early = showingRig();
+    early.showing.loading();
+    early.showing.loading();
+    assert.deepEqual(early.done, []);
+    assert.equal(early.timers.size, 1, 'one bound, the newest');
+});
+
+test('the window’s close leaves no timer, and nothing is added after it', () => {
+    const { showing, done, timers, bound } = showingRig();
+    showing.loading();
+    showing.close();
+    assert.equal(timers.size, 0, 'the bound cleared at the close');
+    showing.landed();
+    showing.loading();
+    bound();
+    assert.deepEqual(done, []);
+});
+
+test('the window adds ours before the loads and the page under it only through the showing, on every system alike', () => {
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    // The page's view is added at one place, at index 0, so ours stays drawn over it; ours is added before the loads.
+    assert.equal(window.split('addChildView(page').length - 1, 1, 'one add of the page');
+    assert.ok(window.includes('        add: () => window.contentView.addChildView(page, 0),\n'));
+    assert.ok(window.includes('        remove: () => window.contentView.removeChildView(page),\n'));
+    assert.ok(window.includes('        setTimer: (run, ms) => setTimeout(run, ms),\n'));
+    assert.ok(window.indexOf('window.contentView.addChildView(ours);') < window.indexOf('showing.loading();'));
+    // The page's view, and not ours, is told its sheets settled.
+    const pageSeal = window.slice(window.indexOf('await sealView(page.webContents, demoPage, {'), window.indexOf('await sealView(ours.webContents, demoSwitch, {'));
+    const oursSeal = window.slice(window.indexOf('await sealView(ours.webContents, demoSwitch, {'), window.indexOf("ours.setBackgroundColor('#00000000');"));
+    assert.ok(pageSeal.includes('        landed: () => showing.landed(),\n'));
+    assert.ok(!oursSeal.includes('landed'));
+    // The bound runs from the start of the views' load, after the band's sheet on macOS and outside its branch: the same
+    // statement on every system.
+    assert.ok(window.includes('        }\n        showing.loading();\n        await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);'));
+    // Our reload takes the view off before the page loads again; the close clears the bound.
+    assert.ok(window.includes('        reload: () => {\n            showing.loading();\n            page.webContents.reload();\n        },'));
+    assert.ok(window.includes('    const close = () => {\n        showing.close();\n'));
+    assert.ok(window.includes("    window.on('closed', close);"));
+    // Nothing that decides when the page is shown reads the platform.
+    const demo = readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8');
+    const helper = demo.slice(demo.indexOf('export function demoPageShowing('), demo.indexOf('\n}\n', demo.indexOf('export function demoPageShowing(')));
+    assert.ok(helper.length > 0 && !/platform/.test(helper));
+    const wiring = window.slice(window.indexOf('const showing = demoPageShowing({'), window.indexOf('});', window.indexOf('const showing = demoPageShowing({')));
+    assert.ok(wiring.length > 0 && !/platform/.test(wiring));
 });
 
 // ---- Before Electron is ready: the Demo's schemes, and no host name resolved --------------------------------------------

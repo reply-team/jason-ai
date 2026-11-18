@@ -44,7 +44,7 @@ public class VerbMapTests
     /// </summary>
     private static readonly string[] Nouns =
     [
-        "approval", "audience", "block", "campaign", "contact", "decision", "events", "journal", "operation", "plugin", "preference", "profile", "project",
+        "approval", "audience", "block", "campaign", "contact", "decision", "events", "journal", "notification", "operation", "plugin", "preference", "profile", "project",
         "reply", "report", "role", "rolenote", "route", "runtime", "sender", "session", "skills", "subscription", "suppression", "ui", "update", "workitem",
     ];
 

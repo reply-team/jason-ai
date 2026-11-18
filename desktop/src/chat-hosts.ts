@@ -5,7 +5,7 @@
 import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
 import { isEffort, type Effort } from './chat-models.ts';
-import { allowRules, denyRules } from './chat-deny.ts';
+import { allowRules, denyRules, helpNouns, helpRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { attemptVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
@@ -195,7 +195,8 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default.
  * Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool as any
  * other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only:
- * `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full access:
+ * `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. In every mode
+ * the nouns' help runs too, exactly as written (`helpRules`). Full access:
  * no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
  * (`fullAccessSettings`); what the hook asks about, and what the host asks about whatever the hook said, reaches the
  * prompt tool as in Ask first. Every deny rule is passed in every mode; Anthropic,
@@ -210,7 +211,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed));
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);

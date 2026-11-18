@@ -74,7 +74,7 @@ import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
-import type { ChatFence } from './chat-deny.ts';
+import { helpNouns, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
     codexAutoEdit,
@@ -1900,6 +1900,7 @@ export class Chat {
                     protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
+                    help: helpNouns(fence.allowed, fence.reads),
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,
