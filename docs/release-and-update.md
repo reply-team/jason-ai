@@ -1327,11 +1327,15 @@ alive.
 Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`. On macOS `disable`, and
 `jason uninstall` with it, take the job out of launchd before its file goes — `launchctl unload -w` on the file where it is
 there, then `launchctl remove ai.jason.runtime` by its label, which holds for a job whose file is gone already, each
-waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` marks
-the label disabled, which keeps a file left behind from loading at the next login; `enable` loads with `-w` and so clears
-it. `jason uninstall` leaves no such mark: it unloads without `-w`, and then clears a disabled state an earlier removal
-left for the label in this account's login domain, `launchctl enable gui/<uid>/ai.jason.runtime`, so that a later install's
-job of the same label loads.
+waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` records
+the label as disabled, which keeps a file left behind from loading at the next login. `enable` first reads launchd's record
+of the label in this account's two domains, `launchctl print-disabled gui/<uid>` and `user/<uid>`: where one records it as
+disabled, or one cannot be read, it loads with `-w`, which clears that record; where none does, it loads without `-w` and
+writes none. What loads the job at each login is its file in `~/Library/LaunchAgents`, with `RunAtLoad` and no `Disabled`
+key, not a record. `jason uninstall` leaves no such mark: it unloads without `-w`, so no login job of Jason's is left, and
+none is left disabled. It reads the same two records, and where one records the label as disabled, as an earlier removal
+with `-w` left it, it clears that there with `launchctl enable`, so that a later install's job of the same label loads;
+where none does, it writes none. A cleared record stays behind as "enabled" (§9).
 
 **The registration carries the data directory it was made under**, as `--data-dir` on the registered command
 line, and `autostart status` prints it. This is the whole reason it is a verb rather than a documented
@@ -1590,6 +1594,11 @@ each known by its `.jason/marker.json`, or holding a folder there that cannot be
 
 It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
 something is still there, or it stopped part-way — and every step that did happen is listed either way.
+
+**On macOS one launchd record can stay**: the runtime's label, `ai.jason.runtime`, recorded as enabled in this account's
+launchd records (`launchctl print-disabled`). It stays where a disabled record was cleared, by `enable` or by this verb
+(§8), or where a release before 0.49 registered the job, whose `enable` loaded it with `-w`. No command run without
+administrator rights removes it, and it does nothing: with the job's file gone, nothing loads under that label.
 
 ### The other half: setting the machine up, `jason install`
 
