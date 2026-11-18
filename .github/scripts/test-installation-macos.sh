@@ -1575,10 +1575,11 @@ named = [str((item or {}).get("path") or "") for pack in packs for item in ((pac
 print(", ".join(refs))
 print(len(packs))
 print(len(named))
-print("yes" if "quick-start/SKILL.md" in named else "no")' "$PREVIOUS_OWN_FILE")" || fail "after $remover, $PREVIOUS_OWN_FILE is left, and it could not be read as a skills record"
+print("yes" if "quick-start/SKILL.md" in named else "no")
+print(len([ref for ref in refs if ref not in ("v" + sys.argv[2], sys.argv[2])]) if packs else 1)' "$PREVIOUS_OWN_FILE" "$old")" || fail "after $remover, $PREVIOUS_OWN_FILE is left, and it could not be read as a skills record"
+            # Decided in the reader, pack by pack: a pack with no ref, an empty one or another release's is not this one's.
             refs="$(printf '%s\n' "$record_read" | sed -n 1p)"
-            others="$(printf '%s\n' "$refs" | tr ',' '\n' | sed 's/^ *//' | grep -vxF -e "v$old" -e "$old" || true)"
-            { [ -n "$refs" ] && [ -z "$others" ]; } || fail "after $remover, $PREVIOUS_OWN_FILE is left, and it is not $old's own skills record: its packs' refs are '$refs'"
+            [ "$(printf '%s\n' "$record_read" | sed -n 5p)" = 0 ] || fail "after $remover, $PREVIOUS_OWN_FILE is left, and it is not $old's own skills record: its packs' refs are '$refs'"
             open_leg="$(cat "$OUT/leg-open.txt" 2>/dev/null || true)"
             [ -n "$open_leg" ] || fail "no leg is open to record $PREVIOUS_OWN_FILE as the previous release's own"
             printf '%s\t%s\t%s\n' "$open_leg" "$PREVIOUS_OWN_NAME" "$(stat -f %z "$PREVIOUS_OWN_FILE" 2>/dev/null || echo '?')" >> "$OUT/previous-own.txt"

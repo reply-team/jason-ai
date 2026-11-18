@@ -1135,6 +1135,45 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The macOS way-back leg reads the skills record going back leaves as the previous release's own only where it has a
+    /// pack and every pack names that release, as "v0.48.5" or "0.48.5": a pack with no ref, an empty ref or another
+    /// release's makes the leg fail. The leg's own reader is run on such records and its count of packs naming anything
+    /// else is held.
+    /// </summary>
+    [Fact]
+    public void The_macOS_way_back_leg_reads_a_record_as_the_previous_release_s_own_only_where_every_pack_names_that_release()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var reader = Regex.Match(macos, @"record_read=""\$\(python3 -c '(?<code>[^']*)' ""\$PREVIOUS_OWN_FILE"" ""\$old""\)""");
+        Assert.True(reader.Success, "the way-back leg does not read the record by one python3 reader handed the previous release's version");
+        Assert.Contains("[ \"$(printf '%s\\n' \"$record_read\" | sed -n 5p)\" = 0 ] || fail \"after $remover, $PREVIOUS_OWN_FILE is left, and it is not $old's own skills record", macos, StringComparison.Ordinal);
+
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        var folder = tree.NewDirectory("records");
+        var cases = new (string Name, string Record, bool Own)[]
+        {
+            ("every pack at v0.48.5", """{"packs":[{"ref":"v0.48.5","files":[{"path":"quick-start/SKILL.md"}]},{"ref":"v0.48.5","files":[]}]}""", true),
+            ("every pack at 0.48.5", """{"packs":[{"ref":"0.48.5","files":[]}]}""", true),
+            ("a pack with no ref", """{"packs":[{"ref":"v0.48.5","files":[]},{"files":[]}]}""", false),
+            ("a pack with an empty ref", """{"packs":[{"ref":"v0.48.5","files":[]},{"ref":"","files":[]}]}""", false),
+            ("a pack of another release", """{"packs":[{"ref":"v0.48.5","files":[]},{"ref":"v0.49.0","files":[]}]}""", false),
+            ("no pack", """{"packs":[]}""", false),
+        };
+        foreach (var (name, record, own) in cases)
+        {
+            var file = Path.Combine(folder, ".jason-skills.json");
+            File.WriteAllText(file, record);
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-c", reader.Groups["code"].Value, file, "0.48.5");
+            Assert.True(exit == 0, $"{name}: {stderr}");
+            var lines = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            Assert.True(lines.Length >= 5, $"{name}: the reader said '{stdout.Trim()}'");
+            Assert.True(own == (lines[4] == "0"), $"{name}: the reader counts {lines[4]} pack(s) naming another release, so the leg would {(own ? "refuse" : "take")} it");
+        }
+    }
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
