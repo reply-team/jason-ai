@@ -108,6 +108,17 @@ $thisBuild = Join-Path $Out 'this-build-extracted.txt'
 # EXTRACTED_SOFT is the same switch there, and the two are flipped together.
 $extractedSoft = $false
 
+# The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
+# nothing where none.
+function Get-InheritedBy([string] $line, [string] $rows = (Join-Path $Out 'inherited.txt')) {
+    if (-not (Test-Path -LiteralPath $rows)) { return '' }
+    foreach ($row in @(Get-Content -LiteralPath $rows)) {
+        $at = $row.IndexOf("`t")
+        if ($at -gt 0 -and $row.Substring($at + 1) -ceq $line) { return $row.Substring(0, $at) }
+    }
+    return ''
+}
+
 # A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
 function Fail([string] $why) {
     Add-Content -LiteralPath (Join-Path $Out 'leg-failure.txt') -Value $why -ErrorAction SilentlyContinue
@@ -627,6 +638,25 @@ function Get-LeftOver {
     @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch '^(extracted|retired)\t' -and (& $counts $_) } | ForEach-Object { "- $_" }))
 }
 
+# What a clean leg's begin found and excused: the machine then, listed to -Out\<listing>.txt, against the machine before, the
+# data directory and the harness root aside. One row per line, "<leg><TAB><+ or -> <line>", in the file $rows; a line
+# recorded at an earlier begin keeps the leg it was attributed to there (-Out\inherited.txt), and a new one is attributed to
+# $by, the leg that last changed the machine. The held step reads the machine at the end the same way, into a file of its own.
+function Write-Inherited([string] $by, [string] $listing, [string] $rows) {
+    if (-not $by) { $by = 'no leg, before any leg ran' }
+    $now = Join-Path $Out "$listing.txt"
+    Write-Listing $now -Quiet
+    $was = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
+    $is = @(Get-Content -LiteralPath $now)
+    $kept = '^(data directory|harness root)'
+    $changes = @(@($is | Where-Object { $was -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "+ $_" }) + @($was | Where-Object { $is -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "- $_" }))
+    $written = @(foreach ($change in $changes) {
+        $earlier = Get-InheritedBy $change
+        "$(if ($earlier) { $earlier } else { $by })`t$change"
+    })
+    Set-Content -LiteralPath $rows -Value $written
+}
+
 # --- the readers of the legs over a previous release ----------------------------------------------------------------
 
 # Every jason runtime running on this machine: the processes of jason.exe whose command line runs `runtime run`.
@@ -668,6 +698,90 @@ function Get-WindowsAppsCommandFiles {
     if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return @() }
     try { return @([IO.Directory]::GetFileSystemEntries($folder, 'jason*') | ForEach-Object { [IO.Path]::GetFileName($_) }) }
     catch { Fail "the WindowsApps folder $folder could not be read: $($_.Exception.Message)" }
+}
+
+# A listing compared with another one, by name, under -Out: what the later one left and what went, each line said, and a
+# divergence recorded for the held step. A leg's compare sets aside what its own clean begin found (the lens); the held
+# step's whole compare (-Final) sets aside nothing but the previous release's own lines left by a leg that ran it.
+function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
+    $before = @(Get-Content -LiteralPath (Join-Path $Out "$base.txt"))
+    $after = @(Get-Content -LiteralPath (Join-Path $Out "$listed.txt"))
+    # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
+    $kept = '^(data directory|harness root)'
+    # An extraction folder or a retired folder gone since the listing against is the removal's taking: on Windows it takes
+    # this build's extraction folder and every other build's, and sweeps the retired folders. Said, and not counted.
+    $goneAll = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
+    $taken = @($goneAll | Where-Object { $_ -match '^(extracted|retired)\t' })
+    $gone = @($goneAll | Where-Object { $_ -notmatch '^(extracted|retired)\t' })
+    if ($taken.Count -gt 0) { Say "taken by the removal in ${listed}: $(($taken | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (a removal takes what every build unpacked here and sweeps the retired folders)" }
+    $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
+    # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
+    # this build's ids, and every retired folder, count (softly only while $extractedSoft says so, as a section of their own).
+    $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
+    # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
+    # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
+    if (-not $extractedSoft -and $ours.Count -eq 0) {
+        $why = "${listed} against ${base}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
+        Write-Host "::error title=Uninstall::$why"
+        Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
+    }
+    $left = [System.Collections.Generic.List[string]]::new()
+    $expectedLines = [System.Collections.Generic.List[string]]::new()
+    $softLines = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in $candidates) {
+        if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
+        elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
+        else { $left.Add($line) }
+    }
+    if ($expectedLines.Count -gt 0 -and -not $Final) { Say "expected in ${listed}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job after this build's last removal; that release's own removal leaves it, and on Windows this build's removal takes it when it next runs)" }
+    if ($softLines.Count -gt 0) {
+        Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set), in ${listed}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+        Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${listed}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+    }
+    $gone = [System.Collections.Generic.List[string]]::new([string[]] @($gone))
+    # The lens: a leg is charged for what it does, against the machine its own clean begin found. A line that machine
+    # already had, recorded there with the leg that left it (-Out\inherited.txt), is printed under its own heading by that
+    # leg and not counted here; that leg is held to it by its own compare and stays failed by name, and the held step's
+    # whole compare counts it again. One limit: a line this leg leaves that is the same as an inherited one cannot be told
+    # apart from it, and is attributed to the earlier leg.
+    $inheritedHere = [System.Collections.Generic.List[string]]::new()
+    $excused = [System.Collections.Generic.List[string]]::new()
+    if ($Final) {
+        # The held step's whole compare: the lines the previous release's own acts leave - its jason's extraction folder,
+        # which that release's removal never takes - are expected only where the leg they are attributed to
+        # (-Out\final-attributed.txt) is one that ran the previous release (-Out\previous-legs.txt), named beside it; the same
+        # lines left by a leg of this build alone count.
+        $attributed = Join-Path $Out 'final-attributed.txt'
+        $previousLegs = @(if (Test-Path -LiteralPath (Join-Path $Out 'previous-legs.txt')) { Get-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') })
+        foreach ($line in $expectedLines) {
+            $by = Get-InheritedBy "+ $line" $attributed
+            if ($by -and $previousLegs -ccontains $by) { $excused.Add("+ $line  (left by '$by', a leg of the previous release)") } else { $left.Add($line) }
+        }
+        if ($excused.Count -gt 0) { Say "expected in ${listed}, each left by a leg of the previous release, as that release's own removal leaves it: $(($excused | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    } elseif (Test-Path -LiteralPath (Join-Path $Out 'inherited.txt')) {
+        foreach ($line in @($left)) {
+            $by = Get-InheritedBy "+ $line"
+            if ($by) { $inheritedHere.Add("+ $line  (left by '$by')"); [void] $left.Remove($line) }
+        }
+        foreach ($line in @($gone)) {
+            $by = Get-InheritedBy "- $line"
+            if ($by) { $inheritedHere.Add("- $line  (left by '$by')"); [void] $gone.Remove($line) }
+        }
+        if ($inheritedHere.Count -gt 0) { Say "inherited at this leg's begin and not counted in ${listed}, each by the leg that left it: $(($inheritedHere | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    }
+    $diff = Join-Path $Out "$base-to-$listed.diff.txt"
+    Set-Content -LiteralPath $diff -Value (@("only in $base (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $listed (after):") + @($left | ForEach-Object { "+ $_" }) +
+        @(if ($inheritedHere.Count -gt 0) { "inherited at this leg's begin, not counted here (each by the leg that left it):"; $inheritedHere }) +
+        @(if ($excused.Count -gt 0) { "expected, each left by a leg of the previous release:"; $excused }))
+    Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
+    $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
+    Say "$listed against ${base}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
+    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
+    # the end fails the job on any divergence recorded.
+    if ($gone.Count -gt 0 -or $left.Count -gt 0) {
+        Write-Host "::error title=Uninstall::the machine after '$listed' is not the machine before '${base}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
+        Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$listed against ${base}: see $diff"
+    }
 }
 
 # ONE GUARD, AT THE ENTRY. Every step but the five that read the machine or this job's own files and write only those
@@ -727,51 +841,7 @@ switch ($Step) {
     }
 
     'Compare' {
-        $before = @(Get-Content -LiteralPath (Join-Path $Out "$Against.txt"))
-        $after = @(Get-Content -LiteralPath (Join-Path $Out "$Name.txt"))
-        # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
-        $kept = '^(data directory|harness root)'
-        # An extraction folder or a retired folder gone since the listing against is the removal's taking: on Windows it takes
-        # this build's extraction folder and every other build's, and sweeps the retired folders. Said, and not counted.
-        $goneAll = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
-        $taken = @($goneAll | Where-Object { $_ -match '^(extracted|retired)\t' })
-        $gone = @($goneAll | Where-Object { $_ -notmatch '^(extracted|retired)\t' })
-        if ($taken.Count -gt 0) { Say "taken by the removal in ${Name}: $(($taken | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (a removal takes what every build unpacked here and sweeps the retired folders)" }
-        $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
-        # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
-        # this build's ids, and every retired folder, count (softly only while $extractedSoft says so, as a section of their own).
-        $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
-        # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
-        # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
-        if (-not $extractedSoft -and $ours.Count -eq 0) {
-            $why = "${Name} against ${Against}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
-            Write-Host "::error title=Uninstall::$why"
-            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
-        }
-        $left = [System.Collections.Generic.List[string]]::new()
-        $expectedLines = [System.Collections.Generic.List[string]]::new()
-        $softLines = [System.Collections.Generic.List[string]]::new()
-        foreach ($line in $candidates) {
-            if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
-            elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
-            else { $left.Add($line) }
-        }
-        if ($expectedLines.Count -gt 0) { Say "expected in ${Name}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job after this build's last removal; that release's own removal leaves it, and on Windows this build's removal takes it when it next runs)" }
-        if ($softLines.Count -gt 0) {
-            Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set), in ${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
-            Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
-        }
-        $diff = Join-Path $Out "$Against-to-$Name.diff.txt"
-        Set-Content -LiteralPath $diff -Value (@("only in $Against (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $Name (after):") + @($left | ForEach-Object { "+ $_" }))
-        Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
-        $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
-        Say "$Name against ${Against}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
-        # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
-        # the end fails the job on any divergence recorded.
-        if ($gone.Count -gt 0 -or $left.Count -gt 0) {
-            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
-            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$Name against ${Against}: see $diff"
-        }
+        Compare-Listings $Name $Against
     }
 
     'Begin' {
@@ -801,6 +871,10 @@ switch ($Step) {
             Skip-Leg $(if ($outcome -ceq 'failure') { "not run: the leg it needs failed, $needed" } else { "not run: the leg it needs did not run ($outcome), $needed" })
             return
         }
+        # A leg that needs the previous release's fetch runs the previous release: recorded, for the held step's compare.
+        if (@($Needs | Where-Object { $_.Substring(0, [Math]::Max(0, $_.LastIndexOf('='))) -ceq 'Fetch the previous release' }).Count -gt 0) {
+            Add-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') -Value $Leg
+        }
 
         # The machine this leg starts from is the machine before anything was installed. Where it is not:
         #  - the leg that last changed the machine ENDED: that leg left it, which is that leg's own failure, said and
@@ -813,6 +887,7 @@ switch ($Step) {
         # doors cannot remove makes this leg not run, naming the lines left.
         if ($Clean) {
             if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
+            $prior = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
             $found = @(Get-LeftOver)
             if ($found.Count -gt 0) {
                 $resets = Join-Path $Out 'resets.txt'
@@ -918,6 +993,8 @@ switch ($Step) {
                 Say "the reset removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
                 if ($left.Count -gt 0) { Skip-Leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $($left -join '; ')"; return }
             }
+            # What this begin found and excused, for this leg's compare to set aside by the leg that left it.
+            Write-Inherited $prior 'leg-start' (Join-Path $Out 'inherited.txt')
         }
 
         # This leg now changes the machine, and is the one a later leg's start holds to what it leaves; a reading changes
@@ -934,6 +1011,15 @@ switch ($Step) {
 
     'Held' {
         Close-Leg
+        # The final compare: the machine now against the true machine before, through no leg's begin, so that a line any leg
+        # left counts here whichever leg was charged for it. Each line is attributed as a begin attributes it, the last leg
+        # taking what no begin saw (-Out\final-attributed.txt); the previous release's own lines are expected only where
+        # that leg is one of the previous release, and named beside it. Its divergence, recorded, fails the job below.
+        if (Test-Path -LiteralPath (Join-Path $Out 'before.txt')) {
+            $lastNow = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
+            Write-Inherited $lastNow 'final' (Join-Path $Out 'final-attributed.txt')
+            Compare-Listings 'final' 'before' -Final
+        }
         $divergent = Join-Path $Out 'divergent.txt'
         $failedLegs = Join-Path $Out 'failed-legs.txt'
         $notRun = Join-Path $Out 'not-run.txt'
