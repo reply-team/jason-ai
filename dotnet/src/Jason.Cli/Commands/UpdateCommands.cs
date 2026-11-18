@@ -857,15 +857,12 @@ public static class UpdateCommands
     /// </summary>
     private static readonly string[] LockFiles = ["update.lock", "update.lock.holder"];
 
-    /// <summary>The files a system leaves in any folder it shows, passed over at the data directory's top and in its logs.</summary>
-    private static readonly string[] SystemLitter = [".DS_Store", "desktop.ini", "Thumbs.db"];
-
     /// <summary>
     /// Whether the data directory holds an installation: the one definition of "an installation is here". It does not where it
     /// holds nothing but Jason Desktop's own — its folder, <c>desktop/</c>, and its log, <c>logs/desktop-*.jsonl</c>, which it
     /// writes from its first start — an <c>update/</c> folder holding nothing but the update's lock file and the note of its
     /// holder (<see cref="LockFiles"/>), which the tool makes for itself, and leaves behind where a holder is killed, and which
-    /// never make a machine installed, and the system's litter (<see cref="SystemLitter"/>) at the top
+    /// never make a machine installed, and the system's litter (<see cref="Files.SystemLitter"/>) at the top
     /// and in <c>logs/</c>. Anything else is an installation's, a record under <c>update/</c> among it. A directory, or one of
     /// those folders, that cannot be listed is <see cref="DataDirHolds.Unreadable"/>: never taken for either answer.
     /// </summary>
@@ -881,7 +878,7 @@ public static class UpdateCommands
                     continue;
                 }
 
-                if (File.Exists(entry) && SystemLitter.Contains(name, StringComparer.Ordinal))
+                if (File.Exists(entry) && Files.SystemLitter.Names.Contains(name, StringComparer.Ordinal))
                 {
                     continue;
                 }
@@ -889,7 +886,7 @@ public static class UpdateCommands
                 if (name == "logs"
                     && Directory.Exists(entry)
                     && Directory.EnumerateFileSystemEntries(entry).All(log => File.Exists(log)
-                        && (SystemLitter.Contains(Path.GetFileName(log), StringComparer.Ordinal)
+                        && (Files.SystemLitter.Names.Contains(Path.GetFileName(log), StringComparer.Ordinal)
                             || (Path.GetFileName(log).StartsWith("desktop-", StringComparison.Ordinal) && log.EndsWith(".jsonl", StringComparison.Ordinal)))))
                 {
                     continue;

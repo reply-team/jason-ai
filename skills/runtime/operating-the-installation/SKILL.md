@@ -445,6 +445,12 @@ A skill file the person edited, or a file they put in a skill, is theirs: the sk
 and the install it repeats, keep it, write everything else around it, name each file they kept and succeed. The
 skill holding it is then a blend of two hands, the person's and the release's, which the person reconciles. Only
 `--force` overwrites it, and it is the person's to type, never yours to add.
+A whole skill folder under a name Jason ships, one no record of Jason's names, is taken for the person's: every
+deployment leaves it as it is, writes and records nothing of it, and names it in its answer, and `jason status` names
+it — no flag reaches it. Pass that sentence on in its sense: Jason's skill of that name is not installed there, and an
+agent asked to use it reads their folder. The release's skill takes its place only when the person moves or removes
+their folder, then runs the command the sentence names — `jason skills update` for an agent host's folder,
+`jason skills install --roles-only` for the roles home. Never move it yourself.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three

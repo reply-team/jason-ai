@@ -103,6 +103,10 @@ public sealed partial class OwnTreeDeleteTests
         var live = Skill(Path.Combine(root, "researcher"), "OLD");
         var source = Skill(Path.Combine(dir.Paths.Root, "source", "researcher"), "NEW");
         var file = Path.Combine(source, "SKILL.md");
+
+        // Jason's own skill, which the root's record names: a folder no record names is the person's and never swapped.
+        SkillsRecord.Write(root, new SkillsRecord(SkillsRecord.CurrentVersion,
+            [new SkillsDeployment("a-pack", "a test source", "main", false, null, DateTimeOffset.UnixEpoch, [new DeployedFile("researcher/SKILL.md", SkillsRecord.Digest(Path.Combine(live, "SKILL.md")))])]));
         var plan = new SkillsPlan(
             new StagedSource(Path.GetDirectoryName(source)!, "a test source", "main", RefOverridden: false, Commit: null),
             [new PlannedPack("a-pack", root, [new PlannedUnit("researcher", live, [new PlannedFile(file, Path.Combine(live, "SKILL.md"), SkillsRecord.Digest(file))])])],

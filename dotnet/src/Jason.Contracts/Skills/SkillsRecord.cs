@@ -37,7 +37,22 @@ public sealed record SkillsDeployment(
     bool RefOverridden,
     string? Commit,
     DateTimeOffset InstalledAt,
-    IReadOnlyList<DeployedFile> Files);
+    IReadOnlyList<DeployedFile> Files)
+{
+    private readonly IReadOnlyList<string> _leftAlone = [];
+
+    /// <summary>
+    /// The skills of this pack the deployment found in this root under the name Jason ships them by, in a folder no record of
+    /// Jason's named and that is not byte for byte the one Jason ships: the person's own, written over by nothing and recorded
+    /// by nothing, and named here so that what reads this root (`jason status`) can say that a host reading it runs theirs.
+    /// Empty in a record an older Jason wrote, which reads this one by ignoring the member.
+    /// </summary>
+    public IReadOnlyList<string> LeftAlone
+    {
+        get => _leftAlone;
+        init => _leftAlone = value ?? [];
+    }
+}
 
 /// <summary>Every pack Jason put in one root, in one file beside them.</summary>
 /// <remarks>

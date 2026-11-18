@@ -117,6 +117,10 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   own agent's configuration unless the person says so (§4), except the skills that the install prompt's yes covers. A package manager's own PATH change is part of the
   install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand
   (§2) or by the repair (§5), is marked **Ask first.**
+- Where the install's report names a skill left alone (`left_alone`, with its sentence under `left`), tell the person in
+  that sentence's sense: the folder is left as it is, Jason's skill of that name is not installed for that host and an
+  agent asked to use it reads their folder, and to have Jason's they move or remove that folder, then run the command
+  the sentence names. The folder is theirs to move; never move or remove it yourself.
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
@@ -189,7 +193,7 @@ your terminal and your agents use. It is installed once, updated once and remove
   with exit code 3, which the script says in the same words.
 - Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
   put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
-  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
+  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. A skill folder of yours under a name Jason ships, one no record of Jason's names, is left as it is, nothing of it written or recorded, and the report names it under `left_alone` and in a sentence under `left`. Where a
   runtime answered before the install and none answers after it, or the report says it stopped one, the script starts
   one again from the application's `jason`.
 - It ends non-zero, saying which act failed, when `jason` was not put in the terminal. Run again over the version
