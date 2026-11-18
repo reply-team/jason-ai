@@ -577,7 +577,9 @@ public static class PathEntry
     /// </para>
     /// <para>
     /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
-    /// which is what both the installer and the repair append. A line nobody marked is somebody's own, written
+    /// which is what both the installer and the repair append. Appended to a file whose last line had no newline, the
+    /// newline the block begins with ended that line instead of making a blank one: where such a block is the last
+    /// thing in the file, that newline goes with it, and the file ends as it began; where anything follows, it stays. A line nobody marked is somebody's own, written
     /// by hand, and stays: this verb removes only what this installer wrote, on this platform as on the other,
     /// where an entry the installer did not write is left on the Path too.
     /// </para>
@@ -613,12 +615,22 @@ public static class PathEntry
 
             // Exactly what the script appended, and in that order: a blank line, the marker, the line.
             var first = index - 1;
-            if (first > 0 && lines[first - 1].Trim().Length == 0)
+            var blankAbove = first > 0 && lines[first - 1].Trim().Length == 0;
+            if (blankAbove)
             {
                 first--;
             }
 
-            lines.RemoveRange(first, index - first + 1);
+            // With no blank line above, the newline the block began with ended the person's last line, which had none.
+            // Where the block is the last thing in the file, that newline goes with it and the file ends as it began;
+            // where anything follows, it stays, because it now separates the person's own lines.
+            var last = index;
+            if (!blankAbove && first > 0 && index == lines.Count - 2 && lines[^1].Length == 0)
+            {
+                last++;
+            }
+
+            lines.RemoveRange(first, last - first + 1);
             removed = true;
 
             // And carry on above what was just taken out. Without this the walk stepped down into a list
