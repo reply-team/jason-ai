@@ -107,6 +107,22 @@ $thisBuild = Join-Path $Out 'this-build-extracted.txt'
 # expected until the removal takes them" and fail nothing: for a build whose removal takes neither alone. test-installation-macos.sh's
 # EXTRACTED_SOFT is the same switch there, and the two are flipped together.
 $extractedSoft = $false
+# Every leg's own scratch, which a leg that fails part way can leave and no product door takes, as test-installation-macos.sh
+# takes its own (take_scratch): the folder the person's own quick-start is moved out to while the previous release is
+# installed (WayBack), and the helper processes this script starts and leaves running while a leg works - the feed server,
+# the process holding a file of the application's folder (SilentUpdateLegs, leg 5) and the second reader of the update's
+# request file (UpdateApply). A step ended by its timeout never runs a leg's finally, so these outlive it: a feed server
+# keeps its port and the next one cannot bind it; a holder keeps the folder and the reset's uninstall cannot take it. Each
+# helper is recorded when it is started, by its process id and its command line (Register-Scratch); a clean begin takes
+# them all before it reads the machine (Take-Scratch). The signals the holder and the reader wait for are named here once,
+# so a clean begin gives the same ones.
+$scratchTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $temporary }
+$scratchOwnOut = Join-Path $scratchTemp 'own-quick-start-out'
+$scratchPlaces = @($scratchOwnOut)
+$scratchHeldFile = Join-Path $scratchTemp 'release-held-file'
+$scratchStopReading = Join-Path $scratchTemp 'stop-reading-requests'
+$scratchSignals = @($scratchHeldFile, $scratchStopReading)
+$scratchRecords = Join-Path $Out 'scratch-pids.txt'
 
 # The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
 # nothing where none.
@@ -459,6 +475,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     $logged = "$(Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue)".Length
     $arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, "$port", $log) | ForEach-Object { '"' + $_ + '"' }
     $server = Start-Process python -ArgumentList $arguments -PassThru -NoNewWindow -RedirectStandardError "$log.err"
+    Register-Scratch "the feed server for 127.0.0.1:$port" $server
     $null = $server.Handle
     $until = [DateTime]::UtcNow.AddSeconds(30)
     # An answer counts only once this server says it listens, which on Windows it can only do on a port no other socket
@@ -654,6 +671,111 @@ function Skip-Leg([string] $why) {
     Add-Content -LiteralPath (Join-Path $Out 'not-run.txt') -Value "$Leg - $why"
     Remove-Item -LiteralPath $legOpen -Force -ErrorAction SilentlyContinue
     New-Item -ItemType File -Path (Join-Path $Out 'skip') -Force | Out-Null
+}
+
+# A helper process this script started and leaves running while a leg works, recorded for a clean begin to take if the leg
+# leaves it: one JSON line in -Out\scratch-pids.txt with its id, its command line as Windows reports it now, and what it is;
+# its id said when it is started.
+function Register-Scratch([string] $what, [System.Diagnostics.Process] $process) {
+    $started = "$((Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($process.Id)" -ErrorAction SilentlyContinue).CommandLine)"
+    Add-Content -LiteralPath $scratchRecords -Value (ConvertTo-Json -Compress -InputObject ([ordered]@{ pid = $process.Id; command_line = $started; what = $what }))
+    Say "started $what as process $($process.Id), recorded for a clean begin to stop if a leg leaves it running"
+}
+
+# The recorded helpers still running: a process under a recorded id whose command line is still the one recorded. Windows
+# gives a freed id to a later process, so one under the same id with another command line is never a helper; one recorded
+# with no command line is never matched.
+function Get-RunningScratch {
+    @(if (Test-Path -LiteralPath $scratchRecords) {
+        foreach ($row in @(Get-Content -LiteralPath $scratchRecords | Where-Object { $_ })) {
+            $record = $row | ConvertFrom-Json
+            if (-not $record.command_line) { continue }
+            $now = @(Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $([int]$record.pid)" -ErrorAction SilentlyContinue)
+            if ($now.Count -gt 0 -and "$($now[0].CommandLine)" -ceq $record.command_line) { $record }
+        }
+    })
+}
+
+# An earlier leg's scratch taken before a clean leg reads the machine, as test-installation-macos.sh's take_scratch takes
+# its own: the holder and the reader signalled first, so they let go by themselves; a recorded helper still running then
+# stopped by its id alone, and only while its command line is still the one recorded; the person's own quick-start put
+# back where it is out of its place, a stand-in in its place removed first; then the places removed. On a GitHub-hosted
+# runner alone, as the reset; each act said and logged in -Out\resets.txt, never a proof. $false where the leg is not run.
+function Take-Scratch([string] $leg) {
+    $places = @($scratchPlaces | Where-Object { Test-Path -LiteralPath $_ })
+    $running = @(Get-RunningScratch)
+    if ($places.Count -eq 0 -and $running.Count -eq 0) { return $true }
+    $found = @($places) + @($running | ForEach-Object { "process $($_.pid) ($($_.what))" })
+    if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg "not run: an earlier leg's scratch is there ($($found -join '; ')), and it is taken on a GitHub-hosted runner alone"; return $false }
+    $resets = Join-Path $Out 'resets.txt'
+    Add-Content -LiteralPath $resets -Value "before '$leg': an earlier leg's scratch: $($found -join '; ')"
+    function Write-Taken([string] $line) { Say $line; Add-Content -LiteralPath $resets -Value "  $line" }
+    if ($running.Count -gt 0) {
+        foreach ($signal in $scratchSignals) { New-Item -ItemType File -Path $signal -Force | Out-Null }
+        $until = [DateTime]::UtcNow.AddSeconds(15)
+        while ([DateTime]::UtcNow -lt $until -and @(Get-RunningScratch).Count -gt 0) { Start-Sleep -Milliseconds 500 }
+        $stopped = @(Get-RunningScratch)
+        foreach ($record in $running) {
+            if (@($stopped | Where-Object { $_.pid -eq $record.pid }).Count -eq 0) { Write-Taken "the process $($record.pid) ($($record.what)) ended when signalled" }
+        }
+        foreach ($record in $stopped) {
+            Stop-Process -Id ([int]$record.pid) -Force -ErrorAction SilentlyContinue
+            Write-Taken "stopped the process $($record.pid) ($($record.what)) by its id, recorded when it was started and still running the command line recorded: $($record.command_line)"
+        }
+        $until = [DateTime]::UtcNow.AddSeconds(15)
+        while ([DateTime]::UtcNow -lt $until -and @(Get-RunningScratch).Count -gt 0) { Start-Sleep -Milliseconds 500 }
+        $left = @(Get-RunningScratch)
+        if ($left.Count -gt 0) { Skip-Leg "not run: an earlier leg's helper could not be stopped: $(($left | ForEach-Object { "process $($_.pid) ($($_.what))" }) -join '; ')"; return $false }
+    }
+    # While the person's own quick-start is out of its place, whatever stands there is a stand-in (the previous release's
+    # skills write one): removed, then the person's copy put back, as the leg's own put-back does. Where it cannot be put
+    # back, nothing is removed and the leg is not run, so the person's copy is never taken with the scratch.
+    $outSkill = Join-Path $scratchOwnOut 'quick-start'
+    if (Test-Path -LiteralPath $outSkill -PathType Container) {
+        if (Test-Path -LiteralPath $ownSkill) {
+            try { Remove-Item -LiteralPath $ownSkill -Recurse -Force; Write-Taken "removed $ownSkill, a stand-in while the person's own quick-start was out of its place" }
+            catch { Write-Taken "could not remove $ownSkill, a stand-in while the person's own quick-start was out of its place: $($_.Exception.Message)" }
+        }
+        if (-not (Test-Path -LiteralPath $ownSkill)) {
+            try {
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ownSkill) | Out-Null
+                Move-Item -LiteralPath $outSkill -Destination $ownSkill
+                Write-Taken "put the person's own quick-start back from $outSkill to $ownSkill"
+            } catch { Write-Taken "could not put the person's own quick-start back from ${outSkill}: $($_.Exception.Message)" }
+        }
+        if (Test-Path -LiteralPath $outSkill) { Skip-Leg "not run: the person's own quick-start could not be put back from $outSkill to $ownSkill"; return $false }
+    }
+    foreach ($place in $scratchPlaces) {
+        if (-not (Test-Path -LiteralPath $place)) { continue }
+        try { Remove-Item -LiteralPath $place -Recurse -Force; Write-Taken "removed $place" }
+        catch { Write-Taken "could not remove ${place}: $($_.Exception.Message)" }
+    }
+    foreach ($place in $scratchPlaces) {
+        if (Test-Path -LiteralPath $place) { Skip-Leg "not run: an earlier leg's scratch, $place, could not be removed"; return $false }
+    }
+    return $true
+}
+
+# The updater's folder under the account's local application data (jason-desktop-updater), which a release before 0.49
+# keeps at its own uninstall by design and where its setup stores itself (electron-builder's installer.nsh): taken where
+# the leg that last changed the machine, $by, is one of the previous release (-Out\previous-legs.txt), whichever uninstall
+# of that release left it, the leg's own or the reset's; after a leg of this build alone it is never taken, and counts
+# against that leg. Removed directly, with nothing of this build involved; what it held and whether it went logged in
+# -Out\resets.txt, never a proof. $false where the leg is not run.
+function Take-UpdaterCache([string] $leg, [string] $by) {
+    $folder = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
+    if (-not $by -or -not (Test-Path -LiteralPath $folder)) { return $true }
+    $previousLegs = @(if (Test-Path -LiteralPath (Join-Path $Out 'previous-legs.txt')) { Get-Content -LiteralPath (Join-Path $Out 'previous-legs.txt') })
+    if ($previousLegs -cnotcontains $by) { return $true }
+    if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg "not run: the updater's folder $folder, left after '$by', a leg of the previous release, is taken on a GitHub-hosted runner alone, and this is not one"; return $false }
+    $resets = Join-Path $Out 'resets.txt'
+    $held = @(Get-ChildItem -LiteralPath $folder -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($folder.Length).TrimStart('\')) $($_.Length)" })
+    Add-Content -LiteralPath $resets -Value "before '$leg': found $folder after '$by', a leg of the previous release, whose own uninstall keeps it by design, holding: $(if ($held) { $held -join '; ' } else { 'no file' })"
+    try { Remove-Item -LiteralPath $folder -Recurse -Force } catch { Add-Content -LiteralPath $resets -Value "  could not remove ${folder}: $($_.Exception.Message)" }
+    $state = if (Test-Path -LiteralPath $folder) { 'still there' } else { 'gone' }
+    Add-Content -LiteralPath $resets -Value "  removed ${folder}: it is $state"
+    Say "the updater's folder $folder, left after '$by', a leg of the previous release, whose own uninstall keeps it: removed, and it is $state"
+    return $true
 }
 
 # Every line of the machine now that is not a line of the machine before, and every line gone, the data directory and the
@@ -950,10 +1072,15 @@ switch ($Step) {
         # The reset uses the product's own doors alone - jason uninstall --purge-data from each jason found, then Installed
         # apps' quiet uninstall - and only on a GitHub-hosted runner, never on a person's machine. Each act is logged with
         # what it found and what it removed, here and in -Out\resets.txt; none of it is a proof of anything. What those
-        # doors cannot remove makes this leg not run, naming the lines left.
+        # doors cannot remove makes this leg not run, naming the lines left. Three acts are the proof's own, never a product
+        # door, logged the same way: before the machine is read, an earlier leg's scratch is taken (Take-Scratch) and, after a
+        # leg of the previous release, the updater's folder that release keeps (Take-UpdaterCache); after the reset, the
+        # harness root every uninstall keeps is moved aside whole.
         if ($Clean) {
             if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
+            if (-not (Take-Scratch $Leg)) { return }
             $prior = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
+            if (-not (Take-UpdaterCache $Leg $prior)) { return }
             $found = @(Get-LeftOver)
             if ($found.Count -gt 0) {
                 $resets = Join-Path $Out 'resets.txt'
@@ -1015,12 +1142,8 @@ switch ($Step) {
                     # uninstaller in a folder of its own, given the application's folder by _?=, so that NSIS runs that copy
                     # in place and to its end instead of relaunching one and returning at once.
                     Write-ResetProcesses $resets 'before Installed apps'
-                    $before049 = $false
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
                         $quietLine = Get-QuietUninstall $entry
-                        $entryVersion = "$(if ($entry.PSObject.Properties.Name -contains 'DisplayVersion') { $entry.DisplayVersion } else { ($entry.DisplayName -replace '^Jason\s*', '') })"
-                        $parsedVersion = $null
-                        if ([version]::TryParse(($entryVersion -replace '[^0-9.].*$', ''), [ref] $parsedVersion) -and $parsedVersion -lt [version] '0.49') { $before049 = $true }
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
                             $uninstaller = $Matches['file']; $arguments = $Matches['arguments']
                             $copyFolder = Join-Path $temporary "jason-reset-uninstaller-$([Guid]::NewGuid().ToString('N'))"
@@ -1034,17 +1157,9 @@ switch ($Step) {
                             Remove-Item -LiteralPath $copyFolder -Recurse -Force -ErrorAction SilentlyContinue
                         }
                     }
-                    # A release before 0.49 keeps the updater's folder by its own design (its uninstall says the updater's
-                    # cache stays), and its setup stored itself there (electron-builder's installer.nsh): after Installed
-                    # apps' uninstall of one, and only then, the reset itself removes that folder, directly, with nothing of
-                    # this build involved, logging what it found and what it removed. Never a proof of anything.
-                    $updaterFolder = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
-                    if ($before049 -and (Test-Path -LiteralPath $updaterFolder)) {
-                        $foundThere = @(Get-ChildItem -LiteralPath $updaterFolder -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($updaterFolder.Length).TrimStart('')) $($_.Length)" })
-                        Add-Content -LiteralPath $resets -Value "  found $updaterFolder, which Installed apps' uninstall of a release before 0.49 keeps by its own design, holding: $(if ($foundThere) { $foundThere -join '; ' } else { 'no file' })"
-                        Remove-Item -LiteralPath $updaterFolder -Recurse -Force
-                        Add-Content -LiteralPath $resets -Value "  removed ${updaterFolder}: it is $(if (Test-Path -LiteralPath $updaterFolder) { 'still there' } else { 'gone' })"
-                    }
+                    # The updater's folder the uninstalls above left, where the leg that left the machine is one of the
+                    # previous release, as before this leg's reading (Take-UpdaterCache).
+                    $null = Take-UpdaterCache $Leg $last
                 } catch {
                     Add-Content -LiteralPath $resets -Value "  the reset failed: $($_.Exception.Message)"
                     Skip-Leg "not run: taking off the machine '$last' left failed: $($_.Exception.Message)"
@@ -1058,6 +1173,24 @@ switch ($Step) {
                 Add-Content -LiteralPath $resets -Value "  removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
                 Say "the reset removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
                 if ($left.Count -gt 0) { Skip-Leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $($left -join '; ')"; return }
+            }
+            # The harness root, which every uninstall keeps as its contract says, holds the folders and markers an earlier
+            # leg's installation made, and a new data directory's runtime refuses them as another's (harness_folder_taken):
+            # moved aside whole before a clean leg, never deleted, said in one line and logged, never a proof; on a
+            # GitHub-hosted runner alone, as the reset. test-installation-macos.sh moves its own aside the same way.
+            if (Test-Path -LiteralPath $harnessRoot) {
+                $priorName = if ($prior) { $prior } else { 'no leg' }
+                if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg "not run: the harness root $harnessRoot an earlier leg left is moved aside on a GitHub-hosted runner alone, and this is not one"; return }
+                $roots = Join-Path $scratchTemp 'harness-roots'
+                New-Item -ItemType Directory -Force -Path $roots | Out-Null
+                $asideName = "$(@(Get-ChildItem -LiteralPath $roots -Force).Count + 1)-after-$($priorName -replace '[^A-Za-z0-9._-]', '-')"
+                if ($asideName.Length -gt 80) { $asideName = $asideName.Substring(0, 80) }
+                $aside = Join-Path $roots $asideName
+                try { Move-Item -LiteralPath $harnessRoot -Destination $aside; $movedLine = "before '$Leg': the harness root $harnessRoot, left after '$priorName', moved aside to $aside" }
+                catch { $movedLine = "before '$Leg': the harness root $harnessRoot, left after '$priorName', could not be moved aside to ${aside}: $($_.Exception.Message)" }
+                Say $movedLine
+                Add-Content -LiteralPath (Join-Path $Out 'resets.txt') -Value $movedLine
+                if (Test-Path -LiteralPath $harnessRoot) { Skip-Leg "not run: the harness root $harnessRoot could not be moved aside"; return }
             }
             # What this begin found and excused, for this leg's compare to set aside by the leg that left it.
             Write-Inherited $prior 'leg-start' (Join-Path $Out 'inherited.txt')
@@ -1485,6 +1618,8 @@ switch ($Step) {
         #  4. --updated /S, the old application quitting 20 s late: 0.
         #  5. --updated /S, the application not running, while another process holds a file of its folder, so the old
         #     version's uninstaller refuses: 2, the old version still in place and opening.
+        # Then this build is put back over it by --updated /S, the application not running: 0, so the uninstall that
+        # closes the leg is this build's.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $old = Join-Path $Previous 'jason-desktop-windows-x64-setup.exe'
         $new = Join-Path $Feed 'jason-desktop-windows-x64-setup.exe'
@@ -1592,9 +1727,10 @@ switch ($Step) {
             From-Previous $false
             $held = @('LICENSE.electron.txt', 'LICENSES.chromium.html', 'resources\app.asar') | ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
             if (-not $held) { Fail 'leg 5: no file of the application''s folder to hold' }
-            $release = Join-Path $env:RUNNER_TEMP 'release-held-file'
+            $release = $scratchHeldFile
             Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
             $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
+            Register-Scratch 'the process holding a file of the application''s folder' $holder
             Start-Sleep -Seconds 3
             Say "leg 5: $(Split-Path -Leaf $held) of the application's folder held open by process $($holder.Id), sharing read alone"
             $null = Test-Leg 'leg 5, --updated /S while the old uninstaller cannot remove the folder' @('--updated', '/S') @(2)
@@ -1607,7 +1743,18 @@ switch ($Step) {
         } catch {
             $failures.Add("leg 5 did not finish: $($_.Exception.Message)")
         } finally {
-            New-Item -ItemType File -Path (Join-Path $env:RUNNER_TEMP 'release-held-file') -Force | Out-Null
+            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null
+        }
+
+        # This build put back over the previous release leg 5 leaves, the application not running, as leg 4 puts it: the
+        # uninstall that closes the leg is then this build's, so the leg's compare holds this build's removal, as every other
+        # leg's does, and excuses nothing the previous release's own uninstall keeps.
+        try {
+            End-Application
+            $null = Test-Leg 'this build put back, --updated /S over the previous release not running' @('--updated', '/S') @(0)
+            if ((Read-Version $carried) -ne $Version) { $failures.Add("after this build was put back the application is $(Read-Version $carried), not $Version") }
+        } catch {
+            $failures.Add("putting this build back did not finish: $($_.Exception.Message)")
         }
 
         if ($failures.Count -gt 0) { Fail ($failures -join '; ') }
@@ -1675,12 +1822,14 @@ switch ($Step) {
         if ($runtime.Exit -ne 0) { Fail "a runtime could not be started before the update ($($runtime.Exit))" }
 
         $requests = Join-Path $data 'update'
-        $stopReading = Join-Path $env:RUNNER_TEMP 'stop-reading-requests'
+        $stopReading = $scratchStopReading
         $readsFile = Join-Path $env:RUNNER_TEMP 'request-reads.txt'
         function Start-Reader {
             Remove-Item -LiteralPath $stopReading, $readsFile -Force -ErrorAction SilentlyContinue
             $loop = "`$n = 0; while (-not (Test-Path -LiteralPath '$stopReading')) { `$files = try { [System.IO.Directory]::GetFiles('$requests', 'desktop-*.json') } catch { @() }; foreach (`$f in `$files) { try { `$s = [System.IO.File]::Open(`$f, 'Open', 'Read', 'ReadWrite'); `$b = New-Object byte[] 65536; `$null = `$s.Read(`$b, 0, `$b.Length); Start-Sleep -Milliseconds 15; `$s.Dispose(); `$n++ } catch { } }; Start-Sleep -Milliseconds 2 }; Set-Content -LiteralPath '$readsFile' -Value `$n"
-            Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $loop -PassThru -WindowStyle Hidden
+            $reader = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $loop -PassThru -WindowStyle Hidden
+            Register-Scratch 'the second reader of the update''s request file' $reader
+            $reader
         }
         function Stop-Reader($reader) {
             New-Item -ItemType File -Path $stopReading -Force | Out-Null
@@ -1888,7 +2037,7 @@ switch ($Step) {
         # step 1, after step 3, after the put-back where the words have one, and after the previous release's own uninstall.
         $way = "$env:JASON_PROOF_OWN_SKILL_GOING_BACK"
         if ($way -cnotin @('put-back', 'keep-out')) { Fail "JASON_PROOF_OWN_SKILL_GOING_BACK is '$way', where it says put-back or keep-out" }
-        $outside = Join-Path $env:RUNNER_TEMP 'own-quick-start-out'
+        $outside = $scratchOwnOut
         $ownOut = Join-Path $outside 'quick-start'
 
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
@@ -2005,7 +2154,7 @@ switch ($Step) {
         if ($Again) {
             # Moving again: the previous release's own update apply, pinned to this version, from the feed served here, as the
             # page says it moves the install into Jason Desktop again.
-            $server = Start-FeedServer $Feed 8099 (Join-Path $Out "feed-server-way-back-moved-again$(if ($Again) { '-again' }).log")
+            $server = Start-FeedServer $Feed 8099 (Join-Path $Out 'feed-server-way-back-moved-again.log')
             try {
                 $moved = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
             } finally {

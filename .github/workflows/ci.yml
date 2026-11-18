@@ -2314,7 +2314,8 @@ jobs:
       # This build's silent setups over the previous release (desktop/installer/uninstall.nsh): over a window that never
       # quits, 3 at the include's bound and the next setup not blocked; plain /S over a window and over the tray, 3; the old
       # application quitting 20 s late, 0; the old uninstaller refusing, 2. None may show a window, and each sub-leg runs
-      # whatever the one before it did. Then Installed apps takes it off again, and the listing is held to the machine before.
+      # whatever the one before it did. Then this build is put back over the previous release by its own silent setup, so
+      # Installed apps takes this build off again, and the listing is held to the machine before.
       - name: Install this build silently over the previous release
         if: ${{ !cancelled() }}
         timeout-minutes: 25
