@@ -362,6 +362,14 @@ is_previous_own() {
     grep -qxF -- "$1	$2" "$OUT/previous-own.txt"
 }
 
+# Whether the listing line $2 (without its "+ ") is one the leg $1 recorded as this build's own skills record, kept by this
+# build's own uninstall beside the person's own file it reported edited (the second way-back leg): exactly that line,
+# recorded by that leg ($OUT/this-build-own.txt).
+is_this_build_own() {
+    [ -n "$1" ] && [ -f "$OUT/this-build-own.txt" ] || return 1
+    grep -qxF -- "$1	$2" "$OUT/this-build-own.txt"
+}
+
 # The previous release's own line the leg that last changed the machine, $2, recorded (see PREVIOUS_OWN_NAME), taken before
 # the clean leg $1 reads the machine: the file removed only while its listing line is still exactly the one recorded. On a
 # GitHub-hosted runner alone, as the reset; each act said and logged in $OUT/resets.txt, never a proof. Elsewhere the leg
@@ -802,23 +810,26 @@ compare)
         went="$(printf '%s' "$counted_went" | sed '/^$/d')"
         [ -z "$inherited_here" ] || say "inherited at this leg's begin and not counted in $1, each by the leg that left it: $(printf '%s' "$inherited_here" | tr '\t\n' ' ;')"
     fi
-    # The previous release's own line (see PREVIOUS_OWN_NAME): excused exactly where the leg that left it recorded it, the
-    # open leg in its own compare, the leg the line is attributed to in the held step's whole one.
+    # The previous release's own line (see PREVIOUS_OWN_NAME), and this build's own skills record its uninstall keeps beside
+    # the person's own file it reported edited (is_this_build_own): each excused exactly where the leg that left it recorded
+    # it, the open leg in its own compare, the leg the line is attributed to in the held step's whole one.
     own_here=""; own_by=""; counted_left=""
     if [ "${3:-}" != final ]; then own_by="$(cat "$OUT/leg-open.txt" 2>/dev/null || true)"; fi
     while IFS= read -r line; do
         [ -n "$line" ] || continue
         by="$own_by"; if [ "${3:-}" = final ]; then by="$(inherited_by "+ $line" "$OUT/final-attributed.txt")"; fi
-        if is_previous_own "$by" "$line"; then own_here="$own_here+ $line  (left by '$by', the previous release's own, as its uninstall leaves it)"$'\n'; else counted_left="$counted_left$line"$'\n'; fi
+        if is_previous_own "$by" "$line"; then own_here="$own_here+ $line  (left by '$by', the previous release's own, as its uninstall leaves it)"$'\n'
+        elif is_this_build_own "$by" "$line"; then own_here="$own_here+ $line  (left by '$by', this build's own record, kept by its uninstall beside the person's own file its report names edited)"$'\n'
+        else counted_left="$counted_left$line"$'\n'; fi
     done <<< "$left"
     left="$(printf '%s' "$counted_left" | sed '/^$/d')"
-    [ -z "$own_here" ] || say "expected in $1, the previous release's own as its uninstall leaves it, each recorded by the leg that left it: $(printf '%s' "$own_here" | tr '\t\n' ' ;')"
+    [ -z "$own_here" ] || say "expected in $1, each as the uninstall named beside it leaves it, recorded by the leg that left it: $(printf '%s' "$own_here" | tr '\t\n' ' ;')"
     [ -z "$expected_x" ] || say "expected in $1: $(printf '%s' "$expected_x" | tr '\t\n' ' ;') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)"
     if [ -n "$soft_x" ]; then
         say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
         printf '%s: %s\n' "$1" "$(printf '%s' "$soft_x" | tr '\t\n' ' ;')" >> "$OUT/soft-seen.txt"
     fi
-    { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; [ -z "$inherited_here" ] || { echo "inherited at this leg's begin, not counted here (each by the leg that left it):"; printf '%s' "$inherited_here"; }; [ -z "$own_here" ] || { echo "expected, each the previous release's own as its uninstall leaves it:"; printf '%s' "$own_here"; }; } > "$diffed" || true
+    { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; [ -z "$inherited_here" ] || { echo "inherited at this leg's begin, not counted here (each by the leg that left it):"; printf '%s' "$inherited_here"; }; [ -z "$own_here" ] || { echo "expected, each as the uninstall named beside it leaves it:"; printf '%s' "$own_here"; }; } > "$diffed" || true
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
@@ -1513,6 +1524,36 @@ PY
         wait_until 120 "Jason.app going after jason uninstall" gone "$placed"
         remover="the moved install's own uninstall"
         say "$version's own uninstall --purge-data --yes, after moving again, ended 0"
+        # What a person who went back and moved again with a skill of their own under one of Jason's names is left with:
+        # this build's own uninstall keeps a file it reports edited, as it keeps every file it did not write as it is, and
+        # the skills record that names it beside it. That record's line is this build's own, excused by attribution to this
+        # uninstall only where its own report names exactly the person's own SKILL.md as the one edited file it kept under
+        # ~/.agents/skills, and recorded by its listing line for this leg's compare (is_this_build_own).
+        if [ -f "$PREVIOUS_OWN_FILE" ] && [ ! -L "$PREVIOUS_OWN_FILE" ]; then
+            kept_read="$(python3 -c 'import json,sys
+report = None
+for line in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines():
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        doc = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(doc, dict) and isinstance(doc.get("plan"), dict):
+        report = doc
+if report is None:
+    print("no report")
+else:
+    roots = [root for root in (report["plan"].get("roots") or []) if isinstance(root, dict) and root.get("root") == sys.argv[2]]
+    edited = [str(item.get("path")) for root in roots for item in (root.get("files") or []) if isinstance(item, dict) and item.get("edited") is True]
+    print("edited: " + " | ".join(edited))' "$OUT/way-back-end.txt" "$HOME/.agents/skills")" || fail "after $remover, its report in $OUT/way-back-end.txt could not be read"
+            [ "$kept_read" = "edited: $OWN_SKILL/SKILL.md" ] || fail "after $remover, $PREVIOUS_OWN_FILE is left, and the uninstall's report does not name exactly the person's own $OWN_SKILL/SKILL.md as the one edited file it kept under $HOME/.agents/skills: $kept_read"
+            open_leg="$(cat "$OUT/leg-open.txt" 2>/dev/null || true)"
+            [ -n "$open_leg" ] || fail "no leg is open to record $PREVIOUS_OWN_FILE as this build's own"
+            printf '%s\t%s\t%s\n' "$open_leg" "$PREVIOUS_OWN_NAME" "$(stat -f %z "$PREVIOUS_OWN_FILE" 2>/dev/null || echo '?')" >> "$OUT/this-build-own.txt"
+            say "a person who went back and moved again with a skill of their own under one of Jason's names is left with their own $OWN_SKILL as it was and, beside it, $PREVIOUS_OWN_FILE, Jason's skills record naming it: $remover reported that SKILL.md edited and kept it, with the record that names it; this leg's compare excuses exactly that record's line as this build's own"
+        fi
     else
         # The leg's own end: the runtime stopped, the login start taken off, and the previous release's own uninstall.
         for words in 'runtime stop' 'runtime autostart disable' 'uninstall --purge-data --yes'; do

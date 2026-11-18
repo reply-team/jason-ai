@@ -1064,6 +1064,77 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// After going back and moving again on macOS, this build's own uninstall keeps the person's own quick-start, which it
+    /// reports edited, and the skills record naming it. The leg excuses that record's line by attribution to this build's
+    /// own uninstall only where that uninstall's own report names exactly the person's own SKILL.md as the one edited file
+    /// it kept under ~/.agents/skills: the reader is run on a report the product's own types and serializer wrote, among
+    /// the words the verb says on stderr, beside a report that names another file or another root. The leg says what a
+    /// person is left with, records the line once, and a compare excuses exactly the recorded line.
+    /// </summary>
+    [Fact]
+    public void The_macOS_second_way_back_leg_excuses_this_build_s_own_record_only_where_its_uninstall_reports_the_person_s_file_edited()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = macos.IndexOf("\nis_this_build_own() {\n", StringComparison.Ordinal);
+        Assert.True(function >= 0, "test-installation-macos.sh has no is_this_build_own");
+        var isOwn = macos[function..];
+        isOwn = isOwn[..isOwn.IndexOf("\n}\n", StringComparison.Ordinal)];
+        Assert.Contains("grep -qxF -- \"$1\t$2\" \"$OUT/this-build-own.txt\"", isOwn, StringComparison.Ordinal);
+        var compare = macos[macos.IndexOf("\ncompare)\n", StringComparison.Ordinal)..];
+        compare = compare[..compare.IndexOf("\nbegin)\n", StringComparison.Ordinal)];
+        Assert.Contains("elif is_this_build_own \"$by\" \"$line\"; then own_here=", compare, StringComparison.Ordinal);
+
+        // The one writer of a row: the second way-back leg's own end, after its uninstall's report is read, before 'else'.
+        Assert.Single(Regex.Matches(macos, @">> ""\$OUT/this-build-own\.txt"""));
+        var wayBack = macos[macos.IndexOf("\nway-back)\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\nover-previous-desktop)\n", StringComparison.Ordinal)];
+        var ended = wayBack.IndexOf("        say \"$version's own uninstall --purge-data --yes, after moving again, ended 0\"\n", StringComparison.Ordinal);
+        var reader = Regex.Match(wayBack, @"kept_read=""\$\(python3 -c '(?<code>[^']*)' ""\$OUT/way-back-end\.txt"" ""\$HOME/\.agents/skills""\)""");
+        var held = wayBack.IndexOf("[ \"$kept_read\" = \"edited: $OWN_SKILL/SKILL.md\" ] || fail ", StringComparison.Ordinal);
+        var row = wayBack.IndexOf(">> \"$OUT/this-build-own.txt\"", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("say \"a person who went back and moved again with a skill of their own under one of Jason's names is left with ", StringComparison.Ordinal);
+        var otherwise = wayBack.IndexOf("\n    else\n        # The leg's own end: the runtime stopped", StringComparison.Ordinal);
+        Assert.True(reader.Success, "the second way-back leg reads no report of its uninstall by one python3 reader");
+        Assert.True(ended >= 0 && reader.Index > ended && held > reader.Index && row > held && said > row && otherwise > said, "the second way-back leg does not record this build's own record only after its uninstall's report names the person's own file edited, and say what a person is left with, in its own end");
+
+        // The reader, run on what the verb printed: a line of stderr, then the report the product's types and serializer make.
+        const string home = "/Users/someone";
+        UninstallReport Report(params RootRemoval[] roots) => new(
+            new UninstallPlan(false, null, null, null, roots, [], null, null, null, null, null, true, $"{home}/.jason"),
+            ["Removed 66 file(s)."],
+            [],
+            [],
+            null,
+            null);
+        RootRemoval Root(string root, params (string File, bool Edited)[] files) =>
+            new(root, ["jason-runtime-skills", "jason-business-skills"], [.. files.Select(file => new FileRemoval($"{root}/{file.File}", true, file.Edited))]);
+        var agents = $"{home}/.agents/skills";
+        var claude = $"{home}/.claude/skills";
+        var cases = new (string Name, UninstallReport Report, string Said)[]
+        {
+            ("the person's own file edited", Report(Root(claude, ("quick-start/SKILL.md", false)), Root(agents, ("quick-start/SKILL.md", true), ("inbox-triage/SKILL.md", false))), $"edited: {agents}/quick-start/SKILL.md"),
+            ("another file edited", Report(Root(agents, ("quick-start/SKILL.md", false), ("inbox-triage/SKILL.md", true))), $"edited: {agents}/inbox-triage/SKILL.md"),
+            ("the person's own file edited under another root alone", Report(Root(claude, ("quick-start/SKILL.md", true)), Root(agents, ("quick-start/SKILL.md", false))), "edited: "),
+            ("two files edited", Report(Root(agents, ("quick-start/SKILL.md", true), ("inbox-triage/SKILL.md", true))), $"edited: {agents}/quick-start/SKILL.md | {agents}/inbox-triage/SKILL.md"),
+        };
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        var folder = tree.NewDirectory("said");
+        foreach (var (name, report, expected) in cases)
+        {
+            var printed = Path.Combine(folder, "way-back-end.txt");
+            File.WriteAllText(printed, "Stopping the runtime...\n" + JsonSerializer.Serialize(report, JasonJson.Options) + "\n");
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-c", reader.Groups["code"].Value, printed, agents);
+            Assert.True(exit == 0, $"{name}: {stderr}");
+            Assert.True(expected == stdout.TrimEnd('\r', '\n'), $"{name}: the reader said '{stdout.Trim()}', not '{expected}'");
+        }
+
+        // Only the first is the one the leg excuses: the person's own SKILL.md, exactly, and nothing else.
+        Assert.Contains("OWN_SKILL=\"$HOME/.agents/skills/quick-start\"", macos, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
