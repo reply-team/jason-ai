@@ -545,6 +545,23 @@ function Read-InstallReport([string] $said) {
     return $null
 }
 
+# The command-line install's three files, each there: what its retirement later takes is first held to have been placed.
+function Assert-CommandLineFiles([string] $by) {
+    foreach ($file in 'jason.exe', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') {
+        if (-not (Test-Path -LiteralPath (Join-Path $commandLine $file) -PathType Leaf)) { Fail "$by placed no $file at $commandLine" }
+    }
+}
+
+# The jason command files in this account's WindowsApps, by name. A folder that is not there holds none; one that is there
+# and cannot be read fails, rather than reading as empty: read through .NET, since Get-ChildItem lists nothing, and throws
+# nothing even with -ErrorAction Stop, for a folder it may not list.
+function Get-WindowsAppsCommandFiles {
+    $folder = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return @() }
+    try { return @([IO.Directory]::GetFileSystemEntries($folder, 'jason*') | ForEach-Object { [IO.Path]::GetFileName($_) }) }
+    catch { Fail "the WindowsApps folder $folder could not be read: $($_.Exception.Message)" }
+}
+
 switch ($Step) {
     'Extracted' {
         # The id of the folder this build's executable extracts its native libraries to, read by running it once with the
@@ -1580,7 +1597,10 @@ switch ($Step) {
             if ($moved.Exit -ne 0) { Fail "after going back, $previousVersion's jason update apply --version $Version exited with $($moved.Exit)" }
             $document = Read-Document $moved.Said
             $move = if ($document) { $document.PSObject.Properties['move'] } else { $null }
+            if (-not $document) { Fail "after going back, the update printed no document: $($moved.Said)" }
+            if ($document.step -cne 'complete' -or $document.to -cne $Version) { Fail "after going back, the update ended at '$($document.step)' to '$($document.to)', not complete to $Version" }
             if (-not $move -or -not $move.Value -or $move.Value.state -cne 'done') { Fail "after going back, the update did not end with its move done: $($moved.Said)" }
+            if ([string]$move.Value.application -ine $app) { Fail "after going back, the move put the application at $($move.Value.application), not $app" }
             if ((Read-Version $carried) -ne $Version) { Fail "after moving again the application is $(Read-Version $carried), not $Version" }
             if (Test-Path -LiteralPath $jason) { Fail "after moving again the command-line install's jason is still at $jason" }
             if ((Count-Entry $bundle) -ne 1) { Fail "after moving again the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $((Get-UserPath).Raw)" }
@@ -1638,11 +1658,15 @@ switch ($Step) {
         # naming it; the Path naming the bundle folder once and the command-line folder no more; a new shell finding this
         # version; and the campaigns the same, by id. The uninstall from a new terminal is the next step.
         if (-not $Previous -or -not $Feed -or -not $Version -or -not $Script) { Fail '-Previous, -Feed, -Version and -Script are needed.' }
+        # It writes the account's own data directory, Path, logon registration and Installed apps: a GitHub-hosted runner's
+        # alone, never a person's machine.
+        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail 'InstallOverCommandLine runs on the account''s own home and data directory, and on a GitHub-hosted runner alone.' }
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         $jason = Join-Path $commandLine 'jason.exe'
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
         if (-not (Test-Path -LiteralPath $jason -PathType Leaf)) { Fail "the previous release's install.ps1 placed no jason at $jason" }
+        Assert-CommandLineFiles 'the previous release''s install.ps1'
         $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
         if ($previousVersion -ceq $Version) { Fail "the previous release's jason says $previousVersion, the version this build is" }
         if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
@@ -1702,10 +1726,13 @@ switch ($Step) {
         # install.ps1, side by side, both on the Path; then this build's setup run as an update runs it (--updated --force-run,
         # as InstallOverPrevious runs it), whose own last step, jason install with no flags, retires the command-line one.
         # Asserted: one installation remains, at this version; the command-line install retired into the application, its
-        # files gone, the move's record done and standing where one is written; the Path naming the bundle folder once and the
-        # command-line folder no more, and no command file in WindowsApps; a new shell finding the carried jason. The
-        # uninstall Installed apps runs is the next step.
+        # files gone, no move record written (a move writes one, and this is no move) and jason status's move check reading
+        # absent; the Path naming the bundle folder once and the command-line folder no more, and no command file in
+        # WindowsApps; a new shell finding the carried jason. The uninstall Installed apps runs is the next step.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
+        # It writes the account's own data directory, Path and Installed apps: a GitHub-hosted runner's alone, never a
+        # person's machine.
+        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail 'OverBothPrevious runs on the account''s own home and data directory, and on a GitHub-hosted runner alone.' }
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         $jason = Join-Path $commandLine 'jason.exe'
         $previousSetup = Join-Path $Previous 'jason-desktop-windows-x64-setup.exe'
@@ -1718,11 +1745,13 @@ switch ($Step) {
         $cli = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($cli.Exit -ne 0) { Fail "the previous release's install.ps1 beside its Jason Desktop exited with $($cli.Exit)" }
         if (-not (Test-Path -LiteralPath $jason -PathType Leaf)) { Fail "the previous release's install.ps1 placed no jason at $jason" }
+        Assert-CommandLineFiles 'the previous release''s install.ps1 beside its Jason Desktop'
         $cliVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
+        if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
         # Both on the Path: the command-line folder's entry, and whatever the previous Jason Desktop put there.
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
-        $commandFiles = @(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps') -Filter 'jason*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+        $commandFiles = @(Get-WindowsAppsCommandFiles)
         if ((Count-Entry $bundle) -lt 1 -and $commandFiles.Count -eq 0) { Fail "the previous release's Jason Desktop put nothing on the Path: no entry naming $bundle, no command file in WindowsApps" }
         $first = @(Find-InNewShell 'jason')
         Say "side by side: Jason Desktop $desktopVersion at $app ($(if ((Count-Entry $bundle) -ge 1) { "its bundle folder on the Path" } else { "its command files in WindowsApps: $($commandFiles -join ', ')" })) and the command-line Jason $cliVersion at $jason on the Path; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
@@ -1743,34 +1772,31 @@ switch ($Step) {
             if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the command-line install still holds $file at ${commandLine}: it was not retired into the application" }
         }
         # The move's record is written by a move, which jason update apply makes; the setup's own jason install retires with
-        # none. Where one stands it says done, naming this application, which stands; where none does, jason status's move
-        # check reads absent. The check is never failed, and which of the two was read is said.
+        # none, so none stands, and jason status's move check, which status always lists, reads absent.
         $recordFile = Join-Path $data 'update\move.json'
-        $status = Read-Document (Invoke-Program $carried @('status') $quiet).Said
-        $checks = @(if ($status -and $status.PSObject.Properties['checks']) { $status.checks })
+        if (Test-Path -LiteralPath $recordFile) { Fail "a move record stands at $recordFile after the setup's own jason install, which writes none: $(Get-Content -LiteralPath $recordFile -Raw)" }
+        $statusRun = Invoke-Program $carried @('status') $quiet
+        # jason status ends 0 or 1, ready or not, and never 3: any other end is not an answer to read.
+        if ($statusRun.Exit -ne 0 -and $statusRun.Exit -ne 1) { Fail "jason status after the update exited with $($statusRun.Exit): $($statusRun.Said)" }
+        $status = Read-Document $statusRun.Said
+        if (-not $status -or -not $status.PSObject.Properties['checks']) { Fail "jason status after the update printed no document with its checks: $($statusRun.Said)" }
+        $checks = @($status.checks)
         $moveCheck = @($checks | Where-Object { $_.name -ceq 'move' })
-        $moveSaid = if ($moveCheck.Count -eq 1) { "$($moveCheck[0].state): $($moveCheck[0].fact)" } else { 'no move check read' }
-        if ($moveCheck.Count -eq 1 -and $moveCheck[0].state -ceq 'failed') { Fail "jason status's move check fails after the setup: $moveSaid" }
-        if (Test-Path -LiteralPath $recordFile) {
-            $record = Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json
-            if ($record.state -cne 'done') { Fail "the move record at $recordFile says $($record.state) at $($record.step)" }
-            if ([string]$record.application -ine $app -or -not (Test-Path -LiteralPath $app)) { Fail "the move record at $recordFile names $($record.application), which is not the application standing at $app" }
-            $recordSaid = "a move record was written: $recordFile says done, naming $app, which stands"
-        } else {
-            if ($moveCheck.Count -ne 1 -or $moveCheck[0].state -cne 'absent') { Fail "no move record was written, and jason status's move check does not read absent: $moveSaid" }
-            $recordSaid = 'no move record was written, as the setup''s own jason install writes none, and jason status''s move check reads absent'
-        }
-        Say "one installation: one Installed apps entry, $app at $Version, the command-line install's files gone from $commandLine; $recordSaid; jason status's move check: $moveSaid"
+        if ($moveCheck.Count -ne 1) { Fail "jason status after the update lists $($moveCheck.Count) move check(s), not one: $($statusRun.Said)" }
+        $moveSaid = "$($moveCheck[0].state): $($moveCheck[0].fact)"
+        if ($moveCheck[0].state -cne 'absent') { Fail "no move record was written, and jason status's move check does not read absent: $moveSaid" }
+        Say "one installation: one Installed apps entry, $app at $Version, the command-line install's files gone from $commandLine; no move record was written, as the setup's own jason install writes none; jason status's move check reads $moveSaid"
 
         # A fact, not an assertion: jason status as a whole after the update, read by eye in the run.
-        $ready = if ($status -and $status.PSObject.Properties['ready']) { "$($status.ready)" } else { 'not read' }
+        $ready = if ($status.PSObject.Properties['ready']) { "$($status.ready)" } else { 'not read' }
         $notOk = @($checks | Where-Object { $_.state -cne 'ok' } | ForEach-Object { "$($_.name) ($($_.state)): $($_.fact)" })
-        Say "jason status after the update: ready $ready; $(if ($status) { "$($checks.Count) check(s), $($notOk.Count) not ok$(if ($notOk) { ': ' + ($notOk -join ' | ') })" } else { 'no document read' })"
+        Say "jason status after the update: ready $ready; $($checks.Count) check(s), $($notOk.Count) not ok$(if ($notOk) { ': ' + ($notOk -join ' | ') })"
 
         # The terminal command.
         if ((Count-Entry $bundle) -ne 1) { Fail "the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $((Get-UserPath).Raw)" }
         if ((Count-Entry $commandLine) -ne 0) { Fail "the user Path still names the retired $commandLine" }
-        if (@(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps') -Filter 'jason*' -ErrorAction SilentlyContinue).Count -ne 0) { Fail 'a jason command file is left in WindowsApps' }
+        $leftFiles = @(Get-WindowsAppsCommandFiles)
+        if ($leftFiles.Count -ne 0) { Fail "jason command files are left in WindowsApps: $($leftFiles -join ', ')" }
         $found = @(Find-InNewShell 'jason')
         if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
         if ($found[0] -ine $carried -or (($found[1] -split '\+')[0]) -ne $Version) { Fail "a new shell finds '$($found -join ' ')', not $carried saying $Version" }
