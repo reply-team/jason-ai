@@ -26,8 +26,10 @@ Each release publishes Jason Desktop beside the runtime's downloads ([release-an
 
 On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
 your terminal and your agents use. It is installed once, updated once and removed once. The install script installs it
-([INSTALL.md](INSTALL.md) §2), and so does the package for your system below. On Linux the deb and the AppImage are
-separate downloads beside the command line.
+([INSTALL.md](INSTALL.md) §2), and so does the package for your system below, installed by hand: the application's first
+start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each
+where it is found, and its [Command Line item](#the-command-line-and-the-login-items) says what that placed. On Linux
+the deb and the AppImage are separate downloads beside the command line.
 
 | System | File | Notes |
 | --- | --- | --- |
