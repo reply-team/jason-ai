@@ -40,7 +40,12 @@ public sealed record InstallOptions(bool Human, bool Roles, string? Retire, Time
 /// <param name="Changed">Whether this run wrote the wrapper or the Path entry.</param>
 /// <param name="Profiles">The profiles this run put <c>install.sh</c>'s two lines into; macOS only.</param>
 /// <param name="TakenBack">The application's Windows command files this run removed from <c>WindowsApps</c>.</param>
-public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack);
+/// <param name="Finds">
+/// The file a terminal opened from now on runs for <c>jason</c>, read as that terminal reads its PATH once this run has
+/// placed the command and retired what it retires (<see cref="NewTerminal"/>): this jason, the wrapper running it, or
+/// another file, which is then a problem naming what removes it. Null where none is found, or the command was not placed.
+/// </param>
+public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack, string? Finds = null);
 
 /// <summary>One skills root, as this run left it.</summary>
 /// <param name="Root">The folder.</param>
@@ -168,7 +173,7 @@ public static class MachineSetup
 
         await run.Step("Placing the terminal command", () =>
         {
-            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand() : run.MacCommand(old, holding);
+            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand(old, holding) : run.MacCommand(old, holding);
             return Task.CompletedTask;
         }).ConfigureAwait(false);
 
@@ -178,6 +183,17 @@ public static class MachineSetup
             {
                 // Only once a new terminal finds this jason, as read back: otherwise the old one is what still answers.
                 retired = run.CommandPlaced ? run.Retire(old) : run.NotRetired(old);
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
+        // wrapper being there is not yet that terminal finding this jason, where another file comes first.
+        if (command is { Placed: true } placed)
+        {
+            await run.Step("Reading what a new terminal finds", () =>
+            {
+                command = placed with { Finds = run.Finds() };
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
@@ -612,12 +628,22 @@ public static class MachineSetup
         /// kind kept and running programs told; and the application's own command files in <c>WindowsApps</c> taken back,
         /// each only where it is one of the application's shapes.
         /// </summary>
-        public InstallCommandOutcome? WindowsCommand()
+        public InstallCommandOutcome? WindowsCommand(string? old, bool holding)
         {
             if (!OperatingSystem.IsWindows())
             {
                 Problems.Add("The Windows Path is edited on Windows only.");
                 return null;
+            }
+
+            // A command-line install held in this run still answers as jason, and an entry appended after its own would leave
+            // a new terminal finding it, while the report said this jason was placed: the Path is left, as the wrapper is on
+            // macOS, and the scripts end non-zero.
+            if (old is not null && holding)
+            {
+                Problems.Add($"The command-line install at {old} is not retired in this run, so this account's Path was left as it is: a new terminal still finds that jason.");
+                CommandPlaced = false;
+                return new InstallCommandOutcome(Bundle, false, carried.Executable, false, [], []);
             }
 
             var changed = false;
@@ -670,6 +696,33 @@ public static class MachineSetup
             }
 
             return new InstallCommandOutcome(Bundle, CommandPlaced, carried.Executable, changed, [], takenBack);
+        }
+
+        /// <summary>
+        /// The file a terminal opened from now on runs for <c>jason</c>, read as it reads its PATH (<see cref="NewTerminal"/>);
+        /// where it is not this jason or the wrapper running it, a problem names it and what removes it, and it is left as
+        /// it is.
+        /// </summary>
+        public string? Finds()
+        {
+            var finds = Windows
+                ? NewTerminal.FindsOnWindows(places)
+                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: !PathEntry.OnPath(TerminalPath(), places.LocalBin));
+            if (NewTerminal.Runs(finds, carried.Executable))
+            {
+                return finds;
+            }
+
+            if (finds is null)
+            {
+                Problems.Add($"A terminal opened from now on finds no jason by name, as its PATH reads now: {carried.Executable} runs this jason by its full path.");
+                return null;
+            }
+
+            var image = new FileInfo(finds).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? finds;
+            var owner = env.Managers is { } records ? PackageOwner.Of(image, string.Equals(image, finds, PathCase) ? null : finds, records) : null;
+            Problems.Add(NewTerminal.Problem(finds, carried.Executable, CommandLineInstalls.IsJasons(env, places, image), owner));
+            return finds;
         }
 
         // --- retiring the command-line install ---------------------------------------------------------------

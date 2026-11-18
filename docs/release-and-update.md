@@ -1834,7 +1834,16 @@ the data, or takes it with the data under `--purge-data`.
 The document carries `version` and `executable` (the carried file); `command` — `runs` (what a new terminal finds `jason`
 through: the wrapper on macOS, the folder on the Path on Windows), `placed` (whether a
 new terminal finds this `jason`, as read back: a `command` that is null or not `placed` is what makes the install
-scripts end non-zero), `open_shell`, `changed`, `profiles`, `taken_back`;
+scripts end non-zero), `open_shell`, `changed`, `profiles`, `taken_back`, and `finds`: the file a terminal opened from
+now on runs for `jason`, read once everything is placed and retired, as that terminal reads it — on Windows the machine's
+Path, then the account's, each expanded as its registry kind says, the name tried with each `PATHEXT` extension in
+order; on macOS the PATH a terminal has, with `~/.local/bin` in front where the profile lines put it there. Where it is
+neither the carried file nor the wrapper running it, a problem names it and what removes it — a command-line install's
+own `jason update apply`, which moves it into Jason Desktop; a package manager's command; or else removing it or taking
+its folder off the PATH — and it is left as it is, and the install scripts end non-zero then too. Null where none is
+found or the command was not placed. Where the command-line install of the first step is held, its runtime not stopped
+or the layout refusing, the terminal command is left as it is on both systems, the Path unwritten on Windows, and
+`placed` is false;
 `skills`, one entry per root — `root`, `hosts`, `written`, `unchanged`, `left_alone`; `roles` (with `--roles`, else null);
 `retired` — `executable`, `aside`, `removed`, `reregistered` — or null; `runtime` — `not_running`, `running` (another
 executable's, left as it is), `stopped`, `would_not_stop`; and `done`, `left` and `problems`, a sentence each, with

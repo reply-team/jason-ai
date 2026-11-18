@@ -445,6 +445,16 @@ install_desktop() {
     esac
     OPEN_SHELL="$(printf '%s' "$REPORT" | sed -n 's/.*"open_shell":"\([^"\\]*\)".*/\1/p' | head -n 1)"
     [ -n "$OPEN_SHELL" ] || OPEN_SHELL="$HOME/.local/bin/jason"
+    # What a terminal opened from now on runs for jason, as the report read it once everything was placed: the wrapper or
+    # this jason, or another file earlier on the PATH, which the report's problems name with what removes it. A report
+    # without the member is one from before it was read, and says nothing either way.
+    case "$REPORT" in
+        *'"finds":'*)
+            FINDS="$(printf '%s' "$REPORT" | sed -n 's/.*"finds":"\([^"\\]*\)".*/\1/p' | head -n 1)"
+            if [ -z "$FINDS" ] || { [ "$FINDS" != "$OPEN_SHELL" ] && [ "$FINDS" != "$CARRIED" ]; }; then
+                fail "jason install put jason in the terminal, but a terminal opened from now on finds ${FINDS:-no jason} first by that name; its problems above say what to do. Jason Desktop is installed at $DEST"
+            fi ;;
+    esac
 
     # Where the files will be, the licence, what to run next, and the path to run it by: the last lines of a successful
     # run, and never a question. A shell that was already open reads no profile again: this one, and an agent's session

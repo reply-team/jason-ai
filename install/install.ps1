@@ -385,6 +385,16 @@ public static string Session(int what) {
         if (-not $command -or -not (@($command.PSObject.Properties.Name) -contains 'placed') -or -not $command.placed) {
             throw "``jason install`` did not put jason in the terminal; its problems above say why. Jason Desktop is installed at $app."
         }
+        # What a terminal opened from now on runs for jason, as the report read it once everything was placed: this jason,
+        # or another file earlier on the Path, which the report's problems name with what removes it. A report without
+        # the member is one from before it was read, and says nothing either way.
+        if (@($command.PSObject.Properties.Name) -contains 'finds') {
+            $finds = [string]$command.finds
+            if (-not $finds -or -not (($finds -eq [string]$command.open_shell) -or ($finds -eq $carried))) {
+                $first = if ($finds) { $finds } else { 'no jason' }
+                throw "``jason install`` put jason on this account's Path, but a terminal opened from now on finds $first first by that name; its problems above say what to do. Jason Desktop is installed at $app."
+            }
+        }
         if (-not (($members -contains 'completed') -and $report.completed)) {
             Write-Host 'Jason is installed and in the terminal; `jason install` named above what else it did not get done, and `jason status` names it too.'
         }

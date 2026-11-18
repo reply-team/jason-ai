@@ -77,7 +77,8 @@ public static class InstallCommand
              the value's kind kept and running programs told (a Path of a kind that is not a string is
              refused and left); and the jason and jason-desktop command files Jason Desktop placed in
              %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is one of the application's
-             shapes.
+             shapes. Where the command-line install of step 1 is held - its runtime would not stop, or the
+             layout refuses - the Path is left as it is and placed is false, as the wrapper is left on macOS.
              The command files go, and step 3 runs, only once the terminal command reads back as placed: the
              wrapper and its lines, or the Path entry. Otherwise the old install stays: where it sat at
              ~/.local/bin/jason the wrapper has taken its executable's place, and elsewhere it still answers.
@@ -115,7 +116,14 @@ public static class InstallCommand
 
         The document: version, executable (this jason); command {runs (what a new terminal finds: the wrapper on
         macOS, the folder on the Path on Windows), placed (whether a new terminal finds this jason, as read back;
-        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back}; skills [{root,
+        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back, finds (the
+        file a terminal opened from now on runs for jason, read once everything is placed and retired: on
+        Windows the machine's Path, then the account's, each expanded as its kind says, the name tried with
+        each PATHEXT extension in order; on macOS the PATH a terminal has, with ~/.local/bin in front where the
+        lines put it there. Where it is neither this jason nor the wrapper running it, a problem names it and
+        what removes it - a command-line install's own `jason update apply`, a package manager's command, or
+        else removing it or taking its folder off the PATH - and it is left as it is; the install scripts end
+        non-zero then too. Null where none is found, or the command was not placed)}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.

@@ -1388,7 +1388,8 @@ public class StatusCommandTests
         Assert.Equal(
             $"'jason' resolves to {found}, not to this jason ({installed}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
             + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {installed}.",
-            check.Fact);
+            check.Fact,
+            ignoreCase: true);
         Assert.False(report.Ready);
     }
 

@@ -77,6 +77,19 @@ internal static class CommandLineInstalls
     }
 
     /// <summary>
+    /// Whether a file found by name is a command-line install of Jason's, by the test <see cref="Find"/> holds a candidate
+    /// to: a regular file, not the application's, not its wrapper, and Jason's by a sign of its own.
+    /// </summary>
+    public static bool IsJasons(CliEnvironment env, SetupPlaces places, string file)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(places);
+
+        var full = Path.GetFullPath(file);
+        return CommandFiles.IsRegularFile(full) && CarriedExecutable.Of(full) is null && !CommandFiles.IsWrapperFile(full) && Signed(places, full, Recorded(env));
+    }
+
+    /// <summary>
     /// Whether a file is Jason's by a sign of its own: the one the update ledger records, a notice file of Jason's beside
     /// it, or on Windows the installer's own place.
     /// </summary>
