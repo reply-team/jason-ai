@@ -172,6 +172,19 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
 
+      # jason uninstall from a terminal, with the window opened once the verb is past its own check: the waiter's silent
+      # uninstaller finds the application and ends 3, and the waiter runs it once more without /S, which asks the person.
+      # That run is seen and ended unanswered; Installed apps then takes the application off.
+      - name: Uninstall from a terminal while the window opens, so the waiter asks
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallWaiterShown -Out $env:OUT -Script "${{ steps.stand-in.outputs.script }}"
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-waiter-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-waiter-uninstall -Against before
+
       # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
       # to until that is published, read from where the public releases' latest redirects, and its files from its public
       # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
@@ -247,17 +260,19 @@ jobs:
           ../.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory $next -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
           Get-Content (Join-Path $next 'manifest.json')
 
-      # The carried jason update apply on a real install of this test build: to the next one with no window open, handed to
-      # Jason Desktop and finished by the new jason, not refused as elevated on this runner; then refused by an open window,
-      # which takes no request naming a feed. The test build's updater checks no publisher.
-      - name: Update the test build from a terminal with jason update apply
+      # This build's silent setups over the previous release (desktop/installer/uninstall.nsh): over a window that never
+      # quits, 3 at the include's bound and the next setup not blocked; plain /S over a window and over the tray, 3; the old
+      # application quitting 20 s late, 0; the old uninstaller refusing, 2. None may show a window. Then Installed apps
+      # takes it off again, and this leg's listing is held to the machine before.
+      - name: Install this build silently over the previous release
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UpdateApply -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}" -Next (Join-Path $env:GITHUB_WORKSPACE 'next')
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-update-apply-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step SilentUpdateLegs -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-silent-setups-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-silent-setups-uninstall -Against before
 
       - name: Read the module path Windows PowerShell rebuilds from an empty one
         shell: pwsh
@@ -269,19 +284,18 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
 
-      # Silent update setups over an open window of the previous release: by hand with the window left open (described at
-      # 120 s), and with the arguments 0.49's window-less update hands the installer, the old application ending at once and
-      # 5 s late. Then Installed apps takes it off again, and this leg's listing is held to the machine before. Last in the
-      # job, so that a setup that does not end here leaves every other leg read.
-      - name: Install this build silently over an open window of the previous release
+      # The carried jason update apply on a real install of this test build: first refused by an open window, which takes
+      # no request naming a feed; then to the next one with no window open, handed to Jason Desktop and finished by the new
+      # jason, not refused as elevated on this runner. A second reader holds the request's file as the Desktop writes it.
+      # Last in the job, after the held comparison of every other leg. The test build's updater checks no publisher.
+      - name: Update the test build from a terminal with jason update apply
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step SilentUpdateLegs -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-open-window-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-open-window-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UpdateApply -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}" -Next (Join-Path $env:GITHUB_WORKSPACE 'next')
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-update-apply-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
 
       - name: Say what this job does not prove
@@ -444,6 +458,13 @@ jobs:
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
+
+      # The previous release's own uninstall, for what it leaves in launchd's records: said, and its listing kept.
+      - name: Say what the previous release's own uninstall leaves in launchd
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh previous-removal "$PREVIOUS"
+          bash .github/scripts/test-installation-macos.sh listing after-previous-own-removal
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there and read here,
       # so that one run reads every leg before the job fails.
