@@ -23,17 +23,19 @@ runtime's JIT compiler needs.
 
 ## 1. What a release is
 
-A release is the git tag `vX.Y.Z` and the files that tag's build publishes. A merge to `main` is not a release:
-`main` is where the code is, and a tag is the statement that one commit of it is worth installing.
+A release is the git tag `vX.Y.Z` and the files that tag's build publishes. A merge to `main` is not a release: a tag
+is the statement that one commit is worth installing.
 
 Everything about a release happens in one repository, `reply-team/jason-ai`: the source, its tags and its releases.
 A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and
-Windows; merging it is the last review a release has. The tag `v<version>` pushed on that merge builds the release
-from it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
+Windows. Once that run is green, the tag `v<version>` is pushed on the pull request's head and builds the release from
+it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
 and their archived signatures verified, the plugins' and the UI's packages, and the desktop's. The release job then writes the
 manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
-release unless a newer one already is or the version is a release candidate; a last job asks the Homebrew tap to bump
-its formula (§6). A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
+release unless a newer one already is or the version is a release candidate. The pull request is merged into `main` only
+after the publication is checked: the README and every page GitHub shows are read from `main`, so `main` never
+describes a release that is not out, and a release run that fails leaves `main` as it was. A release no longer asks the
+Homebrew tap to bump its formula (§6). A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
 `hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
 it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
 holds them assembles the release and says in one line that it publishes nothing.
@@ -483,9 +485,23 @@ registers the manager's own entry, which stays put across its upgrades, rather t
 `jason uninstall` takes off the logon registration, the skills and, on the word, the data directory, and leaves the
 rest to the manager (§9).
 
-Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`, whose formula
-follows the latest release. Publishing a release asks the tap to bump it at once; the bump reads the latest release
-itself, and the tap also looks every six hours, so a request that fails delays the formula and never the release.
+Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs
+the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at
+0.48.5, the last release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
+nothing newer.
+
+The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason
+Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:
+
+```sh
+jason uninstall
+brew uninstall jason
+curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
+```
+
+`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data
+directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason
+Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.
 
 ### Carried by the desktop
 

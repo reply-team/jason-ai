@@ -718,9 +718,30 @@ public partial class ReleaseWorkflowTests
             Scalar(Mapping(inputs, "dry_run"), "description"));
 
         // One step publishes, the tag's release or the button's draft, and only outside a dry run in the public
-        // repository; the tap is asked only after a tag's release, there.
+        // repository; the tap's job would ask only after a tag's release, there, and is switched off.
         Assert.Equal(PublishesHere, Scalar(PublishingStep(PublishStep), "if"));
-        Assert.Equal(TagHere, Scalar(TapJob(), "if"));
+        Assert.Equal(TapSwitchedOff, Scalar(TapJob(), "if"));
+    }
+
+    /// <summary>
+    /// The order a release goes in, as the workflow's head says it: the release pull request and its run on every
+    /// platform first, then the tag on that pull request's head, the release published from it, and the merge into main
+    /// only once the publication is checked, with the reason; a hotfix's tag is its merge. No comment of the workflow
+    /// still says the tag is the release pull request's merge.
+    /// </summary>
+    [Fact]
+    public void The_workflow_s_head_says_the_tag_is_the_release_pull_request_s_head_and_main_takes_it_after()
+    {
+        var text = Read(Release).ReplaceLineEndings("\n");
+        var head = string.Join(' ', text.Split('\n').TakeWhile(line => line.StartsWith('#')).Select(line => line[1..].Trim()));
+
+        Assert.Contains(
+            "The release pull request into main, and its run on every platform, come before the tag: the tag is that pull request's head, the release is published from it, and the pull request is merged into main only once the publication is checked, so main, whose README and pages GitHub shows, never describes a release that is not out, and a release run that fails leaves main as it was. A hotfix's tag is its merge into main instead, as DEVELOPMENT.md says.",
+            head,
+            StringComparison.Ordinal);
+        var flat = Regex.Replace(text, @"\s*\n\s*#\s*", " ");
+        Assert.DoesNotContain("the tag is that merge", flat, StringComparison.Ordinal);
+        Assert.DoesNotContain("the merge of the release pull request", flat, StringComparison.Ordinal);
     }
 
     /// <summary>The step that publishes the release, or the button's draft.</summary>
@@ -729,8 +750,11 @@ public partial class ReleaseWorkflowTests
     /// <summary>The condition of the step that publishes: not a dry run, and in the public repository.</summary>
     private const string PublishesHere = "${{ !inputs.dry_run && github.repository == 'reply-team/jason-ai' }}";
 
-    /// <summary>The condition of the job that asks the tap: a tag, in the public repository.</summary>
-    private const string TagHere = "${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' }}";
+    /// <summary>
+    /// The condition of the job that asks the tap: a tag, in the public repository, and a last clause that is false, which
+    /// switches the job off while every clause it comes back with stays held.
+    /// </summary>
+    private const string TapSwitchedOff = "${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' && false }}";
 
     /// <summary>The tap's token, as the one step that sends it names it.</summary>
     private const string TapToken = "${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}";
@@ -903,7 +927,7 @@ public partial class ReleaseWorkflowTests
     {
         var text = Read(Release).ReplaceLineEndings("\n");
         const string Publish = "        if: " + PublishesHere + "\n";
-        const string Tap = "    if: " + TagHere + "\n";
+        const string Tap = "    if: " + TapSwitchedOff + "\n";
         const string Upload = "      - name: Keep what a dry run assembled\n";
 
         string Moved(string from, string to)

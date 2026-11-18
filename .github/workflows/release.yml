@@ -4,9 +4,12 @@
 # the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the Windows one, in a
 # job of its own that runs no test either, signing its executable through Artifact Signing, and one job that archives
 # the plugins' packages from the tag's tree; then the release job — the only one that may write to this repository — assembles the manifest and the
-# checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
-# bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag is
-# that merge.
+# checksums and publishes the release at once, with its notes and its assets. The job after it, which asked the Homebrew
+# tap to bump its formula, is switched off. The release pull request into main, and its run on every platform, come
+# before the tag: the tag is that pull request's head, the release is published from it, and the pull request is merged
+# into main only once the publication is checked, so main, whose README and pages GitHub shows, never describes a
+# release that is not out, and a release run that fails leaves main as it was. A hotfix's tag is its merge into main
+# instead, as DEVELOPMENT.md says.
 #
 # A release is published from reply-team/jason-ai alone. The same tag pushed anywhere else that holds this workflow —
 # a fork, a copy — builds what it can and publishes nothing: without the signing secrets its macOS and Windows jobs
@@ -164,8 +167,9 @@ jobs:
         run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
       # The whole suite ran on this tree, on every platform, on the release's pull request into main, and again under the
-      # bare version on Linux; the tag is that merge, so its tree is the one those runs passed, and the version the tag
-      # stamps differs from what the platform legs built. The SDK is resolved again at the tag, by the version job above,
+      # bare version on Linux; the tag is that pull request's head, so its tree is the one those runs passed, and the
+      # version the tag stamps differs from what the platform legs built. The SDK is resolved again at the tag, by the
+      # version job above,
       # so a channel release between the pull request's run and the tag is a second difference: an SDK, and the runtime
       # patch the executable carries, that the whole suite never ran on. What runs here, before anything is published, is
       # the critical tier on Linux, stamped with the version the tag names, and it is the run on that SDK: a release is a
@@ -897,7 +901,7 @@ jobs:
           # gh make a tag of its own. gh uploads the assets to a draft and publishes it once every asset is there, so a
           # failed upload leaves no published release behind. The button makes a draft and nothing else: no tag exists,
           # so the draft names the commit this run built. The draft is for reading and is deleted afterwards; a release
-          # is published only by its tag, the merge of the release pull request, never by publishing a draft.
+          # is published only by its tag, never by publishing a draft.
           #
           # [string[]] and not a bare assignment: PowerShell unrolls a one-element array assigned from an `if`
           # into a scalar string, and `+=` on a string concatenates rather than appends.
@@ -956,6 +960,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
+  # Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the
+  # formula stays at 0.48.5, the last release it carries; this job comes back, bumping a cask, with the release that
+  # carries one. The last clause of its condition is what switches it off.
+  #
   # Asks the tap to bump its formula once a tag's release is published: after the release job succeeded, never after it
   # failed or was skipped. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
   # changes nothing when the address still answers the previous release or when this one is a candidate or an older
@@ -968,7 +976,7 @@ jobs:
   tap:
     name: Tell the tap
     needs: release
-    if: ${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' }}
+    if: ${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' && false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: signing
