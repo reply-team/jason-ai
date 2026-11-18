@@ -1329,26 +1329,14 @@ public sealed class UninstallCarriedTests : IDisposable
             env = env with { Variables = new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.GetDirectoryName(Path.GetDirectoryName(own))! } };
         }
 
+        var plan = await HumanPlan(env);
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
-        var report = JsonDocument.Parse(output.ToString()).RootElement;
-        Assert.Equal(own, report.GetProperty("plan").GetProperty("extracted_libraries").GetString());
-        Assert.False(Directory.Exists(own), "what this build unpacked is still there");
-        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains(own, StringComparison.Ordinal));
+        AssertUnpackedNamed(plan, JsonDocument.Parse(output.ToString()).RootElement, own, other, othersTaken: OperatingSystem.IsWindows() && !baseMoved, baseMoved);
         var taken = remover.Calls.IndexOf($"extracted.remove {own}");
         Assert.True(taken >= 0 && taken < remover.Calls.IndexOf($"tree.remove {application}"), string.Join(" | ", remover.Calls));
         Assert.Equal($"tree.remove {application}", remover.Calls[^1]);
-        if (OperatingSystem.IsWindows() && !baseMoved)
-        {
-            Assert.False(Directory.Exists(other), "another build's unpacked libraries were left on Windows");
-        }
-        else
-        {
-            Assert.True(Directory.Exists(other), "another build's unpacked libraries were removed");
-            Assert.Contains(report.GetProperty("kept").EnumerateArray(), line => line.GetString()!.Contains(Path.GetDirectoryName(own)!, StringComparison.Ordinal)
-                && line.GetString()!.Contains(baseMoved ? "DOTNET_BUNDLE_EXTRACT_BASE_DIR is set" : "is left, 1 directory", StringComparison.Ordinal));
-        }
     }
 
     /// <summary>
@@ -1374,15 +1362,60 @@ public sealed class UninstallCarriedTests : IDisposable
             env = env with { Variables = new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.GetDirectoryName(Path.GetDirectoryName(own))! } };
         }
 
+        var plan = await HumanPlan(env);
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
-        var report = JsonDocument.Parse(output.ToString()).RootElement;
-        Assert.Equal(own, report.GetProperty("plan").GetProperty("extracted_libraries").GetString());
-        Assert.False(Directory.Exists(own), "what this build unpacked is still there");
-        Assert.Equal(!baseMoved, !Directory.Exists(other));
+        AssertUnpackedNamed(plan, JsonDocument.Parse(output.ToString()).RootElement, own, other, othersTaken: !baseMoved, baseMoved);
         Assert.True(remover.Calls.IndexOf($"extracted.remove {own}") >= 0, string.Join(" | ", remover.Calls));
         Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
+    }
+
+    /// <summary>The plan a person reads before anything goes, from a dry run that removes nothing.</summary>
+    private static async Task<string> HumanPlan(CliEnvironment env)
+    {
+        var plan = new StringWriter();
+        var exit = await UninstallCommand.RunAsync(env with { Out = plan }, new UninstallOptions(Human: true, DryRun: true, PurgeData: false, Yes: false, Force: false), Ct);
+        Assert.True(exit == ExitCodes.Success, plan.ToString());
+        return plan.ToString();
+    }
+
+    /// <summary>
+    /// What the build unpacked is named where the command-line removal names it: in the plan a person reads, in the plan an
+    /// agent reads, and in the report; the others' directories too, as taken or as left with the reason; and what is taken
+    /// is gone and what is left is there.
+    /// </summary>
+    private static void AssertUnpackedNamed(string humanPlan, JsonElement report, string own, string other, bool othersTaken, bool baseMoved)
+    {
+        var why = baseMoved ? "DOTNET_BUNDLE_EXTRACT_BASE_DIR is set" : "is left, 1 directory";
+        var parent = Path.GetDirectoryName(own)!;
+        static IEnumerable<string> Lines(JsonElement report, string name) => report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!);
+
+        // The plan a person reads, before anything at all is removed.
+        Assert.Contains($"the native libraries it unpacked, at {own}", humanPlan, StringComparison.Ordinal);
+        Assert.Equal(othersTaken, humanPlan.Contains($"the native libraries another build of this program unpacked, at {other}", StringComparison.Ordinal));
+        Assert.Equal(!othersTaken, humanPlan.Contains("NOT touched: ", StringComparison.Ordinal) && humanPlan.Contains(why, StringComparison.Ordinal));
+
+        // The plan an agent reads.
+        var plan = report.GetProperty("plan");
+        Assert.Equal(own, plan.GetProperty("extracted_libraries").GetString());
+        Assert.Equal(othersTaken ? [other] : [], plan.GetProperty("other_extracted_libraries").EnumerateArray().Select(entry => entry.GetString()!).ToArray());
+        var left = plan.GetProperty("other_extracted_libraries_left");
+        Assert.Equal(!othersTaken, left.ValueKind is JsonValueKind.String && left.GetString()!.Contains(parent, StringComparison.Ordinal) && left.GetString()!.Contains(why, StringComparison.Ordinal));
+
+        // The report, and the disk.
+        Assert.False(Directory.Exists(own), "what this build unpacked is still there");
+        Assert.Contains(Lines(report, "done"), line => line.Contains(own, StringComparison.Ordinal));
+        if (othersTaken)
+        {
+            Assert.False(Directory.Exists(other), "another build's unpacked libraries were left");
+            Assert.Contains(Lines(report, "done"), line => line.Contains(other, StringComparison.Ordinal) && line.Contains("another build", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.True(Directory.Exists(other), "another build's unpacked libraries were removed");
+            Assert.Contains(Lines(report, "kept"), line => line.Contains(parent, StringComparison.Ordinal) && line.Contains(why, StringComparison.Ordinal));
+        }
     }
 
     /// <summary>
