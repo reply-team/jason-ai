@@ -387,11 +387,13 @@ begin)
             resets="$OUT/resets.txt"
             last="$(cat "$OUT/last-leg.txt" 2>/dev/null || true)"
             [ -n "$last" ] || { skip_leg "not run: the machine is not the machine before, and no leg before this one changed it: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"; exit 0; }
-            ended=""; if [ -f "$OUT/legs-ended.txt" ] && grep -qxF -- "$last" "$OUT/legs-ended.txt"; then ended=1; fi
+            # A leg recorded once as having ended leaving the machine is a failed leg from then on: never recorded again.
+            ended=""; if [ -f "$OUT/legs-ended.txt" ] && grep -qxF -- "$last" "$OUT/legs-ended.txt" && ! grep -qxF -- "$last" "$OUT/legs-dirty.txt" 2>/dev/null; then ended=1; fi
             if [ -n "$ended" ]; then
                 why="the leg '$last' ended, but the machine after it is not the machine before: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"
                 echo "::error title=Installation::$why"
                 printf '%s\n' "$why" >> "$OUT/failed-legs.txt"
+                printf '%s\n' "$last" >> "$OUT/legs-dirty.txt"
                 after_last="ended leaving it, recorded as its failure"
             else
                 after_last="failed"

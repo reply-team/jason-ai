@@ -606,11 +606,14 @@ switch ($Step) {
                 $resets = Join-Path $Out 'resets.txt'
                 $last = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
                 if (-not $last) { Skip-Leg "not run: the machine is not the machine before, and no leg before this one changed it: $($found -join '; ')"; return }
-                $ended = (Test-Path -LiteralPath $legsEnded) -and (@(Get-Content -LiteralPath $legsEnded) -ccontains $last)
+                # A leg recorded once as having ended leaving the machine is a failed leg from then on: never recorded again.
+                $dirty = Join-Path $Out 'legs-dirty.txt'
+                $ended = (Test-Path -LiteralPath $legsEnded) -and (@(Get-Content -LiteralPath $legsEnded) -ccontains $last) -and -not ((Test-Path -LiteralPath $dirty) -and (@(Get-Content -LiteralPath $dirty) -ccontains $last))
                 if ($ended) {
                     $why = "the leg '$last' ended, but the machine after it is not the machine before: $($found -join '; ')"
                     Write-Host "::error title=Installation::$why"
                     Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value $why
+                    Add-Content -LiteralPath $dirty -Value $last
                 }
                 Add-Content -LiteralPath $resets -Value "before '$Leg', after '$last' $(if ($ended) { 'ended leaving it' } else { 'failed' }), found: $($found -join '; ')"
                 Say "before this leg the machine is not the machine before ($($found.Count) line(s)), after '$last' $(if ($ended) { 'ended leaving it, recorded as its failure' } else { 'failed' }); found: $($found -join '; ')"
