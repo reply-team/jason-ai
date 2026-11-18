@@ -7,11 +7,14 @@ import { INSTALL_HEADING, INSTALL_MAX_BYTES, INSTALL_PAGE, LATEST_RELEASE, LATES
 const LINK = /\]\(([^)\s]+)\)/g;
 const ABSOLUTE = /^[a-z][a-z0-9+.-]*:/i;
 
-// Kept at Cloudflare's edge for five minutes, so a burst of installs reads each fixed address once.
+// Asked to be kept at Cloudflare's edge for five minutes, so that a burst of installs reads each fixed address once
+// where the edge keeps it.
 const EDGE = { cacheTtl: 300, cacheEverything: true };
 
-// The latest release's redirect, kept five minutes by its status: GitHub answers it with `Cache-Control: no-cache`, and a
-// TTL chosen by status overrides what the origin says, for the 3xx this read is about.
+// The latest release's redirect, asked to be kept five minutes by its status: GitHub answers it with `Cache-Control:
+// no-cache`, and a TTL chosen by status asks the edge to keep the 3xx this read is about regardless. Where the edge does
+// not keep it, every request asks GitHub once, and a throttled or failed answer falls back to main's page, which the
+// X-Jason-Install-Source header then names.
 const REDIRECT_EDGE = { cacheEverything: true, cacheTtlByStatus: { '300-399': 300 } };
 
 /**
