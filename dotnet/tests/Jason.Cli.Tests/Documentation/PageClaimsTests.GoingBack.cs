@@ -132,7 +132,7 @@ public partial class PageClaimsTests
         var said = section.IndexOf("Before step 1, run `jason status`.", StringComparison.Ordinal);
         Assert.True(said >= 0 && said < section.IndexOf("1. Quit Jason Desktop", StringComparison.Ordinal), "the section does not say, before step 1, to read jason status.");
         Assert.Contains(
-            "Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one \"Jason did not deploy, under a name Jason ships, left as it is\", move that folder out of the skills folder before step 3 and put it back after step 3. 0.49 leaves such a folder as it is; 0.48.5's `jason skills install` deploys its own skill over a folder of the same name and records it as its own, and 0.48.5's uninstall removes what it recorded.",
+            "Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one \"Jason did not deploy, under a name Jason ships, left as it is\", move that folder out of the skills folder before step 3 and put it back after step 3. 0.49 leaves such a folder as it is; 0.48.5's `jason skills install` deploys its own skill over a folder of the same name and records it as its own, and 0.48.5's uninstall removes what it recorded. A folder put back after step 3 differs from what 0.48.5 recorded, and 0.48.5 keeps a file it finds changed since it wrote it.",
             section,
             StringComparison.Ordinal);
 
