@@ -2426,8 +2426,10 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
-    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 135
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run. 180 for
+    # this rehearsal, which adds the legs over the previous release's Jason Desktop; set again after the first run that
+    # runs every leg, to that run's time and half again.
+    timeout-minutes: 180
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2642,14 +2644,16 @@ jobs:
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
-      # Over the previous release's Jason Desktop: its own download placed and opened as a person does, then this build
-      # installed over it by install.sh as an agent runs it, and taken off from a new terminal.
-      - name: Install this build by install.sh over the previous release's Jason Desktop
+      # Over the previous release's Jason Desktop: its own download placed and opened as a person does; this build's
+      # install.sh, as an agent runs it, refuses an application before 0.49.0 and changes nothing (docs/INSTALL.md); the
+      # person then takes the old application out as to the Trash, and the line run again installs; then taken off from a
+      # new terminal.
+      - name: This build's install.sh refuses the previous release's Jason Desktop, then installs once it is moved out
         if: ${{ !cancelled() }}
         timeout-minutes: 25
         shell: bash
         env:
-          LEG: "Install this build by install.sh over the previous release's Jason Desktop"
+          LEG: "This build's install.sh refuses the previous release's Jason Desktop, then installs once it is moved out"
         run: |
           bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
           [ ! -e "$OUT/skip" ] || exit 0

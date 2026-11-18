@@ -107,6 +107,17 @@ app() {
     elif [ -e /Applications/Jason.app ]; then echo /Applications/Jason.app
     else echo ""; fi
 }
+# Where an application of a release before 0.49.0 is moved out of its place, as a person moves it to the Trash: by the
+# leg that installs over the previous release's Jason Desktop, and by the reset after a failed leg. The runner's temporary
+# folder, which no listing reads; the Trash itself is protected on the runner.
+OLD_APPS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/over-previous-trash"
+# Whether a version is one before 0.49.0; an unknown one is not.
+before_049() {
+    case "$1" in
+        0.[0-9]*) local minor="${1#0.}"; minor="${minor%%.*}"; case "$minor" in ''|*[!0-9]*) return 1 ;; esac; [ "$minor" -lt 49 ] ;;
+        *) return 1 ;;
+    esac
+}
 version_of() { sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Contents/Resources/bundle/version.json" 2>/dev/null | head -n 1; }
 
 # A login shell as a new terminal starts one: the environment the system gives, not this job's, whose PATH names
@@ -451,6 +462,35 @@ begin)
             done
             sleep 3
             placed="$(app)"
+            # An application of a release before 0.49.0 cannot be taken off by its own jason, which refuses as the one the
+            # application carries, and is never set up or replaced from a terminal: quit above, it is moved out of its place
+            # as a person moves it to the Trash, said, and never for 0.49.0 or later, which keeps its own removal. In the
+            # same act its preferences go as this build's removal takes them, by the one identifier and nothing wider:
+            # through the preferences system first (defaults delete, which would otherwise write back a copy it holds), then
+            # the file, where it is a file of its own and not a link.
+            if [ -n "$placed" ] && before_049 "$(version_of "$placed")"; then
+                moved_to="$OLD_APPS/moved-by-the-reset-$(date +%s)"
+                mkdir -p "$moved_to"
+                if mv "$placed" "$moved_to/Jason.app"; then line="  moved the application $placed, $(version_of "$moved_to/Jason.app"), a release before 0.49.0, out of its place to $moved_to"; else line="  could not move the application $placed, a release before 0.49.0, out of its place"; fi
+                echo "$line"
+                printf '%s\n' "$line" >> "$resets"
+                if [ ! -e "$placed" ]; then
+                    preferences="$HOME/Library/Preferences/ai.jasonharness.desktop.plist"
+                    status=0
+                    ( within 10 'defaults delete ai.jasonharness.desktop' defaults delete ai.jasonharness.desktop > "$OUT/reset-defaults.txt" 2>&1 ) || status=$?
+                    line="  defaults delete ai.jasonharness.desktop ended $status: $({ grep . "$OUT/reset-defaults.txt" || true; } | tail -n 1)"
+                    echo "$line"
+                    printf '%s\n' "$line" >> "$resets"
+                    if [ -f "$preferences" ] && [ ! -L "$preferences" ]; then
+                        if rm -f "$preferences"; then line="  removed $preferences"; else line="  could not remove $preferences"; fi
+                    else
+                        line="  $preferences: $(if [ -L "$preferences" ]; then echo 'a link, left'; else echo 'not there'; fi)"
+                    fi
+                    echo "$line"
+                    printf '%s\n' "$line" >> "$resets"
+                fi
+                placed="$(app)"
+            fi
             for jason in "${placed:+$placed/Contents/Resources/bundle/jason}" "$WRAPPER"; do
                 [ -n "$jason" ] && [ -x "$jason" ] || continue
                 status=0
@@ -995,9 +1035,14 @@ PY
 
 over-previous-desktop)
     # The previous release's Jason Desktop placed as a person places its download, opened and quit as a person leaves it,
-    # then this build installed over it by install.sh as an agent runs it: the application replaced in its own place at
-    # this version, one application only, the terminal command the application's wrapper naming no data directory, and a
-    # new login shell finding it. The uninstall and the compare after it are the leg's next steps.
+    # then this build's install.sh run over it as an agent runs it. A Jason.app before 0.49.0 is never replaced from a
+    # terminal (docs/INSTALL.md, "an earlier one is left as it is, and the script ends non-zero saying to update it from
+    # its own menu"): asserted, the refusal by its words and nothing changed, held before against after. Then the person
+    # takes the old application out instead of updating it from its menu: quit, and moved out of its place as to the Trash
+    # (into the runner's temporary folder, which no listing reads; the Trash itself is protected on the runner); and the
+    # line, run again, installs: this build in that place, one application only, the terminal command the application's
+    # wrapper naming no data directory, and a new login shell finding it, on a machine the previous release's Desktop
+    # set up at its first start. The uninstall and the compare after it are the leg's next steps.
     previous="$1"; feed="$2"; version="$3"; script="$4"
     zip="$previous/jason-desktop-macos-arm64.zip"
     [ -f "$zip" ] || fail "no $zip: the step fetching the previous release did not take it"
@@ -1024,19 +1069,55 @@ over-previous-desktop)
     sleep 3
     say "the previous release's Jason Desktop quit, as a person closes it before installing"
 
-    # This build over it, by install.sh as an agent runs it.
+    # This build's line over it, as an agent runs it: refused, and nothing changed. The previous release's first start may
+    # have placed a terminal command and profile lines of its own, so nothing is held absent: each is held the same, by
+    # its bytes and its modification time, before the line and after it, an absent one staying absent; and the
+    # application's version and signature the same.
+    held_files() {
+        for file in "$WRAPPER" "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.zshrc" "$HOME/.zlogin" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.bashrc"; do
+            if [ -e "$file" ]; then printf '%s\t%s\t%s\n' "$file" "$(shasum -a 256 < "$file" | cut -d' ' -f1)" "$(stat -f %m "$file")"; else printf '%s\tabsent\n' "$file"; fi
+        done
+    }
+    held_files > "$OUT/over-previous-files-before.txt"
+    write_listing "$OUT/over-previous-refusal-before.txt" quiet
     status=0
-    within 300 'install.sh over the previous Jason Desktop' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-install.txt" 2>&1 || status=$?
+    within 300 'install.sh over the previous Jason Desktop' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-refused.txt" 2>&1 || status=$?
+    cat "$OUT/over-previous-refused.txt"
+    [ "$status" -ne 0 ] || fail "install.sh over the previous Jason Desktop $old ended 0, where a Jason.app before 0.49.0 is left as it is and the script ends non-zero"
+    # The sentence as install.sh writes it on stderr, whole, as its own line.
+    refusal="install.sh: Jason Desktop $old at $placed is older than 0.49.0 and cannot be set up from a terminal; nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again."
+    grep -qxF -- "$refusal" "$OUT/over-previous-refused.txt" || fail "install.sh over the previous Jason Desktop exited $status without the line '$refusal': $(tail -n 3 "$OUT/over-previous-refused.txt")"
+    held_files > "$OUT/over-previous-files-after.txt"
+    cmp -s "$OUT/over-previous-files-before.txt" "$OUT/over-previous-files-after.txt" || fail "install.sh said nothing was changed, and the terminal command or a profile changed: $(diff "$OUT/over-previous-files-before.txt" "$OUT/over-previous-files-after.txt" | grep '^[<>]' | tr '\t\n' ' ;')"
+    [ "$(version_of "$placed")" = "$old" ] || fail "after the refusal $placed is $(version_of "$placed"), not $old"
+    write_listing "$OUT/over-previous-refusal-after.txt" quiet
+    # The data directory and the harness root aside, as every reading of a leg's leftovers sets them aside: a runtime the
+    # previous release's window started may still be writing there.
+    for when in before after; do grep -vE '^(data directory|harness root)' "$OUT/over-previous-refusal-$when.txt" > "$OUT/over-previous-refusal-$when-held.txt" || true; done
+    cmp -s "$OUT/over-previous-refusal-before-held.txt" "$OUT/over-previous-refusal-after-held.txt" || fail "install.sh said nothing was changed, and the machine differs: $(diff "$OUT/over-previous-refusal-before-held.txt" "$OUT/over-previous-refusal-after-held.txt" | grep '^[<>]' | tr '\t\n' ' ;')"
+    within 300 "codesign verifying the previous release's application after the refusal" codesign --verify --deep --strict "$placed" || fail "after the refusal the signature of $placed does not verify"
+    say "this build's install.sh over Jason Desktop $old exited $status with its refusal, naming Check for Updates; the terminal command and the profiles the same by bytes and time, $placed still $old with its signature verifying, and the machine outside the data directory and the harness root listed the same before and after"
+
+    # The person takes the old application out instead of updating it from its menu: quit, and moved out of its place as
+    # to the Trash, into the runner's temporary folder, out of every place a listing reads. Then the line again.
+    aside="$OLD_APPS/moved-by-the-leg"
+    [ ! -e "$aside" ] || fail "$aside is there before the leg makes it"
+    mkdir -p "$aside"
+    mv "$placed" "$aside/Jason.app" || fail "$placed could not be moved out of $place"
+    [ -z "$(app)" ] || fail "after the previous release's application was moved out, an application stands at $(app)"
+    say "the previous release's Jason Desktop $old moved out of $place, as to the Trash"
+    status=0
+    within 300 'install.sh once the previous Jason Desktop is moved out' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-install.txt" 2>&1 || status=$?
     cat "$OUT/over-previous-install.txt"
-    [ "$status" -eq 0 ] || fail "install.sh over the previous Jason Desktop exited with $status: $(tail -n 3 "$OUT/over-previous-install.txt")"
-    [ "$(app)" = "$placed" ] || fail "install.sh over the previous Jason Desktop at $placed left the application at '$(app)'"
+    [ "$status" -eq 0 ] || fail "install.sh once the previous Jason Desktop was moved out exited with $status: $(tail -n 3 "$OUT/over-previous-install.txt")"
+    [ "$(app)" = "$placed" ] || fail "install.sh once the previous Jason Desktop was moved out of $placed put the application at '$(app)'"
     for other in /Applications/Jason.app "$HOME/Applications/Jason.app"; do
         [ "$other" = "$placed" ] || [ ! -e "$other" ] || fail "a second application stands at $other beside $placed"
     done
     [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed") after install.sh, not $version"
     carried="$placed/Contents/Resources/bundle/jason"
     [ "$(within 60 'the carried jason --version' "$carried" --version | cut -d+ -f1)" = "$version" ] || fail "the carried jason does not say $version"
-    say "install.sh put Jason Desktop $version in the previous release's place, $placed, and no second application stands"
+    say "install.sh run again put Jason Desktop $version in the previous release's place, $placed, and no second application stands"
 
     # The terminal command: the application's wrapper, naming no data directory, and a new login shell finds it.
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
