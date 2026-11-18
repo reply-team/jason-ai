@@ -1254,9 +1254,10 @@ bundle-swap)
     # jason status printed whole. With running-cli, the same over a command-line install of the previous release at
     # ~/.local/bin/jason whose runtime runs before the swap, and also held: a runtime answering from the carried jason
     # (looked for 120 s, since it starts only once the set-up's finishing step returns), the note that a start is owed
-    # gone, the old executable now the wrapper, its notice files gone, and the campaigns the same by id. Without it, the
-    # set-up record the first start writes once the set-up completes; with it, no record is held, since the finishing
-    # step reads the public feed, where a test build has no release, and writes none. Not proved here: the old
+    # gone, the old executable now the wrapper, its notice files gone, and the campaigns the same by id. In both, the
+    # set-up's routine ended 0 and completed. Without it, the set-up record the first start writes once the set-up
+    # completes; with it, no record is held, since the finishing step reads the public feed, where a test build has no
+    # release, and writes none. Whether the previous release's quit left its own runtime running is said either way. Not proved here: the old
     # application's own updater, its download, its signature check and its swap; the swap is the leg's. The uninstall and
     # the compare after it are the leg's next steps.
     previous="$1"; built="$2"; version="$3"; mode="${4:-}"
@@ -1331,6 +1332,12 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     end_process "$window" "the previous release's Jason Desktop"
     pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
     sleep 3
+    # Whether the previous release's quit left a runtime of its own running: a fact, either way.
+    if [ -n "$(runtimes_of "$placed/Contents/Resources/bundle/jason")" ]; then
+        say "the previous release's quit left its own runtime running (pid $(runtimes_of "$placed/Contents/Resources/bundle/jason" | awk '{print $1}' | tr '\n' ' '))"
+    else
+        say "the previous release's quit left no runtime of its own running"
+    fi
     write_listing "$OUT/bundle-swap-before-swap.txt" quiet
     say "the previous release's Jason Desktop $old placed at $placed from its own download, its signature verified, started once for 30 s and quit; the machine then, $(grep -c . "$OUT/bundle-swap-before-swap.txt") line(s), is in bundle-swap-before-swap.txt"
     cat "$OUT/bundle-swap-before-swap.txt"
@@ -1385,12 +1392,13 @@ print("%d %s %s" % (len(lines), last.get("Exit", "none"), str(last.get("Complete
     ran_exit="$2"; ran_completed="$3"
     say "this build's first start after the swap ran the set-up: jason install exited $ran_exit, completed $ran_completed"
     [ "$ran_exit" = 0 ] || fail "the set-up at this build's first start after the swap exited $ran_exit"
-    if [ "$mode" != running-cli ]; then [ "$ran_completed" = true ] || fail "the set-up at this build's first start after the swap did not complete"; fi
+    # Completed is the routine's own (jason install, which runs offline), never the finishing step's: held in both halves.
+    [ "$ran_completed" = true ] || fail "the set-up at this build's first start after the swap did not complete"
     # The runtime: looked for for 120 s from the carried jason, since it starts only once the finishing step returns.
     until=$(( $(date +%s) + 120 ))
     answered=""
     while [ "$(date +%s)" -lt "$until" ]; do
-        if "$carried" runtime status > "$OUT/bundle-swap-runtime.txt" 2>&1 && [ -n "$(runtimes_of "$carried")" ]; then answered=1; break; fi
+        if within 20 'jason runtime status from the carried jason' "$carried" runtime status > "$OUT/bundle-swap-runtime.txt" 2>&1 && [ -n "$(runtimes_of "$carried")" ]; then answered=1; break; fi
         sleep 2
     done
     if [ "$mode" = running-cli ]; then
