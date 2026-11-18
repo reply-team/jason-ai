@@ -57,7 +57,9 @@ public static class UninstallCommand
              build of this program unpacked beside them — a running copy holds its own, and each build
              unpacks again on its next start. Elsewhere a running copy holds nothing, so those are counted
              and left, for you to remove once nothing runs from them; and with DOTNET_BUNDLE_EXTRACT_BASE_DIR
-             set they are not looked for
+             set they are not looked for. Then, on Windows, each jason-retired-<id> folder an install, an
+             update or a move renamed a running jason.exe into, once that process has ended; one it still
+             runs is named, for you to remove once it has ended
 
         A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
         elsewhere than Windows an open file does not stop the removal.
@@ -100,8 +102,8 @@ public static class UninstallCommand
             call of an agent host opened by hand. The application's uninstaller removes nothing while one
             does. The runtime this stops, and every process it started (its plugin hosts, its agents' calls),
             are not counted.
-          - with the logon registration: Open Jason at Login, where it starts this application. On macOS,
-            with --keep-application, its file goes and its job is not unloaded, since the application kept
+          - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
+            where it starts this application. On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
             may be that job's own window: the output says the job stays loaded until the next login.
           - with the runtime: the runtime an earlier version's demo left running on its own data directory.
           - with the jason: link: the jason-desktop link registration, where it starts this application.
@@ -111,7 +113,8 @@ public static class UninstallCommand
             but Jason, a profile file removed only where jason install recorded that it created it and nothing
             but whitespace is left, then the folder once empty; on Windows the application's jason and jason-desktop command
             files in WindowsApps, and the entry in this account's Path naming the application's resources\bundle,
-            where that folder holds nothing but what the application carries there. An older command-line install
+            where that folder holds nothing but what the application carries there. Then the native libraries
+            this jason's build unpacked, as step 6 takes them: this jason goes with the application. An older command-line install
             of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
             profile block and its folder. Then the folders an earlier version's demo made, each only where it
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/

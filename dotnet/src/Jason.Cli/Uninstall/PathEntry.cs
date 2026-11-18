@@ -718,7 +718,10 @@ public static class PathEntry
 
     /// <summary>
     /// Whether a directory is the application's carried folder and holds nothing but what the application puts there: the
-    /// rule the Path entry <c>jason install</c> writes on Windows is taken back by.
+    /// rule the Path entry <c>jason install</c> writes on Windows is taken back by. What the application puts there includes
+    /// <see cref="Update.CarriedUpdate.PidFileName"/>, which the carried jason writes beside itself while it hands an update
+    /// over and which an update killed part-way leaves: without it, that file made the entry another program's, and the
+    /// application's uninstaller then took the folder and left the entry naming nothing.
     /// </summary>
     public static bool CarriedBundle(string directory, bool windows)
     {
@@ -726,7 +729,7 @@ public static class PathEntry
 
         try
         {
-            var names = BundleFiles(windows);
+            IReadOnlyList<string> names = [.. BundleFiles(windows), Update.CarriedUpdate.PidFileName];
             var comparer = windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             return Installation.CarriedExecutable.Of(System.IO.Path.Combine(directory, names[0])) is not null
                 && System.IO.Directory.EnumerateFileSystemEntries(directory).All(entry => names.Contains(System.IO.Path.GetFileName(entry), comparer));

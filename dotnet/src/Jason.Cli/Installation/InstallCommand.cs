@@ -83,7 +83,7 @@ public static class InstallCommand
              now, and until then the old job stays loaded and idle. Its notice files, and on Windows
              jason.previous.exe, removed. Windows: the executable removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
              own volume and left there, with nothing started to wait for that process, until a later jason install,
-             jason update apply --finish or move finds that process ended and removes the folder; its Path entry taken
+             jason update apply --finish, move or jason uninstall finds that process ended and removes the folder; its Path entry taken
              off where its folder then holds nothing but what install.ps1 wrote there before 0.49; the folder once empty.
              macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
              its profile block where its folder then holds nothing but Jason.
