@@ -40,6 +40,39 @@ public class ExecutableResolverTests
         Assert.Null(resolved.Version);
     }
 
+    /// <summary>
+    /// A declared program is resolved to a full path, and never from an entry of the search path that is not one: the path
+    /// the plugin's own calls start, and its version check, is that full path.
+    /// </summary>
+    [Fact]
+    public void A_declared_program_is_resolved_to_its_full_path_and_never_from_an_entry_that_is_not_one()
+    {
+        using var programs = new TestPrograms();
+        var name = "provider-" + Guid.NewGuid().ToString("N");
+        var real = programs.AddProgram(name);
+
+        var resolved = new ExecutableResolver(new TestSearchPath { Path = string.Join(Path.PathSeparator, string.Empty, ".", "relative", programs.Root) })
+            .Resolve(new ExecutableRequest(name, null, null), 0);
+        Assert.Equal(real, resolved.Path);
+        Assert.True(Path.IsPathFullyQualified(resolved.Path!));
+
+        var folder = "jason-resolver-" + Guid.NewGuid().ToString("N");
+        var decoys = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), folder)).FullName;
+        try
+        {
+            File.Copy(real, Path.Combine(decoys, Path.GetFileName(real)));
+
+            var relative = new ExecutableResolver(new TestSearchPath { Path = string.Join(Path.PathSeparator, string.Empty, ".", folder) })
+                .Resolve(new ExecutableRequest(name, null, null), 0);
+            Assert.Null(relative.Path);
+            Assert.Equal(ProblemCodes.ExecutableMissing, relative.Problem!.Code);
+        }
+        finally
+        {
+            Directory.Delete(decoys, recursive: true);
+        }
+    }
+
     [Fact]
     public void A_program_nobody_installed_is_a_problem_of_the_machine()
     {

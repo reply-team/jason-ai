@@ -80,7 +80,7 @@ public sealed class ProcessToastLauncherTests
     [Fact]
     public async Task A_child_that_outlives_its_bound_is_killed()
     {
-        var launch = new ToastLaunch(Jason.Runtime.Tests.Execution.FakeAgentHost.EntryCommand("linger"), null, Environment());
+        var launch = new ToastLaunch([Muxer.Path, .. Jason.Runtime.Tests.Execution.FakeAgentHost.EntryCommand("linger").Skip(1)], null, Environment());
         var watch = Stopwatch.StartNew();
 
         var result = await new ProcessToastLauncher().LaunchAsync(launch, TimeSpan.FromSeconds(2), Ct);

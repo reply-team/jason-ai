@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Programs;
 using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
@@ -45,15 +46,31 @@ public class ProcessPathLocatorTests
     }
 
     /// <summary>
-    /// A host that publishes no process path at all leaves the muxer as the only answer that can still run, and
-    /// it is the answer the CLI has always given when it starts a runtime of its own.
+    /// A host that publishes no process path at all leaves the muxer as the only answer that can still run, and it is
+    /// named by the full path the search path's full entries give for it, never looked up again by the operating system
+    /// in the working folder. With no muxer there either, the bare name is all there is to say, and the door refuses it.
     /// </summary>
     [Fact]
-    public void A_process_with_no_path_is_still_started_through_the_muxer()
+    public void A_process_with_no_path_is_started_through_the_muxer_the_search_path_gives()
     {
-        var locator = new ProcessPathLocator(processPath: null, "/build/jason.dll");
+        var folder = Directory.CreateTempSubdirectory("jason-muxer-").FullName;
+        try
+        {
+            var muxer = Path.Combine(folder, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+            File.WriteAllText(muxer, "not a real program");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(muxer, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
 
-        Assert.Equal(["dotnet", "/build/jason.dll"], locator.Command);
+            var walked = new ProgramSearchPath(string.Join(Path.PathSeparator, ".", "relative", folder), null);
+            Assert.Equal([muxer, "/build/jason.dll"], SelfExecutable.Resolve(processPath: null, "/build/jason.dll", walked));
+            Assert.Equal(["dotnet", "/build/jason.dll"], SelfExecutable.Resolve(processPath: null, "/build/jason.dll", new ProgramSearchPath(".", null)));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     /// <summary>

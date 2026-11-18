@@ -1,6 +1,7 @@
 using Jason.Contracts.Notifications;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Desktop;
+using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Notifications;
 
@@ -57,11 +58,11 @@ public sealed class ToastCommandsTests
         var launch = command switch
         {
             "osascript" => ToastCommands.MacOs(one),
-            "notify-send" => ToastCommands.LinuxNotifySend(one),
-            _ => ToastCommands.LinuxGdbus(one),
+            "notify-send" => ToastCommands.LinuxNotifySend("/usr/bin/notify-send", one),
+            _ => ToastCommands.LinuxGdbus("/usr/bin/gdbus", one),
         };
 
-        Assert.Equal(command, launch.Command[0]);
+        Assert.Equal(command, Path.GetFileName(launch.Command[0]));
         Assert.All(launch.Command, argument => Assert.DoesNotContain("apr_", argument, StringComparison.Ordinal));
         Assert.DoesNotContain("apr_", launch.Stdin ?? string.Empty, StringComparison.Ordinal);
         Assert.All(launch.Environment.Values, value => Assert.DoesNotContain("apr_", value, StringComparison.Ordinal));
@@ -72,13 +73,30 @@ public sealed class ToastCommandsTests
     public void Windows_follows_the_command_that_starts_this_executable() =>
         Assert.Equal(["dotnet", "jason.dll", "toast-host", "--protocol", Protocol], ToastCommands.Windows(["dotnet", "jason.dll"], Message).Command);
 
+    /// <summary>
+    /// Every toast is started by the full path of its program: on Windows this executable as the operating system names
+    /// it, on macOS osascript where macOS keeps it, and on Linux notify-send or gdbus as the search path's full entries
+    /// gave them, handed in rather than named again.
+    /// </summary>
+    [Fact]
+    public void Every_toast_is_started_by_the_full_path_of_its_program()
+    {
+        Assert.True(Path.IsPathFullyQualified(ToastCommands.Windows(new ProcessPathLocator().Command, Message).Command[0]));
+        Assert.Equal("/usr/bin/osascript", ToastCommands.MacOs(Message).Command[0]);
+        Assert.Equal("/opt/tools/notify-send", ToastCommands.LinuxNotifySend("/opt/tools/notify-send", Message).Command[0]);
+        foreach (var launch in new[] { ToastCommands.LinuxGdbus("/opt/tools/gdbus", Message), ToastCommands.LinuxDaemonProbe("/opt/tools/gdbus"), ToastCommands.LinuxActivatableProbe("/opt/tools/gdbus") })
+        {
+            Assert.Equal("/opt/tools/gdbus", launch.Command[0]);
+        }
+    }
+
     [Fact]
     public void Mac_os_says_it_with_osascript()
     {
         var launch = ToastCommands.MacOs(Message);
 
         Assert.Equal(
-            ["osascript", "-e", $"display notification \"{Message.Summary} {Message.Look}\" with title \"Jason\""],
+            ["/usr/bin/osascript", "-e", $"display notification \"{Message.Summary} {Message.Look}\" with title \"Jason\""],
             launch.Command);
         Assert.Null(launch.Stdin);
     }
@@ -98,8 +116,8 @@ public sealed class ToastCommandsTests
     public void Linux_says_it_with_notify_send()
     {
         Assert.Equal(
-            ["notify-send", "--app-name=Jason", "Jason", $"{Message.Summary}\n{Message.Look}"],
-            ToastCommands.LinuxNotifySend(Message).Command);
+            ["/usr/bin/notify-send", "--app-name=Jason", "Jason", $"{Message.Summary}\n{Message.Look}"],
+            ToastCommands.LinuxNotifySend("/usr/bin/notify-send", Message).Command);
     }
 
     [Fact]
@@ -107,13 +125,13 @@ public sealed class ToastCommandsTests
     {
         Assert.Equal(
             [
-                "gdbus", "call", "--session",
+                "/usr/bin/gdbus", "call", "--session",
                 "--dest", "org.freedesktop.Notifications",
                 "--object-path", "/org/freedesktop/Notifications",
                 "--method", "org.freedesktop.Notifications.Notify",
                 "'Jason'", "uint32 0", "''", "'Jason'", $"'{Message.Summary}\n{Message.Look}'", "@as []", "@a{sv} {}", "int32 -1",
             ],
-            ToastCommands.LinuxGdbus(Message).Command);
+            ToastCommands.LinuxGdbus("/usr/bin/gdbus", Message).Command);
     }
 
     [Fact]
@@ -121,7 +139,7 @@ public sealed class ToastCommandsTests
     public void A_gvariant_string_escapes_its_quote_and_backslash()
     {
         var odd = new NotificationMessage("Jason", "it's c:\\x", "e", 1, 0);
-        Assert.Equal("'it\\'s c:\\\\x\ne'", ToastCommands.LinuxGdbus(odd).Command[13]);
+        Assert.Equal("'it\\'s c:\\\\x\ne'", ToastCommands.LinuxGdbus("/usr/bin/gdbus", odd).Command[13]);
     }
 
     [Fact]
@@ -129,13 +147,13 @@ public sealed class ToastCommandsTests
     {
         Assert.Equal(
             [
-                "gdbus", "call", "--session",
+                "/usr/bin/gdbus", "call", "--session",
                 "--dest", "org.freedesktop.DBus",
                 "--object-path", "/org/freedesktop/DBus",
                 "--method", "org.freedesktop.DBus.NameHasOwner",
                 "org.freedesktop.Notifications",
             ],
-            ToastCommands.LinuxDaemonProbe().Command);
+            ToastCommands.LinuxDaemonProbe("/usr/bin/gdbus").Command);
     }
 
     [Fact]
@@ -143,12 +161,12 @@ public sealed class ToastCommandsTests
     {
         Assert.Equal(
             [
-                "gdbus", "call", "--session",
+                "/usr/bin/gdbus", "call", "--session",
                 "--dest", "org.freedesktop.DBus",
                 "--object-path", "/org/freedesktop/DBus",
                 "--method", "org.freedesktop.DBus.ListActivatableNames",
             ],
-            ToastCommands.LinuxActivatableProbe().Command);
+            ToastCommands.LinuxActivatableProbe("/usr/bin/gdbus").Command);
     }
 
     /// <summary>

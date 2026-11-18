@@ -155,11 +155,11 @@ public class UpdateLaunchEnvironmentTests
         {
             Environment.SetEnvironmentVariable(UpdateLock.Variable, "inherited");
 
-            var handed = RuntimeProcessControl.RunStart(dir.Paths, ["jason", "update", "apply", "--finish"], "the-nonce");
+            var handed = RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason"), "update", "apply", "--finish"], "the-nonce");
             Assert.Equal("the-nonce", handed.Environment[UpdateLock.Variable]);
             Assert.DoesNotContain(handed.ArgumentList, argument => argument.Contains("the-nonce", StringComparison.Ordinal));
 
-            var plain = RuntimeProcessControl.RunStart(dir.Paths, ["Jason", "--update-settle"]);
+            var plain = RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "Jason"), "--update-settle"]);
             Assert.False(plain.Environment.ContainsKey(UpdateLock.Variable), "a run the lock was not handed to inherited it");
             var launch = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started");
             Assert.False(launch.Environment.ContainsKey(UpdateLock.Variable), "a runtime was handed the update's lock");

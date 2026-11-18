@@ -143,7 +143,7 @@ public sealed class MoveSystem : IMoveSystem
 
     public bool IsAppleSilicon()
     {
-        var (exit, output, _) = RunTool("/usr/sbin/sysctl", ["-n", "hw.optional.arm64"], TimeSpan.FromSeconds(10), CancellationToken.None).GetAwaiter().GetResult();
+        var (exit, output, _) = RunTool(Sysctl, ["-n", "hw.optional.arm64"], TimeSpan.FromSeconds(10), CancellationToken.None).GetAwaiter().GetResult();
         return exit == 0 && output.Trim() == "1";
     }
 
@@ -180,13 +180,13 @@ public sealed class MoveSystem : IMoveSystem
 
     public async Task<string?> MacSignatureRefusalAsync(string application, string requirement, CancellationToken cancellationToken)
     {
-        var (exit, _, error) = await RunTool("/usr/bin/codesign", ["--verify", "--deep", "--strict", "-R=" + requirement, application], ToolWait, cancellationToken).ConfigureAwait(false);
+        var (exit, _, error) = await RunTool(Codesign, ["--verify", "--deep", "--strict", "-R=" + requirement, application], ToolWait, cancellationToken).ConfigureAwait(false);
         return exit == 0 ? null : (error.Trim() is { Length: > 0 } said ? said : $"codesign exited with {exit}");
     }
 
     public async Task<string?> UnzipAsync(string zip, string folder, CancellationToken cancellationToken)
     {
-        var (exit, _, error) = await RunTool("/usr/bin/ditto", ["-x", "-k", zip, folder], ToolWait, cancellationToken).ConfigureAwait(false);
+        var (exit, _, error) = await RunTool(Ditto, ["-x", "-k", zip, folder], ToolWait, cancellationToken).ConfigureAwait(false);
         return exit == 0 ? null : (error.Trim() is { Length: > 0 } said ? said : $"ditto exited with {exit}");
     }
 
@@ -278,6 +278,13 @@ public sealed class MoveSystem : IMoveSystem
 
         return false;
     }
+
+    /// <summary>The tools a move runs on macOS, each where macOS keeps it.</summary>
+    internal const string Sysctl = "/usr/sbin/sysctl";
+
+    internal const string Codesign = "/usr/bin/codesign";
+
+    internal const string Ditto = "/usr/bin/ditto";
 
     private static async Task<(int Exit, string Output, string Error)> RunTool(string program, IReadOnlyList<string> arguments, TimeSpan bound, CancellationToken cancellationToken)
     {

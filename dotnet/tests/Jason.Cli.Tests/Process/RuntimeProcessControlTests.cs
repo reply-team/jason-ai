@@ -87,4 +87,20 @@ public class RuntimeProcessControlTests
         Assert.Equal("dotnet", muxer);
         Assert.Equal(["/opt/jason/jason.dll", "runtime", "run", "--detached"], withDll);
     }
+
+    /// <summary>
+    /// A runtime, and a command of this product run to its end, are started by a full path: this program's own as the
+    /// operating system gives it, or the executable an update placed, named by its place. A name that is not one is
+    /// refused at the door before anything starts.
+    /// </summary>
+    [Fact]
+    public void The_runtime_and_a_command_of_this_product_are_started_by_a_full_path()
+    {
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-" + Guid.NewGuid().ToString("N")));
+
+        Assert.True(Path.IsPathFullyQualified(RuntimeProcessControl.LaunchStart(paths, SelfExecutable.Command, updateLaunch: null).FileName));
+        Assert.True(Path.IsPathFullyQualified(RuntimeProcessControl.RunStart(paths, SelfExecutable.Command).FileName));
+        Assert.ThrowsAny<ArgumentException>(() => RuntimeProcessControl.LaunchStart(paths, ["jason"], updateLaunch: null));
+        Assert.ThrowsAny<ArgumentException>(() => RuntimeProcessControl.RunStart(paths, ["jason", "update", "apply"]));
+    }
 }
