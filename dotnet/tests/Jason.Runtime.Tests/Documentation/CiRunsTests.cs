@@ -22,8 +22,11 @@ namespace Jason.Runtime.Tests.Documentation;
 /// parent runs the version alone as well. Any other push to <c>main</c> runs every check, and any other push to a release
 /// branch the Linux set. A run started by hand runs every check, and nothing runs nightly. A draft's push, a pull request
 /// into a release branch and the version pull request test the critical tier alone; every other run tests the whole
-/// suite, which runs once per release on the release's pull request. Read out of ci.yml, and the steps that decide are run
-/// rather than read, so what these facts hold is what a runner does.
+/// suite, which runs once per release on the release's pull request. A hotfix's pull request — one into <c>main</c> from a
+/// branch <c>hotfix/&lt;name&gt;</c> of this repository — is refused, draft or ready, when it changes what a hotfix may not
+/// change; once it is ready it builds every platform and tests the critical tier on each, and <c>main</c> passes its
+/// record over. Read out of ci.yml, and the steps that decide are run rather than read, so what these facts hold is what a
+/// runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -121,6 +124,19 @@ public class CiRunsTests
 
     private const string FeatureBranch = "feature/the-change";
 
+    /// <summary>A hotfix's branch. Made up.</summary>
+    private const string HotfixBranch = "hotfix/the-fix";
+
+    /// <summary>The set a hotfix's pull request runs once it is ready.</summary>
+    private const string Hotfix = "hotfix";
+
+    /// <summary>What the hotfix set runs: every platform, testing the critical tier, and the Linux set's other jobs.</summary>
+    private static readonly string[] TheHotfixSet =
+    [
+        "The version this tree carries", "linux-x64", "win-x64", "osx-arm64", "install.sh on ubuntu", "an update on linux-x64",
+        "The UI on ubuntu", "The desktop on ubuntu",
+    ];
+
     /// <summary>The repository the runs of these facts belong to, and a fork of it. Made up.</summary>
     private const string ThisRepository = "acme/jason";
 
@@ -177,11 +193,16 @@ public class CiRunsTests
     /// A run as the deciding step is told about it: the event, what the step before it found — the tree an earlier ready run
     /// tested (none when nothing was found) and the set that run named in its record (none when the record names none, as one
     /// kept before records named their set does) — this run's own listing, the branch the change lands on and, for a pull
-    /// request, the branch it comes from, the listing of its base and the props file's text on both sides.
+    /// request, the branch it comes from, the repository its head is in, the listing of its base and the props file's text
+    /// on both sides.
     /// </summary>
     private sealed record Run(
         string Event, string Action = "", string Draft = "", string? TestedTree = null, string[]? Listing = null, string Target = "main", string Branch = FeatureBranch,
-        string? TestedSet = null, string[]? Base = null, (string Before, string After)? Props = null);
+        string? TestedSet = null, string[]? Base = null, (string Before, string After)? Props = null, string HeadRepository = ThisRepository);
+
+    /// <summary>A hotfix's pull request into <c>main</c>, from this repository, that changes <paramref name="paths"/> against its base, which it lists.</summary>
+    private static Run AHotfix(string action = "ready_for_review", string draft = "false", string target = "main", string headRepository = ThisRepository, params string[] paths) =>
+        new("pull_request", action, draft, Listing: ChangedAll(paths.Length > 0 ? paths : ["dotnet/src/Jason.App/Program.cs"]), Target: target, Branch: HotfixBranch, Base: Tested, HeadRepository: headRepository);
 
     /// <summary>A ready pull request into <c>main</c> that moves the version: its base, the four pins moved, and the props file's prefix line alone.</summary>
     private static Run TheVersionPullRequest(string action = "ready_for_review", string draft = "false") =>
@@ -208,6 +229,19 @@ public class CiRunsTests
         ["marking the version pull request ready"] = (TheVersionPullRequest(), VersionOnly),
         ["a push after ready to the version pull request"] = (TheVersionPullRequest("synchronize"), VersionOnly),
         ["a push to the version pull request while it is a draft"] = (TheVersionPullRequest("synchronize", "true"), "linux"),
+        ["marking a hotfix's pull request into main ready"] = (AHotfix(), Hotfix),
+        ["opening a hotfix's pull request into main ready"] = (AHotfix("opened"), Hotfix),
+        ["a push after ready to a hotfix's pull request into main"] = (AHotfix("synchronize"), Hotfix),
+        ["a push to a hotfix's pull request into main while it is a draft"] = (AHotfix("synchronize", "true"), "linux"),
+        ["marking a pull request from a hotfix's branch into a release branch ready"] = (AHotfix(target: ReleaseBranch), "linux"),
+        ["marking a fork's pull request from a branch named as a hotfix's ready"] = (AHotfix(headRepository: AFork), "not-the-release"),
+        ["reopening a hotfix's pull request into main"] = (AHotfix("reopened"), Hotfix),
+        ["marking a pull request into main from Hotfix/<name> ready"] = (AHotfix() with { Branch = "Hotfix/the-fix" }, "not-the-release"),
+        ["marking a pull request into main from a branch named hotfix ready"] = (AHotfix() with { Branch = "hotfix" }, "not-the-release"),
+        ["marking a pull request into main from release/hotfix/<name> ready"] = (AHotfix() with { Branch = "release/hotfix/the-fix" }, "everything"),
+        ["marking a pull request into main from <name>/hotfix/<name> ready"] = (AHotfix() with { Branch = "feature/hotfix/the-fix" }, "not-the-release"),
+        ["a run started by hand on a hotfix's branch"] = (new Run("workflow_dispatch", Target: HotfixBranch), "everything"),
+        ["a push to a release branch of the tree a hotfix tested"] = (new Run("push", TestedTree: Tree, TestedSet: Hotfix, Target: ReleaseBranch), "none"),
         ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "everything"),
         ["a push to main of a tree a run that passed recorded"] = (new Run("push", TestedTree: Tree), "tested"),
         ["a push to main of the tree another pull request into main tested when it was ready"] = (new Run("push", TestedTree: Tree, TestedSet: "not-the-release"), "tested"),
@@ -228,6 +262,7 @@ public class CiRunsTests
         ["documentation"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
         ["not-the-release"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
         [VersionOnly] = (["The version this tree carries", "linux-x64"], ["win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
+        [Hotfix] = (TheHotfixSet, ["an update on win-x64"]),
         ["tested"] = (["The version this tree carries"], ["linux-x64", "win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         ["everything"] = (Required, []),
         ["none"] = (["The version this tree carries"], []),
@@ -364,10 +399,12 @@ public class CiRunsTests
             ["BASE"] = "${{ steps.tree.outputs.base }}",
             ["RECORD"] = "${{ steps.earlier.outputs.record }}",
             ["FOUND"] = "${{ steps.earlier.outputs.found }}",
+            ["REPOSITORY"] = "${{ github.repository }}",
+            ["HEAD_REPOSITORY"] = "${{ github.event.pull_request.head.repo.full_name }}",
         };
         Assert.Equal(
             told.OrderBy(pair => pair.Key, StringComparer.Ordinal),
-            Variables(deciding).Where(pair => pair.Key is not ("PLATFORMS" or "UPDATES" or "PARTS")).OrderBy(pair => pair.Key, StringComparer.Ordinal));
+            Variables(deciding).Where(pair => pair.Key is not ("PLATFORMS" or "UPDATES" or "PARTS" or "OUTSIDE_A_HOTFIX")).OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
         // In the order a runner needs them: the SDK the version is read with, the version, the tree, then what an earlier
         // run tested, then the decision.
@@ -531,8 +568,8 @@ public class CiRunsTests
     /// <summary>
     /// The deciding step's words for each set — the jobs only a run of every check needs, the platform legs, the Linux set's
     /// other jobs, and the steps that need the macOS archive — and the legs each matrix runs: every platform when every check
-    /// runs, Linux alone on the Linux set and on the version pull request, which runs no update, none where the tree was
-    /// tested already. And it says which case it took and why, in the run's summary.
+    /// runs, Linux alone on the Linux set and on the version pull request, which runs no update, every platform on a hotfix's
+    /// pull request, with the update on linux-x64 alone, none where the tree was tested already. And it says which case it took and why, in the run's summary.
     /// </summary>
     [Theory]
     [MemberData(nameof(KindsOfRun))]
@@ -550,12 +587,14 @@ public class CiRunsTests
 
         string[] platforms = set switch
         {
-            "everything" => ["linux-x64", "win-x64", "osx-arm64"],
+            "everything" or Hotfix => ["linux-x64", "win-x64", "osx-arm64"],
             "linux" or "documentation" or "not-the-release" or VersionOnly => ["linux-x64"],
             _ => [],
         };
         Assert.Equal(platforms, Legs(said["platforms"]).Select(leg => leg["rid"]));
-        Assert.Equal(platforms.Where(rid => rid != "osx-arm64" && set != VersionOnly), Legs(said["updates"]).Select(leg => leg["rid"]));
+        Assert.Equal(
+            platforms.Where(rid => rid != "osx-arm64" && set != VersionOnly && (set != Hotfix || rid == "linux-x64")),
+            Legs(said["updates"]).Select(leg => leg["rid"]));
         Assert.Equal(string.Join(',', platforms), said["rids"]);
 
         // Each leg keeps the runner it is built on.
@@ -739,7 +778,8 @@ public class CiRunsTests
     /// A push to <c>main</c> whose tree a run that passed recorded runs the version alone, whichever set that run ran —
     /// another pull request's into <c>main</c>, the version pull request's, the release's, a push to <c>main</c>'s — and its
     /// reason names the run, the ref it ran on and the set the record came from; a record that names no set says that
-    /// instead.
+    /// instead. A record of a pull request's into a release branch or of a hotfix's never reaches this step on <c>main</c>:
+    /// the step that looks passes both over.
     /// </summary>
     [Theory]
     [InlineData("not-the-release")]
@@ -837,8 +877,8 @@ public class CiRunsTests
     /// Every ready pull request's run keeps a record of the tree it tested, of the set it ran and of the ref it ran on, for
     /// the runs after it: the release's run of every check, for a push to it that changes documentation only and for the push
     /// to <c>main</c> its merge makes; a run of the Linux set into a release branch, for the push to the release branch its
-    /// merge makes; and the run of any other pull request into <c>main</c>, the version pull request's among them, for the
-    /// push to <c>main</c> its squash makes. So does a push to <c>main</c> that runs every check, for a release branch that
+    /// merge makes; and the run of any other pull request into <c>main</c>, the version pull request's and a hotfix's among
+    /// them, for the push to <c>main</c> its squash makes, which passes a hotfix's over. So does a push to <c>main</c> that runs every check, for a release branch that
     /// takes <c>main</c> as it is; a push's record names no pull request. A draft's run keeps none, and neither does a push to
     /// the release's pull request that changes documentation only, whose next push compares with its last run of every check.
     /// The record is trusted only from a run that passed, which the step that looks asks the run.
@@ -851,7 +891,7 @@ public class CiRunsTests
         var decided = Decide(run);
 
         var keeps = (run.Event == "pull_request" && run.Draft == "false" &&
-            (set is "everything" or "not-the-release" or VersionOnly || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)))) ||
+            (set is "everything" or "not-the-release" or VersionOnly or Hotfix || (set == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)))) ||
             (run is { Event: "push", Target: "main" } && set == "everything");
         Assert.True(keeps == decided.Record is not null, $"{kind} {(keeps ? "kept no record" : $"kept a record: {decided.Record}")}");
         if (decided.Record is { } record)
@@ -872,7 +912,7 @@ public class CiRunsTests
     /// <summary>
     /// A draft's push tests the critical tier alone, on linux-x64, the one platform its Linux set builds, and so do a pull
     /// request into a release branch and the version pull request once they are ready, for which the tier is the ready run
-    /// by rule: the whole suite runs once per release, on the release's pull request, and locally before ready for a change
+    /// by rule, and a hotfix's pull request on every platform: the whole suite runs once per release, on the release's pull request, and locally before ready for a change
     /// under <c>dotnet/</c>. Every other run tests the whole suite. Of the linux-x64 job's two test steps exactly one runs,
     /// by the word the version job hands on, and only the one those two run filters the suite.
     /// </summary>
@@ -881,7 +921,7 @@ public class CiRunsTests
     public void A_draft_s_push_a_pull_request_into_a_release_branch_and_the_version_pull_request_test_the_critical_tier_and_every_other_run_the_whole_suite(string kind)
     {
         var (run, set) = Kinds[kind];
-        var tier = (run.Event == "pull_request" && (run.Draft == "true" || run.Target.StartsWith("release/", StringComparison.Ordinal))) || set == VersionOnly;
+        var tier = (run.Event == "pull_request" && (run.Draft == "true" || run.Target.StartsWith("release/", StringComparison.Ordinal))) || set is VersionOnly or Hotfix;
 
         var decided = Decide(run);
 
@@ -890,7 +930,7 @@ public class CiRunsTests
         var command = Scalar(testing, "run")!;
         Assert.True(
             Tiered(command) == tier,
-            $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push, a pull request into a release branch and the version pull request test less than the whole suite")}");
+            $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push, a pull request into a release branch, the version pull request and a hotfix's test less than the whole suite")}");
         Assert.Contains(tier ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
     }
 
@@ -931,9 +971,10 @@ public class CiRunsTests
 
     /// <summary>
     /// A run that keeps a record of the tree it tested ran the whole suite on it, but for the version pull request, whose
-    /// ready run the critical tier is by rule, and a pull request into a release branch, whose record is for the push to the
-    /// release branch its merge makes, which no ruleset reads: a push to <c>main</c> passes that record over, and a push to a
-    /// release branch takes it. A later push skips its checks on a record, so a tree a draft's tier ran on is never
+    /// ready run the critical tier is by rule, a pull request into a release branch, whose record is for the push to the
+    /// release branch its merge makes, which no ruleset reads, and a hotfix's pull request, after whose squash <c>main</c>
+    /// runs as though no run had tested its tree: a push to <c>main</c> passes those two records over, and a push to a
+    /// release branch takes them. A later push skips its checks on a record, so a tree a draft's tier ran on is never
     /// recorded, and <c>main</c> takes no tree the tier alone tested but the version pull request's.
     /// </summary>
     [Theory]
@@ -946,7 +987,7 @@ public class CiRunsTests
 
         var tierAlone = decided.Record is not null && decided.Outputs["tier"] == "true" && decided.Outputs["set"] != VersionOnly;
         Assert.True(
-            !tierAlone || (decided.Outputs["set"] == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)),
+            !tierAlone || (decided.Outputs["set"] == "linux" && run.Target.StartsWith("release/", StringComparison.Ordinal)) || decided.Outputs["set"] == Hotfix,
             $"{kind} keeps a record of tree {decided.Record?["tree"]} and tested the critical tier alone on it");
         if (tierAlone)
         {
@@ -955,6 +996,331 @@ public class CiRunsTests
             Assert.True(onMain.Record is null, $"a push to main took the record {kind} kept: {onMain.Outputs["found"]}");
             var onTheReleaseBranch = LookForTheRecord(ReleaseBranch, record);
             Assert.True(onTheReleaseBranch.Record is not null, $"a push to a release branch passed over the record {kind} kept: {onTheReleaseBranch.Outputs["found"]}");
+        }
+    }
+
+    /// <summary>
+    /// A hotfix's pull request that changes, adds or removes a path of the list of what a hotfix may not change fails the
+    /// version check, which <c>main</c>'s ruleset requires, draft or ready: one sentence names the path, its kind and the
+    /// pattern it matched, and says that such a change goes through a release branch. Nothing of the run is handed on, so
+    /// nothing else of it starts. One row a pattern, and files a kind holds that no pattern names by their own names.
+    /// </summary>
+    [Theory]
+    [InlineData("dotnet/src/Jason.Runtime/Persistence/Migrations/20990101000000_ANewShape.cs", "the database's shape")]
+    [InlineData("docs/contracts/operations/campaign.create.json", "the contract documents and the operation catalog")]
+    [InlineData("docs/contracts/a-new-family/a-new-contract.json", "the contract documents and the operation catalog")]
+    [InlineData("dotnet/src/Jason.Contracts/Api/Operations.cs", "the contract documents and the operation catalog")]
+    [InlineData(".github/workflows/ci.yml", "CI and the release's machinery")]
+    [InlineData(".github/scripts/Invoke-Tests.ps1", "CI and the release's machinery")]
+    [InlineData("install/install.sh", "installing, updating and uninstalling")]
+    [InlineData("install/feeds/schema-1/manifest.json", "installing, updating and uninstalling")]
+    [InlineData("desktop/installer/uninstall.nsh", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Update/UpdateApplier.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Installation/ANewStep.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Uninstall/ANewStep.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Contracts/Update/ANewField.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Runtime/Update/ANewCheck.cs", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/updates.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/update-feed.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/uninstall.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/uninstall-start.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/rollback.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/installation.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/machine-setup.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/carried-jason.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/own-runtime.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/path-command.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/path-profile.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/remove-placed.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/bundle-copy.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/linux-package.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/login-item.ts", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Ui/UiInstaller.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Skills/SkillsDeployer.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Autostart/WindowsTasks.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Plugins/PluginInstaller.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.App/Jason.App.csproj", "the build and what it depends on")]
+    [InlineData("dotnet/tests/Jason.New.Tests/Jason.New.Tests.csproj", "the build and what it depends on")]
+    [InlineData("dotnet/Directory.Packages.props", "the build and what it depends on")]
+    [InlineData("dotnet/Directory.Build.props", "the build and what it depends on")]
+    [InlineData("dotnet/src/Jason.App/Native.targets", "the build and what it depends on")]
+    [InlineData("dotnet/Jason.slnx", "the build and what it depends on")]
+    [InlineData("global.json", "the build and what it depends on")]
+    [InlineData("dotnet/src/Jason.App/jason.manifest", "the build and what it depends on")]
+    [InlineData("dotnet/src/Jason.App/jason.entitlements", "the build and what it depends on")]
+    [InlineData("dotnet-tools.json", "the build and what it depends on")]
+    [InlineData("ui/scripts/package.mjs", "the build and what it depends on")]
+    [InlineData("ui/vite.config.ts", "the build and what it depends on")]
+    [InlineData("ui/tsconfig.json", "the build and what it depends on")]
+    [InlineData("desktop/tsconfig.json", "the build and what it depends on")]
+    [InlineData("desktop/test/tsconfig.json", "the build and what it depends on")]
+    [InlineData("ui/package.json", "the build and what it depends on")]
+    [InlineData("get/package.json", "the build and what it depends on")]
+    [InlineData("desktop/package-lock.json", "the build and what it depends on")]
+    [InlineData("desktop/electron-builder.config.mjs", "the build and what it depends on")]
+    [InlineData("desktop/electron-builder.config.d.mts", "the build and what it depends on")]
+    [InlineData("desktop/scripts/prepare.mjs", "the build and what it depends on")]
+    [InlineData("THIRD-PARTY-NOTICES", "the build and what it depends on")]
+    [InlineData("desktop/THIRD-PARTY-NOTICES", "the build and what it depends on")]
+    public void A_hotfix_that_changes_what_a_hotfix_may_not_change_fails_the_version_check_draft_or_ready(string path, string kind)
+    {
+        foreach (var (action, draft) in new[] { ("ready_for_review", "false"), ("synchronize", "false"), ("synchronize", "true") })
+        {
+            var decided = Decide(AHotfix(action, draft, paths: [path]), refused: true);
+
+            var why = $"{(draft == "true" ? "a draft" : "a ready pull request")} ({action}) changing {path}";
+            Assert.True(decided.Outputs.Count == 0, $"{why} handed on {string.Join(", ", decided.Outputs.Keys)}");
+            Assert.True(decided.Record is null, $"{why} kept a record");
+            Assert.Contains($"::error title=Not a hotfix::this hotfix changes {path}, which is {kind} (", decided.Stdout, StringComparison.Ordinal);
+            Assert.Contains("), and such a change goes through a release branch, not a hotfix", decided.Stdout, StringComparison.Ordinal);
+            Assert.Contains($"**refused**: this hotfix changes {path}, which is {kind}", decided.Summary, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>A hotfix that removes a path of the list is refused as one that changes it is.</summary>
+    [Fact]
+    public void A_hotfix_that_removes_what_a_hotfix_may_not_change_fails_the_version_check()
+    {
+        var decided = Decide(AHotfix() with { Listing = Changed("install/install.sh", removed: true) }, refused: true);
+
+        Assert.Contains("this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)", decided.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path renamed out of the list or into it is refused by the listed side, a file whose mode alone changed by its
+    /// path, and a name git prints quoted — whatever it names — because it matches no pattern as it is printed.
+    /// </summary>
+    [Theory]
+    [InlineData("a rename out of the list", "this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)")]
+    [InlineData("a rename into the list", "this hotfix changes dotnet/src/Jason.Cli/Update/Program.cs, which is installing, updating and uninstalling (dotnet/src/Jason.Cli/Update/**)")]
+    [InlineData("a mode alone", "this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)")]
+    [InlineData("a quoted name under the contracts", "this hotfix changes \"docs/contracts/operations/\\303\\251.json\", a name git prints quoted, which cannot be judged against the list")]
+    [InlineData("a quoted name anywhere", "this hotfix changes \"docs/caf\\303\\251.md\", a name git prints quoted, which cannot be judged against the list")]
+    public void A_hotfix_that_renames_changes_a_mode_or_names_a_path_git_quotes_is_refused(string change, string said)
+    {
+        string Entry(string mode, string blob, string path) => $"{mode} blob {blob}\t{path}";
+        var install = "4444444444444444444444444444444444444444";
+        var program = "3333333333333333333333333333333333333333";
+        string[] listing = change switch
+        {
+            "a rename out of the list" => [.. Tested.Where(line => !line.EndsWith("\tinstall/install.sh", StringComparison.Ordinal)), Entry("100755", install, "docs/install.sh")],
+            "a rename into the list" => [.. Tested.Where(line => !line.EndsWith("\tdotnet/src/Jason.App/Program.cs", StringComparison.Ordinal)), Entry("100644", program, "dotnet/src/Jason.Cli/Update/Program.cs")],
+            "a mode alone" => [.. Tested.Select(line => line.EndsWith("\tinstall/install.sh", StringComparison.Ordinal) ? Entry("100644", install, "install/install.sh") : line)],
+            "a quoted name under the contracts" => [.. Tested, Entry("100644", "5555555555555555555555555555555555555555", "\"docs/contracts/operations/\\303\\251.json\"")],
+            "a quoted name anywhere" => [.. Tested, Entry("100644", "5555555555555555555555555555555555555555", "\"docs/caf\\303\\251.md\"")],
+            _ => throw new ArgumentOutOfRangeException(nameof(change), change, "no such change"),
+        };
+
+        var decided = Decide(AHotfix() with { Listing = listing }, refused: true);
+
+        Assert.Contains(said, decided.Stdout, StringComparison.Ordinal);
+        Assert.Contains("goes through a release branch, not a hotfix", decided.Stdout, StringComparison.Ordinal);
+        Assert.Empty(decided.Outputs);
+    }
+
+    /// <summary>
+    /// A hotfix cannot move the version: the version pull request's change from a hotfix's branch is refused by the version
+    /// prefix's file, so the version pull request comes from a branch of another name, before the next hotfix.
+    /// </summary>
+    [Fact]
+    public void The_version_pull_request_from_a_hotfix_s_branch_is_refused_by_the_version_prefix_s_file()
+    {
+        var decided = Decide(TheVersionPullRequest() with { Branch = HotfixBranch }, refused: true);
+
+        Assert.Contains($"this hotfix changes {VersionProps}, which is the build and what it depends on (**/*.props)", decided.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>Of several paths on the list, the refusal names the first, in the order of their names, and no other.</summary>
+    [Fact]
+    public void A_hotfix_refused_for_several_paths_names_the_first()
+    {
+        var decided = Decide(AHotfix(paths: ["install/install.sh", "global.json", ".github/workflows/ci.yml"]), refused: true);
+
+        Assert.Contains("this hotfix changes .github/workflows/ci.yml, which is CI and the release's machinery (.github/**)", decided.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("changes global.json", decided.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("changes install/install.sh", decided.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A hotfix whose change against its base cannot be read cannot have its paths judged, and is refused, draft or ready:
+    /// the gate does not open on doubt.
+    /// </summary>
+    [Theory]
+    // Critical: a hotfix whose change against its base cannot be listed is refused, never let through on doubt.
+    [InlineData("false", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B7)])]
+    [InlineData("true")]
+    public void A_hotfix_whose_change_cannot_be_read_fails_the_version_check(string draft)
+    {
+        var decided = Decide(AHotfix("synchronize", draft) with { Base = null }, refused: true);
+
+        Assert.Contains("what this hotfix changes against main could not be read (the tree step did not list this pull request's base)", decided.Stdout, StringComparison.Ordinal);
+        Assert.Contains("goes through a release branch, not a hotfix", decided.Stdout, StringComparison.Ordinal);
+        Assert.Empty(decided.Outputs);
+    }
+
+    /// <summary>
+    /// What a hotfix may change runs the hotfix set: code outside the list, the release notes, the recorded exchanges of the
+    /// API, a page, a skill, and files beside the listed ones whose names only resemble them. Its summary names what it
+    /// changes against its base.
+    /// </summary>
+    [Fact]
+    public void A_hotfix_that_changes_only_what_a_hotfix_may_change_runs_the_hotfix_set()
+    {
+        string[] paths =
+        [
+            "RELEASE-NOTES.md",
+            "docs/api/fixtures/workitem.list/by-block.json",
+            "dotnet/src/Jason.Runtime/Dispatch/Dispatcher.cs",
+            "dotnet/src/Jason.Runtime/Persistence/JasonDbContext.cs",
+            "dotnet/tests/Jason.Runtime.Tests/Dispatch/DispatcherTests.cs",
+            "desktop/src/main.ts",
+            "desktop/test/updates.test.ts",
+            "docs/contracts.md",
+            "skills/runtime/operating-the-installation/SKILL.md",
+            "ui/src/screens/today/Today.tsx",
+        ];
+
+        var decided = Decide(AHotfix(paths: paths));
+
+        Assert.True(decided.Outputs["set"] == Hotfix, $"a hotfix changing {string.Join(", ", paths)} took the set '{decided.Outputs["set"]}': {decided.Summary}");
+        Assert.Contains("changed against the base -> ", decided.Summary, StringComparison.Ordinal);
+        Assert.All(paths, path => Assert.Contains(path, decided.Summary, StringComparison.Ordinal));
+        Assert.Equal(Hotfix, (string?)decided.Record?["checks"]);
+    }
+
+    /// <summary>
+    /// A hotfix's pull request once it is ready builds every platform and tests the critical tier on each, under each
+    /// platform's own name, which the ruleset requires; it runs the Linux set's other jobs, and reports the update on
+    /// win-x64 as skipped by rule, saying why. The jobs only a run of every check needs report success by their condition.
+    /// </summary>
+    [Fact]
+    public void A_ready_hotfix_tests_the_critical_tier_on_every_platform_under_the_platform_s_own_name()
+    {
+        var decided = Decide(AHotfix());
+
+        Assert.Equal("true", decided.Outputs["tier"]);
+        Assert.Equal("false", decided.Outputs["full"]);
+        Assert.Equal(["linux-x64", "win-x64", "osx-arm64"], Legs(decided.Outputs["platforms"]).Select(leg => leg["name"]));
+        Assert.Equal(["linux-x64"], Legs(decided.Outputs["updates"]).Select(leg => leg["rid"]));
+        Assert.All(Legs(decided.Outputs["tests"]), leg => Assert.Equal("the critical tier", leg["part"]));
+        Assert.Equal(["linux-x64", "win-x64", "osx-arm64"], Legs(decided.Outputs["tests"]).Select(leg => leg["rid"]));
+
+        var (_, byRule, byCondition) = Report(decided.Outputs);
+        Assert.Equal(["an update on win-x64"], byRule);
+        Assert.Equal(
+            ["The suite under a release's version", "install.ps1 on windows", "jason.exe on a Windows older than 24H2"],
+            byCondition.Order(StringComparer.Ordinal));
+        Assert.Contains("is a hotfix's", Assert.Single(Legs(decided.Outputs["skipped"]))["why"], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Only a branch of this repository is a hotfix's: a fork's pull request runs here too, and its branch may carry any name.
+    /// A fork's <c>hotfix/&lt;name&gt;</c> into <c>main</c> is any other pull request, and its paths are not judged, as is a
+    /// pull request whose head repository is gone.
+    /// </summary>
+    [Theory]
+    // Critical: a fork's branch named as a hotfix's never gets the hotfix set, and its paths are not judged.
+    [InlineData(AFork, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B7)])]
+    [InlineData("")]
+    public void A_fork_s_branch_named_as_a_hotfix_s_is_any_other_pull_request(string headRepository)
+    {
+        var ready = Decide(AHotfix(headRepository: headRepository, paths: [".github/workflows/ci.yml"]));
+        Assert.True(ready.Outputs["set"] == "not-the-release", $"a fork's ready hotfix/ took the set '{ready.Outputs["set"]}': {ready.Summary}");
+        Assert.Equal("false", ready.Outputs["tier"]);
+
+        var draft = Decide(AHotfix("synchronize", "true", headRepository: headRepository, paths: [".github/workflows/ci.yml"]));
+        Assert.True(draft.Outputs["set"] == "linux", $"a fork's draft hotfix/ took the set '{draft.Outputs["set"]}': {draft.Summary}");
+    }
+
+    /// <summary>
+    /// <c>main</c> passes over the record of a hotfix's pull request, whose ready run tested the critical tier alone, as it
+    /// passes over a pull request's into a release branch, and takes an older record of the same tree that a run of the
+    /// whole suite kept, if there is one: with none, the push its squash makes is decided as one no run recorded. A release
+    /// branch takes the hotfix's record as it takes any other.
+    /// </summary>
+    [Theory]
+    [InlineData("main", true, "run 301 on refs/pull/9/merge tested tree ")]
+    [InlineData("main", false, null)]
+    [InlineData(ReleaseBranch, true, "run 302 on refs/pull/8/merge tested tree ")]
+    public void Main_passes_over_the_record_of_a_hotfix_s_pull_request(string target, bool olderRecord, string? found)
+    {
+        var answers = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OfTheTree] = olderRecord
+                ? TreeArtifactsAnswer((302, "2026-10-22T11:00:00Z", false), (301, "2026-10-22T10:00:00Z", false))
+                : TreeArtifactsAnswer((302, "2026-10-22T11:00:00Z", false)),
+            ["api repos/acme/jason/actions/runs/302"] = RunAnswer("completed", "success"),
+            ["api repos/acme/jason/actions/runs/301"] = RunAnswer("completed", "success"),
+        };
+        var records = new Dictionary<long, string>
+        {
+            [302] = RecordFor(8, Tree, Hotfix, "refs/pull/8/merge"),
+            [301] = RecordFor(9, Tree, "not-the-release", "refs/pull/9/merge"),
+        };
+
+        var looked = Look(Facts("push", target: target), answers, records);
+
+        if (found is null)
+        {
+            Assert.True(looked.Record is null, $"a record was found: {looked.Outputs["found"]}");
+            Assert.Contains("run 302 on refs/pull/8/merge tested the critical tier alone, as a hotfix", looked.Outputs["found"], StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.True(looked.Record is not null, $"nothing was found: {looked.Outputs["found"]}");
+            Assert.Equal(found + Tree, looked.Outputs["found"]);
+        }
+    }
+
+    /// <summary>
+    /// The list of what a hotfix may not change is kept in one place, the deciding step's, and the hotfix's section of
+    /// DEVELOPMENT.md prints it, kind by kind and pattern by pattern, in the same order.
+    /// </summary>
+    [Fact]
+    public void The_page_prints_the_list_of_what_a_hotfix_may_not_change_that_the_workflow_reads()
+    {
+        var read = JsonNode.Parse(Scalar(Mapping(Step("legs"), "env"), "OUTSIDE_A_HOTFIX")!)!.AsArray()
+            .Select(entry => $"{(string)entry!["kind"]!}: {string.Join(", ", ((string)entry["paths"]!).Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(path => $"`{path}`"))}")
+            .ToList();
+        Assert.Equal(5, read.Count);
+
+        var page = Read(["DEVELOPMENT.md"]).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = page.IndexOf("**A hotfix.**", StringComparison.Ordinal);
+        Assert.True(section >= 0, "DEVELOPMENT.md has no section on a hotfix");
+        var printed = new List<string>();
+        foreach (var line in page[section..].Split('\n').SkipWhile(line => !line.StartsWith("- ", StringComparison.Ordinal))
+            .TakeWhile(line => line.StartsWith("- ", StringComparison.Ordinal) || line.StartsWith("  ", StringComparison.Ordinal)))
+        {
+            if (line.StartsWith("- ", StringComparison.Ordinal))
+            {
+                printed.Add(line[2..]);
+            }
+            else
+            {
+                printed[^1] += $" {line.Trim()}";
+            }
+        }
+
+        Assert.Equal(read, printed);
+    }
+
+    /// <summary>
+    /// Each platform's critical tier says on the run's summary how many minutes it took, under the leg's own title: on a
+    /// hotfix's run that is one figure a platform, so a platform whose tier grows slow shows on every such run.
+    /// </summary>
+    [Fact]
+    public void A_hotfix_s_tier_on_each_platform_says_its_minutes_on_the_summary()
+    {
+        var decided = Decide(AHotfix());
+        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier == 'true'");
+
+        foreach (var leg in Legs(decided.Outputs["tests"]))
+        {
+            var tests = RunTests(step, [[]], environment: Told(leg));
+            Assert.True(tests.Exit == 0, tests.Output);
+            Assert.Matches(
+                $@"### {Regex.Escape(leg["rid"])} tests: the critical tier\n\nTook [0-9]+\.[0-9] minutes\.\n",
+                tests.Summary.Replace("\r\n", "\n", StringComparison.Ordinal));
         }
     }
 
@@ -1422,8 +1788,10 @@ public class CiRunsTests
     /// <summary>
     /// One job runs the desktop application's checks, in the order desktop/README.md gives them: the install, the
     /// type-check and the Node tests, in the desktop's own folder, on a node of 22 or later, which runs the tests' TypeScript
-    /// as it is. Electron's own binary is never downloaded: no test starts a window. None of the steps may fail without
-    /// failing the job, and none may be skipped.
+    /// as it is. No test starts a window, so the install fetches no Electron binary; one step before the Node tests fetches
+    /// it, by the electron package's own installer, for the rows that run code under it as Node, and the Node tests are
+    /// told that its absence is a failure there, never a skip. None of the steps may fail without failing the job, and
+    /// none may be skipped.
     /// </summary>
     [Fact]
     public void The_desktop_job_runs_the_install_the_type_check_and_the_node_tests_in_order()
@@ -1441,6 +1809,12 @@ public class CiRunsTests
         var order = commands.Select(command => runs.IndexOf(command)).ToList();
         Assert.DoesNotContain(-1, order);
         Assert.Equal(order.Order(), order);
+
+        var electron = runs.IndexOf("node node_modules/electron/install.js");
+        Assert.InRange(electron, order[0] + 1, order[2] - 1);
+        Assert.Equal("", Scalar(Mapping(steps[electron], "env"), "ELECTRON_SKIP_BINARY_DOWNLOAD"));
+        Assert.Null(Node(steps[electron], "if"));
+        Assert.Equal("1", Scalar(Mapping(steps[order[2]], "env"), "JASON_DESKTOP_ELECTRON_REQUIRED"));
 
         var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
         Assert.InRange(node, 0, order[0] - 1);
@@ -2759,7 +3133,7 @@ public class CiRunsTests
     /// instead. A pull request whose props file is given on both sides runs in a repository of its own that holds the two
     /// texts as objects, and both listings name them, as a checkout holds the merge and its base.
     /// </summary>
-    private static Decided Decide(Run run, string? record = null, bool recordIsThere = true, string? found = null)
+    private static Decided Decide(Run run, string? record = null, bool recordIsThere = true, string? found = null, bool refused = false)
     {
         var step = Step("legs");
         var env = Mapping(step, "env");
@@ -2819,6 +3193,9 @@ public class CiRunsTests
             ["BASE"] = listed,
             ["RECORD"] = recorded,
             ["FOUND"] = found ?? (recorded.Length > 0 ? $"run 301 on {FoundRef} tested tree {run.TestedTree}" : $"no run that passed kept a record of tree {Tree}"),
+            ["REPOSITORY"] = ThisRepository,
+            ["HEAD_REPOSITORY"] = run.Event == "pull_request" ? run.HeadRepository : string.Empty,
+            ["OUTSIDE_A_HOTFIX"] = Scalar(env, "OUTSIDE_A_HOTFIX")!,
             ["PLATFORMS"] = Scalar(env, "PLATFORMS")!,
             ["PARTS"] = Scalar(env, "PARTS")!,
             ["UPDATES"] = Scalar(env, "UPDATES")!,
@@ -2829,7 +3206,7 @@ public class CiRunsTests
         };
         var into = checkout.Length > 0 ? $"Set-Location -LiteralPath '{checkout}'; " : string.Empty;
         var ran = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; {into}& '{script}'");
-        Assert.True(ran.Exit == 0, ran.Stderr);
+        Assert.True(refused ? ran.Exit != 0 : ran.Exit == 0, $"the deciding step exited {ran.Exit}: {ran.Stdout}{ran.Stderr}");
 
         var said = Outputs(output);
         JsonNode? kept = null;
@@ -3103,6 +3480,11 @@ public class CiRunsTests
         var kept = Tested.Where(line => line[(line.IndexOf('\t') + 1)..] != path);
         return removed ? [.. kept] : [.. kept, $"{mode} blob 5555555555555555555555555555555555555555\t{path}"];
     }
+
+    /// <summary>The tree <see cref="Tested"/> with each of <paramref name="paths"/> changed or added, as <see cref="Changed"/> changes one.</summary>
+    private static string[] ChangedAll(params string[] paths) =>
+        [.. Tested.Where(line => !paths.Contains(line[(line.IndexOf('\t') + 1)..], StringComparer.Ordinal)),
+            .. paths.Select(path => $"100644 blob 5555555555555555555555555555555555555555\t{path}")];
 
     private static YamlMappingNode Jobs() => Mapping(Parse(Read(Ci)), "jobs");
 

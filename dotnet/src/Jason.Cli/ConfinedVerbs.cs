@@ -74,6 +74,8 @@ public static class ConfinedVerbs
         (Kind.Acts, "plugin grant"),
         (Kind.Acts, "plugin revoke"),
         (Kind.Acts, "role set-profile"),
+        (Kind.Acts, "notification enable"),
+        (Kind.Acts, "notification disable"),
         (Kind.ChatsOwn, "role add"),
         (Kind.ChatsOwn, "project link"),
         (Kind.ChatsOwn, "campaign start"),

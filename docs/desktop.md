@@ -103,8 +103,8 @@ its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
-link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
-without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
+link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
+without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -112,22 +112,24 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. A paid search is named "Find people" and shows, under what it
-  will do, its definition by its own names and values, with what it leaves out on a line of its own, and the search's
-  own arguments in plain words. An approval's **Approve** is live only once Needs you has read that approval whole,
-  with any doubt about a send shown
-  above it; until then the row says it is being read, or why it could not be, and **Details** stays. Under the mailbox
-  an email goes from it says the sending name the provider holds
+  channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
+  narrows to All, Approvals or Questions. A paid search is named "Find people" and shows, under what it will do, its
+  definition by its own names and values, with what it leaves out on a line of its own, and the search's own arguments
+  in plain words. An approval's **Approve** is live only once Needs you has read that approval whole, with any doubt
+  about a send shown above it, under "Why this message was flagged" (flagged is the screen's word for a doubt a role or
+  a person raised); until then the row says it is being read, or why it could not be, and **Details** stays. Under the
+  mailbox an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
   and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
   if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
   agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
-  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
-  channel, and the subject and text, or a search's definition and arguments as in Needs you, with **Approve**, **Edit**
-  (a message written as text), **Reject**, which asks once, and **Details**, which opens it in Needs you; a question's
-  card has its options as buttons and a box for your own
+  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a
+  reply in a conversation, from the account this conversation is in, which it does not name), on which channel, and
+  the subject and text, or a search's definition and arguments as in Needs you, with **Approve**, **Edit** (a message
+  written as text), **Reject**, which asks once, and **Details**, which opens it in Needs you; a question's card has its
+  options as buttons and a box for your own
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
   when the card is drawn, never from what the AI wrote, and not part of what you approve, so it changes no button. A
@@ -141,6 +143,16 @@ shows before anything is typed and what you send waits, while the window is open
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
   conversation to its foot above the box; opening a chat leaves its place alone.
+- While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
+  **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
+  a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
+  queued. It shows in the conversation as your message, with "Queued · Jason takes it when this turn ends" under it,
+  and goes as your next message once the turn ends well. A message you send while one is queued is added under it, a
+  blank line between, and the two go together. **Take back** puts the whole queue into the box when the box is empty.
+  Escape in the box stops the turn, with words typed or none, except while a menu, a list, the search box or a dialog is
+  open on the screen: then the key is theirs, and the sidebar's menus and the search box close by it. A turn you stop,
+  and a turn that fails, gives the queued words back to the box, above what you typed there, and so does a turn that
+  ends while a tab may no longer send to its chat; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
@@ -163,7 +175,8 @@ The View menu carries the keys (New Chat, What Needs You, Performance, Agents, W
 Beside Quit Jason, two more items of the Jason menu have keys of their own: the update item, Ctrl+Shift+D, and Back to
 Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
 Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
-the tray's menu or the Mac's menu bar, and a desktop that shows neither shows it nowhere. At the install the key asks
+the tray's menu or the Mac's menu bar, and in the same item at the foot of Settings' list, beside Jason Desktop's
+version, where a click does what a click in the menu does. At the install the key asks
 first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
@@ -314,11 +327,15 @@ it, to change Jason itself.
 
 **Changing Jason itself.** **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
-plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
-`jason session open --setup`, which opens the host the preference
-[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
-host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
-the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
+plugins folder beside it and a first message that tells it how Jason is changed. The program it opens is, in this order:
+the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have
+stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or
+Codex and is installed; else Claude Code. When you choose the entry, the desktop reads the preference and the program in
+use and runs `jason session open --setup`, with `--host` naming the program in use only where you have stated no
+preference; where either cannot be read, or no program is in use, it runs the command with no host, which opens the
+preference's host, else Claude Code. Only where the host it ran the command for is not installed, or the preference
+cannot be read or names no host this jason knows, does it run the command once more with a host the desktop finds that
+was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
 changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
@@ -434,8 +451,9 @@ own: the minimize, maximize and close buttons stand at the strip's right end, th
 moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
 window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
 a little tighter. On macOS the window has no title bar
-of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
-strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
+of its own: the page starts at the window's top edge, the window's buttons stand over the top of the page's sidebar,
+whose contents start below them, and the window's top strip moves the window, up to a little way before the
+Demo | Live switch. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
 the same. Your own installation's top bar carries the same switch, with **Demo** to come back. Where the machine set-up
@@ -776,9 +794,9 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
 chat is in. A mode applies to the turns you start by sending, from the next one on. **Ask first** is the mode of every new
 chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
-passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
-other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
-refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
+removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
+page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
@@ -814,7 +832,10 @@ still ask to change something; changing back to Ask first lets a running turn fi
 also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
 Cancel, unless you gave the standing choice (below). In Full access the AI runs commands and changes files on this computer without
 asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
-access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
+access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. One line under its
+title says why it asks, for example what in the command Jason could not read plainly, what it would run or change, a
+tool of one of your own MCP servers, a tool Jason does not know, or that Claude Code asked about it itself; a page older
+than the desktop draws the card without a line it has no words for. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
@@ -850,14 +871,17 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test.
+  every time, held to the real tree by a test; and, for each noun with a verb on that list, its help, exactly
+  `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
+  itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
   everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
   subscription), everything that changes the installation, follows it without end or carries it off the machine
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `install`, `ui`, `session`,
-  `journal watch`, `export`, `import`), and six more that decide who is reached or what runs (`suppression remove`,
-  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`). **`role add` and `project link` are
+  `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
+  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
+  `notification disable`). **`role add` and `project link` are
   typed in a terminal**: a role's
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
   its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):
@@ -1046,7 +1070,8 @@ opens as the request ends, unless the request installed the update, after which 
 window takes the request and may close for it, the menu's install refuses while the request is under way, since the
 request installs itself. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
-the package names.
+the package names. On Windows and macOS a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
+install 0.48.5 or later yourself once, and from then on the application's own update works.
 
 Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
 updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
@@ -1062,12 +1087,16 @@ started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself: if the new
-version does not start, the starting page says what went wrong and where the kept version is, and going back is
-quitting Jason and putting that folder back in the place of the installed application. A version from 0.49.0 on does
-not start a runtime on a database a newer version migrated: the runtime refuses it with `data_newer` before it changes
-the database, and the starting page says so in `jason runtime start`'s own words, which say to update, and offers no going
-back. A kept version before 0.49.0 has no such check. That puts back the previous application and the Jason it carried;
+`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
+installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
+version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing
+puts the kept copy back by itself: if the new version does not start, the starting page says what went wrong and where
+the kept version is, and going back is quitting Jason and putting that folder back in the place of the installed
+application. A version from 0.49.0 on does not start a runtime on a database a newer version migrated: the runtime
+refuses it with `data_newer` before it changes the database, and the starting page says so in `jason runtime start`'s
+own words, which say to update, and offers no going back. A kept version before 0.49.0 has no such check. That puts
+back the previous application and the Jason it carried;
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
 update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.

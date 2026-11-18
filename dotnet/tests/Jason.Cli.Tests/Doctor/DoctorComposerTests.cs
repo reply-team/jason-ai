@@ -2288,6 +2288,7 @@ public sealed class DoctorComposerTests
             [
                 ("notifications.channels[].detail", WithheldAs.Dropped),
                 ("notifications.channels[].presence_detail", WithheldAs.DroppedUnlessOwnWord),
+                ("notifications.channels[].readiness_detail", WithheldAs.Dropped),
                 ("skills.problem", WithheldAs.ReplacedByWord),
                 ("skills.problem_code", WithheldAs.ReplacedUnlessOwnWord),
                 ("skills.problem_exception", WithheldAs.ReplacedUnlessOwnWord),
@@ -2318,7 +2319,7 @@ public sealed class DoctorComposerTests
 
         var sentinels = new[]
         {
-            "SENTINEL_CHANNEL_DETAIL", "SENTINEL_SECOND_DETAIL", "SENTINEL_THIRD_DETAIL", "SENTINEL_PRESENCE_DETAIL", "SENTINEL_ROLE_PROBLEM", "SENTINEL_SKILLS_PROBLEM",
+            "SENTINEL_CHANNEL_DETAIL", "SENTINEL_SECOND_DETAIL", "SENTINEL_THIRD_DETAIL", "SENTINEL_PRESENCE_DETAIL", "SENTINEL_READINESS_DETAIL", "SENTINEL_ROLE_PROBLEM", "SENTINEL_SKILLS_PROBLEM",
             "SENTINEL_RELEASE_NOTES", "SENTINEL_ROLE_CODE", "SENTINEL_ROLE_EXCEPTION", "SENTINEL_SKILLS_CODE", "SENTINEL_SKILLS_EXCEPTION", "sentinel-own-skill",
         };
         AssertAbsent(bundle, sentinels);
@@ -4145,7 +4146,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
         new NotificationsInfo(
             true,
             [
-                new NotificationChannelInfo("toast", "toast", true, "failed", "a reason", "toast_failed", "transient", "SENTINEL_CHANNEL_DETAIL", Now, "no_desktop", "SENTINEL_PRESENCE_DETAIL"),
+                new NotificationChannelInfo("toast", "toast", true, "failed", "a reason", "toast_failed", "transient", "SENTINEL_CHANNEL_DETAIL", Now, "no_desktop", "SENTINEL_PRESENCE_DETAIL", "binding_invalid", "SENTINEL_READINESS_DETAIL"),
                 new NotificationChannelInfo("desktop", "toast", true, "not_attempted", "no_desktop", null, null, "SENTINEL_SECOND_DETAIL", Now, "no_desktop", "session 0"),
                 new NotificationChannelInfo("third", "toast", true, "not_attempted", "no_desktop", null, null, "SENTINEL_THIRD_DETAIL", Now, "no_desktop", "Session 0"),
             ],

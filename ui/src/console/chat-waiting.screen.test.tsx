@@ -409,7 +409,7 @@ describe('what waits in an agent’s chat', () => {
         const pane = await openChat('Spring');
         const email = await drawn(pane, 'apr_1');
         const clamped = (element: Element) => element.closest('.ask-b') !== null;
-        // Why it waits, which on a doubted message says the doubt is below.
+        // Why it waits, which on a flagged message says the reason is below.
         const why = email.querySelector('.ask-w')!;
         expect(words(why)).not.toBe('');
         expect(clamped(why)).toBe(false);
@@ -417,7 +417,7 @@ describe('what waits in an agent’s chat', () => {
         const doubts = email.querySelector('.send-doubts')!;
         expect(doubts).not.toBeNull();
         expect(clamped(doubts)).toBe(false);
-        expect(clamped(within(email).getByText(/^The critic role doubted this/))).toBe(false);
+        expect(clamped(within(email).getByText(/^The critic role flagged this/))).toBe(false);
         expect(clamped(within(email).getByText('Hi Ines, thanks for the talk at the meetup.'))).toBe(true);
         const approve = within(email).getByRole('button', { name: 'Approve' });
         expect(clamped(approve)).toBe(false);
@@ -591,8 +591,8 @@ describe('what waits in an agent’s chat', () => {
         const email = await drawn(pane, 'apr_1');
         const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
         const doubt = within(email).getByText(`Their words: ${doubts[0]!.note}`);
-        expect(within(email).getByText(`The critic role doubted this: ${whyWords('unsupported_claim')}`)).toBeTruthy();
-        // Why it waits says the doubt is below: it stands below that sentence, and above the message's words.
+        expect(within(email).getByText(`The critic role flagged this: ${whyWords('unsupported_claim')}`)).toBeTruthy();
+        // Why it waits says the reason is below: it stands below that sentence, and above the message's words.
         const why = within(email).getByText(reasonLabel('doubted'));
         const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
         expect(why.compareDocumentPosition(doubt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

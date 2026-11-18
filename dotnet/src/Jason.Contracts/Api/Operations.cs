@@ -112,6 +112,9 @@ public static class Operations
     public const string ProfileSetDefault = "profile.set_default";
     public const string ProfileUnsetDefault = "profile.unset_default";
 
+    public const string NotificationEnable = "notification.enable";
+    public const string NotificationDisable = "notification.disable";
+
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";
     public const string JournalKinds = "journal.kinds";

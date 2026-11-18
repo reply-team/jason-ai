@@ -1,6 +1,9 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Notifications;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Notifications.Desktop;
+using Jason.Runtime.Notifications.Plugins;
+using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Notifications;
 
@@ -67,16 +70,19 @@ public sealed class NotificationStatus
 
     /// <summary>
     /// What <c>system.info</c> answers: notifications on or off, the toast and every named plugin with whether it is on
-    /// and its last outcome, and — for the toast — whether there is a desktop, decided when the runtime started.
+    /// and its last outcome, for the toast whether there is a desktop, decided when the runtime started, and for each
+    /// plugin whether a notification given to it now would be launched, read by the checks one meets before anything
+    /// starts (<see cref="PluginNotificationChannel.BeforeLaunch"/>) against the plugins in force.
     /// </summary>
-    public NotificationsInfo Info(NotificationsOptions options, Presence presence)
+    public NotificationsInfo Info(NotificationsOptions options, Presence presence, PluginSnapshot plugins)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(presence);
+        ArgumentNullException.ThrowIfNull(plugins);
         var snapshot = Snapshot();
         var last = snapshot.Channels.ToDictionary(channel => channel.Outcome.Channel, StringComparer.Ordinal);
 
-        NotificationChannelInfo Channel(string name, string kind, bool on, string? presenceWord, string? presenceDetail) =>
+        NotificationChannelInfo Channel(string name, string kind, bool on, string? presenceWord, string? presenceDetail, (string Word, string? Detail)? readiness = null) =>
             last.TryGetValue(name, out var status)
                 ? new NotificationChannelInfo(
                     name,
@@ -89,8 +95,10 @@ public sealed class NotificationStatus
                     status.Outcome.Detail,
                     status.At,
                     presenceWord,
-                    presenceDetail)
-                : new NotificationChannelInfo(name, kind, on, null, null, null, null, null, null, presenceWord, presenceDetail);
+                    presenceDetail,
+                    readiness?.Word,
+                    readiness?.Detail)
+                : new NotificationChannelInfo(name, kind, on, null, null, null, null, null, null, presenceWord, presenceDetail, readiness?.Word, readiness?.Detail);
 
         return new NotificationsInfo(
             options.Enabled,
@@ -103,11 +111,21 @@ public sealed class NotificationStatus
                     presence.Detail),
                 .. options.Plugins
                     .OrderBy(plugin => plugin.Key, StringComparer.Ordinal)
-                    .Select(plugin => Channel(plugin.Key, ChannelKinds.Plugin, options.Enabled && plugin.Value.Enabled, null, null)),
+                    .Select(plugin => Channel(plugin.Key, ChannelKinds.Plugin, options.Enabled && plugin.Value.Enabled, null, null, Readiness(plugin.Key, plugin.Value, plugins))),
             ],
             snapshot.LastNotificationId,
             snapshot.LastNotificationAt);
     }
+
+    /// <summary>
+    /// Whether a plugin channel could deliver now: ready, or the reason a notification would not be tried and what is
+    /// missing. A binding whose pattern could not be measured in time is not called wrong, so it reads ready, as the
+    /// notification it was given would be tried again rather than refused.
+    /// </summary>
+    internal static (string Word, string? Detail) Readiness(string id, NotificationPluginEntry entry, PluginSnapshot plugins) =>
+        PluginNotificationChannel.BeforeLaunch(id, entry, plugins, PatternTiming.Default).Outcome is { Result: ChannelResult.NotAttempted } refused
+            ? (refused.Reason!, refused.Detail)
+            : (ChannelReadiness.Ready, null);
 
     public NotificationStatusSnapshot Snapshot()
     {

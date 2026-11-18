@@ -74,7 +74,7 @@ import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
-import type { ChatFence } from './chat-deny.ts';
+import { helpNouns, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
     codexAutoEdit,
@@ -1628,7 +1628,7 @@ export class Chat {
         // What the broker tells another page chat of the conversation (a card it may not answer is gone for it) is not the card's.
         if (conversation === undefined || running === undefined || running.replyTo !== chatId) return;
         if (event.kind === 'permission') {
-            const card: Extract<KeptEntry, { kind: 'permission' }> = { kind: 'permission', title: event.title, detail: event.detail, answer: null };
+            const card: Extract<KeptEntry, { kind: 'permission' }> = { kind: 'permission', title: event.title, detail: event.detail, answer: null, ...(event.why === undefined ? {} : { why: event.why }) };
             conversation.entries.push(card);
             running.cards.set(event.request, card);
         } else {
@@ -1900,6 +1900,7 @@ export class Chat {
                     protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
+                    help: helpNouns(fence.allowed, fence.reads),
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,

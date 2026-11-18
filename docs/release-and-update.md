@@ -33,7 +33,8 @@ from it: the critical tests again under the tag's version, the three executables
 and their archived signatures verified, the plugins' and the UI's packages, and the desktop's. The release job then writes the
 manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
 release unless a newer one already is or the version is a release candidate; a last job asks the Homebrew tap to bump
-its formula (§6). The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
+its formula (§6). A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
+`hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
 it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
 holds them assembles the release and says in one line that it publishes nothing.
 

@@ -319,13 +319,17 @@ public class DefaultActorTests
         ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["plugin", "grant", "fake-provider", "--http", "api.example.com"],
         ["plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN"],
+        ["notification", "enable", "toast"],
+        ["notification", "disable", "toast"],
     ];
 
     /// <summary>
     /// Of those, the acts the runtime takes from any caller: lifting someone's opt-out, moving which account acts for a
-    /// campaign, and changing which agent host runs a role. The CLI alone asks who does them.
+    /// campaign, changing which agent host runs a role, granting a plugin something, and turning a notification channel on or
+    /// off. The CLI alone asks who does them.
     /// </summary>
-    internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke"];
+    internal static readonly string[] RuntimeTakesFromAnyone =
+        ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke", "notification enable", "notification disable"];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
     internal static readonly string[][] Runs =
@@ -538,7 +542,7 @@ public class DefaultActorTests
     private static (string Help, string Form) Expected(string[] verb) => VerbOf(verb) switch
     {
         "workitem resume" => (ActorOption.NoDefaultForResume, "name who ends it, e.g. --actor human:<Name>"),
-        "suppression remove" or "route set" or "route unset" or "role set-profile" or "plugin grant" or "plugin revoke" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
+        "suppression remove" or "route set" or "route unset" or "role set-profile" or "plugin grant" or "plugin revoke" or "notification enable" or "notification disable" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
         "report submit" => (ActorOption.NoDefaultForReport, "write --actor human:<Name> or --actor role:<id>"),
         _ => (ActorOption.NoDefault, "write --actor human:<Name>"),
     };

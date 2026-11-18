@@ -26,8 +26,8 @@ import {
     lost,
     newChat,
     pickedFor,
+    queued,
     received,
-    replaced,
     said,
     shown,
     stopAsked,
@@ -300,42 +300,53 @@ describe('the Feed as the page keeps it', () => {
     });
 });
 
+/** The blank line between messages that wait together, or come back together. */
+const blank = String.fromCharCode(10, 10);
 /** A chat whose turn runs, with `text` typed into the box. */
 const busy = (text: string): Chat => typed(said(newChat('c1', 'claude'), 'Go'), text);
 const done = (chat: Chat, error: string | null = null): Chat => received(chat, { kind: 'done', error });
 
 describe('a message typed while a turn runs', () => {
-    it('waits, one at a time, and the box is cleared for the next words', () => {
+    it('waits, and the box is cleared for the next words', () => {
         const waiting = kept(busy('  And then?  '));
-        expect(waiting).toMatchObject({ waiting: 'And then?', held: false, draft: '', running: true });
+        expect(waiting).toMatchObject({ waiting: 'And then?', draft: '', running: true });
+        expect(waiting).not.toHaveProperty('held');
         expect(waiting.entries).toEqual([{ kind: 'user', text: 'Go' }]);
         expect(kept(busy('   '))).toEqual(busy('   '));
         expect(kept(typed(newChat('c1', 'claude'), 'Idle'))).toMatchObject({ waiting: null, draft: 'Idle' });
     });
 
-    it('never replaces the waiting one silently: a second keeps its text in the box', () => {
-        const second = kept(typed(kept(busy('First')), 'Second'));
-        expect(second).toMatchObject({ waiting: 'First', draft: 'Second' });
+    it('adds a second message under the one that waits, a blank line between, and they go together', () => {
+        const second = kept(typed(kept(busy('First')), '  Second  '));
+        expect(second).toMatchObject({ waiting: ['First', 'Second'].join(blank), draft: '' });
+        const third = kept(typed(second, 'Third'));
+        expect(third.waiting).toBe(['First', 'Second', 'Third'].join(blank));
+        // An empty box adds nothing.
+        expect(kept(typed(second, ' '))).toEqual(typed(second, ' '));
+        const over = done(third);
+        expect(over).toMatchObject({ waiting: null, outbox: ['First', 'Second', 'Third'].join(blank) });
     });
 
-    it('is swapped with the box on Replace, never merged', () => {
-        const second = typed(kept(busy('First')), 'Second');
-        expect(replaced(second)).toMatchObject({ waiting: 'Second', draft: 'First' });
-        expect(replaced(kept(busy('First')))).toMatchObject({ waiting: 'First', draft: '' });
+    it('adds while a conversation is made as while a turn runs, and waits for nothing on an empty box', () => {
+        const idle = typed(newChat('c1', 'claude'), 'First');
+        expect(queued(idle)).toMatchObject({ waiting: 'First', draft: '' });
+        expect(queued(typed(queued(idle), 'Second')).waiting).toBe(['First', 'Second'].join(blank));
+        expect(queued(typed(idle, ''))).toEqual(typed(idle, ''));
     });
 
     it('is taken back only into an empty box, so nothing typed there is overwritten', () => {
         expect(takenBack(kept(busy('First')))).toMatchObject({ waiting: null, draft: 'First' });
         const second = typed(kept(busy('First')), 'Second');
         expect(takenBack(second)).toEqual(second);
+        const both = kept(typed(kept(busy('First')), 'Second'));
+        expect(takenBack(both)).toMatchObject({ waiting: null, draft: ['First', 'Second'].join(blank) });
     });
 
     it('is given back with every word not sent, in the order written, when nothing could take them', () => {
         const second = typed(kept(busy('First')), 'Third');
         expect(everyWordBack(second, 'Zeroth')).toMatchObject({
             waiting: null,
-            held: false,
-            draft: ['Zeroth', 'First', 'Third'].join(String.fromCharCode(10, 10)),
+            draft: ['Zeroth', 'First', 'Third'].join(blank),
         });
         expect(everyWordBack(typed(newChat('c1', 'claude'), '  '), 'Only')).toMatchObject({
             draft: 'Only',
@@ -362,39 +373,50 @@ describe('a message typed while a turn runs', () => {
         expect(over.entries.at(-1)).toEqual({ kind: 'error', text: 'Not logged in' });
     });
 
-    it('stays in sight, not sent, when the turn failed while the box held other words', () => {
+    it('goes back above what is typed when the turn failed while the box held other words', () => {
         const over = done(typed(kept(busy('And then?')), 'More'), 'Not logged in');
-        expect(over).toMatchObject({ waiting: 'And then?', held: true, outbox: null, draft: 'More' });
+        expect(over).toMatchObject({ waiting: null, outbox: null, draft: ['And then?', 'More'].join(blank) });
         expect(over.entries.at(-1)).toEqual({ kind: 'error', text: 'Not logged in' });
-        // Held is never sent: not at the next good end, and nothing else waits beside it.
-        const next = typed(said({ ...over, draft: '' }, 'More'), 'Later');
-        expect(kept(next)).toEqual(next);
-        expect(done(next)).toMatchObject({ waiting: 'And then?', held: true, outbox: null });
-        expect(takenBack(done(typed(next, '')))).toMatchObject({ waiting: null, held: false, draft: 'And then?' });
     });
 
     it('is given back the moment the person stops the turn, so the end that follows sends nothing', () => {
         const stopped = stopAsked(kept(busy('And then?')));
         expect(stopped).toMatchObject({ stopping: true, running: true, waiting: null, draft: 'And then?' });
-        expect(kept(stopped)).toEqual(stopped);
+        // While the stop is asked for, nothing waits: the box keeps what is sent.
+        expect(kept(typed(stopped, 'More'))).toEqual(typed(stopped, 'More'));
         // The person types again before the stopped turn's end arrives; the end changes nothing in the box.
         const over = done(typed(stopped, 'Something else'));
         expect(over).toMatchObject({ waiting: null, outbox: null, running: false, draft: 'Something else' });
         expect(over.entries).toEqual([{ kind: 'user', text: 'Go' }]);
     });
 
-    it('stays in sight, not sent, when the person stops the turn while the box held other words', () => {
-        const stopped = stopAsked(typed(kept(busy('And then?')), 'More'));
-        expect(stopped).toMatchObject({ waiting: 'And then?', held: true, draft: 'More' });
-        expect(done(stopped)).toMatchObject({ waiting: 'And then?', held: true, outbox: null, draft: 'More' });
+    it('comes back above what is typed when the person stops the turn with words in the box', () => {
+        const stopped = stopAsked(typed(kept(typed(kept(busy('First')), 'Second')), 'Typed'));
+        expect(stopped).toMatchObject({
+            stopping: true,
+            waiting: null,
+            draft: ['First', 'Second', 'Typed'].join(blank),
+        });
+        expect(done(stopped)).toMatchObject({
+            waiting: null,
+            outbox: null,
+            running: false,
+            draft: ['First', 'Second', 'Typed'].join(blank),
+        });
     });
 
     it('is given back when the turn it became fails, after a message that waited behind it', () => {
         const resent = (draft: string) => typed(said(newChat('c1', 'claude'), 'And then?', true), draft);
         expect(done(resent(''), 'Too long')).toMatchObject({ draft: 'And then?', waiting: null });
-        expect(done(resent('More'), 'Too long')).toMatchObject({ draft: 'More', waiting: 'And then?', held: true });
+        expect(done(resent('More'), 'Too long')).toMatchObject({
+            draft: ['And then?', 'More'].join(blank),
+            waiting: null,
+        });
         const behind = typed(kept(resent('Third')), 'Fourth');
-        expect(done(behind, 'Too long')).toMatchObject({ draft: 'Fourth', waiting: 'Third', held: true });
+        expect(done(behind, 'Too long')).toMatchObject({
+            draft: ['And then?', 'Third', 'Fourth'].join(blank),
+            waiting: null,
+        });
         expect(done(resent(''))).toMatchObject({ draft: '', resent: null });
     });
 

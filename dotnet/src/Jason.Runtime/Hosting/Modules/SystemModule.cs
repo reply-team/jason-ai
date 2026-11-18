@@ -92,7 +92,7 @@ public static class SystemModule
                     Skills(dataPaths, roleSettings.Current.MaxSkillBytes),
                     // Last, as every section that arrived later was. Whether there is a desktop is decided when the
                     // runtime starts, so it is said before anything has been sent.
-                    notifications.Info(notificationSettings.Current, presence),
+                    notifications.Info(notificationSettings.Current, presence, plugins.Snapshot),
                     Listening: new ListeningInfo(listening.Port, listening.ConfiguredPort),
                     Ui: ui.Active(),
                     // Where the person's files live, as the runtime will make and find them, so a status line shows the

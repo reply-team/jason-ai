@@ -1,23 +1,28 @@
 /**
  * The Demo in the window: the page the application carries, in a view of its own sealed by `demo-page.ts`, and over it
- * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip whose right
- * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an installation is here: no jason, no runtime, no chat, no
- * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
- * above the page (`shell/demo-band.html`, no script). Electron asks the window's own contents first whether a point is in
- * a drag region, whichever view is drawn over it, so the band's document drags over the band's height alone. The page's
- * view also carries the desktop's link on the repository's address in the page's note, and that address alone leaves it,
- * to the person's browser (`demoRepository`).
+ * the desktop's own Demo | Live switch, a second view drawn on top of it, over the strip whose right end the page leaves
+ * free for one (`demoLayout`); that view is transparent but for the switch. The page's view enters the window under ours,
+ * and only once its document's sheets have settled (`demoPageShowing`). Nothing of an
+ * installation is here: no jason, no runtime, no chat, no bridge, no folder made. The window's own contents are empty
+ * under the two views, but on macOS, where they hold our band (`shell/demo-band.html`, no script), the window's drag
+ * region over its top 26 pixels, under the page that starts at the window's top edge. Electron asks the window's own
+ * contents first whether a point is in a drag region, whichever view is drawn over it, so the band's document drags
+ * over the band's height alone, and never over the span where our switch stands. The page's view also carries the
+ * desktop's link on the repository's address in the page's note, and that address alone leaves it, to the person's
+ * browser (`demoRepository`).
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    demoBandSheet,
     demoLayout,
     demoLinkOpener,
     demoLinkScript,
-    demoLinkSheet,
     demoPage,
+    demoPageSheet,
+    demoPageShowing,
     demoStripSheets,
     demoSwitch,
     demoViewPreferences,
@@ -68,15 +73,24 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     }
     const page = new WebContentsView({ webPreferences: demoViewPreferences(demoPage) });
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
-    // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS nothing.
+    // The page's view enters the window only once its document's sheets have settled, under ours (`demoPageShowing`).
+    const showing = demoPageShowing({
+        add: () => window.contentView.addChildView(page, 0),
+        remove: () => window.contentView.removeChildView(page),
+        setTimer: (run, ms) => setTimeout(run, ms),
+        clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+    });
+    // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS the sidebar moved
+    // below the traffic lights (`demoMacSheet`).
     const sheets = demoStripSheets(deps.platform);
     // The note's repository address drawn as a link, and the one address the page's view hands to the browser.
     await sealView(page.webContents, demoPage, {
         read: fileOf(pageFile),
         refused: onceEach((kind) => deps.refused('page', kind)),
-        sheet: sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`,
+        sheet: demoPageSheet(deps.platform),
         script: demoLinkScript,
         asked: demoLinkOpener(deps.open, watchDemoGestures(page.webContents)),
+        landed: () => showing.landed(),
     });
     await sealView(ours.webContents, demoSwitch, {
         read: fileOf(switchFile),
@@ -90,8 +104,7 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     });
     // Ours is transparent, so the page's strip shows through it but for the switch.
     ours.setBackgroundColor('#00000000');
-    // The page first, then ours: a view added later is drawn over the ones before it.
-    window.contentView.addChildView(page);
+    // Ours now; the page later, under it (`showing`): a view added later is drawn over the ones before it.
     window.contentView.addChildView(ours);
     const layout = () => {
         const { width, height } = window.getContentBounds();
@@ -102,13 +115,19 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     layout();
     window.on('resize', layout);
     const close = () => {
+        showing.close();
         if (!page.webContents.isDestroyed()) page.webContents.close();
         if (!ours.webContents.isDestroyed()) ours.webContents.close();
     };
     window.on('closed', close);
     try {
-        // The band is the window's own contents, which on macOS show above the views; elsewhere they stay empty.
-        if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);
+        // On macOS the band, the window's own contents under the views, drags the window; elsewhere they stay empty.
+        if (deps.platform === 'darwin') {
+            await window.webContents.loadFile(bandFile);
+            // The band's drag region narrowed to all but the switch's span, before either view is loaded.
+            await window.webContents.insertCSS(demoBandSheet, { cssOrigin: 'user' });
+        }
+        showing.loading();
         await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);
     } catch {
         window.contentView.removeChildView(ours);
@@ -117,5 +136,11 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
         deps.unshown();
         return none;
     }
-    return { reload: () => page.webContents.reload() };
+    // A reload takes the page's view off until the new document's sheets have settled, as at the first load.
+    return {
+        reload: () => {
+            showing.loading();
+            page.webContents.reload();
+        },
+    };
 }

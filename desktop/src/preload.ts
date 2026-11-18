@@ -47,6 +47,9 @@ const desktop = {
     },
     updates: {
         key: () => ipcRenderer.invoke('jason:updates.key'),
+        item: () => ipcRenderer.invoke('jason:updates.item'),
+        press: (label: string) => ipcRenderer.invoke('jason:updates.press', label),
+        onChanged: (handler: Handler) => subscribe('jason:updates.changed', handler),
     },
     dailyTrends: {
         get: () => ipcRenderer.invoke('jason:dailyTrends.get'),

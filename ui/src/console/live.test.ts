@@ -164,11 +164,103 @@ describe('what the console draws from the runtime', () => {
             compose: null,
             example: null,
             search: null,
-            facts: ['Reach: act (bookkeeping until the campaign is live)', 'Reversibility: irreversible'],
+            facts: [
+                'Contacts the person: something is sent or shown to them (bookkeeping until the campaign is live)',
+                'Cannot be undone',
+            ],
         });
         expect(
             toApprovalDetail({ highlights: { '/args/message': { subject: 'Hello', body: 'Two lines\nof text' } } }),
         ).toMatchObject({ subject: 'Hello', body: 'Two lines\nof text', to: null, intent: null });
+    });
+
+    it('says each property of an approval in plain words, by the operation where its contract makes it depend', () => {
+        const facts = (operation: string | null, preview: Record<string, unknown>) =>
+            toApprovalDetail(preview, operation).facts;
+        const values = {
+            reach: { value: 'control', conditional: false, detail: null },
+            reversibility: { value: 'irreversible', conditional: false, detail: null },
+            cost: { value: 'metered', conditional: false, detail: null },
+        };
+        // A paid search: none of its properties depends on anything.
+        expect(facts('audience.search', values)).toEqual([
+            'Contacts nobody: it acts in your provider account only',
+            'Cannot be undone',
+            "Spends your provider's allowance or credits",
+        ]);
+        expect(
+            facts(null, { reach: { value: 'read' }, reversibility: { value: 'reversible' }, cost: { value: 'none' } }),
+        ).toEqual(['Contacts nobody: it only reads', 'Can be undone', 'Costs nothing']);
+        expect(facts(null, { reversibility: { value: 'compensatable' } })).toEqual([
+            'Can be taken back afterwards, by a step that undoes it',
+        ]);
+        // A property that depends: the whole line is the operation's own sentence, whatever detail the runtime gave.
+        const enroll = {
+            reach: { value: 'act', conditional: true, detail: 'bookkeeping while the campaign is not live' },
+            reversibility: {
+                value: 'irreversible',
+                conditional: true,
+                detail: 'compensatable until the first touch goes',
+            },
+            cost: { value: 'metered', conditional: true, detail: 'none while the campaign is not live' },
+        };
+        expect(facts('campaign.enroll', enroll)).toEqual([
+            'Contacts nobody while the campaign is not live; contacts the person as soon as it is.',
+            'Can be taken back until the first message or invitation goes; cannot be undone after.',
+            "Costs nothing while the campaign is not live; spends your provider's allowance once it is.",
+        ]);
+        expect(facts('campaign.activate', { reach: { value: 'act', conditional: true, detail: 'x' } })).toEqual([
+            'Contacts everyone enrolled in the campaign. With nobody enrolled it contacts nobody yet, and the next person enrolled is sent to at once.',
+        ]);
+        expect(
+            facts('contact.delete', { reversibility: { value: 'irreversible', conditional: true, detail: 'x' } }),
+        ).toEqual(["Can be restored within your provider account's restore window; cannot be undone after it."]);
+        for (const operation of ['message.send', 'conversation.reply'])
+            expect(facts(operation, { cost: { value: 'metered', conditional: true, detail: 'x' } })).toEqual([
+                'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+            ]);
+        // A sentence keys on a property that depends: the same operation's plain property is its value's line.
+        expect(facts('campaign.enroll', { reach: { value: 'act', conditional: false, detail: null } })).toEqual([
+            'Contacts the person: something is sent or shown to them',
+        ]);
+        // No sentence for the operation, or no operation named: the value's line and the runtime's detail, as given.
+        expect(
+            facts('campaign.unknown', { cost: { value: 'metered', conditional: true, detail: '`none` elsewhere' } }),
+        ).toEqual(["Spends your provider's allowance or credits (`none` elsewhere)"]);
+        expect(facts(null, enroll)[0]).toBe(
+            'Contacts the person: something is sent or shown to them (bookkeeping while the campaign is not live)',
+        );
+        // A value with no line is never guessed: the property's name and the value, as before.
+        expect(facts(null, { reach: { value: 'broadcast' }, cost: { value: 'paid', detail: 'per seat' } })).toEqual([
+            'Reach: broadcast',
+            'Cost: paid (per seat)',
+        ]);
+        // A key the runtime's words would make that is not a fact's line is not read as one.
+        expect(facts('modes', { reach: { value: 'doubts', conditional: true, detail: null } })).toEqual([
+            'Reach: doubts',
+        ]);
+    });
+
+    it('says a reply in a thread goes from the account the conversation is in, and names no account', () => {
+        const reply = (sender?: Record<string, unknown> | null) =>
+            toApprovalDetail({
+                highlights: {
+                    '/args/channel': 'linkedin',
+                    '/args/thread': { external_id: 't_1' },
+                    '/args/body': 'Thanks, Thursday works.',
+                    ...(sender === undefined ? {} : { '/args/sender': sender }),
+                },
+            });
+        expect(reply().from).toBe('the account this conversation is in');
+        // A send that names its account is read by that account alone, whatever else it names.
+        expect(reply({ external_id: 's_1', address: 'owner@example.test' }).from).toBe('owner@example.test');
+        expect(reply({ external_id: 's_1', address: null }).from).toBe('s_1');
+        // Only a thread makes the words: a message and an invitation that name no account say nothing in its place.
+        expect(
+            toApprovalDetail({ highlights: { '/args/channel': 'email', '/args/message': { body: 'Hi' } } }).from,
+        ).toBeNull();
+        expect(toApprovalDetail({ highlights: { '/args/note': 'Hi' } }).from).toBeNull();
+        expect(toApprovalDetail({ highlights: { '/args/thread': null, '/args/body': 'Hi' } }).from).toBeNull();
     });
 
     it('asks a question as it was raised', () => {
