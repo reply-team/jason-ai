@@ -505,7 +505,7 @@ public class StatusCommandTests
             Assert.Equal(CheckState.Failed, check.State);
             Assert.Equal("jason skills update", check.Fix);
             Assert.False(check.Required, "harness_skills moves `ready`");
-            Assert.Contains($"{folder}, a folder Jason left as it was, is no longer there, so {harness} has no 'quick-start': `jason skills update` writes the one Jason ships.", check.Fact, StringComparison.Ordinal);
+            Assert.Contains($"{folder}, a folder Jason left as it was, no longer holds a skill, so {harness} has no 'quick-start': `jason skills update` writes the one Jason ships.", check.Fact, StringComparison.Ordinal);
         }
     }
 

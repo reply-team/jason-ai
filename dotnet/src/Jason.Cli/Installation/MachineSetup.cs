@@ -744,7 +744,7 @@ public static class MachineSetup
 
             // Each said in the deployer's own words, as every door says them: adopted as done, left alone as left.
             Done.AddRange(report.Adopted.Select(SkillsDeployer.AdoptedSentence));
-            Left.AddRange(report.LeftAlone.Select(SkillsDeployer.LeftAloneSentence));
+            Left.AddRange(SkillsDeployer.LeftAloneSentences(report.LeftAlone));
             var leftAlone = report.LeftAlone.Select(skill => skill.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
             Done.Add(report.Written == 0

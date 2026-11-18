@@ -719,10 +719,54 @@ internal static partial class StatusChecks
         }
 
         var named = record?.Packs.SelectMany(pack => pack.Files).Select(file => file.Path.Split('/')[0]).ToHashSet(StringComparer.Ordinal) ?? [];
-        return string.Concat(present
-            .Where(role => !named.Contains(role))
-            .Order(StringComparer.Ordinal)
-            .Select(role => $" '{role}' is a role Jason ships, and its skill in {directory} is a folder Jason did not deploy: the runtime teaches '{role}' from that folder, and no deployment writes over it. To have the one Jason ships, move or remove that folder, then run `{Skills.SkillsDeployer.RedeployRoles}`."));
+        var roles = present.Where(role => !named.Contains(role)).Order(StringComparer.Ordinal).ToList();
+        if (roles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // One sentence for the directory, naming every such role, a link said as a link.
+        var quoted = Skills.SkillsDeployer.Listed(roles.Select(role => $"'{role}'"));
+        var what = Skills.SkillsDeployer.Things([.. roles.Select(role => new FileInfo(System.IO.Path.Combine(directory, role)).LinkTarget is not null)]);
+        return roles.Count == 1
+            ? $" {quoted} is a role Jason ships, and its skill in {directory} is a {what} Jason did not deploy: the runtime teaches {quoted} from that {what}, and no deployment writes over it. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`."
+            : $" {quoted} are roles Jason ships, and their skills in {directory} are {what} Jason did not deploy: the runtime teaches each of them from what stands there, and no deployment writes over it. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that still stand there: one sentence for
+    /// the root, in its singular or plural form, each by its path, a link said as a link. Null for none.
+    /// </summary>
+    internal static string? LeftAloneStanding(string root, IReadOnlyList<string> names, string hosts)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        var quoted = Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"));
+        var what = Skills.SkillsDeployer.Things([.. names.Select(name => new FileInfo(System.IO.Path.Combine(root, name)).LinkTarget is not null)]);
+        return names.Count == 1
+            ? $"{paths} is a {what} Jason did not deploy, under a name Jason ships, left as it is: Jason's {quoted} is not installed for {hosts}, and an agent there asked to use {quoted} reads that {what}. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployHost}`."
+            : $"{paths} are {what} Jason did not deploy, under names Jason ships, left as they are: Jason's {quoted} are not installed for {hosts}, and an agent there asked to use one of them reads what stands there. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployHost}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that no longer hold a skill: one sentence
+    /// for the root. Null for none.
+    /// </summary>
+    internal static string? LeftAloneGone(string root, IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        return names.Count == 1
+            ? $"{paths}, a folder Jason left as it was, no longer holds a skill, so {root} has no '{names[0]}': `{Skills.SkillsDeployer.RedeployHost}` writes the one Jason ships."
+            : $"{paths}, folders Jason left as they were, no longer hold a skill, so {root} has none of {Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"))}: `{Skills.SkillsDeployer.RedeployHost}` writes the ones Jason ships.";
     }
 
     /// <summary>
@@ -1836,22 +1880,22 @@ internal static partial class StatusChecks
                             gone.Add(string.Create(CultureInfo.InvariantCulture, $"{pack.Pack} in {root}: {missing} of the {pack.Files.Count} file(s) its record names are not there."));
                         }
 
-                        // The names the last deployment left alone, each looked at on disk and never repeated blind. A folder
-                        // still there is the person's: said, host by host, and never a failure, so `ready` does not move.
-                        // One since taken away leaves the root without Jason's skill of that name, which is the fact a
-                        // recorded skill missing from the disk is, and takes its state and repair (`gone`).
-                        foreach (var name in pack.LeftAlone)
-                        {
-                            var folder = System.IO.Path.Combine(root, name);
-                            if (File.Exists(folder) || Directory.Exists(folder) || new FileInfo(folder).LinkTarget is not null)
-                            {
-                                yours.Add($"{folder} is a folder Jason did not deploy, under a name Jason ships, left as it is: Jason's '{name}' is not installed for {HostsReading(root)}, and an agent there asked to use '{name}' reads that folder. To have the one Jason ships, move or remove that folder, then run `{Skills.SkillsDeployer.RedeployHost}`.");
-                            }
-                            else
-                            {
-                                gone.Add($"{folder}, a folder Jason left as it was, is no longer there, so {root} has no '{name}': `{Skills.SkillsDeployer.RedeployHost}` writes the one Jason ships.");
-                            }
-                        }
+                    }
+
+                    // The names the last deployment left alone, each looked at on disk and never repeated blind, said once
+                    // for the root. One still standing is the person's: said, host by host, and never a failure, so `ready`
+                    // does not move. One that no longer holds a skill leaves the root without Jason's skill of that name,
+                    // which is the fact a recorded skill missing from the disk is, and takes its state and repair (`gone`).
+                    var left = record.Packs.SelectMany(pack => pack.LeftAlone).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+                    var standing = left.Where(name => Skills.SkillsDeployer.Occupied(System.IO.Path.Combine(root, name))).ToList();
+                    if (LeftAloneStanding(root, standing, HostsReading(root)) is { } said)
+                    {
+                        yours.Add(said);
+                    }
+
+                    if (LeftAloneGone(root, [.. left.Except(standing)]) is { } missingSaid)
+                    {
+                        gone.Add(missingSaid);
                     }
 
                     deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}{ReadBy(root)}"));

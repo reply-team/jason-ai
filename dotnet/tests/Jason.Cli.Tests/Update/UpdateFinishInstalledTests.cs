@@ -399,6 +399,10 @@ public sealed class UpdateFinishInstalledTests
         var report = await FinishAsync(installation);
 
         Assert.Equal(before, SkillsLeftAloneTests.Snapshot(own));
+
+        // Complete with a skill left alone: the Desktop's set-up runs again only where it is not, so a folder of the
+        // person's never makes it run over that folder at every start.
+        Assert.True(report.Complete, string.Join(" | ", report.Parts.Select(part => $"{part.Part}: {part.State} {part.Reason}")));
         var skills = report.Parts.Single(part => part.Part == "skills");
         var sentence = SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(harness, SkillPacks.Runtime, "quick-start"));
         Assert.True(skills.Lines.Any(line => line.Contains(sentence, StringComparison.Ordinal)), string.Join(" | ", skills.Lines));

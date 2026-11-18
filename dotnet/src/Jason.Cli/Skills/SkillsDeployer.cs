@@ -7,9 +7,10 @@ namespace Jason.Cli.Skills;
 
 /// <summary>
 /// A skill folder a deployment met in a root under the name Jason ships it by, which the root's record does not name: where,
-/// in which pack, by which name, and whether the root is the roles home, which the runtime teaches roles from.
+/// in which pack, by which name, whether the root is the roles home, which the runtime teaches roles from, and whether what
+/// stands there is a link rather than a folder of its own.
 /// </summary>
-public sealed record UnrecordedSkill(string Root, string Pack, string Name, bool RolesHome = false)
+public sealed record UnrecordedSkill(string Root, string Pack, string Name, bool RolesHome = false, bool Link = false)
 {
     /// <summary>The folder itself.</summary>
     public string Folder => Path.Combine(Root, Name);
@@ -17,16 +18,21 @@ public sealed record UnrecordedSkill(string Root, string Pack, string Name, bool
 
 /// <summary>
 /// What the one rule made of a plan before anything is written: the plan without the skills it leaves alone, those skills,
-/// and the ones it adopts (<see cref="SkillsDeployer.Judge"/>).
+/// and the ones it adopts (<see cref="SkillsDeployer.Judge"/>); and, for a dry run, each root whose record cannot be read,
+/// which a deployment refuses whole and so judges nothing in.
 /// </summary>
 public sealed record SkillsJudgement(SkillsPlan Plan, IReadOnlyList<UnrecordedSkill> LeftAlone, IReadOnlyList<UnrecordedSkill> Adopted)
 {
+    /// <summary>What a deployment would say of each root it refuses because its record cannot be read: a dry run's alone.</summary>
+    public IReadOnlyList<string> Refused { get; init; } = [];
+
     /// <summary>
-    /// What is said of each, in every answer that names them: a skill left alone as the person's, and one adopted as Jason's.
-    /// The same sentence at every door, so an install, an update and the set-up never say one thing two ways.
+    /// What is said, in every answer that names them: each root a deployment would refuse, each skill adopted as Jason's, and,
+    /// one sentence per root, the skills left alone as the person's. The same sentences at every door, so an install, an
+    /// update and the set-up never say one thing two ways.
     /// </summary>
     public IEnumerable<string> Sentences =>
-        Adopted.Select(SkillsDeployer.AdoptedSentence).Concat(LeftAlone.Select(SkillsDeployer.LeftAloneSentence));
+        Refused.Concat(Adopted.Select(SkillsDeployer.AdoptedSentence)).Concat(SkillsDeployer.LeftAloneSentences(LeftAlone));
 }
 
 /// <summary>What a deployment did, so the verb can report it rather than claim it.</summary>
@@ -86,20 +92,25 @@ public static class SkillsDeployer
     {
         ArgumentNullException.ThrowIfNull(plan);
         var records = new Dictionary<string, SkillsRecord>(StringComparer.Ordinal);
+        var refused = new List<string>();
+        var unreadable = new HashSet<string>(StringComparer.Ordinal);
         foreach (var root in plan.Roots)
         {
             try
             {
                 records[root] = SkillsRecord.Read(root) ?? new SkillsRecord(SkillsRecord.CurrentVersion, []);
             }
-            catch (SkillsRecordUnreadable)
+            catch (SkillsRecordUnreadable refusal)
             {
-                // Judged by the deployment, which refuses the root before anything is written: a dry run leaves it to say so.
-                records[root] = new SkillsRecord(SkillsRecord.CurrentVersion, []);
+                // A deployment refuses this root whole before anything is judged or written, so a dry run says that, and
+                // never that a skill there would be left alone or adopted.
+                unreadable.Add(root);
+                refused.Add($"{refusal.Message} A deployment refuses {root} whole: nothing would be written or recorded there.");
             }
         }
 
-        return Judge(plan, records, rolesHome);
+        var judged = Judge(plan with { Packs = [.. plan.Packs.Where(pack => !unreadable.Contains(pack.Root))] }, records, rolesHome);
+        return judged with { Refused = refused };
     }
 
     private static SkillsJudgement Judge(SkillsPlan plan, Dictionary<string, SkillsRecord> records, string? rolesHome)
@@ -122,14 +133,15 @@ public static class SkillsDeployer
                     continue;
                 }
 
-                if (!IsLink(unit.Unit) && Current(unit))
+                var link = IsLink(unit.Unit);
+                if (!link && Current(unit))
                 {
                     adopted.Add(new UnrecordedSkill(pack.Root, pack.Pack, unit.Name, roles));
                     units.Add(unit);
                     continue;
                 }
 
-                leftAlone.Add(new UnrecordedSkill(pack.Root, pack.Pack, unit.Name, roles));
+                leftAlone.Add(new UnrecordedSkill(pack.Root, pack.Pack, unit.Name, roles, link));
             }
 
             packs.Add(pack with { Units = units });
@@ -145,22 +157,68 @@ public static class SkillsDeployer
     public const string RedeployRoles = "jason skills install --roles-only";
 
     /// <summary>
-    /// What is said of a skill left alone as the person's, the same at every door: whose Jason takes it for, what it means
-    /// for the host or the role, and, last, the one way to have Jason's instead. "Takes it for" and not "is": a remnant of an
-    /// older Jason with no record reads the same on disk, and the sentence stays true of it.
+    /// What is said of the skills left alone as the person's, one sentence per root naming every one of them there, the same
+    /// at every door: whose Jason takes them for, what it means for the host or the role, and, last, the one way to have
+    /// Jason's instead. "Takes it for" and not "is": a remnant of an older Jason with no record reads the same on disk, and
+    /// the sentence stays true of it.
     /// </summary>
+    public static IEnumerable<string> LeftAloneSentences(IEnumerable<UnrecordedSkill> skills)
+    {
+        ArgumentNullException.ThrowIfNull(skills);
+        return skills
+            .GroupBy(skill => skill.Root, StringComparer.Ordinal)
+            .Select(root => LeftAloneSentence(root.DistinctBy(skill => skill.Name, StringComparer.Ordinal).OrderBy(skill => skill.Name, StringComparer.Ordinal).ToList()));
+    }
+
+    /// <summary>The sentence for one skill left alone: the singular form of <see cref="LeftAloneSentences"/>.</summary>
     public static string LeftAloneSentence(UnrecordedSkill skill)
     {
         ArgumentNullException.ThrowIfNull(skill);
-        return skill.RolesHome
-            ? $"{skill.Folder} is a role skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
-                + $"left as it is, nothing written or recorded, and no flag writes over it; the runtime teaches the role '{skill.Name}' from that folder. "
-                + $"To have the one Jason ships, move or remove that folder, then run `{RedeployRoles}`."
-            : $"{skill.Folder} is a skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
-                + $"left as it is, nothing written or recorded, and no flag writes over it; Jason's '{skill.Name}' is not installed there, "
-                + $"and an agent reading {skill.Root} that is asked to use '{skill.Name}' reads that folder. "
-                + $"To have the one Jason ships, move or remove that folder, then run `{RedeployHost}`.";
+        return LeftAloneSentence([skill]);
     }
+
+    /// <summary>The sentence for the skills left alone in one root, in its singular or its plural form.</summary>
+    private static string LeftAloneSentence(IReadOnlyList<UnrecordedSkill> skills)
+    {
+        var first = skills[0];
+        var names = Listed(skills.Select(skill => $"'{skill.Name}'"));
+        var what = Things(skills.Select(skill => skill.Link).ToList());
+        if (skills.Count == 1)
+        {
+            return first.RolesHome
+                ? $"{first.Folder} is a role skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
+                    + $"left as it is, nothing written or recorded, and no flag writes over it; the runtime teaches the role {names} from that {what}. "
+                    + $"To have the one Jason ships, move or remove that {what}, then run `{RedeployRoles}`."
+                : $"{first.Folder} is a skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
+                    + $"left as it is, nothing written or recorded, and no flag writes over it; Jason's {names} is not installed there, "
+                    + $"and an agent reading {first.Root} that is asked to use {names} reads that {what}. "
+                    + $"To have the one Jason ships, move or remove that {what}, then run `{RedeployHost}`.";
+        }
+
+        var paths = Listed(skills.Select(skill => skill.Folder));
+        return first.RolesHome
+            ? $"{paths} are role skills under names Jason ships that no record of Jason's names there, so Jason takes them for yours: "
+                + $"left as they are, nothing written or recorded, and no flag writes over them; the runtime teaches the roles {names} from those {what}. "
+                + $"To have the ones Jason ships, move or remove those {what}, then run `{RedeployRoles}`."
+            : $"{paths} are skills under names Jason ships that no record of Jason's names there, so Jason takes them for yours: "
+                + $"left as they are, nothing written or recorded, and no flag writes over them; Jason's {names} are not installed there, "
+                + $"and an agent reading {first.Root} that is asked to use one of them reads that {(skills.All(skill => skill.Link) ? "link" : skills.Any(skill => skill.Link) ? "folder or link" : "folder")}. "
+                + $"To have the ones Jason ships, move or remove those {what}, then run `{RedeployHost}`.";
+    }
+
+    /// <summary>A list in a sentence: "a", "a and b", "a, b and c".</summary>
+    internal static string Listed(IEnumerable<string> items)
+    {
+        var all = items.ToList();
+        return all.Count <= 1 ? string.Concat(all) : string.Join(", ", all.Take(all.Count - 1)) + " and " + all[^1];
+    }
+
+    /// <summary>What stands there, by whether each is a link: "folder" or "link" for one, "folders", "links" or "folders and links" for more.</summary>
+    internal static string Things(IReadOnlyList<bool> links) =>
+        links.Count == 1 ? (links[0] ? "link" : "folder")
+        : links.All(link => link) ? "links"
+        : links.Any(link => link) ? "folders and links"
+        : "folders";
 
     /// <summary>What is said of a skill adopted as Jason's.</summary>
     public static string AdoptedSentence(UnrecordedSkill skill)
@@ -169,9 +227,21 @@ public static class SkillsDeployer
         return $"{skill.Folder} is byte for byte the skill Jason ships, and no record of Jason's named it: recorded as Jason's now, nothing written.";
     }
 
-    /// <summary>Whether anything stands at a path: a file, a folder, or a link, a dangling one included.</summary>
-    private static bool Occupied(string path) =>
-        File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null;
+    /// <summary>
+    /// Whether anything stands at a path that a deployment must not write over: a file, a link, a dangling one included, or a
+    /// folder holding anything but the system's litter (<see cref="SystemLitter"/>). A folder that holds nothing, or only
+    /// that, is unoccupied: the skill is written and recorded there as into no folder at all. The status checks read a folder
+    /// left alone by this same test.
+    /// </summary>
+    internal static bool Occupied(string path)
+    {
+        if (new FileInfo(path).LinkTarget is not null || File.Exists(path))
+        {
+            return true;
+        }
+
+        return Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any(entry => !SystemLitter.Is(entry));
+    }
 
     /// <summary>Whether a path is a link, a junction included, rather than a folder of its own.</summary>
     private static bool IsLink(string path) => new FileInfo(path).LinkTarget is not null;

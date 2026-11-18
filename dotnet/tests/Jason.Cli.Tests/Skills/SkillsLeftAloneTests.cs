@@ -233,7 +233,10 @@ public sealed class SkillsLeftAloneTests
 
         Assert.Equal(ExitCodes.Success, run.Exit);
         Assert.NotNull(new DirectoryInfo(link).LinkTarget);
-        Assert.Contains(SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(root, SkillPacks.Runtime, "quick-start")), run.Output, StringComparison.Ordinal);
+        var sentence = SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(root, SkillPacks.Runtime, "quick-start", Link: true));
+        Assert.Contains(sentence, run.Output, StringComparison.Ordinal);
+        Assert.Contains("reads that link. To have the one Jason ships, move or remove that link, then run `jason skills update`.", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("folder", sentence[sentence.IndexOf("reads that", StringComparison.Ordinal)..], StringComparison.Ordinal);
         Assert.DoesNotContain(SkillsRecord.Read(root)!.Packs.SelectMany(pack => pack.Files), file => file.Path.StartsWith("quick-start/", StringComparison.Ordinal));
     }
 
@@ -296,6 +299,110 @@ public sealed class SkillsLeftAloneTests
         Assert.False(File.Exists(Path.Combine(root, "operating", "SKILL.md")));
         Assert.False(File.Exists(Path.Combine(root, SkillsRecord.FileName)), "the record outlived an uninstall that removed every file it names");
         Assert.DoesNotContain("quick-start", JsonSerializer.Serialize(report, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder under a shipped name that holds nothing, or only the system's litter, is no folder of anyone's: the skill is
+    /// written and recorded there as into no folder at all, and nothing is said of it. One real file beside the litter makes
+    /// it a folder of the person's, left alone.
+    /// </summary>
+    [Theory]
+    [InlineData("empty", true)]
+    [InlineData("litter", true)]
+    [InlineData("litter and a file", false)]
+    [Critical(Family.I3, "a skill folder holding nothing but the system's litter is written into, and one holding a file of the person's is not")]
+    public async Task A_folder_holding_nothing_or_only_the_systems_litter_is_written_into_as_no_folder_at_all(string holds, bool written)
+    {
+        using var dir = new TempPaths();
+        var root = Harness(dir);
+        var source = Source(dir, quickStart: true);
+        var folder = Directory.CreateDirectory(Path.Combine(root, "quick-start")).FullName;
+        if (holds != "empty")
+        {
+            foreach (var litter in new[] { ".DS_Store", "desktop.ini", "Thumbs.db" })
+            {
+                File.WriteAllText(Path.Combine(folder, litter), "litter");
+            }
+        }
+
+        if (holds == "litter and a file")
+        {
+            File.WriteAllText(Path.Combine(folder, "notes.md"), "mine");
+        }
+
+        var run = await RunAsync(dir, ["skills", "install", "--source", source, "--root", root]);
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        var recorded = SkillsRecord.Read(root)!.Packs.SelectMany(pack => pack.Files).Select(file => file.Path).ToList();
+        if (written)
+        {
+            Assert.Contains("quick-start/SKILL.md", recorded);
+            Assert.Equal(
+                File.ReadAllText(Path.Combine(source, "skills", "runtime", "quick-start", "SKILL.md")),
+                File.ReadAllText(Path.Combine(folder, "SKILL.md")));
+            Assert.DoesNotContain("Jason takes it for yours", run.Output, StringComparison.Ordinal);
+            Assert.Empty(SkillsRecord.Read(root)!.Packs.SelectMany(pack => pack.LeftAlone));
+        }
+        else
+        {
+            Assert.DoesNotContain(recorded, path => path.StartsWith("quick-start/", StringComparison.Ordinal));
+            Assert.False(File.Exists(Path.Combine(folder, "SKILL.md")));
+            Assert.Contains(SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(root, SkillPacks.Runtime, "quick-start")), run.Output, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Every folder left alone in a root is named in one sentence for the root, in its plural form, while the record keeps the
+    /// list of names as it is.
+    /// </summary>
+    [Fact]
+    public async Task The_folders_left_alone_in_one_root_are_named_in_one_sentence()
+    {
+        using var dir = new TempPaths();
+        var root = Harness(dir);
+        var source = Source(dir, quickStart: true);
+        Plant(root, "quick-start");
+        Plant(root, "operating");
+
+        var run = await RunAsync(dir, ["skills", "install", "--source", source, "--root", root]);
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        var sentences = SkillsDeployer.LeftAloneSentences(
+            [new UnrecordedSkill(root, SkillPacks.Runtime, "quick-start"), new UnrecordedSkill(root, SkillPacks.Runtime, "operating")]).ToList();
+        var sentence = Assert.Single(sentences);
+        Assert.Equal(
+            $"{Path.Combine(root, "operating")} and {Path.Combine(root, "quick-start")} are skills under names Jason ships that no record of Jason's names there, so Jason takes them for yours: "
+            + "left as they are, nothing written or recorded, and no flag writes over them; Jason's 'operating' and 'quick-start' are not installed there, "
+            + $"and an agent reading {root} that is asked to use one of them reads that folder. To have the ones Jason ships, move or remove those folders, then run `jason skills update`.",
+            sentence);
+        Assert.Contains(sentence, run.Output, StringComparison.Ordinal);
+        Assert.Equal(1, run.Output.Split("Jason takes", StringSplitOptions.None).Length - 1);
+        Assert.Equal(["operating", "quick-start"], SkillsRecord.Read(root)!.Packs.Single(pack => pack.Pack == SkillPacks.Runtime).LeftAlone);
+    }
+
+    /// <summary>
+    /// A dry run over a root whose record cannot be read says what the deployment does there: it refuses the root whole, so
+    /// nothing there would be left alone, adopted, written or recorded, and the dry run says none of those.
+    /// </summary>
+    [Fact]
+    public async Task A_dry_run_over_a_root_whose_record_cannot_be_read_says_the_root_is_refused_and_nothing_is_left_alone()
+    {
+        using var dir = new TempPaths();
+        var root = Harness(dir);
+        var source = Source(dir, quickStart: true);
+        Plant(root, "quick-start");
+        File.WriteAllText(Path.Combine(root, SkillsRecord.FileName), "{ not json");
+
+        var dry = await RunAsync(dir, ["skills", "install", "--source", source, "--root", root, "--dry-run"]);
+        var real = await RunAsync(dir, ["skills", "install", "--source", source, "--root", root]);
+
+        Assert.Equal(ExitCodes.Success, dry.Exit);
+        Assert.Contains($"A deployment refuses {root} whole: nothing would be written or recorded there.", dry.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Jason takes it for yours", dry.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("byte for byte", dry.Output, StringComparison.Ordinal);
+        Assert.NotEqual(ExitCodes.Success, real.Exit);
+        Assert.DoesNotContain("Jason takes it for yours", real.Output, StringComparison.Ordinal);
+        Assert.Equal("{ not json", File.ReadAllText(Path.Combine(root, SkillsRecord.FileName)));
     }
 
     internal static string Harness(TempPaths dir) =>
