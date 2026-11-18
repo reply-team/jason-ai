@@ -44,8 +44,9 @@ public sealed class AutostartRunLimitTests : IDisposable
 
     /// <summary>
     /// The uninstall's removal on macOS: unloaded through its file without <c>-w</c>, removed by its label, and the label's
-    /// disabled state cleared in the account's login domain, each with the bound, before the file goes; and where the file is
-    /// gone already, as an earlier version's <c>disable</c> left it, with the label disabled, the label is still cleared.
+    /// disabled record cleared in the account's login domain, where it stands, each with the bound, before the file goes;
+    /// and where the file is gone already, as an earlier version's <c>disable</c> left it, with the label disabled, the label
+    /// is still cleared.
     /// </summary>
     [Fact]
     public void The_uninstalls_removal_unloads_without_w_and_clears_the_labels_disabled_state_file_or_none()
@@ -58,7 +59,9 @@ public sealed class AutostartRunLimitTests : IDisposable
         var registrar = new LaunchAgentRegistrar((command, limit) =>
         {
             ran.Add((string.Join(" ", command), File.Exists(plist), limit));
-            return (0, string.Empty, string.Empty);
+            return string.Join(" ", command) == "/bin/launchctl print-disabled gui/501"
+                ? (0, "disabled services = {\n\t\"ai.jason.runtime\" => disabled\n}\n", string.Empty)
+                : (0, string.Empty, string.Empty);
         }, home);
         var registration = AutostartArtifacts.LeavingNoMark(
             AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone") with { ArtifactPath = plist },
@@ -66,7 +69,7 @@ public sealed class AutostartRunLimitTests : IDisposable
 
         Assert.True(registrar.Remove(registration).Registration);
         Assert.Equal(
-            [$"launchctl unload {plist}", "/bin/launchctl remove ai.jason.runtime", "/bin/launchctl enable gui/501/ai.jason.runtime"],
+            [$"launchctl unload {plist}", "/bin/launchctl remove ai.jason.runtime", "/bin/launchctl print-disabled gui/501", "/bin/launchctl enable gui/501/ai.jason.runtime", "/bin/launchctl print-disabled user/501"],
             ran.Select(run => run.Command));
         Assert.All(ran, run => Assert.True(run.FileThere, $"{run.Command} ran after the file went"));
         Assert.All(ran, run => Assert.Equal(LaunchdJobs.Limit, run.Limit));
@@ -74,7 +77,100 @@ public sealed class AutostartRunLimitTests : IDisposable
 
         ran.Clear();
         Assert.False(registrar.Remove(registration).Registration);
-        Assert.Equal(["/bin/launchctl remove ai.jason.runtime", "/bin/launchctl enable gui/501/ai.jason.runtime"], ran.Select(run => run.Command));
+        Assert.Equal(["/bin/launchctl remove ai.jason.runtime", "/bin/launchctl print-disabled gui/501", "/bin/launchctl enable gui/501/ai.jason.runtime", "/bin/launchctl print-disabled user/501"], ran.Select(run => run.Command));
+    }
+
+    /// <summary>
+    /// Jason never writes a launchd record where none stands: with nothing registered and no record of the label in either
+    /// domain, the uninstall's removal reads both domains and runs no <c>enable</c>; nor where a domain records the label
+    /// as enabled, names another label disabled, cannot be read, or does not answer.
+    /// </summary>
+    [Theory]
+    [InlineData("no record", "disabled services = {\n\t\"com.apple.Siri.agent\" => disabled\n}\n", 0)]
+    [InlineData("recorded enabled", "disabled services = {\n\t\"ai.jason.runtime\" => enabled\n}\n", 0)]
+    [InlineData("recorded false", "disabled services = {\n\t\"ai.jason.runtime\" => false\n}\n", 0)]
+    [InlineData("another label of ours disabled", "disabled services = {\n\t\"ai.jason.runtime.other\" => disabled\n}\n", 0)]
+    [InlineData("not readable", "", 1)]
+    public void Where_no_record_of_the_label_stands_the_uninstall_writes_none(string what, string answer, int exit)
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var ran = new List<string>();
+        var registrar = new LaunchAgentRegistrar((command, _) =>
+        {
+            ran.Add(string.Join(" ", command));
+            return command.Count > 1 && command[1] == "print-disabled" ? (exit, answer, string.Empty) : (0, string.Empty, string.Empty);
+        }, home);
+        var registration = AutostartArtifacts.LeavingNoMark(
+            AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone"),
+            501);
+
+        Assert.False(registrar.Remove(registration).Registration);
+
+        Assert.True(
+            ran.SequenceEqual(["/bin/launchctl remove ai.jason.runtime", "/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501"]),
+            $"{what}: {string.Join(" | ", ran)}");
+    }
+
+    /// <summary>
+    /// A disabled record in one domain is cleared there alone, whichever of the two holds it, in the words macOS prints today
+    /// and in the ones earlier versions print; one that does not answer in time writes nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("gui/501", "disabled")]
+    [InlineData("user/501", "disabled")]
+    [InlineData("gui/501", "true")]
+    public void A_disabled_record_in_one_domain_is_cleared_there_alone(string domain, string word)
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var ran = new List<string>();
+        var registrar = new LaunchAgentRegistrar((command, _) =>
+        {
+            ran.Add(string.Join(" ", command));
+            return string.Join(" ", command) == $"/bin/launchctl print-disabled {domain}"
+                ? (0, $"disabled services = {{\n\t\"ai.jason.runtime\" => {word}\n}}\n", string.Empty)
+                : (0, "disabled services = {\n}\n", string.Empty);
+        }, home);
+        var registration = AutostartArtifacts.LeavingNoMark(
+            AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone"),
+            501);
+
+        registrar.Remove(registration);
+
+        Assert.Equal([$"/bin/launchctl enable {domain}/ai.jason.runtime"], ran.Where(command => command.Contains(" enable ", StringComparison.Ordinal)));
+
+        ran.Clear();
+        var silent = new LaunchAgentRegistrar((command, _) =>
+        {
+            ran.Add(string.Join(" ", command));
+            return command[1] == "print-disabled" ? throw new AutostartException(AutostartCodes.Refused, "did not answer within 10 seconds") : (0, string.Empty, string.Empty);
+        }, home);
+        silent.Remove(registration);
+        Assert.DoesNotContain(ran, command => command.Contains(" enable ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>disable</c> then <c>enable</c> behave as before: <c>disable</c> unloads with <c>-w</c> and removes by label, and reads
+    /// and clears no record; <c>enable</c> loads with <c>-w</c>.
+    /// </summary>
+    [Fact]
+    public void Disable_then_enable_behave_as_before()
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var plist = AutostartArtifacts.ArtifactPath(AutostartPlatform.MacOs, home, string.Empty);
+        Directory.CreateDirectory(Path.GetDirectoryName(plist)!);
+        File.WriteAllText(plist, "<plist/>");
+        var ran = new List<string>();
+        var registrar = new LaunchAgentRegistrar((command, _) =>
+        {
+            ran.Add(string.Join(" ", command));
+            return (0, string.Empty, string.Empty);
+        }, home);
+        var registration = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone") with { ArtifactPath = plist };
+
+        registrar.Remove(registration);
+
+        Assert.Equal([$"launchctl unload -w {plist}", "/bin/launchctl remove ai.jason.runtime"], ran);
+        Assert.Equal([["launchctl", "load", "-w", plist]], registration.Apply);
     }
 
     /// <summary>

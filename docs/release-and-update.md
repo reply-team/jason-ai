@@ -1329,9 +1329,11 @@ Starting and stopping a runtime today is still `jason runtime start` and `jason 
 there, then `launchctl remove ai.jason.runtime` by its label, which holds for a job whose file is gone already, each
 waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` marks
 the label disabled, which keeps a file left behind from loading at the next login; `enable` loads with `-w` and so clears
-it. `jason uninstall` leaves no such mark: it unloads without `-w`, and then clears a disabled state an earlier removal
-left for the label in this account's login domain, `launchctl enable gui/<uid>/ai.jason.runtime`, so that a later install's
-job of the same label loads.
+it. `jason uninstall` leaves no such mark: it unloads without `-w`, so no login job of Jason's is left, and none is left
+disabled. It reads launchd's record of the label in this account's two domains, `launchctl print-disabled gui/<uid>` and
+`user/<uid>`, and where one records it as disabled, as an earlier removal with `-w` left it, it clears that there with
+`launchctl enable`, so that a later install's job of the same label loads; where no record stands it writes none. A disabled
+record it cleared stays recorded as enabled, which only an administrator can remove and which does nothing.
 
 **The registration carries the data directory it was made under**, as `--data-dir` on the registered command
 line, and `autostart status` prints it. This is the whole reason it is a verb rather than a documented

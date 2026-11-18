@@ -133,8 +133,9 @@ public static class AutostartArtifacts
 
     /// <summary>
     /// The removal <c>jason uninstall</c> makes, which leaves no mark for the name: on macOS the job is unloaded through its
-    /// file without <c>-w</c>, and the disabled state an earlier removal with <c>-w</c> left for the label is cleared in this
-    /// account's login domain. Every other platform's removal is the one <c>disable</c> makes.
+    /// file without <c>-w</c>, and a disabled record an earlier removal with <c>-w</c> left for the label is cleared in each of
+    /// this account's two domains that records it, and in no other. Every other platform's removal is the one <c>disable</c>
+    /// makes.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -146,10 +147,14 @@ public static class AutostartArtifacts
     /// loading at the next login; its <c>enable</c> loads with <c>-w</c>, which sets the state back to false.
     /// </para>
     /// <para>
-    /// The clearing is <c>launchctl enable gui/&lt;uid&gt;/ai.jason.runtime</c>: <c>enable</c> "may only target services
+    /// The clearing is <c>launchctl enable &lt;domain&gt;/ai.jason.runtime</c>: <c>enable</c> "may only target services
     /// within the system domain or user and user-login domains", and <c>gui/&lt;uid&gt;</c> is "another form of the
-    /// <c>login</c> specifier", the user-login domain "created when the user logs in at the GUI" (launchctl(1)). Composed only
-    /// where the account's user id is known; enabling a label that is not disabled changes nothing.
+    /// <c>login</c> specifier", the user-login domain "created when the user logs in at the GUI" (launchctl(1)); the other is
+    /// <c>user/&lt;uid&gt;</c>. <c>enable</c> writes a record of its own: on a label no record names it leaves the label
+    /// recorded as enabled, a record no command run without administrator rights removes. So each domain is read first with
+    /// <c>launchctl print-disabled</c>, and <c>enable</c> runs only where the label is recorded as disabled
+    /// (<see cref="LaunchdJobs.ClearDisabled"/>): where no record stands, none is written. Composed only where the account's
+    /// user id is known.
     /// </para>
     /// </remarks>
     /// <param name="registration">The registration as a removal composes it.</param>
@@ -162,8 +167,8 @@ public static class AutostartArtifacts
             : registration with
             {
                 Remove = [["launchctl", "unload", registration.ArtifactPath]],
-                Forget = userId is { } account
-                    ? [[LaunchdJobs.Launchctl, "enable", $"gui/{account.ToString(CultureInfo.InvariantCulture)}/{registration.Name}"]]
+                ClearsDisabledIn = userId is { } account
+                    ? [$"gui/{account.ToString(CultureInfo.InvariantCulture)}", $"user/{account.ToString(CultureInfo.InvariantCulture)}"]
                     : [],
             };
     }
