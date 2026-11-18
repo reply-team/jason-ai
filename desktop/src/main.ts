@@ -214,19 +214,18 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
 /**
- * A terminal's update requests, taken by the run whose window is open: by the updater `updater` gives, which Live's
- * window has and the Demo's makes for the request alone. Up to the download in either; on, to the install, only where the
- * switch says a window may close (`windowOpenUpdate`). `menu` says whether the window has an install item to wait under;
- * `demo` whether it shows the Demo, which refuses every request as `demo_open` before the updater is asked for.
+ * A terminal's update requests, taken by the run whose window is open: in Live by the updater `updater` gives, up to the
+ * download, and on, to the install, only where the switch says a window may close (`windowOpenUpdate`); `menu` says
+ * whether the window has an install item to wait under. A window that shows the Demo holds no updater and refuses every
+ * request as `demo_open` (`takeRequest`).
  */
-function serveRequests(log: Logger, data: string, window: { menu: boolean; demo: boolean }, updater: () => Pick<Updater, 'take'>): void {
+function serveRequests(log: Logger, data: string, window: { menu: boolean; updater: () => Pick<Updater, 'take'> } | 'demo'): void {
     windowRequests?.serve((request) =>
         takeRequest(request, {
             data,
             from: app.getVersion(),
-            where: { window },
+            ...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),
             unsupported: requestSupport(app.isPackaged, process.platform),
-            updater,
             windowOpen: windowOpenUpdate,
             log,
             startRuntime: carriedRuntimeStart(data, log),
@@ -522,7 +521,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     updates?.start();
     // A terminal's update request, taken by this window's own updater (a build that has none takes none: `requestSupport`).
-    serveRequests(log, paths.data, { menu: updates !== null, demo: false }, () => updates ?? requestUpdater({ data: paths.data, log }));
+    serveRequests(log, paths.data, { menu: updates !== null, updater: () => updates ?? requestUpdater({ data: paths.data, log }) });
     let runtimeVersion: string | null = null;
     let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
@@ -935,24 +934,9 @@ async function runDemo(_links: LinkPost): Promise<void> {
     const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
-    // A terminal's update request: the Demo resolves no host name, so it refuses the request as the Demo (`demo_open`)
-    // before any updater is made (`takeRequest`). It has no updater of its own; the one below is made for a request only
-    // where that refusal lets one through.
-    serveRequests(log, runOn.person, { menu: false, demo: true }, () =>
-        requestUpdater({
-            data: runOn.person,
-            log,
-            async beforeInstall() {
-                quitting = true;
-                desk.close();
-            },
-            async afterRefused() {
-                quitting = false;
-                desk.open();
-                desk.show();
-            },
-        }),
-    );
+    // A terminal's update request: the Demo resolves no host name and holds no updater, so it refuses the request as the
+    // Demo (`demo_open`), and nothing is checked, stopped or kept.
+    serveRequests(log, runOn.person, 'demo');
 
     const unshown = demoUnshownSentence(process.platform);
     try {

@@ -484,21 +484,29 @@ export class UpdateRequests {
     }
 }
 
-export interface TakeDeps {
+/**
+ * Where a request is taken, and by what: a start of its own or a Live window, each with the updater it is taken by, made
+ * only when one is needed; or a window that shows the Demo, which holds none. The Demo resolves no host name in its run
+ * (`demoResolverRule`), so no feed could be read there: it refuses every request as `demo_open`, after a feed it refuses
+ * and a build that takes no request, before anything is checked.
+ */
+export type TakeDeps = TakeDepsCommon &
+    (
+        | {
+              /** A start of its own, or a running Live window, which has an install item or not. */
+              where: 'headless' | { window: { menu: boolean } };
+              updater(): Pick<Updater, 'take'>;
+          }
+        | { where: 'demo' }
+    );
+
+export interface TakeDepsCommon {
     /** The data directory the request's file is written under: the one this application runs on. */
     data: string;
     /** This application's version. */
     from: string;
-    /**
-     * Where the request is taken: by a start of its own, or by a running window, which has an install item or not, and
-     * shows the Demo or not. A window that shows the Demo resolves no host name in its run (`demoResolverRule`), so no
-     * feed could be read there: it refuses the request as `demo_open` before any updater is made.
-     */
-    where: 'headless' | { window: { menu: boolean; demo: boolean } };
     /** Why this application takes no request at all (`requestSupport`), or null. */
     unsupported: 'not_installed' | 'unsupported_platform' | null;
-    /** The updater the request is taken by, made only when one is needed. */
-    updater(): Pick<Updater, 'take'>;
     /** The switch, read by a window only. */
     windowOpen: WindowOpenUpdate;
     log: Logger;
@@ -568,7 +576,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     const write = deps.write ?? writeRequestFile;
     const create = deps.create ?? createRequestFile;
     const window = deps.where !== 'headless';
-    const menu = deps.where !== 'headless' && deps.where.window.menu;
+    const menu = typeof deps.where === 'object' && deps.where.window.menu;
     let last: RequestRecord = {
         request: request.id,
         state: 'checking',
@@ -637,11 +645,13 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         ended = true;
         return end(refuse(deps.unsupported));
     }
-    // A window that shows the Demo reads no feed (`demoResolverRule`): it says so, and nothing is checked, stopped or kept.
-    if (deps.where !== 'headless' && deps.where.window.demo) {
+    // A window that shows the Demo reads no feed (`demoResolverRule`) and holds no updater: it says so, and nothing is
+    // checked, stopped or kept.
+    if (deps.where === 'demo') {
         ended = true;
         return end(refuse('demo_open'));
     }
+    const { updater } = deps;
     // A go that is there before the request was taken is none: the verb makes its go only once it has read `downloaded`.
     const go = goFile(deps.data, request.id);
     const waiting = deps.go ?? goWait;
@@ -696,7 +706,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     const taken: TakenRequest = { to: request.to, feed: request.feed };
     let outcome: TakenOutcome;
     try {
-        outcome = await deps.updater().take(taken, {
+        outcome = await updater().take(taken, {
             install: !window || deps.windowOpen === 'close',
             // Only a request that names --await-go waits for the verb's go; every other request installs as before.
             ...(request.awaitGo === true ? { go: awaitGo } : {}),

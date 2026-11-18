@@ -6,6 +6,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, r
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { demoMenu } from '../src/mode.ts';
 import {
     applyExit,
     applyExits,
@@ -43,6 +44,7 @@ import {
     type RequestFileIo,
     type RequestRecord,
     type TakeDeps,
+    type TakeDepsCommon,
     type UpdateRequest,
 } from '../src/update-request.ts';
 import { Updater, type TakenHow, type TakenOutcome, type TakenRequest, type TakenStep } from '../src/updates.ts';
@@ -252,15 +254,14 @@ function handTimers() {
     };
 }
 
-function deps(data: string, updater: TakeDeps['updater'], extra: Partial<TakeDeps> = {}) {
+/** What every taker is given, the test's own writes and clock among them. */
+function common(data: string, extra: Partial<TakeDepsCommon>) {
     const log = memoryLog();
     const written: RequestRecord[] = [];
-    const all: TakeDeps = {
+    const base: TakeDepsCommon = {
         data,
         from: '0.49.0',
-        where: 'headless',
         unsupported: null,
-        updater,
         windowOpen: 'stop',
         log,
         write: (file, record) => {
@@ -274,6 +275,21 @@ function deps(data: string, updater: TakeDeps['updater'], extra: Partial<TakeDep
         now: () => new Date('2026-11-17T10:00:00Z'),
         ...extra,
     };
+    return { base, log, written };
+}
+
+/** A start of its own, or a Live window where `where` says so, taking the request with `updater`. */
+function deps(data: string, updater: () => Pick<Updater, 'take'>, extra: Partial<TakeDepsCommon> & { where?: Exclude<TakeDeps['where'], 'demo'> } = {}) {
+    const { where = 'headless', ...rest } = extra;
+    const { base, log, written } = common(data, rest);
+    const all: TakeDeps = { ...base, where, updater };
+    return { all, log, written };
+}
+
+/** A window that shows the Demo, which holds no updater. */
+function demoDeps(data: string, extra: Partial<TakeDepsCommon> = {}) {
+    const { base, log, written } = common(data, extra);
+    const all: TakeDeps = { ...base, where: 'demo' };
     return { all, log, written };
 }
 
@@ -332,7 +348,7 @@ test('the switch: a window that takes a request stops at the download by default
     for (const windowOpen of ['stop', 'close'] as const) {
         const data = scratch(t);
         const u = planted({ state: 'refused', reason: 'window_open', offered: '0.49.1', runtimeStopped: false, kept: null });
-        const { all } = deps(data, u.updater, { where: { window: { menu: true, demo: false } }, windowOpen });
+        const { all } = deps(data, u.updater, { where: { window: { menu: true } }, windowOpen });
         const end = await taken(request, all);
         assert.equal(u.asked[0]?.how.install, windowOpen === 'close', windowOpen);
         assert.equal(end.window, true);
@@ -363,7 +379,7 @@ test('the switch: a window that takes a request stops at the download by default
         };
         const updater = new Updater({ updater: electron, version: '0.49.0', application: null, rollback: join(data, 'desktop', 'rollback'), log: memoryLog(), stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
         updater.prepare();
-        const { all } = deps(data, () => updater, { where: { window: { menu: true, demo: false } }, windowOpen });
+        const { all } = deps(data, () => updater, { where: { window: { menu: true } }, windowOpen });
         const end = await taken(request, all);
         if (windowOpen === 'stop') {
             assert.equal(end.reason, 'window_open');
@@ -380,7 +396,7 @@ test('a window refuses a request that names a feed before it checks anything: no
     for (const windowOpen of ['stop', 'close'] as const) {
         for (const menu of [true, false]) {
             const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: null });
-            const end = await taken(fed, deps(scratch(t), u.updater, { where: { window: { menu, demo: false } }, windowOpen }).all);
+            const end = await taken(fed, deps(scratch(t), u.updater, { where: { window: { menu } }, windowOpen }).all);
             assert.equal(end.state, 'refused');
             assert.equal(end.reason, 'window_feed');
             assert.equal(end.window, true);
@@ -394,7 +410,7 @@ test('a window refuses a request that names a feed before it checks anything: no
     const updater = new Updater({ updater: electron, version: '0.49.0', application: null, rollback: join(data, 'desktop', 'rollback'), log: memoryLog(), stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
     updater.prepare();
     const prepared = [...calls];
-    const end = await taken(fed, deps(data, () => updater, { where: { window: { menu: true, demo: false } }, windowOpen: 'stop' }).all);
+    const end = await taken(fed, deps(data, () => updater, { where: { window: { menu: true } }, windowOpen: 'stop' }).all);
     assert.equal(end.reason, 'window_feed');
     assert.deepEqual(calls, prepared, 'no setFeedURL, no check, no download');
     assert.deepEqual(updater.current, { step: 'idle' }, 'nothing waits under the install item');
@@ -411,10 +427,10 @@ test('a window refuses a request that names a feed before it checks anything: no
     assert.doesNotMatch(JSON.stringify(log.lines), /127\.0\.0\.1|8123|feed\/|req_01JA/);
 });
 
-test('a Demo window refuses a terminal’s request with its own reason before any updater is made: nothing checked, stopped or kept', async (t) => {
+test('a Demo window, which holds no updater, refuses a terminal’s request with its own reason: nothing checked, stopped or kept', async (t) => {
     for (const windowOpen of ['stop', 'close'] as const) {
-        const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: '/data/desktop/rollback/0.49.0/Jason.app' });
-        const { all, written, log } = deps(scratch(t), u.updater, { where: { window: { menu: false, demo: true } }, windowOpen });
+        const { all, written, log } = demoDeps(scratch(t), { windowOpen });
+        assert.equal('updater' in all, false, 'the Demo is given no updater to take it with');
         const end = await taken(request, all);
         assert.equal(end.state, 'refused');
         assert.equal(end.reason, 'demo_open');
@@ -424,30 +440,30 @@ test('a Demo window refuses a terminal’s request with its own reason before an
         assert.equal(end.kept, null, 'no copy was kept');
         assert.match(end.message ?? '', /^Jason Desktop is showing the Demo, which takes no update, so nothing was checked, stopped or changed\./);
         assert.match(end.message ?? '', /Choose Back to Your Own Installation in its Jason menu, or quit Jason Desktop, then run jason update apply again\.$/);
-        assert.equal(u.made(), 0, 'no updater is made');
+        assert.ok((end.message ?? '').includes(`Choose ${demoMenu('demo')!.back.label} in its Jason menu`), 'the item the Demo’s menu draws');
         assert.deepEqual(written.map((record) => record.state), ['checking', 'refused']);
         assert.ok(log.lines.some((line) => line.name === 'update_request_ended' && line.fields.Code === 'demo_open'));
     }
 });
 
 test('a Demo window decides the Demo after a feed and a build it cannot take, and before a go found there', async (t) => {
-    const demo: TakeDeps['where'] = { window: { menu: false, demo: true } };
     const fed: UpdateRequest = { ...request, feed: 'http://127.0.0.1:8123/feed/' };
-    const byFeed = await taken(fed, deps(scratch(t), planted({ state: 'current' }).updater, { where: demo }).all);
+    const byFeed = await taken(fed, demoDeps(scratch(t)).all);
     assert.equal(byFeed.reason, 'window_feed');
+    assert.equal(byFeed.window, true);
     for (const unsupported of ['not_installed', 'unsupported_platform'] as const) {
-        const end = await taken(request, deps(scratch(t), planted({ state: 'current' }).updater, { where: demo, unsupported }).all);
+        const end = await taken(request, demoDeps(scratch(t), { unsupported }).all);
         assert.equal(end.reason, unsupported);
     }
     const there: GoWait = { exists: () => true, ms: 10, pollMs: 5, sleep: async () => undefined };
-    const waiting = await taken({ ...request, awaitGo: true }, deps(scratch(t), planted({ state: 'current' }).updater, { where: demo, go: there }).all);
+    const waiting = await taken({ ...request, awaitGo: true }, demoDeps(scratch(t), { go: there }).all);
     assert.equal(waiting.reason, 'demo_open');
 });
 
 test('a Live window still takes the request with its updater: the Demo’s reason is the Demo’s alone', async (t) => {
     for (const menu of [true, false]) {
         const u = planted({ state: 'current' });
-        const end = await taken(request, deps(scratch(t), u.updater, { where: { window: { menu, demo: false } } }).all);
+        const end = await taken(request, deps(scratch(t), u.updater, { where: { window: { menu } } }).all);
         assert.equal(end.state, 'current');
         assert.equal(u.made(), 1);
         assert.equal(u.asked.length, 1);
@@ -624,11 +640,12 @@ test('the settling start takes the single-instance lock, and leaves the record t
 test('a Live window’s run takes requests with its own updater, and the Demo’s says it is the Demo', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const live = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
-    assert.ok(live.includes('serveRequests(log, paths.data, { menu: updates !== null, demo: false }, () => updates ?? requestUpdater({ data: paths.data, log }));'));
+    assert.ok(live.includes('serveRequests(log, paths.data, { menu: updates !== null, updater: () => updates ?? requestUpdater({ data: paths.data, log }) });'));
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
-    assert.ok(demo.includes('serveRequests(log, runOn.person, { menu: false, demo: true }, () =>'), 'the Demo’s window refuses as the Demo');
+    assert.ok(demo.includes("serveRequests(log, runOn.person, 'demo');"), 'the Demo’s window refuses as the Demo');
+    assert.equal(demo.includes('requestUpdater('), false, 'and holds no updater');
     const served = main.slice(main.indexOf('function serveRequests('), main.indexOf('\n}\n', main.indexOf('function serveRequests(')));
-    for (const member of ['data,', 'where: { window },', 'unsupported: requestSupport(app.isPackaged, process.platform),', 'updater,', 'windowOpen: windowOpenUpdate,', 'log,']) {
+    for (const member of ['data,', "...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),", 'unsupported: requestSupport(app.isPackaged, process.platform),', 'windowOpen: windowOpenUpdate,', 'log,']) {
         assert.ok(served.includes(member), member);
     }
     assert.equal(existsSync(new URL('../src/update-start.ts', import.meta.url)), true);
@@ -774,7 +791,7 @@ test('a window that would install waits for the go too, and its menu stays at th
         const data = scratch(t);
         const { updater, order } = realUpdater(data);
         const wait = goWaitOf(3);
-        const end = await taken(waits, deps(data, () => updater, { where: { window: { menu: true, demo: false } }, windowOpen, go: wait }).all);
+        const end = await taken(waits, deps(data, () => updater, { where: { window: { menu: true } }, windowOpen, go: wait }).all);
         assert.equal(end.window, true);
         assert.equal(end.reason, windowOpen === 'close' ? 'go_timed_out' : 'window_open', windowOpen);
         if (windowOpen === 'close') assert.match(end.message ?? '', /The download waits under the install item of Jason Desktop's menu/);

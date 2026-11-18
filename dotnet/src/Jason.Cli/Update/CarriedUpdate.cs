@@ -1039,6 +1039,15 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>The jason a runtime is started again from: the one at the carried path, else this one where it moved.</summary>
     private string Whole => File.Exists(carried.Executable) || Moved is null ? carried.Executable : Moved;
 
+    /// <summary>
+    /// The Desktop's reasons that pass, each a refusal worth asking again as it stands; every other reason, the Demo's
+    /// <c>demo_open</c> among them, refuses the same request again until the person changes something.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> RetryableRefusals = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "busy", "window_open", "check_failed", "download_failed", "runtime_not_stopped", "timed_out", "go_timed_out", "go_there",
+    };
+
     /// <summary>A refusal of the Desktop's, in its own words.</summary>
     private static UpdateException RefusedBy(UpdateLedger ledger, DesktopAnswer answer)
     {
@@ -1048,7 +1057,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             $"Jason Desktop refused to install {ledger.ToVersion} ({reason}): {answer.Message ?? "it gave no sentence."}"
             + (answer.Offered is { } offered ? $" Its feed offered {offered}." : string.Empty),
             null,
-            retryable: reason is "busy" or "window_open" or "check_failed" or "download_failed" or "runtime_not_stopped" or "timed_out" or "go_timed_out" or "go_there");
+            retryable: RetryableRefusals.Contains(reason));
     }
 
     private static UpdateException NoAnswer(UpdateLedger ledger, string why) =>

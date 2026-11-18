@@ -54,6 +54,25 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The page lists the Desktop's refusals a carried update calls retryable, and the list is the set the verb retries,
+    /// read out of the code: a reason added on one side alone is a row the page and the verb tell apart.
+    /// </summary>
+    [Fact]
+    public void The_page_lists_the_desktop_refusals_the_verb_retries()
+    {
+        const string lead = "Retryable where the reason is one that passes: ";
+        var row = Page("docs", "release-and-update.md").Split('\n').Single(line => line.StartsWith("| `update_refused_by_desktop` |", StringComparison.Ordinal));
+        var at = row.IndexOf(lead, StringComparison.Ordinal);
+        Assert.True(at > 0, row);
+        var listed = row[(at + lead.Length)..].TrimEnd().TrimEnd('|').Split(", ").Select(code => code.Trim().Trim('`')).ToList();
+
+        Assert.Equal(listed.Count, listed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            Jason.Cli.Update.CarriedUpdate.RetryableRefusals.Order(StringComparer.Ordinal),
+            listed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// The pages say what an executable another program holds open meets: the update's and the rollback's moves wait for
     /// it, and the wait they name is the uninstall's own rule's. The install page no longer says it of install.ps1, which
     /// moves no executable of its own any more: the application's installer places it.
