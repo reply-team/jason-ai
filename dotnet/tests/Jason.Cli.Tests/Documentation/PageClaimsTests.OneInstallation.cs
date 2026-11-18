@@ -38,6 +38,37 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// What a person or an agent does after <c>jason uninstall</c> on Windows, in one wording wherever it is said: the
+    /// report that names the waiter's process, the verb's help and the update page's removal table. The moment is once
+    /// that process has ended, and only if Jason is still listed in Installed apps then; an uninstall started there
+    /// before it has ended runs beside the waiter's, and the second starts the application from the folder the first is
+    /// deleting. The desktop page says the two doors are one or the other, never both.
+    /// </summary>
+    internal const string AfterTheWaiter = "Once that process has ended, and only if Jason is then still listed in Installed apps in Settings, uninstall Jason there; do not start that uninstall before then, since two at once can leave part of the folder behind.";
+
+    [Fact]
+    public async Task What_follows_jason_uninstall_on_Windows_waits_for_the_process_the_report_names()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+        var help = Flat(output.ToString());
+        Assert.Contains("so the folder goes after this ends; the report names the waiter's process. " + AfterTheWaiter, help, StringComparison.Ordinal);
+
+        var update = Flat(Page("docs", "release-and-update.md"));
+        Assert.Contains("The report says the folder goes after the verb ends and names the waiter's process. " + AfterTheWaiter, update, StringComparison.Ordinal);
+        Assert.Contains("The uninstaller in Installed apps runs this verb through the application's own start, so a second one started there runs the application's `Jason.exe` from the folder while the first deletes the folder, and that file stays.", update, StringComparison.Ordinal);
+
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains("Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal: the two are alternatives, one or the other, not both. Either is the one uninstall", desktop, StringComparison.Ordinal);
+
+        foreach (var (place, text) in new[] { ("the help", help), ("docs/release-and-update.md", update) })
+        {
+            Assert.False(text.Contains("still listed in Installed apps afterwards", StringComparison.Ordinal), $"{place} still says \"afterwards\" with no moment.");
+        }
+    }
+
+    /// <summary>
     /// On macOS and Windows the carried <c>jason uninstall</c> is the one uninstall. The install page, the README and the
     /// handbook say so where they take Jason off, with its other doors, and no page sends a person on macOS to Remove What
     /// Jason Placed, which is Linux's alone now, or to move Jason.app to the Trash. What the install page says the verb
