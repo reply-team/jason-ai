@@ -776,8 +776,9 @@ public static partial class DesktopRemoval
 
         if (plan.CommandLineInstall is { } old)
         {
-            // What became of an executable held by a running process is said by the routine itself, once.
-            var (_, removed) = new CommandLineRemoval(places, kept, problems).Remove(old, replacedByWrapper: false);
+            // What became of an executable held by a running process is said once, by the removal's sweep of the folder it was
+            // renamed into, which comes after this: taken, or left with what to do.
+            var (_, removed) = new CommandLineRemoval(places, kept, problems) { SaysAside = false }.Remove(old, replacedByWrapper: false);
             done.Add($"Took off the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}.");
         }
 

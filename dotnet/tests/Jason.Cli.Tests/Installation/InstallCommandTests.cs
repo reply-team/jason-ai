@@ -11,6 +11,8 @@ using Jason.Cli.Tests.Process;
 using Jason.Cli.Tests.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Tests;
@@ -524,6 +526,41 @@ public sealed class InstallCommandTests : IDisposable
 
         var target = CommandFiles.WrapperTarget(File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
         Assert.Equal((executable, (string?)_data.Paths.Root), target);
+    }
+
+    /// <summary>
+    /// The move's routine, <c>jason install --retire</c>, is started with <c>JASON_DATA_DIR</c> always set, so "set" does not
+    /// mean the person named one. The wrapper names a data directory only where it is not the default one: with the variable
+    /// naming <c>~/.jason</c> it is the wrapper every other door writes, and with a directory of the person's own it names it.
+    /// </summary>
+    [Theory]
+    [InlineData("the default")]
+    [InlineData("the default, cased otherwise")]
+    [InlineData("another")]
+    public async Task The_routine_s_wrapper_names_a_data_directory_only_where_it_is_not_the_default(string spelled)
+    {
+        // The default spelled in another case is the same folder where the platform's file systems ignore case, as the
+        // tree's own folder comparison says, and another folder where they do not.
+        var theDefault = spelled == "the default" || (spelled == "the default, cased otherwise" && FolderPaths.Comparison == StringComparison.OrdinalIgnoreCase);
+        var old = PlantMacCommandLineInstall();
+        var data = new JasonPaths(spelled switch
+        {
+            "the default" => Path.Combine(Home, JasonPaths.DefaultFolder),
+            "the default, cased otherwise" => Path.Combine(Home, JasonPaths.DefaultFolder.ToUpperInvariant()),
+            _ => _data.Paths.Root,
+        });
+        var executable = Carried();
+        var (env, _) = Environment(MacPlaces(), executable, new Dictionary<string, string> { [JasonPaths.DataDirectoryVariable] = data.Root });
+        env = env with { Paths = data };
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, old), Ct);
+
+        var target = CommandFiles.WrapperTarget(File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
+        Assert.Equal((executable, theDefault ? null : (string?)data.Root), target);
+        if (theDefault)
+        {
+            Assert.Equal(CommandFiles.Wrapper(executable, null), File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
+        }
     }
 
     [Fact]
@@ -1173,9 +1210,76 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Contains(recorded, path => path.StartsWith("operating/", StringComparison.Ordinal));
     }
 
-    /// <summary>Note 7: a stop that fails leaves the runtime resumed, not draining.</summary>
+    /// <summary>
+    /// Note 7, the stop's answer read as the stop that did not finish is: a runtime that refused the shutdown took nothing,
+    /// so no start is owed beside it, and it is resumed, not left draining.
+    /// </summary>
     [Fact]
-    public async Task A_runtime_that_would_not_stop_is_resumed()
+    public async Task A_runtime_that_refused_the_stop_is_resumed_and_owes_no_start()
+    {
+        var (old, asked, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, """{"error":{"code":"internal","message":"no","retryable":false}}"""));
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(MachineSetup.RuntimeStates.WouldNotStop, Report(output).GetProperty("runtime").GetString());
+        Assert.Equal(Operations.SystemResume, asked[^1]);
+        Assert.True(File.Exists(old));
+        Assert.False(File.Exists(_data.Paths.StartOwedFile), "a runtime that refused the stop was said to owe a start");
+    }
+
+    /// <summary>
+    /// A runtime that took the shutdown and had not ended within the stop's wait is going down: the note that a start is
+    /// owed stays for when it has ended, nothing is resumed, and nothing of the install is retired.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_took_the_stop_and_had_not_ended_keeps_the_note_and_is_not_resumed()
+    {
+        var (old, asked, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD")));
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.Equal(MachineSetup.RuntimeStates.WouldNotStop, report.GetProperty("runtime").GetString());
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.DoesNotContain(Operations.SystemResume, asked);
+        Assert.True(File.Exists(old));
+        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "a runtime going down was left with no note that a start is owed");
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("took the stop", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A runtime that ended while its stop said otherwise, here going down as it refused: it runs no longer, so the note that
+    /// a start is owed stays, the runtime is said stopped, nothing is resumed, and the install is still held for this run.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_ended_while_its_stop_said_otherwise_keeps_the_note_and_is_not_resumed()
+    {
+        FakeProcessControl? control = null;
+        var (old, asked, processes, env, output) = OldRuntimeStopping(_ =>
+        {
+            control!.RunningPids.Remove(RuntimeVerbs.Pid);
+            return RuntimeVerbs.Response(HttpStatusCode.ServiceUnavailable, """{"error":{"code":"internal","message":"going","retryable":false}}""");
+        });
+        control = processes;
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.Equal(MachineSetup.RuntimeStates.Stopped, report.GetProperty("runtime").GetString());
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.DoesNotContain(Operations.SystemResume, asked);
+        Assert.True(File.Exists(old));
+        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "a runtime that ended was left with no note that a start is owed");
+    }
+
+    /// <summary>
+    /// A command-line install at <c>~/.local/bin/jason</c> whose runtime runs from it, drains with nothing running, resumes,
+    /// and answers the shutdown with <paramref name="shutdown"/>.
+    /// </summary>
+    private (string Old, List<string> Asked, FakeProcessControl Processes, CliEnvironment Env, StringWriter Output) OldRuntimeStopping(Func<HttpRequestMessage, HttpResponseMessage> shutdown)
     {
         var old = PlantMacCommandLineInstall();
         Directory.CreateDirectory(_data.Paths.Root);
@@ -1189,20 +1293,142 @@ public sealed class InstallCommandTests : IDisposable
             return operation switch
             {
                 Operations.SystemDrain => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 0), JasonJson.Options)),
-                Operations.SystemShutdown => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD")),
+                Operations.SystemResume => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Running, 0), JasonJson.Options)),
+                Operations.SystemShutdown => shutdown(request),
                 _ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD")),
             };
         });
         var (env, output) = Environment(MacPlaces(), Carried());
-        env = env with { HttpHandler = handler, Processes = processes };
+        return (old, asked, processes, env with { HttpHandler = handler, Processes = processes }, output);
+    }
 
-        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+    /// <summary>
+    /// A stop that did not finish holds the install. Cancelled while the drain waits for a running attempt, as a Ctrl+C or
+    /// an agent's timeout does: the old executable is not written over, nothing is retired, the runtime is said to run, the
+    /// drain is taken off, and no start is said to be owed beside a runtime that answers.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_while_the_drain_waits_holds_the_install()
+    {
+        using var cancel = new CancellationTokenSource();
+        var drained = false;
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+        {
+            drained |= operation == Operations.SystemDrain;
+            if (drained && operation == Operations.SystemInfo)
+            {
+                cancel.Cancel();
+            }
 
-        Assert.Equal(ExitCodes.ApiError, exit);
-        Assert.Equal("would_not_stop", Report(output).GetProperty("runtime").GetString());
+            return null;
+        });
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), cancel.Token);
+
+        AssertHeld(old, asked, output);
+        Assert.DoesNotContain(Operations.SystemShutdown, asked);
+    }
+
+    /// <summary>A stop that did not finish holds the install: the drain's call fails with something no step expected.</summary>
+    [Fact]
+    public async Task A_drain_that_fails_holds_the_install()
+    {
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+            operation == Operations.SystemDrain ? throw new InvalidOperationException("the drain failed") : null);
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        AssertHeld(old, asked, output);
+        Assert.DoesNotContain(Operations.SystemShutdown, asked);
+    }
+
+    /// <summary>A stop that did not finish holds the install: the stop's call fails with something no step expected.</summary>
+    [Fact]
+    public async Task A_stop_that_fails_holds_the_install()
+    {
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+            operation == Operations.SystemShutdown ? throw new InvalidOperationException("the stop failed")
+            : operation == Operations.SystemInfo ? RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD"))
+            : null);
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        AssertHeld(old, asked, output, owed: true);
+        Assert.Contains(Operations.SystemShutdown, asked);
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("whether the runtime took it is not known", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A cancel inside the shutdown's send, between the runtime receiving it and its answer being read: whether the runtime
+    /// took it is not known, so the note that a start is owed stays, inert beside a runtime that answers and taken back by a
+    /// runtime's own start or a deliberate <c>jason runtime stop</c>; the resume is still tried, and the report says the
+    /// stop's fate is not known.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_inside_the_stops_send_keeps_the_note_and_says_the_stops_fate_is_unknown()
+    {
+        using var cancel = new CancellationTokenSource();
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+        {
+            if (operation == Operations.SystemShutdown)
+            {
+                cancel.Cancel();
+                throw new OperationCanceledException(cancel.Token);
+            }
+
+            return operation == Operations.SystemInfo ? RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD")) : null;
+        });
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), cancel.Token);
+
+        AssertHeld(old, asked, output, owed: true);
+        Assert.Contains(Operations.SystemShutdown, asked);
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("whether the runtime took it is not known", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A command-line install at <c>~/.local/bin/jason</c> whose runtime runs from it, answering <paramref name="answer"/> where
+    /// that gives an answer: otherwise a drain that drains, one attempt still running, a resume that resumes and a stop that
+    /// is taken.
+    /// </summary>
+    private (string Old, List<string> Asked, CliEnvironment Env, StringWriter Output) OldRuntimeAnswering(Func<string, HttpResponseMessage?> answer)
+    {
+        var old = PlantMacCommandLineInstall();
+        Directory.CreateDirectory(_data.Paths.Root);
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var oneRunning = System.Text.Json.Nodes.JsonNode.Parse(RuntimeVerbs.InfoJson("rt_OLD"))!;
+        oneRunning["dispatcher"]!["running_attempts"] = 1;
+        var asked = new List<string>();
+        var handler = new FakeHandler(request =>
+        {
+            var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+            asked.Add(operation);
+            return answer(operation) ?? operation switch
+            {
+                Operations.SystemDrain => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 1), JasonJson.Options)),
+                Operations.SystemResume => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Running, 1), JasonJson.Options)),
+                Operations.SystemShutdown => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD")),
+                _ => RuntimeVerbs.Response(HttpStatusCode.OK, oneRunning.ToJsonString()),
+            };
+        });
+        var (env, output) = Environment(MacPlaces(), Carried());
+        return (old, asked, env with { HttpHandler = handler, Processes = processes }, output);
+    }
+
+    /// <summary>
+    /// What a held install is: its executable as it was, nothing retired, the runtime said, the drain taken off, and the note
+    /// that a start is owed standing only where a shutdown was sent and its answer never came (<paramref name="owed"/>).
+    /// </summary>
+    private void AssertHeld(string old, List<string> asked, StringWriter output, bool owed = false)
+    {
+        Assert.Equal(new byte[200_000], File.ReadAllBytes(old));
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.NotEqual(MachineSetup.RuntimeStates.NotRunning, report.GetProperty("runtime").GetString());
+        Assert.Contains(Operations.SystemDrain, asked);
         Assert.Equal(Operations.SystemResume, asked[^1]);
-        Assert.True(File.Exists(old));
-        Assert.False(File.Exists(_data.Paths.StartOwedFile), "a runtime that did not stop was said to owe a start");
+        Assert.True(owed == File.Exists(_data.Paths.StartOwedFile), owed ? "a stop whose fate is not known took back the note that a start is owed" : "a runtime that took no stop was said to owe a start");
     }
 
     /// <summary>Note 7: a runtime whose descriptor names no image may run from the file, so the file is not retired, and the report says why.</summary>
