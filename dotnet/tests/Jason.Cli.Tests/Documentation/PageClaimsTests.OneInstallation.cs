@@ -216,7 +216,8 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// On macOS and Windows a Jason Desktop installed by hand, from its disk image or its installer, sets the machine up as
-    /// the install script does: the application's first start of each version runs the <c>jason install</c> it carries, and
+    /// the install script does once it is in its place, and never from the disk image itself: the application's first start
+    /// of each version from its place runs the <c>jason install</c> it carries, and
     /// the Windows installer runs it too. The pages that offer the download say so; the installer's own include is where
     /// the Windows half is held, and the desktop's tests hold the first start (<c>desktop/test/one-installation-pages.test.ts</c>).
     /// </summary>
@@ -227,7 +228,7 @@ public partial class PageClaimsTests
         Assert.Contains("!macro customInstall", installer, StringComparison.Ordinal);
         Assert.Contains("nsExec::Exec '\"$INSTDIR\\resources\\bundle\\jason.exe\" install'", installer, StringComparison.Ordinal);
 
-        Assert.Contains("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
+        Assert.Contains("Installed by hand from one of them, it sets the machine up as the script does (§2), once it is in its place: on macOS, drag Jason into Applications, or into the Applications folder in your home, and open it there. Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first. From its place, the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
         Assert.Contains("the Windows installer runs it too, at every install and update.", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
         Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found.", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.Contains("and so does the package for your system below, installed by hand: the application's first start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);

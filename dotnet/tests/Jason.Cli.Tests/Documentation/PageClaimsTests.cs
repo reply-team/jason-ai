@@ -2680,6 +2680,30 @@ public partial class PageClaimsTests
     }
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
+    /// <summary>
+    /// The pages say what an application opened from its disk image does, as the code does it: <c>jason install</c> refuses
+    /// with <c>install_vanishing_place</c> before anything is stopped, written or retired, and the desktop records a set-up
+    /// by its place as well as its version. INSTALL.md said such an install set the machine up as the script does.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/INSTALL.md", "Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first.")]
+    [InlineData("docs/desktop.md", "opened from the disk image itself, it sets nothing up and says to move it first.")]
+    [InlineData("docs/desktop.md", "`jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything")]
+    [InlineData("docs/desktop.md", "Nothing else follows from such a place: no finishing step, no runtime started and nothing recorded, so each start from there asks again")]
+    [InlineData("docs/desktop.md", "the place it ran from (the `jason` the application carries)")]
+    [InlineData("docs/release-and-update.md", "is refused with `install_vanishing_place` before anything is stopped, written or retired, and before the update's lock is read or taken")]
+    [InlineData("desktop/README.md", "`ran_from`, the carried `jason` it ran from")]
+    public void The_pages_say_an_application_opened_from_its_disk_image_sets_nothing_up(string page, string said)
+    {
+        Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
+        Assert.DoesNotContain("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Equal("install_vanishing_place", CliErrors.InstallVanishingPlace);
+
+        using var paths = new TempPaths();
+        var help = Flat(Jason.Cli.Installation.InstallCommand.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)).Description ?? string.Empty);
+        Assert.Contains("it refuses with install_vanishing_place before anything is stopped, written or retired", help, StringComparison.Ordinal);
+    }
+
     private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
 
     /// <summary>A page with the marks of a quoted block taken off, so a sentence quoted across lines reads as one.</summary>

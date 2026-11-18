@@ -124,6 +124,14 @@ public static class InstallCommand
         JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
         is no update folder, or no data directory at all, it takes no lock and makes none.
 
+        From a place that goes away: on macOS, run by the jason of an application opened from its disk image, or
+        of a copy macOS runs from a temporary place of its own (App Translocation) because it was opened where it
+        was downloaded, it refuses with install_vanishing_place before anything is stopped, written or retired:
+        nothing placed, retired or stopped, and no lock taken. The sentence says to move Jason to Applications, or
+        to ~/Applications, and open it there. A volume is that place only where it is read-only, as access(2)
+        answers, which writes nothing; a disk of your own is not refused by its path. Windows is not refused this
+        way: its installer puts the application in place.
+
         Inside a move of a command-line install into Jason Desktop: the setup the move runs is given JASON_MOVE,
         naming the move's record. A jason install that finds it, while that record in <data>/update/move.json
         stands not done, does nothing - nothing placed, retired or stopped - says so in its document and exits 0:
@@ -186,6 +194,13 @@ public static class InstallCommand
                 "This jason is not the one Jason Desktop carries (no version.json beside it), so nothing was read or written. "
                 + "Run the jason inside the application: on macOS Jason.app/Contents/Resources/bundle/jason, on Windows "
                 + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
+        }
+
+        // From a place that goes away, a mounted disk image or a translocated copy, nothing is set up: before the update's
+        // lock is read or taken, and before anything is stopped, written or retired (VanishingPlace).
+        if (VanishingPlace.Refusal(carried, places) is { } vanishing)
+        {
+            return Refuse(env, options.Human, CliErrors.InstallVanishingPlace, vanishing);
         }
 
         // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`

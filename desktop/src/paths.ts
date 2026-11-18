@@ -4,7 +4,7 @@
  */
 
 import { closeSync, fstatSync, lstatSync, openSync, readSync, statSync, type Stats } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve, win32 } from 'node:path';
 
 export interface DesktopPaths {
     /** The data directory: the one the CLI and the runtime use, never one of the desktop's own. */
@@ -500,4 +500,20 @@ export function layoutRefusal(layout: DataLayout, current: string): { code: stri
     if (stamp.state === 'unreadable') return { code: layoutUnreadableCode, message: layoutUnreadableSentence(stamp.path, stamp.problem) };
     if (stamp.state === 'read') return { code: layoutNewerCode, message: layoutNewerSentence(stamp.writtenBy, current) };
     return null;
+}
+
+/**
+ * The data directory a wrapper of the command line names, as the desktop compares one: none where `JASON_DATA_DIR` is
+ * unset or names the default `~/.jason`, which the command line's wrapper does not pin; else the variable as set. The
+ * default is compared as the command line compares it: the full path, a trailing separator dropped, letter for letter on
+ * macOS and Linux and whatever the case on Windows.
+ */
+export function namedDataDirectory(env: Readonly<Record<string, string | undefined>>, home: string, platform: NodeJS.Platform): string | null {
+    const named = env.JASON_DATA_DIR;
+    if (!named) return null;
+    const paths = platform === 'win32' ? win32 : posix;
+    const full = paths.resolve(named);
+    const theDefault = paths.join(home, '.jason');
+    const same = platform === 'win32' ? full.toLowerCase() === theDefault.toLowerCase() : full === theDefault;
+    return same ? null : named;
 }
