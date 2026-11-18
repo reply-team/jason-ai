@@ -193,8 +193,22 @@ internal static class StartInFlight
         + $" It is neither the runtime of {env.Paths.Root}{runtime}, nor anything that runtime started. "
         + "It may be a runtime that never came up: end it, or wait for it to end, then uninstall again. "
         + $"Or it may be a runtime of another data directory, which `\"{image}\" runtime stop` with JASON_DATA_DIR set to that "
-        + "directory stops, a `jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; in "
-        + "another session of this account, it may be a task that runs whether you are signed in or not. Once none runs, run this again.";
+        + "directory stops, a `jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; "
+        + (Windows(env)
+            ? "in another session of this account, it may be a task that runs whether you are signed in or not."
+            : $"{SharedComputer}.")
+        + " Once none runs, run this again.";
+
+    /// <summary>
+    /// The case a look that cannot tell a process's account names without claiming it: on a Mac, the one application in
+    /// <c>/Applications</c> is every account's, and another account's Jason runs its <c>jason</c> by the same path.
+    /// </summary>
+    public const string SharedComputer =
+        "on a computer more than one account uses, it may be Jason running under another account from this same application, which that account quits";
+
+    /// <summary>Whether the installation is Windows', by the system's places where they are known, else by this machine.</summary>
+    private static bool Windows(CliEnvironment env) =>
+        env.Setup is { } places ? places.Platform is SetupSystem.Windows : OperatingSystem.IsWindows();
 
     /// <summary>"process 9001" or "process 9001, 9004", as every refusal of this verb names processes.</summary>
     public static string Processes(IReadOnlyList<int> pids) =>

@@ -110,7 +110,9 @@ public sealed partial class UninstallCarriedTests
         _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STARTING"));
         var clock = new Leaping();
 
-        // This process, the runtime, and a plugin host the runtime started, all from the carried jason, until the stop.
+        // This process, the runtime, and a plugin host the runtime started, all from the carried jason, until the stop. The
+        // remover here tells the plugin host's parent, as Windows does; elsewhere no parent is told, and a runtime's children
+        // count until its stop ends them, within the moment the look after the stop gives them.
         remover.Parents[9002] = RuntimeVerbs.Pid;
         remover.Looks = (image, _) => Same(image, executable) && processes.RunningPids.Contains(RuntimeVerbs.Pid)
             ? [System.Environment.ProcessId, RuntimeVerbs.Pid, 9002]
@@ -349,6 +351,71 @@ public sealed partial class UninstallCarriedTests
         Assert.True(clock.Passed < TimeSpan.FromSeconds(60), $"it waited {clock.Passed}");
         Assert.Contains($"any-session {executable}", remover.Reads);
         Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
+    }
+
+    /// <summary>
+    /// A process of the same application under another account, as on a Mac more than one account uses, where the one
+    /// application in /Applications is every account's: the look cannot tell its account, so it is refused, never taken
+    /// from under that account's Jason. With this account's runtime down, at the bound, nothing removed; with it up, after
+    /// this account's runtime is stopped and the look after the stop has given the rest their moment. Either way the
+    /// refusal names the case without claiming it, and says nothing of another session of this account.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_jason_of_the_same_application_under_another_account_is_refused_and_named_as_such(bool runtimeUp)
+    {
+        const int Theirs = 9400;
+        var executable = MacApplication();
+        var application = ApplicationOf(executable);
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        var registrar = (Autostart.RecordingRegistrar)env.Autostart!;
+        var processes = new FakeProcessControl();
+        var clock = new Leaping();
+        var stops = 0;
+        if (runtimeUp)
+        {
+            _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STARTING"));
+            processes.RunningPids.Add(RuntimeVerbs.Pid);
+        }
+
+        remover.Looks = (image, _) => !Same(image, executable)
+            ? []
+            : processes.RunningPids.Contains(RuntimeVerbs.Pid) ? [RuntimeVerbs.Pid, Theirs] : [Theirs];
+        env = env with { Processes = processes, Clock = clock, HttpHandler = Stopping(processes, () => stops++) };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        string code;
+        string message;
+        if (runtimeUp)
+        {
+            var report = JsonDocument.Parse(output.ToString()).RootElement;
+            code = report.GetProperty("refusal_code").GetString()!;
+            message = report.GetProperty("refusal").GetString()!;
+            Assert.True(stops > 0, "this account's runtime was not stopped first");
+            Assert.Contains("with its runtime stopped", message, StringComparison.Ordinal);
+            Assert.Contains("its logon registration included", message, StringComparison.Ordinal);
+            Assert.True(clock.Passed >= TimeSpan.FromSeconds(10) && clock.Passed < TimeSpan.FromSeconds(60), $"it waited {clock.Passed}");
+        }
+        else
+        {
+            var refusal = RuntimeVerbs.Envelope(output.ToString());
+            code = refusal.Code;
+            message = refusal.Message;
+            Assert.Equal(0, stops);
+            Assert.Contains("within 60 s", message, StringComparison.Ordinal);
+            Assert.True(clock.Passed >= TimeSpan.FromSeconds(60), $"it waited {clock.Passed}");
+        }
+
+        Assert.Equal(CliErrors.JasonRunning, code);
+        Assert.Contains($"(process {Theirs})", message, StringComparison.Ordinal);
+        Assert.Contains("on a computer more than one account uses, it may be Jason running under another account from this same application, which that account quits", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("another session of this account", message, StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+        Assert.Equal(0, registrar.Removals);
+        Assert.True(Directory.Exists(application));
     }
 
     private static string ApplicationOf(string executable) =>

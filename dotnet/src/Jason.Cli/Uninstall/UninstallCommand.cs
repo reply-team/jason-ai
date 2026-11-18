@@ -47,7 +47,8 @@ public static class UninstallCommand
           2. the runtime — and if it will not stop, nothing further is removed. Before anything is read, a
              runtime that is still starting is waited for, up to {StartInFlight.Seconds(StartInFlight.Bound)}, and then stopped; where another jason of this
              installation still runs (jason_running) — one that never came up, or after the stop — nothing is
-             removed
+             removed; on a computer more than one account uses, it may be Jason running under another account
+             from this same application, which that account quits
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
              two entries Windows made for it, and the jason: link registration where its command names this
              executable
