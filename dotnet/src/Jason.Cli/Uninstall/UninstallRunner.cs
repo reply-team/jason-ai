@@ -534,7 +534,8 @@ public static class UninstallRunner
     /// Last because every step above it is run from this file. And the one step that can honestly half
     /// succeed: where the file is the image of this very process it is moved aside rather than deleted, and
     /// the report names where it went and the line that removes it. It does not claim a clean uninstall it
-    /// did not perform.
+    /// did not perform. Off Windows the executable is looked at once more first: a jason started from it since the
+    /// runtime stopped (a person's or an agent's <c>jason runtime start</c>) keeps it, and what goes with it, as a problem.
     /// </remarks>
     private static void Step5RemoveExecutable(
         CliEnvironment env,
@@ -561,6 +562,15 @@ public static class UninstallRunner
                 + "own output - so there is no one executable to remove and none was: the build it runs from is "
                 + "where it lives, and neither the muxer nor a build's launcher is an installation of Jason. A "
                 + "published release is one file, and this verb removes that one.");
+            return;
+        }
+
+        if (StartInFlight.LastLook(env, executable, []) is { Count: > 0 } started)
+        {
+            problems.Add(
+                $"The executable at '{executable}' was kept, and its notice files, its install directory and what it unpacked "
+                + $"with it: another jason of this installation ({StartInFlight.Processes(started)}) runs it, started since the "
+                + $"runtime was stopped. Wait until it ends, then run '{executable} uninstall' again.");
             return;
         }
 
@@ -1088,9 +1098,10 @@ public static class UninstallRunner
 
     /// <summary>
     /// After the runtime: the other processes of this installation's <c>jason</c>, given <see cref="StartInFlight.Settle"/>
-    /// to end. One still running then — a runtime that never came up, a runtime of another data directory, a journal watch —
-    /// runs from what the next steps remove, so it refuses with <c>jason_running</c>, nothing further removed. The Windows
-    /// uninstaller's own call (<c>--keep-application</c>) leaves the folder and looks at it itself.
+    /// to end. One still running then — a provider's call the stopped runtime left running, a runtime that never came up, a
+    /// runtime of another data directory, a journal watch — runs from what the next steps remove, so it refuses with
+    /// <c>jason_running</c>, nothing further removed. The Windows uninstaller's own call (<c>--keep-application</c>) leaves
+    /// the folder and looks at it itself; and Windows never looks again here, having refused such a process up front.
     /// </summary>
     private static async Task<RemovalRefused?> Step2OthersEndedAsync(
         CliEnvironment env,
@@ -1099,7 +1110,7 @@ public static class UninstallRunner
         bool registrationAfterTheStop,
         CancellationToken cancellationToken)
     {
-        if (options.KeepApplication || StartInFlight.Image(env) is not { } image)
+        if (options.KeepApplication || StartInFlight.Windows(env) || StartInFlight.Image(env) is not { } image)
         {
             return null;
         }
@@ -1111,14 +1122,13 @@ public static class UninstallRunner
                 CliErrors.JasonRunning,
                 StartInFlight.JasonRunning(
                     env,
-                    image,
                     $"Another jason still runs from this installation ({StartInFlight.Processes(left)}) with its runtime stopped, so nothing "
                     + "further was removed and this installation is as it was"
                     + (registrationAfterTheStop
                         ? ", its logon registration included."
                         : " — except the logon registration, which had already been taken away and which "
                           + "'jason runtime autostart enable' puts back."),
-                    string.Empty));
+                    afterTheStop: true));
     }
 
     /// <summary>

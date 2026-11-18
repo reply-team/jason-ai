@@ -821,7 +821,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var refusal = RuntimeVerbs.Envelope(output.ToString());
         Assert.Equal("jason_running", refusal.Code);
         Assert.Contains("(process 9001)", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("runtime stop", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("wait until it ends, then uninstall again", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtime stop", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(Path.Combine(apps, "jason.cmd")), "the command was removed");
         Assert.True(Directory.Exists(application));
@@ -879,8 +880,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         remover.Running[executable] = [];
         remover.RunningInAnySession[executable] = [9005];
 
-        // With no runtime answering, it is waited for as a runtime that may be starting, and refused at the bound.
-        var exit = await UninstallCommand.RunAsync(env with { Clock = new Leaping() }, new UninstallOptions(false, false, false, false, false), Ct);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         var refusal = RuntimeVerbs.Envelope(output.ToString());

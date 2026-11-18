@@ -888,6 +888,37 @@ public static partial class DesktopRemoval
         }
     }
 
+    /// <summary>
+    /// The last look, just before the application is deleted: the window opened again, or a jason of this installation
+    /// started since the runtime stopped, both of which run from what goes next. Either keeps the application, and its state
+    /// under ~/Library, and is the problem this returns; null where neither runs.
+    /// </summary>
+    private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application)
+    {
+        var window = env.Removes!.RunningFrom(ApplicationExecutable(application, SetupSystem.MacOs));
+        var jason = StartInFlight.Image(env) is { } image ? StartInFlight.LastLook(env, image, plan.Demo) : [];
+        if (window.Count == 0 && jason.Count == 0)
+        {
+            return null;
+        }
+
+        var found = string.Join(
+            " and ",
+            new[]
+            {
+                window.Count > 0 ? $"Jason Desktop is open again ({StartInFlight.Processes(window)})" : null,
+                jason.Count > 0 ? $"another jason of this installation runs from it ({StartInFlight.Processes(jason)})" : null,
+            }.OfType<string>());
+        var first = (window.Count > 0, jason.Count > 0) switch
+        {
+            (true, true) => "Quit Jason Desktop from the Jason menu and wait until that jason ends",
+            (true, false) => "Quit Jason Desktop from the Jason menu",
+            _ => "Wait until that jason ends",
+        };
+        return $"The application at {application} was not deleted: {found}, started since the runtime was stopped. {first}, "
+            + $"then move {application} to the Bin (the Trash) in the Finder.";
+    }
+
     /// <summary>The application itself, the last act: kept, handed to its uninstaller, or deleted.</summary>
     public static void RemoveApplication(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems)
     {
@@ -926,6 +957,12 @@ public static partial class DesktopRemoval
                 if (!IsJasonsBundle(application))
                 {
                     problems.Add($"{application} no longer names Jason Desktop's bundle identifier, {Identifier}, in its Contents/Info.plist, so it was not deleted: it is not known to be Jason's.");
+                    return;
+                }
+
+                if (StartedSinceTheStop(env, plan, application) is { } started)
+                {
+                    problems.Add(started);
                     return;
                 }
 

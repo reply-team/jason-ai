@@ -1,4 +1,6 @@
 using System.Globalization;
+using Jason.Cli.Autostart;
+using Jason.Cli.Commands;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
@@ -31,9 +33,17 @@ public enum StartWait
 /// start of <c>jason runtime start</c> and that moment, the starter and the runtime it launched run this installation's
 /// <c>jason</c> and nothing on disk names them: the application starts one at each start, a logon starts one, and so does a
 /// person. An uninstall that read only the descriptor then said that no runtime was running, removed the files those
-/// processes run from, and reported that it was done while they ran on. So, before the plan is read, the processes that run
-/// this installation's <c>jason</c> are looked for by their image, and while one runs and no runtime answers, the uninstall
-/// waits, a bounded time, for the runtime to come up; the plan then reads it, and the stop stops it as it stops any runtime.
+/// processes run from, and reported that it was done while they ran on. So, before the runtime is looked for and before
+/// anything is removed, the processes that run this installation's <c>jason</c> are looked for by their image, and while one
+/// runs and no runtime answers, the uninstall waits, a bounded time, for the runtime to come up; the plan then reads it, and
+/// the stop stops it as it stops any runtime. A dry run never waits.
+/// </para>
+/// <para>
+/// Not on Windows (<see cref="Windows"/>), which never had the hole: there the running image cannot be deleted, and the
+/// application's uninstaller removes nothing while a process runs from its folder, so the verb refuses such a process at
+/// once, as it always has, and neither waits nor looks again after the stop. Elsewhere, once the runtime has stopped, what
+/// still runs is given <see cref="Settle"/> to end, and one more look comes just before the executable, or the application,
+/// is deleted, for a jason started in the removal's own seconds.
 /// </para>
 /// <para>
 /// "Answers" is <see cref="DescriptorProcess.Live"/>, the reading the plan and the stop make. "Another process" is
@@ -106,7 +116,8 @@ internal static class StartInFlight
     }
 
     /// <summary>
-    /// Waits for a runtime of this installation that is still starting. Where a runtime answers at the first look, or nothing
+    /// Waits for a runtime of this installation that is still starting, or for what a runtime stopped a moment before left
+    /// running. Where a runtime answers at the first look, or nothing
     /// else runs <paramref name="image"/>, it returns at once, having waited for nothing. Otherwise it says once on stderr what
     /// it waits for and how long, and looks again until a runtime answers — then gives the starter <see cref="Grace"/> to
     /// leave and returns, whatever remains — until what ran ends by itself, or until <see cref="Bound"/>, when it returns
@@ -131,7 +142,8 @@ internal static class StartInFlight
         var clock = env.Clock ?? TimeProvider.System;
         env.Error.WriteLine(
             $"A runtime of {env.Paths.Root} may be starting: {Processes(others)} runs this installation's jason, at {image}, and no "
-            + $"runtime answers yet. Waiting up to {Seconds(Bound)} for it, so that it is stopped before anything is removed.");
+            + $"runtime answers yet; it may also be {ProviderCall("a runtime stopped a moment ago")}. Waiting up to {Seconds(Bound)} "
+            + "for a runtime to answer, or for it to end, so that nothing is removed from under it.");
         var until = clock.GetUtcNow() + Bound;
         while (true)
         {
@@ -161,6 +173,13 @@ internal static class StartInFlight
     }
 
     /// <summary>
+    /// The last look, just before the executable or the application is deleted: the processes of <paramref name="image"/>
+    /// started in the removal's own seconds, since the runtime stopped. None on Windows, which never looks again.
+    /// </summary>
+    public static IReadOnlyList<int> LastLook(CliEnvironment env, string image, IEnumerable<string> demo) =>
+        Windows(env) ? [] : Others(env, image, demo);
+
+    /// <summary>
     /// Once the runtime has stopped: looks for the other processes of <paramref name="image"/> until none runs, for up to
     /// <see cref="Settle"/>, and returns those still running then. A stopped runtime's process, and a starter, leave within
     /// moments, and a single look would have refused on them.
@@ -185,19 +204,37 @@ internal static class StartInFlight
 
     /// <summary>
     /// The refusal <c>jason_running</c> says, on every system and at every point it is reached: <paramref name="lead"/>, which
-    /// says what was found when and what was not removed, then what such a process may be and what to do.
-    /// <paramref name="runtime"/> follows the data directory's name: ", which this would stop" before the stop, nothing after it.
+    /// says what was found when and what was not removed, then what such a process may be, and to wait for it, never to end
+    /// it: a runtime migrating its database, a set-up or an update finishing, is not one to cut short. After the stop
+    /// (<paramref name="afterTheStop"/>) the first case is a provider's call the stopped runtime left running; before it, a
+    /// start in flight. On Windows, where a process's parent is told, it says first what the process is not.
     /// </summary>
-    public static string JasonRunning(CliEnvironment env, string image, string lead, string runtime) =>
-        lead
-        + $" It is neither the runtime of {env.Paths.Root}{runtime}, nor anything that runtime started. "
-        + "It may be a runtime that never came up: end it, or wait for it to end, then uninstall again. "
-        + $"Or it may be a runtime of another data directory, which `\"{image}\" runtime stop` with JASON_DATA_DIR set to that "
-        + "directory stops, a `jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; "
-        + (Windows(env)
-            ? "in another session of this account, it may be a task that runs whether you are signed in or not."
-            : $"{SharedComputer}.")
-        + " Once none runs, run this again.";
+    public static string JasonRunning(CliEnvironment env, string lead, bool afterTheStop)
+    {
+        var windows = Windows(env);
+        return lead
+            + (windows ? $" It is neither the runtime of {env.Paths.Root}, which this would stop, nor anything that runtime started." : string.Empty)
+            + (afterTheStop
+                ? $" It may be {ProviderCall("the stopped runtime")}, or {StillFinishing}"
+                : $" It may be {StillFinishing}, or {ProviderCall("a runtime stopped a moment ago")}")
+            + ": wait until it ends, then uninstall again. It may also be a runtime of another data directory, a `jason journal "
+            + "watch`, or a call an agent host you opened yourself makes; "
+            + (windows
+                ? "in another session of this account, it may be a task that runs whether you are signed in or not."
+                : $"{SharedComputer}.")
+            + " Once none of them runs, run this again.";
+    }
+
+    /// <summary>What may hold a jason of this installation for a while yet, and must be let finish.</summary>
+    private const string StillFinishing =
+        "a runtime still starting or migrating its database, or a set-up or an update still finishing";
+
+    /// <summary>
+    /// A provider's call a stopped runtime left running: the stop drains for a while and cancels nothing, and a plugin host
+    /// ends by itself within its operation's own time limit, the catalog's, which is why no number is said.
+    /// </summary>
+    private static string ProviderCall(string runtime) =>
+        $"a call to a provider that {runtime} left running, which ends by itself within that operation's own time limit";
 
     /// <summary>
     /// The case a look that cannot tell a process's account names without claiming it: on a Mac, the one application in
@@ -206,9 +243,21 @@ internal static class StartInFlight
     public const string SharedComputer =
         "on a computer more than one account uses, it may be Jason running under another account from this same application, which that account quits";
 
-    /// <summary>Whether the installation is Windows', by the system's places where they are known, else by this machine.</summary>
-    private static bool Windows(CliEnvironment env) =>
-        env.Setup is { } places ? places.Platform is SetupSystem.Windows : OperatingSystem.IsWindows();
+    /// <summary>
+    /// Whether the installation is Windows', by the system's places where they are known, else by the logon registrar's
+    /// system, else by this machine.
+    /// </summary>
+    internal static bool Windows(CliEnvironment env)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        if (env.Setup is { } places)
+        {
+            return places.Platform is SetupSystem.Windows;
+        }
+
+        var platform = RuntimeAutostartCommands.Registrar(env).Platform;
+        return platform is AutostartPlatform.Unsupported ? OperatingSystem.IsWindows() : platform is AutostartPlatform.Windows;
+    }
 
     /// <summary>"process 9001" or "process 9001, 9004", as every refusal of this verb names processes.</summary>
     public static string Processes(IReadOnlyList<int> pids) =>
