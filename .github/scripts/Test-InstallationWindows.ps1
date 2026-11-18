@@ -1509,7 +1509,9 @@ switch ($Step) {
         $left = @(if (Test-Path -LiteralPath $commandLine) { Get-ChildItem -LiteralPath $commandLine -Force | ForEach-Object { $_.Name } })
         # Where the product renames a retired jason a running process holds (CommandLineInstalls.AsideFolder): jason-retired-<id> in
         # the temporary directory on the executable's volume, .jason-retired-<id> beside its folder otherwise.
-        $aside = @(@(Get-ChildItem -LiteralPath $temporary -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "%TEMP%\$($_.Name)" }) + @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "Programs\$($_.Name)" }))
+        # Under every temporary base, each named, as the listing reads them.
+        $bases = Get-ExtractBases
+        $aside = @(@(foreach ($base in $bases.Keys) { Get-ChildItem -LiteralPath $bases[$base] -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "$base\$($_.Name)" } }) + @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "Programs\$($_.Name)" }))
         Say "the command-line install is retired: no jason.exe or notice file at $commandLine; that folder $(if (Test-Path -LiteralPath $commandLine) { "is kept, holding: $(if ($left) { $left -join ', ' } else { 'nothing' })" } else { 'is gone' }); executables renamed aside: $(if ($aside) { $aside -join ', ' } else { 'none' })"
 
         # Whether this build says it is a test build: a release never does, CI's build always.
