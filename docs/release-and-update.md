@@ -1005,8 +1005,9 @@ that exit: `jason update apply` sees a setup that ended 3, Jason Desktop still r
 `version.json` did not name the new version within its ten-minute wait, after which, the old version still named, it
 puts a `jason` back at the carried path and the record that stood, starts the runtime again where one was running
 and answers `update_desktop_not_installed` (below). The Desktop's start never starts a runtime, and touches
-no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes
-one for the request. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
+no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window resolves no host name, so it could
+read no feed: it refuses the request as `demo_open` before it checks anything, and nothing is stopped, kept or
+downloaded; leaving the Demo, or quitting Jason Desktop, and running the verb again takes it. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
 folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
 installer's publisher by running PowerShell through that shell, and lets the check pass where PowerShell cannot be run
 at all, so the shell and the PowerShell are found where the system keeps them rather than where the caller's `PATH`
@@ -1079,6 +1080,7 @@ application as no answer. Every member is always there:
 | `not_installed` | a development build, which no installer updates |
 | `unsupported_platform` | not Windows or macOS |
 | `window_feed` | a window took a request that names a feed; nothing was checked, set or downloaded |
+| `demo_open` | a window that shows the Demo took the request; it resolves no host name, so nothing was checked, stopped or downloaded |
 | `updater_inactive` | the updater cannot replace the application where it is installed |
 | `busy` | the Desktop was already checking for, downloading or installing an update, or taking another request |
 | `version_rejected` | `to` failed its first start on this machine before |

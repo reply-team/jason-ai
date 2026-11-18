@@ -30,6 +30,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, r
 import { dirname, join } from 'node:path';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
+import { backLabel } from './mode.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type Unanswered } from './own-runtime.ts';
 import type { TakenOutcome, TakenRefusal, TakenRequest, TakenStep, Updater } from './updates.ts';
 
@@ -211,13 +212,14 @@ export function goFile(data: string, id: string): string {
 export type RequestState = 'checking' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'refused';
 
 /** Why a request was refused: the updater's codes, and the ones a start decides before it reaches the updater. */
-export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'window_feed' | 'go_there' | 'timed_out' | 'failed';
+export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'window_feed' | 'demo_open' | 'go_there' | 'timed_out' | 'failed';
 
 export const requestRefusals: readonly RequestRefusal[] = [
     'usage',
     'not_installed',
     'unsupported_platform',
     'window_feed',
+    'demo_open',
     'go_there',
     'updater_inactive',
     'busy',
@@ -366,6 +368,8 @@ export function refusalMessage(
             return 'On this system Jason Desktop takes no update request from a terminal: update it from its own menu, or through the package it came in. Nothing was changed.';
         case 'window_feed':
             return 'Jason Desktop is open, and an open window updates from the releases alone, never from a feed a terminal names, so nothing was checked or downloaded. Quit Jason Desktop and run jason update apply again.';
+        case 'demo_open':
+            return `Jason Desktop is showing the Demo, which takes no update, so nothing was checked, stopped or changed. Choose ${backLabel} in its Jason menu, or quit Jason Desktop, then run jason update apply again.`;
         case 'go_there':
             return 'A go for this request was made before Jason Desktop had downloaded the update and asked for one, so it is no go the verb made: nothing was stopped, kept or installed. Run jason update apply again.';
         case 'go_timed_out':
@@ -485,8 +489,12 @@ export interface TakeDeps {
     data: string;
     /** This application's version. */
     from: string;
-    /** Where the request is taken: by a start of its own, or by a running window, which has an install item or not (the Demo). */
-    where: 'headless' | { window: { menu: boolean } };
+    /**
+     * Where the request is taken: by a start of its own, or by a running window, which has an install item or not, and
+     * shows the Demo or not. A window that shows the Demo resolves no host name in its run (`demoResolverRule`), so no
+     * feed could be read there: it refuses the request as `demo_open` before any updater is made.
+     */
+    where: 'headless' | { window: { menu: boolean; demo: boolean } };
     /** Why this application takes no request at all (`requestSupport`), or null. */
     unsupported: 'not_installed' | 'unsupported_platform' | null;
     /** The updater the request is taken by, made only when one is needed. */
@@ -628,6 +636,11 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     if (deps.unsupported !== null) {
         ended = true;
         return end(refuse(deps.unsupported));
+    }
+    // A window that shows the Demo reads no feed (`demoResolverRule`): it says so, and nothing is checked, stopped or kept.
+    if (deps.where !== 'headless' && deps.where.window.demo) {
+        ended = true;
+        return end(refuse('demo_open'));
     }
     // A go that is there before the request was taken is none: the verb makes its go only once it has read `downloaded`.
     const go = goFile(deps.data, request.id);
