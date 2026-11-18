@@ -49,6 +49,9 @@ Jason is installed, updated and removed as it was.
 - **One update.** `jason update apply` updates Jason Desktop and the `jason` it carries together, through the
   application's own updater, one update at a time. Check for Updates… in Jason Desktop's menu updates the same way. An
   installer that finds Jason Desktop running waits for it to quit or refuses, and never closes it.
+- **A terminal's update is refused while Jason Desktop shows the Demo.** `jason update apply` is refused as `demo_open`
+  before anything is checked, so nothing is stopped, kept or downloaded. Leaving the Demo, or quitting Jason Desktop, and
+  running it again takes it.
 - **A command-line install moves into Jason Desktop.** On macOS and Windows, `jason update apply` in a command-line
   install of an earlier version updates it and then moves it into Jason Desktop, so that the terminal's `jason` is the
   one the application carries. The update never fails because of the move: where the move cannot go on, the install is
