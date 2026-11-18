@@ -349,9 +349,12 @@ have done their work: you may delete those three — only those — with `rm -r 
 installation itself: one installation, Jason Desktop and the `jason` it carries, which the install script above
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
-`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. The Windows installer, at
-every install and update, puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is
-found, as the script does (§2). The Windows and macOS packages are signed.
+`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from one of
+them, it sets the machine up as the script does (§2): the application's first start of each version runs the
+`jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each
+is found, and its Command Line item says what that placed
+([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install
+and update. The Windows and macOS packages are signed.
 
 On Linux, Jason Desktop is a separate download beside the command line: `jason-desktop-linux-x64.deb`
 (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or
@@ -476,7 +479,9 @@ package manager's upgrade goes straight to the newest release.
 
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
-and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. A package
+and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
+Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's
+`jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7). A package
 manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
@@ -662,6 +667,12 @@ runtime then runs in your own session when you sign in, shows no window on Windo
 when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
+
+An install, an update or Jason Desktop's set-up that stops the runtime leaves a note that a start is owed,
+`<data>/run/start-owed.json`, and Jason Desktop's next start starts one from the `jason` it carries where it finds the
+note and no runtime answering ([desktop.md](desktop.md), "The start that is owed"). The note goes in two ways: when a
+runtime starts on that data directory again, and when you stop the runtime yourself with `jason runtime stop`, so a
+stop of your own is never taken for one an install owes.
 
 That is the installation. An agent that installed Jason tells you where it keeps your files and what it ran, then starts
 the [`quick-start`](../skills/runtime/quick-start/SKILL.md) skill, which asks you one question and takes you to your

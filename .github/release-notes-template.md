@@ -70,7 +70,10 @@ is, with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, and talks to it as the C
 each signed with Reply's certificate and timestamped. On macOS, open the dmg for your Mac and drag Jason into
 Applications; the application, the `jason` it carries and the dmg are signed with Reply's Developer ID and notarized,
 and the application and the dmg are stapled. The Intel application's `jason` is built and signed as the Apple silicon one is, and started once under
-Rosetta where the release's runner has it; the test suite does not run on an Intel Mac.
+Rosetta where the release's runner has it; the test suite does not run on an Intel Mac. On macOS and Windows, the
+application's first start of each version puts `jason` in the terminal and Jason's skills where Claude Code and Codex
+read them, each where it is found, through the `jason` it carries; the Windows installer does the same at every install
+and update.
 
 On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
 in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
@@ -85,7 +88,10 @@ library (`libicu`), as the archive's does.
 
 The desktop updates itself from the latest release's `latest.yml`, `latest-mac.yml` or `latest-linux.yml`, on your
 word, and to stable releases only. A candidate's feed files stay on the candidate's own page, which never becomes the
-latest release, so an installed desktop, a candidate included, never moves to a candidate.
+latest release, so an installed desktop, a candidate included, never moves to a candidate. On macOS and Windows, `jason update apply` typed into
+the `jason` the application carries is such a word too: it hands the update to the same updater with no window, and the
+new version's `jason` finishes it, the plugin packages, the runtime's start, the skills, the terminal command and the
+UI.
 
 Installing an update restarts the runtime: the runtime the application carries is stopped first, with
 `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again

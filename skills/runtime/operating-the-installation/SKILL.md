@@ -49,7 +49,9 @@ a minute. After that pairing, a bookmark of the page keeps working. `--approval 
 address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
 this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
-`jason decision` commands.
+`jason decision` commands. Where Jason was installed on macOS or Windows by its install script or Jason Desktop's own
+package, Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download
+link, which is for Linux, where the desktop is a separate download.
 
 That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
 draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
@@ -418,6 +420,19 @@ needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earl
 `install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
 `update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
+Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran,
+`jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window,
+waits for it, and the new version's `jason` finishes it: the plugin packages, the runtime's start, the skills, the terminal command and the UI. It still ends with one JSON
+document and its exit code. Jason Desktop's first start of each version runs `jason install` and
+`jason update apply --finish` itself, so a version installed from the desktop's own menu catches up the same way. A
+refusal with `update_in_progress` or `install_in_progress` means later, not a failure: another update, or
+`jason install`, holds this installation's update lock; let it end, then run the command again, and
+`jason update status` says where an update stands. `update_desktop_not_installed` means Jason Desktop's installer had not
+installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason
+Desktop that is running, one of another data directory included: say that to the person, who quits it, and run the
+command again only on their word. On Linux the `jason` the deb or the AppImage carries is refused with
+`update_carried_by_desktop`: the desktop's own update item updates it.
+
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
 line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
@@ -511,7 +526,10 @@ and its last line is the full path of `jason`, which a shell already open, yours
 installs the executable under the person's own account, in `~/.local/bin`, and puts that directory on the `PATH`
 unless `--no-modify-path` is passed; then the executable it installed deploys the role skills from the release's
 package of them; where that fails, Jason is still installed, one line says so, and `jason status` names the line to
-run. Nothing needs administrator rights. Any other agent host, and on Linux every one, gets Jason's skills with
+run. Nothing needs administrator rights. A person who installs Jason Desktop on macOS or Windows by hand, from its
+disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it
+carries, which puts `jason` in the terminal and gives Claude Code and Codex Jason's skills, and its Command Line item
+says what that placed. Any other agent host, and on Linux every one, gets Jason's skills with
 `jason skills install --host <host>`, an act the install page marks "Ask first" unless it is the host of the agent the install prompt's
 three lines were given to.
 

@@ -1,7 +1,7 @@
 /**
  * The machine set-up at a start, on macOS and Windows: the carried `jason install` (`docs/release-and-update.md` §9), which
- * puts `jason` where a new terminal finds it, deploys Jason's skills for every agent host found and retires an older
- * command-line install; then the command line's finishing step, `jason update apply --finish` (§7), which brings the
+ * puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where each is found and
+ * retires an older command-line install; then the command line's finishing step, `jason update apply --finish` (§7), which brings the
  * plugin packages, the skills deployments and the UI up to the installed version, or finishes a carried update in flight
  * with the application at its version, the runtime's start included. The desktop runs both at a start where they have not
  * yet completed for the version the application carries, before the window's Demo or Live run goes on, and again on the

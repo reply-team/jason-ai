@@ -53,8 +53,9 @@ If anything stops you, ask me directly and tell me why.
 ```
 
 **Or with [Jason Desktop](#jason-desktop)**, if you would rather start from a window: one download, and its window sets
-the rest up. On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries. Everything
-about installing: [docs/INSTALL.md](docs/INSTALL.md).
+the rest up. On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first
+start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where
+it is found. Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
@@ -308,9 +309,11 @@ the runtime, not a second Jason: it works on the data directory the CLI uses, st
 `jason runtime start`, and changes the installation only through the CLI's verbs. Its chat is a session with your own
 agent, started for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads
 and advises. Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification
-channels and your AI provider's key. The terminal stays open to you at any time: the Command Line item of its menu
-puts a command there, `jason`, or `jason-desktop` where another `jason` already stands, and on macOS and Linux puts its
-folder on your terminal's PATH where it is not yet, as the installer does.
+channels and your AI provider's key. The terminal stays open to you at any time: on macOS and Windows the first start
+of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the
+Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there, `jason`,
+or `jason-desktop` where another `jason` already stands, and puts its folder on your terminal's PATH where it is not
+yet, as the installer does.
 
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
