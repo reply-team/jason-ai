@@ -407,7 +407,13 @@ begin)
     printf '%s\n' "$LEG" > "$OUT/leg-open.txt"
     for need in "$@"; do
         needed="${need%=*}"; outcome="${need##*=}"
-        [ "$outcome" = success ] && continue
+        if [ "$outcome" = success ]; then
+            # A leg's step succeeds where the leg itself was not run, or failed and was recorded so, so a needed leg's
+            # record is read as well as its step's outcome.
+            if [ -f "$OUT/failed-legs.txt" ] && awk -v p="the leg '$needed' " 'index($0, p) == 1 { found = 1 } END { exit !found }' "$OUT/failed-legs.txt"; then outcome=failure
+            elif [ -f "$OUT/not-run.txt" ] && awk -v p="$needed - " 'index($0, p) == 1 { found = 1 } END { exit !found }' "$OUT/not-run.txt"; then outcome='not run'
+            else continue; fi
+        fi
         if [ "$outcome" = failure ]; then skip_leg "not run: the leg it needs failed, $needed"; else skip_leg "not run: the leg it needs did not run ($outcome), $needed"; fi
         exit 0
     done

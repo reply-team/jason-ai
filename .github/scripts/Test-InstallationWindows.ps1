@@ -442,6 +442,16 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     if ($Quiet) { return }
     Write-Host "$($sorted.Count) lines written to $file"
     $sorted | ForEach-Object { Write-Host "  $_" }
+    # Where the extraction folders stand and when each was made, said beside the listing and never part of it: the
+    # temporary folder this step reads, and every per-session one under it (%TEMP%\<n>), where a process started in
+    # another session unpacks.
+    $bases = @(@($temporary) + @(Get-ChildItem -LiteralPath $temporary -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+$' } | ForEach-Object { $_.FullName }))
+    foreach ($base in $bases) {
+        foreach ($folder in @(Get-ChildItem -LiteralPath (Join-Path $base '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) {
+            Write-Host "  (where) extracted $($folder.Name) at $($folder.FullName), made $($folder.CreationTimeUtc.ToString('o')), written $($folder.LastWriteTimeUtc.ToString('o'))"
+        }
+    }
+    Write-Host "  (where) this step's temporary folder is $temporary"
 }
 
 # --- the legs' two ends ----------------------------------------------------------------------------------------------
@@ -618,7 +628,15 @@ switch ($Step) {
             if ($at -lt 1) { Fail "-Needs takes 'name=outcome', not '$need'" }
             $needed = $need.Substring(0, $at)
             $outcome = $need.Substring($at + 1)
-            if ($outcome -ceq 'success') { continue }
+            if ($outcome -ceq 'success') {
+                # A leg's step succeeds where the leg itself was not run, or failed and was recorded so, so a needed leg's
+                # record is read as well as its step's outcome.
+                $failedFile = Join-Path $Out 'failed-legs.txt'
+                $notRunFile = Join-Path $Out 'not-run.txt'
+                if ((Test-Path -LiteralPath $failedFile) -and @(Get-Content -LiteralPath $failedFile | Where-Object { $_.StartsWith("the leg '$needed' ", [StringComparison]::Ordinal) }).Count -gt 0) { $outcome = 'failure' }
+                elseif ((Test-Path -LiteralPath $notRunFile) -and @(Get-Content -LiteralPath $notRunFile | Where-Object { $_.StartsWith("$needed - ", [StringComparison]::Ordinal) }).Count -gt 0) { $outcome = 'not run' }
+                else { continue }
+            }
             Skip-Leg $(if ($outcome -ceq 'failure') { "not run: the leg it needs failed, $needed" } else { "not run: the leg it needs did not run ($outcome), $needed" })
             return
         }
