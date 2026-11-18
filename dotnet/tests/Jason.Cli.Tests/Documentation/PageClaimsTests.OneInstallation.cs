@@ -358,4 +358,37 @@ public partial class PageClaimsTests
         Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
         Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`: it installs the application and moves the command line into it, and the update never fails because of the move; `jason status` says where the move stands. Linux has no move.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// On macOS and Windows the install script's set-up teaches the role skills from the folder beside the jason the
+    /// application carries, with no network, as the routine reads them; §1 of the install page says so, and keeps the fetch of
+    /// the release's package for Linux and for a later <c>jason skills install</c>.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_role_skills_come_with_the_application_on_macOS_and_Windows()
+    {
+        var setup = Page("dotnet", "src", "Jason.Cli", "Installation", "MachineSetup.cs");
+        Assert.Contains("// The folder beside this jason, read where it stands: no download, nothing written under the data directory.", setup, StringComparison.Ordinal);
+        Assert.Contains("SkillsSource.StageAsync(env with { Out = TextWriter.Null }, Bundle, null, null, cancellationToken)", setup, StringComparison.Ordinal);
+
+        var need = Flat(Section(Page("docs", "INSTALL.md"), "## 1. What you need"));
+        Assert.Contains("On macOS and Windows they come with Jason Desktop: the set-up reads them from the folder beside the `jason` it carries, with no network.", need, StringComparison.Ordinal);
+        Assert.Contains("On Linux teaching it is a fetch of its own, and so is a later `jason skills install` on any system: a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.", need, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Restoring a database by hand starts the version the backup was written by. A command-line install's update kept that
+    /// version under <c>update/previous</c>; where Jason Desktop carries jason, the copy of the application the Desktop kept
+    /// is that version, as the rollback's own line says, and <c>update/previous</c> there holds what a move retired.
+    /// </summary>
+    [Fact]
+    public void Restoring_a_database_by_hand_names_the_version_before_for_each_kind_of_install()
+    {
+        Assert.Contains("the copy Jason Desktop kept under its rollback folder", Page("dotnet", "src", "Jason.Cli", "Update", "UpdateRollback.cs"), StringComparison.Ordinal);
+
+        var restoring = Flat(Section(Page("docs", "release-and-update.md"), "### Restoring a database by hand"));
+        Assert.Contains("for a backup taken before a migration is the version you were on before the update; a command-line # install's update kept it here: ~/.jason/update/previous/jason runtime start", restoring, StringComparison.Ordinal);
+        Assert.Contains("Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/` (`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder, then run `jason runtime start`.", restoring, StringComparison.Ordinal);
+        Assert.Contains("`~/.jason/update/previous/jason` is not that version there: after a move into Jason Desktop it is the command-line executable the move's update replaced, a release before 0.49.", restoring, StringComparison.Ordinal);
+    }
 }

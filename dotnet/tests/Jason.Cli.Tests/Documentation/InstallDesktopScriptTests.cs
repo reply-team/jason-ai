@@ -567,6 +567,27 @@ public sealed class InstallDesktopScriptTests : IDisposable
     }
 
     /// <summary>
+    /// Run as root - <c>curl … | sudo sh</c> - the script would place Jason.app owned by root, which the application's own
+    /// updater then cannot replace without a password, and through a home sudo keeps, a data directory, a wrapper and skills
+    /// the person's own runtime cannot write. So it stops before it downloads anything, and says to run it as yourself.
+    /// </summary>
+    [Fact]
+    public void Macos_root_is_refused_before_anything_is_downloaded()
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STUB_UID"] = "0";
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("this script runs as root, and Jason Desktop and everything it sets up are your account's own, so nothing was downloaded or installed: run the install line again as yourself, without sudo.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
+        Assert.Empty(mac.Calls());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Home));
+    }
+
+    /// <summary>
     /// The script installs Jason Desktop on Apple silicon only, as the install page says, so it refuses an Intel Mac before
     /// it downloads anything. It gives that reason and no other: every release publishes the Intel image, so it says nothing
     /// of what is published, and it points nowhere else.
@@ -736,6 +757,11 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         Assert.NotEqual(0, run.Exit);
         Assert.Contains("does not verify as signed by BD8M7U5YBV, the team that signs Jason (said above), so its jason was not run; nothing was changed", run.Stderr, StringComparison.Ordinal);
+
+        // And the way on, which every run again would otherwise meet the same refusal without: that application out of the
+        // way, the next run downloads one and puts it in its place.
+        var app = Path.Combine(mac.Shared, "Jason.app");
+        Assert.Contains($"Move {app} to the Bin, then run the install line again: it downloads Jason Desktop and puts it there.", run.Stderr, StringComparison.Ordinal);
         Assert.Equal([VerifyCall], mac.PathlessCalls());
         Assert.True(File.Exists(mac.Carried));
     }
@@ -981,6 +1007,8 @@ public sealed class InstallDesktopScriptTests : IDisposable
             Running = Path.Combine(tree.NewDirectory("flag"), "running");
             Stubs = tree.NewDirectory("stubs");
             Stub("uname", "case \"${1:-}\" in -m) echo arm64 ;; *) echo Darwin ;; esac\n");
+            // The user id a Mac's first account has, or root where a row says so, whoever runs the row.
+            Stub("id", "[ \"${1:-}\" = -u ] && { echo \"${STUB_UID:-501}\"; exit 0; }\nexec /usr/bin/id \"$@\"\n");
             Stub("sysctl", "[ \"${STUB_ARM64:-1}\" = absent ] && { echo \"sysctl: unknown oid 'hw.optional.arm64'\" >&2; exit 1; }\necho \"${STUB_ARM64:-1}\"\n");
             // ditto unpacks, and where a row says so the script is then sent a signal, as an agent's timeout sends one.
             Stub("ditto", $"echo \"ditto $*\" >> '{Log}'\ntar -xzf \"$3\" -C \"$4\"\n[ -z \"${{STUB_SIGNAL:-}}\" ] || kill -\"$STUB_SIGNAL\" \"$PPID\"\n");
