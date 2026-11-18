@@ -668,6 +668,81 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The macOS legs that open this build's application hold its profiles by the PATH a new login shell answered before
+    /// the open, never by what the product then did: where that PATH named ~/.local/bin already the product writes no
+    /// profile, and the leg holds the report's done to the product's own sentence for it, which is the sentence
+    /// MachineSetup writes; elsewhere every profile the product names carries its line. Both legs read that PATH between
+    /// saying the open's environment and opening.
+    /// </summary>
+    [Fact]
+    public void The_macOS_legs_hold_the_profiles_by_the_PATH_a_new_login_shell_answered_before_the_open()
+    {
+        var root = RepositoryRoot();
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var setup = File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.Cli", "Installation", "MachineSetup.cs"));
+        Assert.Contains("Done.Add($\"{places.LocalBin} is on the PATH a terminal has already, so no profile was written.\");", setup, StringComparison.Ordinal);
+        Assert.Contains("grep -qxF \"$HOME/.local/bin is on the PATH a terminal has already, so no profile was written.\"", macos, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Matches(macos, @"\n    say_open_environment\n    read_terminal_before\n    window=""\$\(open_app ""\$placed"" ").Count);
+        var hold = macos[macos.IndexOf("\nhold_account_terminal() {\n", StringComparison.Ordinal)..];
+        hold = hold[..hold.IndexOf("\n}\n", StringComparison.Ordinal)];
+        Assert.Contains("if [ -s \"$OUT/terminal-before-names-local-bin.txt\" ]; then", hold, StringComparison.Ordinal);
+        Assert.Contains("grep -qx '# added by jason install' \"$profile\"", hold, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
+    /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
+    /// from running.
+    /// </summary>
+    [Fact]
+    public void A_clean_begin_takes_every_place_a_macOS_leg_refuses_to_find_there_already()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var scratch = string.Join('\n', macos.Split('\n').Where(line => line.StartsWith("SCRATCH_", StringComparison.Ordinal)));
+        Assert.Contains("\n        take_scratch \"$LEG\"\n", macos, StringComparison.Ordinal);
+        // Each name a refusal reads, by the assignment nearest before it.
+        var refused = Regex.Matches(macos, @"\|\| fail ""(?<names>[^""]*) is there before ")
+            .SelectMany(match => Regex.Matches(match.Groups["names"].Value, @"\$(?<name>[a-z_]+)").Select(name => (Name: name.Groups["name"].Value, At: match.Index)))
+            .ToList();
+        Assert.NotEmpty(refused);
+        var wrong = new List<string>();
+        foreach (var (name, at) in refused)
+        {
+            var assigned = Regex.Matches(macos[..at], $@"(?m)^\s*{name}=""(?<value>[^""]+)""$").LastOrDefault()?.Groups["value"].Value;
+            if (assigned is null) wrong.Add($"${name} is refused and never assigned before");
+            else if (!scratch.Contains("/" + assigned.Split('/')[^1], StringComparison.Ordinal)) wrong.Add($"${name}, {assigned}, is refused where it is found, and take_scratch does not take it");
+        }
+
+        Assert.True(wrong.Count == 0, string.Join("; ", wrong));
+    }
+
+    /// <summary>
+    /// The macOS legs serve their feed by serve-feed.py, which does nothing between bind and listen, and wait 30 s for it,
+    /// printing the server's log, its process and what holds the port where it never answers.
+    /// </summary>
+    [Fact]
+    public void The_macOS_legs_serve_their_feed_by_the_proofs_own_server_and_say_why_it_never_answered()
+    {
+        var root = RepositoryRoot();
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var server = File.ReadAllText(Path.Combine(root, ".github", "scripts", "serve-feed.py")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.DoesNotContain("http.server 80", macos, StringComparison.Ordinal);
+        Assert.Equal(3, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
+        Assert.Contains("    python3 \"$(dirname \"$0\")/serve-feed.py\" \"$folder\" 8099 \"$log\" &\n", macos, StringComparison.Ordinal);
+        Assert.Contains("    until=$(( $(date +%s) + 30 ))\n", macos, StringComparison.Ordinal);
+        foreach (var said in new[] { "lsof -nP -iTCP:8099", "netstat -anv -p tcp", "cat \"$log\"", "kill -0 \"$server\"" })
+        {
+            Assert.Contains(said, macos, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("        def server_bind(self):\n", server, StringComparison.Ordinal);
+        Assert.Contains("        def server_activate(self):\n", server, StringComparison.Ordinal);
+        Assert.DoesNotContain("getfqdn(", server[server.IndexOf("def main", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        Assert.Contains("said(f\"bound {address}:", server, StringComparison.Ordinal);
+        Assert.Contains("said(f\"listening on {address}:", server, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
     /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
     /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
