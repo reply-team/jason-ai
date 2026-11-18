@@ -268,7 +268,9 @@ public static class UpdateCommands
 
         try
         {
-            return MoveRecord.Read(paths.Move) is { State: MoveStates.Done } ? null : complete;
+            // A done record is believed only while it stands: one left by a move made before going back from 0.49 is a move
+            // to make again, by the rule jason status, the move and a rollback read.
+            return MoveRecord.Read(paths.Move) is { } record && record.DoneAndStanding(MoveRecord.OnWindows(env)) ? null : complete;
         }
         catch (MoveRecordUnreadable)
         {
@@ -1155,7 +1157,7 @@ public static class UpdateCommands
         {
             return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { } record
                 && string.Equals(Path.GetFullPath(record.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                && (record.DoneAndStanding() || (record.State != MoveStates.Done && MoveRecord.Retired(record.From)));
+                && (record.DoneAndStanding(MoveRecord.OnWindows(env)) || (record.State != MoveStates.Done && MoveRecord.Retired(record.From)));
         }
         catch (MoveRecordUnreadable)
         {

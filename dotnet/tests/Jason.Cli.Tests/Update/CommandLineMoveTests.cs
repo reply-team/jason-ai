@@ -176,8 +176,27 @@ public sealed class CommandLineMoveTests
         Assert.Equal(MoveStates.Done, answer.State);
         Assert.Contains(rig.Acts, act => act.StartsWith("setup", StringComparison.Ordinal) || act == "unzip");
         Assert.Contains("routine", rig.Acts);
-        Assert.True(rig.Record()!.DoneAndStanding());
+        Assert.True(rig.Record()!.DoneAndStanding(windows));
         Assert.Equal(CheckState.Ok, StatusChecks.Move(rig.Env).State);
+    }
+
+    /// <summary>
+    /// The application stands by the move's own look at it: on Windows its <c>Jason.exe</c>, so a folder left without it
+    /// does not stand, and the record that names it is a move to make again.
+    /// </summary>
+    [Fact]
+    public async Task A_done_record_whose_application_folder_has_lost_its_executable_no_longer_stands()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        Assert.True(rig.Record()!.DoneAndStanding(windows: true));
+
+        File.Delete(Path.Combine(rig.Application, "Jason.exe"));
+
+        Assert.True(Directory.Exists(rig.Application));
+        Assert.False(rig.Record()!.DoneAndStanding(windows: true));
+        Assert.Equal(CheckState.Absent, StatusChecks.Move(rig.Env).State);
     }
 
     /// <summary>A later application, 0.49.0 or later, is reused as it is, and its own jason runs the routine.</summary>

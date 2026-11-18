@@ -86,11 +86,12 @@ public static class RuntimeStopCommand
         return exit;
     }
 
-    /// <param name="acknowledged">
-    /// Called once the runtime has taken the shutdown, before its exit is waited for: from then on it is going down, whatever
-    /// becomes of the wait.
+    /// <param name="answered">
+    /// Called once the runtime has answered the shutdown: with true where it took it, before its exit is waited for, since
+    /// from then on it is going down whatever becomes of the wait; with false where it refused it. Not called where no answer
+    /// came, so a caller that sent the shutdown and heard neither does not know whether it was taken.
     /// </param>
-    public static async Task<int> RunAsync(CliEnvironment env, bool human, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null, Action? acknowledged = null)
+    public static async Task<int> RunAsync(CliEnvironment env, bool human, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null, Action<bool>? answered = null)
     {
         ArgumentNullException.ThrowIfNull(env);
 
@@ -110,13 +111,14 @@ public static class RuntimeStopCommand
 
         if (!response.IsSuccess)
         {
+            answered?.Invoke(false);
             env.Out.WriteLine(OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
         // The acknowledgement names the instance that is going down; the descriptor is the fallback for a
         // runtime that answered something this version of the CLI cannot read.
-        acknowledged?.Invoke();
+        answered?.Invoke(true);
         var acknowledgement = Parse(response.Body);
         var instanceId = acknowledgement?.InstanceId ?? descriptor.InstanceId;
         var pid = acknowledgement?.Pid ?? descriptor.Pid;

@@ -94,11 +94,15 @@ public sealed record MoveRecord(
     /// or whose install is a command-line install again, as after going back from 0.49, is a move to make again. One rule,
     /// which the move, <c>jason status</c> and a rollback all read.
     /// </summary>
-    public bool DoneAndStanding() =>
+    public bool DoneAndStanding(bool windows) =>
         State == MoveStates.Done
         && Application is { Length: > 0 } application
-        && (Directory.Exists(application) || File.Exists(application))
+        && CommandLineMove.ApplicationStands(application, windows)
         && Retired(From);
+
+    /// <summary>Whether a record is read by Windows' look at an application: the setup's system, else the one this runs on.</summary>
+    internal static bool OnWindows(CliEnvironment env) =>
+        env.Setup is { } setup ? setup.Platform is Installation.SetupSystem.Windows : OperatingSystem.IsWindows();
 
     /// <summary>
     /// The record at <paramref name="file"/>; null where there is none. One that cannot be read throws

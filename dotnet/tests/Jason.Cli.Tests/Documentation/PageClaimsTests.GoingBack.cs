@@ -137,7 +137,7 @@ public partial class PageClaimsTests
         File.WriteAllBytes(from, new byte[4096]);
         var record = new Jason.Cli.Update.MoveRecord("0.49.0", from, Jason.Cli.Update.MoveStates.Done, Jason.Cli.Update.MoveSteps.Started, null, application, null, null, DateTimeOffset.UnixEpoch);
 
-        Assert.False(record.DoneAndStanding());
+        Assert.False(record.DoneAndStanding(windows: false));
     }
 
     /// <summary>The update page's "### Going back from 0.49", up to the next heading.</summary>

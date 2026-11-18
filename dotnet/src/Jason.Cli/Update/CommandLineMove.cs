@@ -138,7 +138,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         if (_before is { State: MoveStates.Done } done && SamePath(done.From, old, places))
         {
-            if (done.DoneAndStanding())
+            if (done.DoneAndStanding(places.Platform is SetupSystem.Windows))
             {
                 Say($"{old} was moved into Jason Desktop already, at {done.Application}");
                 return Response(done);
@@ -705,14 +705,13 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         foreach (var application in Places(places))
         {
             var windows = places.Platform is SetupSystem.Windows;
-            var there = windows ? Path.Combine(application, "Jason.exe") : application;
-            if (!File.Exists(there) && !Directory.Exists(there))
+            if (!ApplicationStands(application, windows))
             {
                 continue;
             }
 
             // The program a window runs: Jason.exe, or the bundle's own executable.
-            var program = windows ? there : Path.Combine(application, "Contents", "MacOS", "Jason");
+            var program = windows ? Path.Combine(application, "Jason.exe") : Path.Combine(application, "Contents", "MacOS", "Jason");
             var carried = Carried(places, application)!;
             var placed = CarriedExecutable.Of(carried);
             SemanticVersion version = default;
@@ -769,6 +768,16 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         && !System.Runs(Path.Combine(application, "Jason.exe"))
         && !System.Runs(carried)
         && !System.Runs(Path.Combine(update.MoveDownloads, WindowsAsset));
+
+    /// <summary>
+    /// Whether an application is at <paramref name="application"/>, by the one look the move and a record of it both take: on
+    /// Windows its <c>Jason.exe</c>, so a folder left without it is no application; on macOS the bundle.
+    /// </summary>
+    internal static bool ApplicationStands(string application, bool windows)
+    {
+        var there = windows ? Path.Combine(application, "Jason.exe") : application;
+        return File.Exists(there) || Directory.Exists(there);
+    }
 
     /// <summary>Where an application is looked for: on macOS this account's own folder first, then the shared one.</summary>
     private IEnumerable<string> Places(SetupPlaces places) =>

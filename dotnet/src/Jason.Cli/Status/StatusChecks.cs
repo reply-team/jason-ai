@@ -428,7 +428,7 @@ internal static partial class StatusChecks
             return new StatusCheck(Name, false, CheckState.Absent, "No command-line install is being moved into Jason Desktop.", null);
         }
 
-        if (record.DoneAndStanding())
+        if (record.DoneAndStanding(Jason.Cli.Update.MoveRecord.OnWindows(env)))
         {
             return new StatusCheck(Name, false, CheckState.Ok, $"The command-line install at {record.From} was moved into Jason Desktop at {record.Application}.", null);
         }

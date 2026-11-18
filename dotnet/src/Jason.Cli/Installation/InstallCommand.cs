@@ -46,8 +46,11 @@ public static class InstallCommand
              it, and so do any stop through jason runtime stop and an uninstall that keeps the data; jason
              status names it while no runtime answers, and Jason Desktop starts one when it finds it standing;
              a run killed or timed out during the stop's wait leaves it standing. Where nothing is to be
-             retired, no runtime is asked anything. A runtime that will not stop is resumed, its note taken
-             back, and leaves that install as it is, and so does a runtime that does not name the executable it runs from. Where the data
+             retired, no runtime is asked anything. A runtime that does not stop leaves that install as it is,
+             and so does a runtime that does not name the executable it runs from. The note is taken back only
+             where the runtime goes on running having taken no stop, and that runtime is resumed; one that took
+             the stop and has not ended, or has ended, keeps the note and is not resumed; one sent the stop
+             whose answer never came keeps the note and is resumed. Where the data
              directory's layout.json names a layout newer than this jason runs (layout_newer) or cannot be
              read (layout_unreadable), no runtime is stopped, no registration moved and nothing of that
              install retired, with --roles or without.
