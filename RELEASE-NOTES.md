@@ -29,7 +29,10 @@ replaces the title and the body together.
 - **Turn one notification channel on or off.** Settings › Notifications has a switch for each channel, and
   `jason notification enable <channel>` and `jason notification disable <channel>` do the same from the command line,
   for the system's own notifications (`toast`, on Windows, macOS and Linux) or a notification plugin. Whoever
-  switches a channel is named, and the change is recorded.
+  switches a channel is named, and the change is recorded. This release publishes the journal forwarder 1.7.0, whose
+  manifest declares the kind a channel's switch writes (`notification_channel_updated`): a grant of every kind
+  forwards it from the first load, and a grant that names kinds does not until you add it, with
+  `jason plugin grant journal-forwarder --subscription notification_channel_updated`.
 - **A Full access card says why it asks.** In the desktop chat, a card titled "Full access asks about this one" now
   says in one line why this request still asks, for example a command whose wildcard the shell expands only as it runs.
 - **Approvals in plain words.** An approval's detail says what the act does in words a person reads at a glance:
