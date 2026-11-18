@@ -32,7 +32,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -110,7 +110,7 @@ function Write-ProcessTree([System.Diagnostics.Process] $process) {
 
 # Every top-level window a process owns, visible or not, with its class and title and the text of each of its child
 # controls: what a setup that waits with no child shows, a message box naming itself. Read on a hosted runner only.
-function Write-ProcessWindows([int] $id) {
+function Use-WindowsType {
     if (-not ('JasonProof.Windows' -as [type])) {
         Add-Type -Namespace JasonProof -Name Windows -MemberDefinition @'
 public delegate bool EnumProc(System.IntPtr hwnd, System.IntPtr lparam);
@@ -131,13 +131,59 @@ public static System.Collections.Generic.List<string> Describe(uint owner) {
     }, System.IntPtr.Zero);
     return lines;
 }
+public static System.Collections.Generic.List<string> Visible(uint owner) {
+    var lines = new System.Collections.Generic.List<string>();
+    EnumWindows((hwnd, _) => {
+        uint pid; GetWindowThreadProcessId(hwnd, out pid);
+        if (pid == owner && IsWindowVisible(hwnd)) lines.Add("class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd) + "'");
+        return true;
+    }, System.IntPtr.Zero);
+    return lines;
+}
 static string ClassOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(256); GetClassName(hwnd, b, b.Capacity); return b.ToString(); }
 static string TextOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(1024); GetWindowText(hwnd, b, b.Capacity); return b.ToString(); }
 '@
     }
+}
+
+function Write-ProcessWindows([int] $id) {
+    Use-WindowsType
     $lines = [JasonProof.Windows]::Describe([uint32] $id)
     Write-Host "  the windows of process $($id): $($lines.Count) line(s)"
     foreach ($line in $lines) { Write-Host "    $line" }
+}
+
+# The visible top-level windows of these processes, one line each: class and title.
+function Get-VisibleWindows([int[]] $ids) {
+    Use-WindowsType
+    $lines = foreach ($id in $ids) { [JasonProof.Windows]::Visible([uint32] $id) }
+    @($lines | Where-Object { $_ })
+}
+
+# A setup started and watched until it ends or the bound: twice a second, every visible top-level window of it and of
+# every process it started is noted, and the step given is run with the seconds gone by. What it ended with, when, and
+# every window seen.
+function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scriptblock] $whileRunning = $null) {
+    $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
+    $null = $process.Handle
+    $started = Get-Date
+    $seen = [System.Collections.Generic.List[string]]::new()
+    while (-not $process.HasExited -and ((Get-Date) - $started).TotalSeconds -lt $seconds) {
+        $all = @(Get-CimInstance -ClassName Win32_Process)
+        $ids = @($process.Id)
+        for ($at = 0; $at -lt $ids.Count; $at++) { $ids += @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] } | ForEach-Object { [int] $_.ProcessId }) }
+        foreach ($window in (Get-VisibleWindows $ids)) { if (-not $seen.Contains($window)) { $seen.Add($window); Write-Host "  a window of the setup at $([int]((Get-Date) - $started).TotalSeconds) s: $window" } }
+        if ($whileRunning) { & $whileRunning ((Get-Date) - $started).TotalSeconds }
+        Start-Sleep -Milliseconds 500
+    }
+    $ended = $process.WaitForExit(0)
+    $result = @{ Ended = $ended; Exit = $(if ($ended) { $process.ExitCode } else { $null }); Seconds = [int]((Get-Date) - $started).TotalSeconds; Windows = @($seen) }
+    if (-not $ended) {
+        Write-ProcessTree $process
+        Write-ProcessWindows $process.Id
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    return $result
 }
 
 function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [int] $seconds = 300) {
@@ -198,10 +244,11 @@ function Read-Version([string] $jason) {
 
 # The application's window started as a person starts it, its processes once it shows, given up to a minute for the
 # runtime its start brings up to answer; the window's process ids.
-function Open-Window {
+function Open-Window([int] $RuntimeSeconds = 60) {
     Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
     Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 60 'the window starting'
-    $until = (Get-Date).AddSeconds(60)
+    Wait-Until { @(Get-VisibleWindows @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { [int] $_.ProcessId })).Count -gt 0 } 60 'the window showing'
+    $until = (Get-Date).AddSeconds($RuntimeSeconds)
     while ((Get-Date) -lt $until -and (Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { Start-Sleep -Seconds 2 }
     Start-Sleep -Seconds 3
     return @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { $_.ProcessId })
@@ -504,23 +551,30 @@ switch ($Step) {
     }
 
     'SilentUpdateLegs' {
-        # Three legs over an open window of the previous release, each from it installed and its window open on the Demo:
-        #  1. the hung state, run 8's: --updated /S --force-run with the window left open; at 120 s the setup's own windows,
-        #     then the setup and the window ended, for the next leg;
-        #  2. the arguments 0.49's window-less update hands the installer (updates.ts quitAndInstall(true, false):
-        #     --updated /S), the old application ending at once;
-        #  3. the same, the old application ending five seconds late.
-        # A leg's setup that has not ended 300 s after the window is described and ended, and the step fails once all ran.
+        # The silent setups of this build over an installed previous release, each leg from that release installed afresh
+        # (docs/release-and-update.md, section 7; desktop/installer/uninstall.nsh). A silent setup never shows a window:
+        # every visible top-level window of the setup and of every process it started is looked for twice a second while
+        # it runs, and any one is a failure.
+        #  1. --updated /S, the arguments the window-less update hands the installer, over a window that never quits: 3
+        #     after the include's bound of about 60 s (here at most 150 s), the old version untouched and still running;
+        #     a 2 within about 30 s would say the include's look missed the window. Then, the window ended, the same setup
+        #     again: 0, so the first left no installer's mutex held.
+        #  2. plain /S over a window: 3, the old version untouched.
+        #  3. plain /S over the application left in the tray, its window closed: 3, the old version untouched.
+        #  4. --updated /S, the old application quitting 20 s late: 0.
+        #  5. --updated /S, the application not running, while another process holds a file of its folder, so the old
+        #     version's uninstaller refuses: 2, the old version still in place and opening.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $old = Join-Path $Previous 'jason-desktop-windows-x64-setup.exe'
         $new = Join-Path $Feed 'jason-desktop-windows-x64-setup.exe'
-        $hung = [System.Collections.Generic.List[string]]::new()
-        function End-Window {
+        $failures = [System.Collections.Generic.List[string]]::new()
+        function End-Application {
             Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-            Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window''s processes ending'
+            Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the application''s processes ending'
         }
-        function From-Previous {
+        function From-Previous([bool] $open = $true) {
             if (Test-Path -LiteralPath $carried) {
+                End-Application
                 $entry = @(Get-JasonUninstallEntries)
                 if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                     $null = Wait-Program $Matches['file'] @($Matches['arguments'])
@@ -529,98 +583,217 @@ switch ($Step) {
             }
             $installed = Wait-Program $old @('/S')
             if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
-            $null = Open-Window
-            Say "the previous release $(Read-Version $carried) installed, its window open; a runtime answering: $(Test-Runtime)"
-        }
-        function Run-Leg([string] $name, [string[]] $arguments, [int] $quitAfter, [int] $describeAt) {
-            Write-Host "--- $name"
-            $installer = Start-Process -FilePath $new -ArgumentList $arguments -PassThru
-            $null = $installer.Handle
-            $started = Get-Date
-            if ($quitAfter -ge 0) {
-                if ($quitAfter -gt 0) { Start-Sleep -Seconds $quitAfter }
-                End-Window
-                Say "$name - the previous release's window ended $([int]((Get-Date) - $started).TotalSeconds) s after the setup started"
-            }
-            $ended = Get-Date
-            if ($describeAt -gt 0 -and -not $installer.WaitForExit($describeAt * 1000)) {
-                Write-Host "$name - at $describeAt s:"
-                Write-ProcessTree $installer
-                Write-ProcessWindows $installer.Id
-                End-Window
-                $ended = Get-Date
-            }
-            if ($installer.WaitForExit(300000)) {
-                Say "$name - the setup ended $([int]((Get-Date) - $ended).TotalSeconds) s after the window ended, exit $($installer.ExitCode), version now $(Read-Version $carried)"
-                if ($installer.ExitCode -ne 0) { $hung.Add("$name exited $($installer.ExitCode)") }
+            $script:previousVersion = Read-Version $carried
+            if ($open) {
+                $null = Open-Window -RuntimeSeconds 0
+                Say "the previous release $previousVersion installed, its window shown"
             } else {
-                Write-Host "$name - 300 s after the window ended:"
-                Write-ProcessTree $installer
-                Write-ProcessWindows $installer.Id
-                Stop-Process -Id $installer.Id -Force -ErrorAction SilentlyContinue
-                $hung.Add("$name did not end within 300 s after the window ended")
+                Say "the previous release $previousVersion installed, not running"
             }
-            End-Window
+        }
+        function Test-Leg([string] $name, [string[]] $arguments, [int[]] $expected, [scriptblock] $whileRunning = $null) {
+            Write-Host "--- $name"
+            $watched = Watch-Setup $new $arguments 150 $whileRunning
+            $said = "$name - " + $(if ($watched.Ended) { "the setup ended after $($watched.Seconds) s, exit $($watched.Exit)" } else { "the setup had not ended after $($watched.Seconds) s" }) + ", the application $(Read-Version $carried)"
+            Say $said
+            if ($watched.Windows.Count -gt 0) { $failures.Add("$name showed a window: $($watched.Windows -join '; ')") }
+            if (-not $watched.Ended) { $failures.Add("$name did not end within 150 s") }
+            elseif ($expected -notcontains $watched.Exit) { $failures.Add("$name exited $($watched.Exit), not $($expected -join ' or ')") }
+            return $watched
+        }
+        function Assert-Untouched([string] $name, [bool] $running) {
+            if ((Read-Version $carried) -ne $previousVersion) { $failures.Add("after $name the application is $(Read-Version $carried), not the previous $previousVersion") }
+            $alive = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0
+            if ($running -and -not $alive) { $failures.Add("after $name the previous release no longer runs") }
         }
 
+        # 1. Over a window that never quits, then the same setup again with the window ended.
         From-Previous
-        Run-Leg 'leg 1, by hand: --updated /S --force-run, the window left open' @('--updated', '/S', '--force-run') -1 120
+        $leg = Test-Leg 'leg 1, --updated /S over a window that never quits' @('--updated', '/S') @(3)
+        if ($leg.Ended -and $leg.Exit -eq 2 -and $leg.Seconds -lt 30) { $failures.Add('leg 1 ended 2 within 30 s: the include''s look missed the window, and the old uninstaller refused') }
+        if ($leg.Ended -and $leg.Exit -eq 3 -and $leg.Seconds -lt 45) { $failures.Add("leg 1 ended 3 after $($leg.Seconds) s, before the include's bound of about 60 s") }
+        Assert-Untouched 'leg 1' $true
+        End-Application
+        $null = Test-Leg 'leg 1, the same setup again once the window ended' @('--updated', '/S') @(0)
+        if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 1's second setup the application is $(Read-Version $carried), not $Version") }
+
+        # 2. Plain /S over a window.
         From-Previous
-        Run-Leg 'leg 2, the window-less update''s arguments: --updated /S, the old application ending at once' @('--updated', '/S') 0 0
+        $null = Test-Leg 'leg 2, plain /S over a window' @('/S') @(3)
+        Assert-Untouched 'leg 2' $true
+
+        # 3. Plain /S over the application in the tray: its window closed as a person closes it, the application left
+        # running.
         From-Previous
-        Run-Leg 'leg 3, the window-less update''s arguments: --updated /S, the old application ending 5 s late' @('--updated', '/S') 5 0
-        if ($hung.Count -gt 0) { Fail ($hung -join '; ') }
+        $main = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' -and $_.CommandLine -notmatch '--type=' })
+        foreach ($window in $main) { $running = Get-Process -Id $window.ProcessId -ErrorAction SilentlyContinue; if ($running) { $null = $running.CloseMainWindow() } }
+        Start-Sleep -Seconds 5
+        $shown = @($main | ForEach-Object { Get-VisibleWindows @([int] $_.ProcessId) }) | Where-Object { $_ }
+        if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0) {
+            $failures.Add('leg 3: closing the window ended the application, so there was no application in the tray to set up over')
+        } else {
+            Say "leg 3: the window closed, the application left running in the tray; its visible windows: $(if ($shown) { $shown -join '; ' } else { 'none' })"
+            $null = Test-Leg 'leg 3, plain /S over the application in the tray' @('/S') @(3)
+            Assert-Untouched 'leg 3' $true
+        }
+
+        # 4. The old application quitting 20 s after the setup started.
+        From-Previous
+        $late = { param($elapsed) if ($elapsed -ge 20 -and -not $script:quit) { $script:quit = $true; End-Application } }
+        $script:quit = $false
+        $null = Test-Leg 'leg 4, --updated /S, the old application quitting 20 s late' @('--updated', '/S') @(0) $late
+        if (-not $script:quit) { $failures.Add('leg 4: the setup ended before the application was made to quit') }
+        if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 4 the application is $(Read-Version $carried), not $Version") }
+
+        # 5. The old uninstaller refusing: a file of the application's folder held by another process, no delete shared.
+        From-Previous $false
+        $held = @('LICENSE.electron.txt', 'LICENSES.chromium.html', 'resources\app.asar') | ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if (-not $held) { Fail 'leg 5: no file of the application''s folder to hold' }
+        $release = Join-Path $env:RUNNER_TEMP 'release-held-file'
+        Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
+        $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 3
+        Say "leg 5: $(Split-Path -Leaf $held) of the application's folder held open by process $($holder.Id), sharing read alone"
+        $null = Test-Leg 'leg 5, --updated /S while the old uninstaller cannot remove the folder' @('--updated', '/S') @(2)
+        New-Item -ItemType File -Path $release -Force | Out-Null
+        $null = $holder.WaitForExit(15000)
+        Assert-Untouched 'leg 5' $false
+        $opened = Open-Window -RuntimeSeconds 0
+        if ($opened.Count -eq 0) { $failures.Add('after leg 5 the previous release does not open') } else { Say "after leg 5 the previous release $(Read-Version $carried) opens" }
+        End-Application
+
+        if ($failures.Count -gt 0) { Fail ($failures -join '; ') }
+    }
+
+    'UninstallWaiterShown' {
+        # jason uninstall's waiter (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff): where its
+        # silent uninstaller ends 3 because Jason Desktop was opened after the verb's own check, it runs the uninstaller
+        # once more without /S, which shows the person its question. Here: this build installed by the stand-in script,
+        # a runtime started, jason uninstall started, and the window opened once the verb has stopped that runtime, past
+        # its own check. The second run is found, its window seen, and it is ended without an answer; the folder is still
+        # there, and the waiter's line is in the desktop's log of the day. Installed apps then takes the application off.
+        if (-not $Script) { Fail '-Script is needed.' }
+        $installed = Invoke-InstallScript $Script
+        if ($installed.Exit -ne 0) { Fail "install.ps1 exited with $($installed.Exit): $($installed.Said)" }
+        if ((Invoke-Program $carried @('runtime', 'start')).Exit -ne 0) { Fail 'a runtime could not be started' }
+        $descriptor = Join-Path $data 'run\runtime.json'
+        $verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden
+        $null = $verb.Handle
+        Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited } 120 'jason uninstall stopping the runtime'
+        if ($verb.HasExited) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window could be opened past its check: the leg proves nothing" }
+        Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null
+        Say 'the window opened once jason uninstall had stopped the runtime, past its own check'
+        if (-not $verb.WaitForExit(300000)) { Fail 'jason uninstall did not end within 300 s' }
+        Say "jason uninstall ended, exit $($verb.ExitCode)"
+        $shown = $null
+        $until = (Get-Date).AddSeconds(150)
+        while ((Get-Date) -lt $until -and -not $shown) {
+            $copies = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' })
+            foreach ($copy in $copies) { $windows = @(Get-VisibleWindows @([int] $copy.ProcessId)); if ($windows.Count -gt 0) { $shown = @{ Process = $copy; Windows = $windows } } }
+            if (-not $shown) { Start-Sleep -Milliseconds 500 }
+        }
+        if (-not $shown) {
+            Write-Host 'every uninstaller process now:'
+            Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' } | ForEach-Object { Write-Host "  $($_.ProcessId), started by $($_.ParentProcessId): $($_.CommandLine)" }
+            Fail 'no uninstaller run without /S showed a window within 150 s of jason uninstall ending'
+        }
+        Say "the waiter ran the uninstaller once more without /S (process $($shown.Process.ProcessId)), and it showed: $($shown.Windows -join '; ')"
+        if (-not (Test-Path -LiteralPath (Join-Path $app 'Jason.exe'))) { Fail 'the application''s folder went while the window ran' }
+        Stop-Process -Id $shown.Process.ProcessId -Force
+        $logs = Join-Path $data 'logs'
+        Wait-Until { @(Get-ChildItem -LiteralPath $logs -Filter 'desktop-*.jsonl' -ErrorAction SilentlyContinue | Select-String -SimpleMatch 'uninstaller_exited').Count -gt 0 } 30 'the waiter''s line in the desktop''s log of the day'
+        Say 'that run ended without an answer, the folder is still there, and the waiter left its uninstaller_exited line in the desktop''s log of the day'
+        Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
     }
 
     'UpdateApply' {
         # The carried jason update apply on a real install of this test build, to a next test build - its own jason, its
-        # setup and its feed - served on the loopback (docs/release-and-update.md, "Handing the update to Jason Desktop"):
-        # with no window open, the verb hands the update to Jason Desktop, which installs it with --updated /S, and the new
-        # carried jason finishes it; this runner's administrator has no split token, so the verb is not refused with
-        # update_elevated. Then with a window open, which refuses a request naming a feed (window_feed). The test build's
-        # updater checks no publisher, so this says nothing of the signature check.
+        # setup and its feed - served on the loopback (docs/release-and-update.md, "Handing the update to Jason Desktop").
+        # First with a window open, which refuses a request naming a feed (window_feed). Then with no window: the verb
+        # hands the update to Jason Desktop, which installs it with --updated /S, and the new carried jason finishes it;
+        # this runner's administrator has no split token, so the verb is not refused with update_elevated. While each
+        # runs, a second reader opens the request's file as fast as it can, so the Desktop's writes of it meet a reader
+        # holding it as the verb's own poll does; no step may be lost to that (desktop/src/update-request.ts,
+        # writeRequestFile), and the desktop's log may not say a step went unwritten. The test build's updater checks no
+        # publisher, so this says nothing of the signature check.
         if (-not $Feed -or -not $Version -or -not $Script -or -not $Next) { Fail '-Feed, -Version, -Script and -Next are needed.' }
         $nextVersion = "$Version.1"
+        $failure = $null
         $installed = Invoke-InstallScript $Script
         if ($installed.Exit -ne 0) { Fail "install.ps1 exited with $($installed.Exit): $($installed.Said)" }
         if ((Read-Version $carried) -ne $Version) { Fail "the application installed is $(Read-Version $carried), not $Version" }
         $runtime = Invoke-Program $carried @('runtime', 'start')
         if ($runtime.Exit -ne 0) { Fail "a runtime could not be started before the update ($($runtime.Exit))" }
 
+        $requests = Join-Path $data 'update'
+        $stopReading = Join-Path $env:RUNNER_TEMP 'stop-reading-requests'
+        $readsFile = Join-Path $env:RUNNER_TEMP 'request-reads.txt'
+        function Start-Reader {
+            Remove-Item -LiteralPath $stopReading, $readsFile -Force -ErrorAction SilentlyContinue
+            $loop = "`$n = 0; while (-not (Test-Path -LiteralPath '$stopReading')) { `$files = try { [System.IO.Directory]::GetFiles('$requests', 'desktop-*.json') } catch { @() }; foreach (`$f in `$files) { try { `$s = [System.IO.File]::Open(`$f, 'Open', 'Read', 'ReadWrite'); `$b = New-Object byte[] 65536; `$null = `$s.Read(`$b, 0, `$b.Length); Start-Sleep -Milliseconds 15; `$s.Dispose(); `$n++ } catch { } }; Start-Sleep -Milliseconds 2 }; Set-Content -LiteralPath '$readsFile' -Value `$n"
+            Start-Process pwsh -ArgumentList '-NoProfile', '-Command', $loop -PassThru -WindowStyle Hidden
+        }
+        function Stop-Reader($reader) {
+            New-Item -ItemType File -Path $stopReading -Force | Out-Null
+            $null = $reader.WaitForExit(15000)
+            return $(if (Test-Path -LiteralPath $readsFile) { [int](Get-Content -LiteralPath $readsFile -Raw) } else { -1 })
+        }
+
         $server = Start-Process python -ArgumentList '-m', 'http.server', '8098', '--bind', '127.0.0.1', '--directory', $Next -PassThru -NoNewWindow
         try {
             Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/manifest.json' -UseBasicParsing).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
             $feedAddress = 'http://127.0.0.1:8098/manifest.json'
 
-            # No window open: the update goes through.
-            $applied = Invoke-Program $carried @('update', 'apply', '--feed', $feedAddress, '--drain-seconds', '0')
-            $applied.Said | ForEach-Object { Write-Host $_ }
-            if ($applied.Flat.Contains('update_elevated')) { Fail 'the carried jason update apply was refused with update_elevated on a runner whose administrator has no split token' }
-            if ($applied.Exit -ne 0) { Fail "the carried jason update apply exited with $($applied.Exit)" }
-            Wait-Until { (Read-Version $carried) -eq $nextVersion } 180 "the application's version.json naming $nextVersion"
-            if (((Read-Version $carried) -split '\+')[0] -ne $nextVersion) { Fail "after the update the application is $(Read-Version $carried)" }
-            $said = (Invoke-Program $carried @('--version')).Said
-            if ((("$said".Trim()) -split '\+')[0] -ne $nextVersion) { Fail "after the update the carried jason says '$said', not $nextVersion" }
-            if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { Fail 'no runtime answers after the update, which starts one again' }
-            if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -ne 0) { Fail 'a window was started by an update asked for from a terminal' }
-            Say "the carried jason update apply, not refused as elevated, handed $nextVersion to Jason Desktop with no window; the application and its jason say $nextVersion and the runtime answers again"
-
             # A window open: the Desktop refuses a request that names a feed, and the verb says so.
-            $opened = Open-Window
+            $null = Open-Window
+            $reader = Start-Reader
             $refused = Invoke-Program $carried @('update', 'apply', '--feed', $feedAddress, '--drain-seconds', '0')
+            $reads = Stop-Reader $reader
             $refused.Said | ForEach-Object { Write-Host $_ }
             if ($refused.Exit -ne 1 -or -not $refused.Flat.Contains('update_refused_by_desktop') -or -not $refused.Flat.Contains('window_feed')) { Fail "with a window open the update was not refused as update_refused_by_desktop, window_feed (exit $($refused.Exit))" }
             if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { Fail 'the refused update left no runtime answering' }
-            Say 'with a window open the carried jason update apply was refused by the window, update_refused_by_desktop for window_feed, and the runtime is as it was'
-            $opened | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+            Say "with a window open the carried jason update apply was refused by the window, update_refused_by_desktop for window_feed, and the runtime answers; a second reader opened the request's file $reads time(s) meanwhile"
+            Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
             Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
+            if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { $null = Invoke-Program $carried @('runtime', 'start') }
+
+            # No window open: the update goes through.
+            $reader = Start-Reader
+            $applied = Invoke-Program $carried @('update', 'apply', '--feed', $feedAddress, '--drain-seconds', '0')
+            $reads = Stop-Reader $reader
+            $applied.Said | ForEach-Object { Write-Host $_ }
+            Say "with no window, a second reader opened the request's file $reads time(s) while the update ran"
+            if ($applied.Flat.Contains('update_elevated')) { Fail 'the carried jason update apply was refused with update_elevated on a runner whose administrator has no split token' }
+            Say 'the carried jason update apply was not refused with update_elevated'
+            if ($applied.Exit -eq 0) {
+                Wait-Until { (Read-Version $carried) -eq $nextVersion } 180 "the application's version.json naming $nextVersion"
+                $said = (Invoke-Program $carried @('--version')).Said
+                if ((("$said".Trim()) -split '\+')[0] -ne $nextVersion) { $failure = "after the update the carried jason says '$said', not $nextVersion" }
+                elseif ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { $failure = 'no runtime answers after the update, which starts one again' }
+                elseif (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -ne 0) { $failure = 'a window was started by an update asked for from a terminal' }
+                else { Say "the carried jason update apply handed $nextVersion to Jason Desktop with no window; the application and its jason say $nextVersion and the runtime answers again" }
+            } else {
+                # What a refusal left: the application as it was, its jason at its path, the runtime answering again.
+                $kept = if ((Read-Version $carried) -eq $Version -and (((("$((Invoke-Program $carried @('--version')).Said)".Trim()) -split '\+')[0]) -eq $Version) -and (Invoke-Program $carried @('runtime', 'status')).Exit -eq 0) { "the application, its jason and the runtime are as they were" } else { "the application is $(Read-Version $carried) and the runtime answers: $(Test-Runtime)" }
+                $failure = if ($applied.Flat.Contains('keep_failed')) {
+                    "the carried jason update apply was refused by Jason Desktop with keep_failed (exit $($applied.Exit)): the copy of the application kept aside to go back to could not be made; $kept"
+                } else {
+                    "the carried jason update apply exited with $($applied.Exit); $kept"
+                }
+            }
         } finally {
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
         }
 
+        $unwritten = @(Get-ChildItem -LiteralPath (Join-Path $data 'logs') -Filter 'desktop-*.jsonl' -ErrorAction SilentlyContinue | Select-String -SimpleMatch 'could not be written at the step')
+        if ($unwritten.Count -gt 0) { $unwritten | ForEach-Object { Write-Host $_.Line }; $failure = (@($failure, 'the desktop''s log says a step of the request''s file went unwritten') | Where-Object { $_ }) -join '; ' }
+        else { Say 'the desktop''s log says no step of the request''s file went unwritten' }
+
         $removed = Invoke-Program $carried @('uninstall', '--purge-data', '--yes')
         if ($removed.Exit -ne 0) { Fail "jason uninstall after the update exited with $($removed.Exit): $($removed.Said)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        if ($failure) { Fail $failure }
     }
 
     'UninstallFromInstalledApps' {

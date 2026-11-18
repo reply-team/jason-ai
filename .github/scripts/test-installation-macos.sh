@@ -61,6 +61,20 @@ version_of() { sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Content
 fresh() { env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh TERM=xterm-256color PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/zsh -l -i -c "$1" 2>/dev/null; }
 
 # This job's PATH without ~/.local/bin, which the runner's image puts there and a person's terminal does not have.
+# launchd's record of every ai.jason label enabled or disabled for this account, in the user-login domain (gui/<uid>) and
+# the per-user domain (user/<uid>), one line each: domain, label, state. `load -w` and `unload -w` write it, and
+# `launchctl enable` and `disable`; it outlives the job and its file.
+launchd_records() {
+    for domain in gui user; do
+        launchctl print-disabled "$domain/$(id -u)" 2>/dev/null | awk -v domain="$domain" '
+            match($0, /ai\.jason[A-Za-z0-9.-]*/) {
+                label = substr($0, RSTART, RLENGTH); state = $0
+                sub(/.*=>[[:space:]]*/, "", state); gsub(/[[:space:]]/, "", state)
+                print domain "\t" label " " state
+            }'
+    done
+}
+
 plain_path() { printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$HOME/.local/bin" | paste -sd: -; }
 
 wait_until() {
@@ -97,24 +111,13 @@ write_listing() {
         done
         for agent in "$HOME"/Library/LaunchAgents/ai.jason*; do [ -e "$agent" ] && printf 'launch agent file\t%s\n' "${agent#$HOME/}"; done
         # launchd, read two ways that are kept apart: a job loaded in this account's domain (its label answering a print of
-        # its own), and the record launchd keeps of a label enabled or disabled (the "disabled services" block, which
-        # `load -w` and `unload -w` write and which outlives the job).
+        # its own), and launchd's record of a label enabled or disabled, in both domains (launchd_records).
         {
         launchctl print "gui/$(id -u)/ai.jason.runtime" > /dev/null 2>&1 && printf 'launchd job loaded\tai.jason.runtime\n'
-        launchctl print "gui/$(id -u)" 2>/dev/null | awk '
-            /disabled services = \{/ { record = 1; next }
-            record && /^[[:space:]]*\}/ { record = 0; next }
-            match($0, /ai\.jason[A-Za-z0-9.-]*/) {
-                label = substr($0, RSTART, RLENGTH)
-                if (record) { state = $0; sub(/.*=>[[:space:]]*/, "", state); gsub(/[[:space:]]/, "", state); print "launchd record\t" label " " state }
-                else { print "launchd label\t" label }
-            }' | sort -u | while IFS="$(printf '\t')" read -r kind rest; do
-                if [ "$kind" = 'launchd label' ]; then
-                    if launchctl print "gui/$(id -u)/$rest" > /dev/null 2>&1; then printf 'launchd job loaded\t%s\n' "$rest"; fi
-                else
-                    printf '%s\t%s\n' "$kind" "$rest"
-                fi
-            done
+        launchctl print "gui/$(id -u)" 2>/dev/null | grep -oE 'ai\.jason[A-Za-z0-9.-]*' | sort -u | while read -r label; do
+            if launchctl print "gui/$(id -u)/$label" > /dev/null 2>&1; then printf 'launchd job loaded\t%s\n' "$label"; fi
+        done
+        launchd_records | sed 's/^/launchd record /'
         } | sort -u || true
         folder 'updater cache' "$HOME/Library/Caches/jason-desktop-updater"
         folder 'ShipIt cache' "$HOME/Library/Caches/ai.jasonharness.desktop.ShipIt"
@@ -303,6 +306,7 @@ from-previous)
     "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     "$WRAPPER" runtime autostart enable > "$OUT/autostart.json" || fail "the previous release could not register its logon start: $(cat "$OUT/autostart.json")"
     say "the previous release's command-line Jason $old installed by its own script, with a runtime and a logon registration"
+    say "launchd's records after the previous release's registration: $(launchd_records | tr '\t\n' ' ;' || true)"
 
     python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/feed-server.log" 2>&1 &
     server=$!
@@ -322,6 +326,24 @@ from-previous)
     say "the command-line install now says $version and its runtime answers (the move into the application is asserted once it lands)"
 
     "$WRAPPER" uninstall > "$OUT/uninstall-previous.json" || fail "jason uninstall of the updated command-line install failed: $(cat "$OUT/uninstall-previous.json")"
+    say "launchd's records after $version's jason uninstall: $(launchd_records | tr '\t\n' ' ;' || true)"
+    ;;
+
+previous-removal)
+    # The previous release's own removal of its logon registration, said in launchd's records: its command-line Jason
+    # installed by its own script, its logon registration, and its own jason uninstall. Facts for the release before this
+    # one, whose code no longer changes: the records before, after the registration and after the removal are said, and
+    # the listing is kept, not compared.
+    previous="$1"
+    say "launchd's records before the previous release's own removal leg: $(launchd_records | tr '\t\n' ' ;' || true)"
+    env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/install-previous-again.txt" || fail "the previous release's install.sh failed"
+    old="$("$WRAPPER" --version | cut -d+ -f1)"
+    "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
+    "$WRAPPER" runtime autostart enable > "$OUT/autostart-again.json" || fail "the previous release could not register its logon start"
+    say "launchd's records after $old's registration: $(launchd_records | tr '\t\n' ' ;' || true)"
+    "$WRAPPER" uninstall > "$OUT/uninstall-previous-own.json" || fail "the previous release's own jason uninstall failed: $(cat "$OUT/uninstall-previous-own.json")"
+    loaded=no; launchctl print "gui/$(id -u)/ai.jason.runtime" > /dev/null 2>&1 && loaded=yes
+    say "launchd's records after $old's own jason uninstall: $(launchd_records | tr '\t\n' ' ;' || true); the job loaded: $loaded"
     ;;
 
 requirement)
