@@ -139,6 +139,13 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(places);
         ArgumentNullException.ThrowIfNull(options);
 
+        // From a place that goes away, nothing at all: the update's door runs this routine with no InstallCommand before it.
+        if (VanishingPlace.Refusal(carried, places) is { } vanishing)
+        {
+            var running = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null ? RuntimeStates.NotRunning : RuntimeStates.Running;
+            return new InstallReport(carried.Version, carried.Executable, null, [], null, null, running, [], [], [vanishing]);
+        }
+
         // The command-line executables an earlier run renamed aside while a process held them, once that process ended: before
         // this run renames any, whose process still runs.
         RetiredSweep.Sweep(places, options.Retire);

@@ -1768,7 +1768,14 @@ application: the terminal command, the skills for Claude Code and Codex where ea
 other `jason` is refused with `install_not_carried`, a system other than macOS and Windows with
 `install_unsupported`, and a `jason` run elevated with `install_elevated` — on Windows as an administrator above the
 account's ordinary rights or as another account than the one signed in to the session, on macOS as root, by the rule
-`update_elevated` follows (§7) — each before anything is read or written. Where the data directory has an update folder it holds the
+`update_elevated` follows (§7) — each before anything is read or written. On macOS, the `jason` of an application that runs from a place
+that goes away, its disk image mounted or a copy macOS runs from a temporary place of its own (App Translocation) because
+it was opened where it was downloaded, is refused with `install_vanishing_place` before anything is stopped, written or
+retired, and before the update's lock is read or taken: nothing is placed, retired or stopped, and the sentence says to
+move Jason to Applications, or to `~/Applications`, and open it there. A volume is such a place only where it is
+read-only, as `access(2)` answers, which writes nothing; a disk of a person's own is not refused by its path. The routine
+an update runs in its own process refuses the same way at its entry. Windows is not refused this way: its installer puts
+the application in its place. Where the data directory has an update folder it holds the
 update's lock, `<data>/update/update.lock`, while it runs, naming itself beside it as `install` (§7), and while another
 `jason` holds it — an update, its finish or a rollback — it refuses with `update_in_progress` and sets nothing up, since an
 update's own finish sets the machine up itself; while another `jason install` holds it, it refuses with

@@ -361,7 +361,10 @@ installation itself: one installation, Jason Desktop and the `jason` it carries,
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
 `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from one of
-them, it sets the machine up as the script does (§2): the application's first start of each version runs the
+them, it sets the machine up as the script does (§2), once it is in its place: on macOS, drag Jason into Applications, or
+into the Applications folder in your home, and open it there. Opened from its disk image, or where it was downloaded,
+which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its
+Command Line item says to move Jason first. From its place, the application's first start of each version runs the
 `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each
 is found, and its Command Line item says what that placed
 ([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install

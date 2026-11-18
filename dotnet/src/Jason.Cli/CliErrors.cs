@@ -76,6 +76,13 @@ public static class CliErrors
     /// </summary>
     public const string InstallElevated = "install_elevated";
 
+    /// <summary>
+    /// <c>jason install</c> run by a jason the application carries from a place that goes away: a mounted disk image, or a
+    /// copy macOS runs translocated. Nothing was placed, retired or stopped; the sentence says to move Jason to Applications
+    /// first. Not retryable: the same place answers the same.
+    /// </summary>
+    public const string InstallVanishingPlace = "install_vanishing_place";
+
     /// <summary><c>jason install</c> on a system it does not set up — anything but macOS and Windows: nothing was read or written.</summary>
     public const string InstallUnsupported = "install_unsupported";
 
