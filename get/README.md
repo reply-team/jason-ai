@@ -132,7 +132,9 @@ the address in the Worker's place. The install scripts' own addresses, `/release
    database refuses fails silently, because the count is left to run after the answer, so the row is the only sign the
    counting works; if it is not there, `npx wrangler@4.152.0 rollback`.
 7. Check, before a release that names the address is published: `curl -sI https://get.jasonharness.ai/install`
-   answers 200 with `content-type: text/plain; charset=utf-8`, and
+   answers 200 with `content-type: text/plain; charset=utf-8` and an `X-Jason-Install-Source` header:
+   `X-Jason-Install-Source` names the latest release's tag; `main` means the release's page was not read, and `main`'s
+   was served in its place. And
    `curl -sI https://get.jasonharness.ai/releases/latest/download/manifest.json` still answers the redirect to this
    repository's releases on GitHub. The install prompt names the first address, so it must answer before the prompt is
    published.
