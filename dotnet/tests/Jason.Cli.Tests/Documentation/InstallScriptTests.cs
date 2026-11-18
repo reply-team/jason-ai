@@ -656,6 +656,46 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// Going back to the previous release on Windows leaves that release's own skills record, which its uninstall keeps where
+    /// the person's own quick-start stands. One name is the previous release's own and no other; the way-back leg records
+    /// its exact listing line only after reading the file as that release's own, outside the leg that moves again; a compare
+    /// excuses a line only where a leg of the previous release recorded it exactly; and a clean begin takes it after that leg,
+    /// before it reads the machine, so the next leg runs.
+    /// </summary>
+    [Fact]
+    public void The_Windows_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\n$previousOwn = [ordered]@{ 'agents skills\\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\\skills\\.jason-skills.json') }\n", windows, StringComparison.Ordinal);
+        Assert.Contains("($previousLegs -ccontains $leg) -and (@(Get-Content -LiteralPath $previousOwnRows) -ccontains \"$leg`t$line\")", Function("Test-PreviousOwn"), StringComparison.Ordinal);
+        Assert.Contains("if (-not (Test-PreviousOwn $by $line)) { continue }", Function("Take-PreviousOwn"), StringComparison.Ordinal);
+        Assert.Contains("if (Test-PreviousOwn $by $line) { $own.Add(", Function("Compare-Listings"), StringComparison.Ordinal);
+
+        // The one writer of a row: the way-back leg's own end, outside -Again, after the record is read as the previous release's.
+        Assert.Single(Regex.Matches(windows, @"Add-Content -LiteralPath \$previousOwnRows"));
+        var wayBack = windows[windows.IndexOf("\n    'WayBack' {\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)];
+        var otherwise = wayBack.IndexOf("        } else {\n            # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.\n", StringComparison.Ordinal);
+        var refs = wayBack.IndexOf("is not $previousVersion's own skills record", StringComparison.Ordinal);
+        var row = wayBack.IndexOf("Add-Content -LiteralPath $previousOwnRows", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("Say \"going back leaves $leftRecord", StringComparison.Ordinal);
+        var ownSkill = wayBack.IndexOf("        if ($way -ceq 'put-back') {\n            $own4", StringComparison.Ordinal);
+        Assert.True(otherwise >= 0 && refs > otherwise && row > refs && said > row && ownSkill > said, "the way-back leg does not record the previous release's own record only after reading it as that release's, in its own end and outside -Again, and say so");
+
+        var begin = windows[windows.IndexOf("\n    'Begin' {\n", StringComparison.Ordinal)..];
+        var cache = begin.IndexOf("\n            if (-not (Take-UpdaterCache $Leg $prior)) { return }\n", StringComparison.Ordinal);
+        var take = begin.IndexOf("\n            if (-not (Take-PreviousOwn $Leg $prior)) { return }\n", StringComparison.Ordinal);
+        var read = begin.IndexOf("\n            $found = @(Get-LeftOver)\n", StringComparison.Ordinal);
+        Assert.True(cache >= 0 && take > cache && read > take, "a clean Windows begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
     /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
     /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
     /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one
