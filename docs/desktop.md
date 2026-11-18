@@ -1129,7 +1129,8 @@ Windows, and the harness root (`~/Jason`, or the one `Harness:Root` names), alwa
 above stays too. The two folders an earlier version's demo made (see [the demo](#the-demo)) are not your data: the
 removal takes them off too.
 
-- **Windows.** Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal. Either is the one
+- **Windows.** Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal: the two are
+  alternatives, one or the other, not both. Either is the one
   uninstall, the `jason` the application carries (`docs/release-and-update.md` §9): it stops the runtime and removes
   nothing when it does not stop, then takes off Open Jason at Login, the `jason-desktop://` link registration when it
   names this application, the `jason` command and the skills `jason install` placed, an older command-line install, an
