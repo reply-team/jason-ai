@@ -1009,6 +1009,61 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// Going back to the previous release on macOS leaves that release's own skills record, which its uninstall keeps where
+    /// the person's own quick-start stands. One name is the previous release's own and no other; the way-back leg records
+    /// its exact listing line only after reading the file as that release's own, outside the leg that moves again; a compare
+    /// excuses a line only where a leg of the previous release recorded it exactly; and a clean begin takes it after that leg,
+    /// before it reads the machine, so the next leg runs.
+    /// </summary>
+    [Fact]
+    public void The_macOS_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var at = macos.IndexOf($"\n{name}() {{\n", StringComparison.Ordinal);
+            Assert.True(at >= 0, $"test-installation-macos.sh has no function {name}");
+            var body = macos[at..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        string Step(string name, string next)
+        {
+            var at = macos.IndexOf($"\n{name})\n", StringComparison.Ordinal);
+            Assert.True(at >= 0, $"test-installation-macos.sh has no step {name}");
+            var body = macos[at..];
+            return body[..body.IndexOf($"\n{next})\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\nPREVIOUS_OWN_NAME='agents skills/.jason-skills.json'\nPREVIOUS_OWN_FILE=\"$HOME/.agents/skills/.jason-skills.json\"\n", macos, StringComparison.Ordinal);
+        var isOwn = Function("is_previous_own");
+        Assert.Contains("grep -qxF -- \"$1\" \"$OUT/previous-legs.txt\" 2>/dev/null || return 1", isOwn, StringComparison.Ordinal);
+        Assert.Contains("grep -qxF -- \"$1\t$2\" \"$OUT/previous-own.txt\"", isOwn, StringComparison.Ordinal);
+        var take = Function("take_previous_own");
+        Assert.Contains("is_previous_own \"$by\" \"$line\" || return 0", take, StringComparison.Ordinal);
+        Assert.Contains("[ \"${GITHUB_ACTIONS:-}\" != true ] || [ \"${RUNNER_ENVIRONMENT:-}\" != github-hosted ]", take, StringComparison.Ordinal);
+        Assert.Contains(">> \"$OUT/resets.txt\"", take, StringComparison.Ordinal);
+        Assert.Contains("if is_previous_own \"$by\" \"$line\"; then own_here=", Step("compare", "begin"), StringComparison.Ordinal);
+
+        // The one writer of a row: the way-back leg's own end, outside 'again', after the record is read as the previous release's.
+        Assert.Single(Regex.Matches(macos, @">> ""\$OUT/previous-own\.txt"""));
+        var wayBack = Step("way-back", "over-previous-desktop");
+        var otherwise = wayBack.IndexOf("        say \"$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0\"\n", StringComparison.Ordinal);
+        var refs = wayBack.IndexOf("is not $old's own skills record", StringComparison.Ordinal);
+        var row = wayBack.IndexOf(">> \"$OUT/previous-own.txt\"", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("say \"going back leaves $PREVIOUS_OWN_FILE", StringComparison.Ordinal);
+        var ownSkill = wayBack.IndexOf("    if [ \"$way\" = put-back ]; then\n        own4=", StringComparison.Ordinal);
+        Assert.True(otherwise >= 0 && refs > otherwise && row > refs && said > row && ownSkill > said, "the macOS way-back leg does not record the previous release's own record only after reading it as that release's, in its own end and outside 'again', and say so");
+
+        var begin = Step("begin", "end");
+        var scratch = begin.IndexOf("\n        take_scratch \"$LEG\"\n", StringComparison.Ordinal);
+        var prior = begin.IndexOf("\n        prior=\"$(cat \"$OUT/last-leg.txt\" 2>/dev/null || true)\"\n", StringComparison.Ordinal);
+        var taken = begin.IndexOf("\n        take_previous_own \"$LEG\" \"$prior\"\n", StringComparison.Ordinal);
+        var read = begin.IndexOf("\n        found=\"$(left_over)\"\n", StringComparison.Ordinal);
+        Assert.True(scratch >= 0 && prior > scratch && taken > prior && read > taken, "a clean macOS begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
