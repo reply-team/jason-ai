@@ -644,7 +644,7 @@ public class WindowsTasksTests
 
         public (int Exit, string Output, string Error) Run(IReadOnlyList<string> command)
         {
-            Assert.Equal("schtasks", command[0]);
+            Assert.Equal(Path.Combine(Environment.SystemDirectory, "schtasks.exe"), command[0]);
             Assert.Contains("/HRESULT", command);
 
             var words = command.ToList();

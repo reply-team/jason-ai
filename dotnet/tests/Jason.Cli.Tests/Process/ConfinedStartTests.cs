@@ -16,8 +16,8 @@ public class ConfinedStartTests
     {
         using var dir = new TempPaths();
         var started = Confined(() => (
-            RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], updateLaunch: null),
-            RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started")));
+            RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], updateLaunch: null),
+            RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started")));
 
         Assert.False(started.Item1.Environment.ContainsKey(Confinement.Variable), "A plain launch passed the variable on.");
         Assert.False(started.Item2.Environment.ContainsKey(Confinement.Variable), "The update's launch passed the variable on.");
@@ -27,7 +27,7 @@ public class ConfinedStartTests
     public void The_command_an_update_hands_the_rest_of_itself_to_does_not_carry_the_variable()
     {
         using var dir = new TempPaths();
-        var started = Confined(() => RuntimeProcessControl.RunStart(dir.Paths, ["jason", "update", "apply"]));
+        var started = Confined(() => RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason"), "update", "apply"]));
 
         Assert.False(started.Environment.ContainsKey(Confinement.Variable), "The command that starts a runtime passed the variable on.");
     }

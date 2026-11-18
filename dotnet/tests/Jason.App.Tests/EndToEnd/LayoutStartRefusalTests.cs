@@ -65,7 +65,7 @@ public class LayoutStartRefusalTests
     private sealed class ShippedRuntime : IRuntimeProcessControl
     {
         public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable, string? updateLaunch) =>
-            RuntimeProcessControl.Instance.Launch(paths, ["dotnet", GoldenPath.Assembly], updateLaunch);
+            RuntimeProcessControl.Instance.Launch(paths, [Jason.Runtime.Tests.Muxer.Path, GoldenPath.Assembly], updateLaunch);
 
         public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Only a launch is asked of it.");

@@ -130,7 +130,7 @@ public class PluginFlowEndToEndTests
             var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
             Assert.Equal("world", succeeded.Result!["echo"]!["hello"]!.GetValue<string>());
             Assert.Equal(digest, result.Provenance.Digest);
-            Assert.Equal("dotnet", result.Launch!.Command[0]);
+            Assert.Equal(Muxer.Path, result.Launch!.Command[0]);
             Assert.Equal("jason.dll", Path.GetFileName(result.Launch.Command[1]));
             Assert.Equal(0, result.Launch.ExitCode);
 
@@ -321,7 +321,7 @@ public class PluginFlowEndToEndTests
     /// </summary>
     private sealed class JasonDllLocator : IPluginHostLocator
     {
-        public IReadOnlyList<string> Command { get; } = ["dotnet", Path.Combine(AppContext.BaseDirectory, "jason.dll")];
+        public IReadOnlyList<string> Command { get; } = [Muxer.Path, Path.Combine(AppContext.BaseDirectory, "jason.dll")];
     }
 
     /// <summary>The options a running runtime would monitor, held still: this test changes no setting mid-flight.</summary>

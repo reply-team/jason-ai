@@ -96,4 +96,30 @@ public sealed class DesktopPresenceTests
             facts.Platform);
         Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().SessionId, facts.SessionId);
     }
+
+    /// <summary>
+    /// A program the toast needs is found on the search path's full entries alone, by the lookup every program Jason starts
+    /// by name goes through: an empty entry, <c>.</c> or a relative folder names wherever the runtime stands, and is not
+    /// searched.
+    /// </summary>
+    [Fact]
+    public void A_program_is_found_on_the_search_path_s_full_entries_alone()
+    {
+        using var programs = new Jason.Runtime.Tests.Plugins.TestPrograms();
+        var name = "tool-" + Guid.NewGuid().ToString("N");
+        var relative = "jason-desktop-" + Guid.NewGuid().ToString("N");
+        var decoys = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), relative)).FullName;
+        try
+        {
+            var real = programs.AddProgram(name);
+            File.Copy(real, Path.Combine(decoys, Path.GetFileName(real)));
+
+            Assert.Null(DesktopFacts.Find(name, new Dictionary<string, string> { ["PATH"] = string.Join(Path.PathSeparator, string.Empty, ".", relative) }));
+            Assert.Equal(real, DesktopFacts.Find(name, new Dictionary<string, string> { ["PATH"] = string.Join(Path.PathSeparator, relative, programs.Root) }));
+        }
+        finally
+        {
+            Directory.Delete(decoys, recursive: true);
+        }
+    }
 }

@@ -424,7 +424,9 @@ whole — the alternative is a runtime that quietly runs with one plugin missing
 — are about the machine rather than the package. They make that one plugin `status: unavailable`
 with its problems listed, and change nothing else: the set still activates and the other plugins
 stay usable. An autostarted runtime sees a different search path than a shell does, and one
-uninstalled vendor tool must not empty the registry. `probe_timed_out` is a binding pattern that did
+uninstalled vendor tool must not empty the registry. Only the entries of the search path that are full
+paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a
+program found only there is `executable_missing`. `probe_timed_out` is a binding pattern that did
 not finish its load-time probe on either of a start's two loads (below); a live reload refuses such
 a package as `field_invalid` instead.
 
