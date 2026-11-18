@@ -660,6 +660,61 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows leg that opens the window while jason uninstall runs, so the waiter asks, holds the verb where the window
+    /// can open rather than hoping for the moment: a skill file the verb removes after it stops the runtime is held open,
+    /// sharing read alone, before the verb starts, and the hold is seen refusing a writer; the verb then tries that file
+    /// again for its wait, and the leg lets go only once the window's process runs and the verb has not ended. A verb that
+    /// ended before that fails the leg, and so does a held file still there after the verb, so the leg cannot end green
+    /// having proven nothing; where the window was opened, the leg first closes it and ends every uninstaller run the
+    /// waiter shows, so the next leg meets neither.
+    /// </summary>
+    [Fact]
+    public void The_Windows_waiter_leg_holds_the_verb_while_the_window_opens_and_cannot_end_green_having_proven_nothing()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = windows[windows.IndexOf("\n    'UninstallWaiterShown' {\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    'UpdateApply' {\n", StringComparison.Ordinal)];
+
+        // The hold, the silent leg's own: a file of this build's skills record, held sharing read alone, seen refusing a writer.
+        var record = leg.IndexOf("$skillsRecord = Join-Path $env:USERPROFILE '.claude\\skills\\.jason-skills.json'", StringComparison.Ordinal);
+        var holder = leg.IndexOf("$holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', \"`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()\" -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        var registered = leg.IndexOf("Register-Scratch ", StringComparison.Ordinal);
+        var refusing = leg.IndexOf("[System.IO.File]::Open($held, 'Open', 'ReadWrite', 'ReadWrite')", StringComparison.Ordinal);
+        var verb = leg.IndexOf("$verb = Start-Process -FilePath $carried -ArgumentList 'uninstall', '--yes' -PassThru -WindowStyle Hidden", StringComparison.Ordinal);
+        Assert.True(record >= 0 && holder > record && registered > holder && refusing > registered && verb > refusing, "the waiter leg does not hold a file of this build's skills, recorded, and see the hold refuse a writer, before jason uninstall starts");
+
+        // Past the stop, the window opened; the verb must still run once the window's process does, and only then is it let go.
+        var stopped = leg.IndexOf("Wait-Until { -not (Test-Path -LiteralPath $descriptor) -or $verb.HasExited }", StringComparison.Ordinal);
+        var early = leg.IndexOf("if ($verb.HasExited) { Fail ", StringComparison.Ordinal);
+        var window = leg.IndexOf("Start-Process -FilePath (Join-Path $app 'Jason.exe') | Out-Null", StringComparison.Ordinal);
+        var seen = leg.IndexOf("Wait-Until { $verb.HasExited -or @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 }", StringComparison.Ordinal);
+        var landed = leg.IndexOf("$landed = -not $verb.HasExited", StringComparison.Ordinal);
+        var release = leg.IndexOf("New-Item -ItemType File -Path $release -Force | Out-Null", StringComparison.Ordinal);
+        var unlanded = leg.IndexOf("$noProof = if (-not $landed) { \"", StringComparison.Ordinal);
+        var ended = leg.IndexOf("if (-not $verb.WaitForExit(300000)) { Fail ", StringComparison.Ordinal);
+        var taken = leg.IndexOf("if (-not $noProof -and (Test-Path -LiteralPath $held)) { $noProof = \"", StringComparison.Ordinal);
+        Assert.True(stopped > verb && early > stopped && window > early && seen > window && landed > seen && release > landed && unlanded > release && ended > unlanded && taken > ended,
+            "the waiter leg does not open the window past the stop, see its process while the verb still runs, let go only then, and keep the reason where the verb ended first or the held file outlived the verb");
+        Assert.DoesNotContain("Start-Sleep", leg[verb..release], StringComparison.Ordinal);
+        Assert.DoesNotContain("if (-not $landed) { Fail ", leg, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (Test-Path -LiteralPath $held) { Fail ", leg, StringComparison.Ordinal);
+
+        // A leg that proved nothing still cleans up before it fails by that reason: the window closed, then while the waiter
+        // this verb left still runs, every uninstaller run it shows ended by its id; the shown run is looked for only after.
+        var cleanUp = leg.IndexOf("        if ($noProof) {\n", StringComparison.Ordinal);
+        var closed = leg.IndexOf("Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }", cleanUp, StringComparison.Ordinal);
+        var waiter = leg.IndexOf("$waiterLine = \"Wait-Process -Id $($verb.Id) -Timeout 600;\"", cleanUp, StringComparison.Ordinal);
+        var shownEnded = leg.IndexOf("$_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\\s)/S(\\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }", cleanUp, StringComparison.Ordinal);
+        var failed = leg.IndexOf("            Fail $noProof\n        }\n", cleanUp, StringComparison.Ordinal);
+        var looked = leg.IndexOf("        $shown = $null\n", StringComparison.Ordinal);
+        Assert.True(cleanUp > taken && closed > cleanUp && waiter > closed && shownEnded > waiter && failed > shownEnded && looked > failed,
+            "the waiter leg does not close the window and end the uninstaller runs the waiter shows, while the waiter runs, before it fails by the reason it kept, and before it looks for the shown run");
+
+        // Let go and waited for even where the leg fails.
+        Assert.Contains("} finally {\n            New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null\n            if ($holder) { $null = $holder.WaitForExit(15000) }\n        }", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
     /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
     /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
@@ -729,6 +784,43 @@ public partial class InstallScriptTests
         var take = begin.IndexOf("\n            if (-not (Take-PreviousOwn $Leg $prior)) { return }\n", StringComparison.Ordinal);
         var read = begin.IndexOf("\n            $found = @(Get-LeftOver)\n", StringComparison.Ordinal);
         Assert.True(cache >= 0 && take > cache && read > take, "a clean Windows begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
+    /// Going back and forward again on Windows, with the person's own quick-start put back under Jason's name, leaves the
+    /// skills record in ~\.agents\skills: this build's own uninstall reports that file as edited, keeps it without --force,
+    /// and keeps the record that names it. One name is this build's own kept record and no other; the leg that moves again
+    /// records its exact listing line only where that uninstall's own report names exactly the person's file, under that
+    /// root, as the one edited file, and the record names it; and a compare excuses the line only where that leg recorded it.
+    /// </summary>
+    [Fact]
+    public void The_Windows_compare_excuses_this_build_s_own_kept_record_only_where_its_uninstall_reports_the_person_s_file_edited()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\n$thisBuildKept = [ordered]@{ 'agents skills\\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\\skills\\.jason-skills.json') }\n", windows, StringComparison.Ordinal);
+        Assert.Contains("@(Get-Content -LiteralPath $thisBuildKeptRows) -ccontains \"$leg`t$line\"", Function("Test-ThisBuildKept"), StringComparison.Ordinal);
+        Assert.Contains("elseif (Test-ThisBuildKept $by $line) { $keptOwn.Add(", Function("Compare-Listings"), StringComparison.Ordinal);
+
+        // The one writer of a row: the leg that moves again, after its own uninstall, once the report and the record are read.
+        Assert.Single(Regex.Matches(windows, @"Add-Content -LiteralPath \$thisBuildKeptRows"));
+        var wayBack = windows[windows.IndexOf("\n    'WayBack' {\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)];
+        var again = wayBack.IndexOf("        if ($Again) {\n", StringComparison.Ordinal);
+        var uninstall = wayBack.IndexOf("$ran = Invoke-Program $carried @('uninstall', '--purge-data', '--yes') $quiet 300", StringComparison.Ordinal);
+        var edited = wayBack.IndexOf("$edited = @($roots | ForEach-Object { $root = $_; @($root.files) | Where-Object { $_.edited -eq $true } | ForEach-Object { \"$($root.root)`t$($_.path)\" } })", StringComparison.Ordinal);
+        var exact = wayBack.IndexOf("if ($edited.Count -ne 1 -or $edited[0] -ine \"$keptRoot`t$keptFile\") { Fail ", StringComparison.Ordinal);
+        var names = wayBack.IndexOf("if ($recorded -cnotcontains 'quick-start/SKILL.md') { Fail ", StringComparison.Ordinal);
+        var row = wayBack.IndexOf("Add-Content -LiteralPath $thisBuildKeptRows", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("Say \"going back and forward again leaves the person ", StringComparison.Ordinal);
+        var otherwise = wayBack.IndexOf("        } else {\n            # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.\n", StringComparison.Ordinal);
+        Assert.True(again >= 0 && uninstall > again && edited > uninstall && exact > edited && names > exact && row > names && said > row && otherwise > said,
+            "the leg that moves again does not record this build's own kept record only after its own uninstall's report names exactly the person's file as edited and the record names it, and say so");
     }
 
     /// <summary>
