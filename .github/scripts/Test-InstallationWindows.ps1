@@ -50,7 +50,8 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted')] [string] $Step,
+    [string] $Executable,
     [string] $Leg,
     [string[]] $Needs = @(),
     [switch] $Clean,
@@ -82,6 +83,18 @@ $uninstallKeys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $ownSkill = Join-Path $env:USERPROFILE '.agents\skills\quick-start'
 # The entry the PathShape step adds to the account's Path, spelled through a variable, which every install must keep so.
 $keptEntry = '%USERPROFILE%\jason-ci-kept'
+# The temporary directory, as the product reads it (Path.GetTempPath): where the single-file host extracts and a retired
+# jason is renamed aside.
+$temporary = [IO.Path]::GetTempPath().TrimEnd('\')
+# The ids of the folders this build's executables extract to, written by the Extracted step; any other id under
+# %TEMP%\.net\jason is another release's (the previous release's jason runs in several legs).
+$thisBuild = Join-Path $Out 'this-build-extracted.txt'
+# SOFT UNTIL U19. The carried removal does not yet take this build's extraction folder or a retired folder, so a compare
+# prints those lines under "seen, and expected until the removal takes them" and fails no leg. The commit that merges into
+# this branch the release/49 head holding U19 (the carried removal taking or naming %TEMP%\.net\jason\<id> and the retired
+# folders) sets this to $false in the same commit, and test-installation-macos.sh's EXTRACTED_SOFT to 0; the gate run is
+# made with both hard.
+$extractedSoft = $true
 
 # A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
 function Fail([string] $why) {
@@ -383,6 +396,13 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     Folder 'application' $app
     Folder 'command-line install' $commandLine
     Folder 'updater cache' (Join-Path $env:LOCALAPPDATA 'jason-desktop-updater')
+    # What a jason run leaves outside every folder above, one line per folder: the native libraries the single-file
+    # executable extracts, under %TEMP%\.net\jason\<id> (the host's default base, one id per build), and the folders a
+    # retired command-line jason is renamed into while a process holds it - jason-retired-<id> in the temporary directory
+    # on the executable's volume, .jason-retired-<id> beside its folder otherwise (CommandLineInstalls.AsideFolder).
+    foreach ($extracted in @(Get-ChildItem -LiteralPath (Join-Path $temporary '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) { $lines.Add("extracted`t$($extracted.Name)") }
+    foreach ($retired in @(Get-ChildItem -LiteralPath $temporary -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`t%TEMP%\$($retired.Name)") }
+    foreach ($retired in @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`tPrograms\$($retired.Name)") }
     # What Windows and Electron keep for an application that ran, by its name, in the roaming and local application data:
     # listed, so a person sees what stays. The jobs open the window before each uninstall, so these are written as a
     # person's are.
@@ -454,11 +474,26 @@ function Get-LeftOver {
     Write-Listing $now -Quiet
     $before = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
     $after = @(Get-Content -LiteralPath $now)
-    $kept = '^(data directory|harness root)'
+    # The extraction and retired folders change nothing a leg starts from; the compares judge them, never a leg's start.
+    $kept = '^(data directory|harness root|extracted\t|retired\t)'
     @(@($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "- $_" }))
 }
 
 switch ($Step) {
+    'Extracted' {
+        # The id of the folder this build's executable extracts its native libraries to, read by running it once with the
+        # host's base pointed at a folder of this job's own, so that nothing is written where the listing looks.
+        if (-not $Executable) { Fail '-Executable names the executable.' }
+        $probe = Join-Path $env:RUNNER_TEMP "extract-probe-$([guid]::NewGuid().ToString('N'))"
+        $ran = Invoke-Program $Executable @('--version') @{ DOTNET_BUNDLE_EXTRACT_BASE_DIR = $probe } 120
+        if ($ran.Exit -ne 0) { Fail "$Executable --version exited with $($ran.Exit)" }
+        $ids = @(Get-ChildItem -LiteralPath $probe -Directory -ErrorAction SilentlyContinue | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory } | ForEach-Object { $_.Name })
+        if ($ids.Count -eq 0) { Fail "$Executable extracted nothing under ${probe}: no id to tell this build's extraction folder by" }
+        Add-Content -LiteralPath $thisBuild -Value $ids
+        Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+        Say "this build's $(Split-Path -Leaf $Executable) extracts its native libraries to the id $($ids -join ', ') under %TEMP%\.net\jason"
+    }
+
     'PathShape' {
         # The account's Path as an ordinary account has it: REG_EXPAND_SZ, with an entry spelled through a variable.
         # Through [Environment]'s pair an installer expands every such entry and writes the whole value back as REG_SZ,
@@ -487,7 +522,23 @@ switch ($Step) {
         # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
         $kept = '^(data directory|harness root)'
         $gone = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
-        $left = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
+        $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
+        # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
+        # this build's ids, and every retired folder, count - softly until U19 (see $extractedSoft), as a section of their own.
+        $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
+        $left = [System.Collections.Generic.List[string]]::new()
+        $expectedLines = [System.Collections.Generic.List[string]]::new()
+        $softLines = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in $candidates) {
+            if ($line -match '^extracted\t(?<id>.+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
+            elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
+            else { $left.Add($line) }
+        }
+        if ($expectedLines.Count -gt 0) { Say "expected in ${Name}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)" }
+        if ($softLines.Count -gt 0) {
+            Say "seen, and expected until the removal takes them (soft until U19), in ${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+            Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+        }
         $diff = Join-Path $Out "$Against-to-$Name.diff.txt"
         Set-Content -LiteralPath $diff -Value (@("only in $Against (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $Name (after):") + @($left | ForEach-Object { "+ $_" }))
         Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
@@ -604,6 +655,8 @@ switch ($Step) {
         if (Test-Path -LiteralPath $failedLegs) { $held += @(Get-Content -LiteralPath $failedLegs) }
         if (Test-Path -LiteralPath $notRun) { $held += @(Get-Content -LiteralPath $notRun) }
         if (Test-Path -LiteralPath $divergent) { $held += "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
+        $soft = Join-Path $Out 'soft-seen.txt'
+        if (Test-Path -LiteralPath $soft) { Say "seen, and expected until the removal takes them (soft until U19; they fail nothing): $((Get-Content -LiteralPath $soft) -join ' | ')" }
         if ($held.Count -gt 0) { Fail ($held -join ' | ') }
         Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
     }
@@ -1266,7 +1319,9 @@ switch ($Step) {
             if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the retired install still holds $file at $commandLine" }
         }
         $left = @(if (Test-Path -LiteralPath $commandLine) { Get-ChildItem -LiteralPath $commandLine -Force | ForEach-Object { $_.Name } })
-        $aside = @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Filter 'jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+        # Where the product renames a retired jason a running process holds (CommandLineInstalls.AsideFolder): jason-retired-<id> in
+        # the temporary directory on the executable's volume, .jason-retired-<id> beside its folder otherwise.
+        $aside = @(@(Get-ChildItem -LiteralPath $temporary -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "%TEMP%\$($_.Name)" }) + @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { "Programs\$($_.Name)" }))
         Say "the command-line install is retired: no jason.exe or notice file at $commandLine; that folder $(if (Test-Path -LiteralPath $commandLine) { "is kept, holding: $(if ($left) { $left -join ', ' } else { 'nothing' })" } else { 'is gone' }); executables renamed aside: $(if ($aside) { $aside -join ', ' } else { 'none' })"
 
         # Whether this build says it is a test build: a release never does, CI's build always.
@@ -1298,6 +1353,9 @@ switch ($Step) {
         # jason says its version and its status is ready. No update and no rollback runs under it. Its own uninstall,
         # purging the data, ends the leg.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
+        # It runs on the account's own home and default data directory, which a moved installation and the previous
+        # release share: a GitHub-hosted runner's alone, never a person's machine.
+        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail 'WayBack runs on the account''s own home and data directory, and on a GitHub-hosted runner alone.' }
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         $jason = Join-Path $commandLine 'jason.exe'
 

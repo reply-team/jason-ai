@@ -51,6 +51,11 @@ ROOT="$HOME/Jason"
 OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
+# SOFT UNTIL U19. The application's removal does not yet take this build's ~/.net/jason/<id>, so a compare prints that line
+# under "seen, and expected until the removal takes them" and fails no leg. The commit that merges into this branch the
+# release/49 head holding U19 (the carried removal taking or naming the extraction folder) sets this to 0 in the same
+# commit, and Test-InstallationWindows.ps1's $extractedSoft to $false; the gate run is made with both hard.
+EXTRACTED_SOFT=1
 
 # A failed assertion ends its step; its words are kept beside the leg's name for the held step's list as well.
 fail() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT/leg-failure.txt" 2>/dev/null || true; exit 1; }
@@ -175,6 +180,9 @@ write_listing() {
             [ -d "$HOME/Library/$parent" ] || continue
             find "$HOME/Library/$parent" -maxdepth 1 -iname '*jason*' 2>/dev/null | while IFS= read -r kept; do printf 'system-kept\t%s\n' "${kept#$HOME/}"; done
         done
+        # The native libraries the single-file executable extracts, under ~/.net/jason/<id> (the host's default base on
+        # macOS, one id per build): one line per folder.
+        find "$HOME/.net/jason" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r extracted; do printf 'extracted\t%s\n' "${extracted##*/}"; done
         folder 'claude skills' "$HOME/.claude/skills"
         folder 'agents skills' "$HOME/.agents/skills"
         folder 'data directory' "$DATA"
@@ -217,7 +225,7 @@ left_over() {
     local empty
     empty="$(printf '' | shasum -a 256 | cut -d' ' -f1)"
     { comm -13 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/+ /'; comm -23 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/- /'; } \
-        | grep -vE '^[+-] (data directory|harness root|launchd record )' \
+        | grep -vE '^[+-] (data directory|harness root|launchd record |extracted	)' \
         | grep -vE "^\+ profile \.(zprofile|zshrc)	$empty\$" \
         | grep -vE '^- profile \.(zprofile|zshrc)	absent$' || true
 }
@@ -246,6 +254,19 @@ stand-in)
 
 listing)
     write_listing "$OUT/$1.txt"
+    ;;
+
+extracted)
+    # The id of the folder this build's executable extracts its native libraries to, read by running it once with the
+    # host's base pointed at a folder of this job's own, so that nothing is written where the listing looks.
+    executable="$1"
+    probe="$RUNNER_TEMP/extract-probe-$$-$(date +%s)"
+    within 120 "$executable --version" env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$probe" "$executable" --version > /dev/null 2>&1 || fail "$executable --version failed"
+    ids="$(find "$probe" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | sed 's|.*/||')"
+    [ -n "$ids" ] || fail "$executable extracted nothing under $probe: no id to tell this build's extraction folder by"
+    printf '%s\n' "$ids" >> "$OUT/this-build-extracted.txt"
+    rm -rf "$probe"
+    say "this build's jason extracts its native libraries to the id $(printf '%s' "$ids" | tr '\n' ' ')under ~/.net/jason"
     ;;
 
 compare)
@@ -286,6 +307,27 @@ compare)
                 left="$(printf '%s\n' "$left" | grep -vE '^launchd record (gui|user)	ai\.jason\.runtime disabled$' || true)"
             fi
         fi
+    fi
+    # An extraction folder of another release's id is that release's own, named as expected with its reason; one of this
+    # build's ids counts - softly until U19 (see EXTRACTED_SOFT), as a section of its own.
+    ours="$(cat "$OUT/this-build-extracted.txt" 2>/dev/null || true)"
+    expected_x=""; soft_x=""; rest=""
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        case "$line" in
+            "extracted	"*)
+                id="${line#extracted	}"
+                if [ -n "$ours" ] && ! printf '%s\n' "$ours" | grep -qxF -- "$id"; then expected_x="$expected_x$line"$'\n'
+                elif [ "$EXTRACTED_SOFT" = 1 ]; then soft_x="$soft_x$line"$'\n'
+                else rest="$rest$line"$'\n'; fi ;;
+            *) rest="$rest$line"$'\n' ;;
+        esac
+    done <<< "$left"
+    left="$(printf '%s' "$rest" | sed '/^$/d')"
+    [ -z "$expected_x" ] || say "expected in $1: $(printf '%s' "$expected_x" | tr '\t\n' ' ;') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)"
+    if [ -n "$soft_x" ]; then
+        say "seen, and expected until the removal takes them (soft until U19), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
+        printf '%s: %s\n' "$1" "$(printf '%s' "$soft_x" | tr '\t\n' ' ;')" >> "$OUT/soft-seen.txt"
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
     cat "$diffed"
@@ -378,6 +420,7 @@ end)
 
 held)
     close_leg
+    [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft until U19; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
     [ ! -s "$OUT/not-run.txt" ] || cat "$OUT/not-run.txt" >> "$OUT/failed-legs.txt"
     [ ! -s "$OUT/failed-legs.txt" ] || fail "$(paste -sd '|' "$OUT/failed-legs.txt" | sed 's/|/ | /g')$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
     [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"
@@ -655,7 +698,13 @@ way-back)
     # with its kind and moment, no entry has appeared among the old ones, and the previous release's jason says its
     # version and its status is ready. No update and no rollback runs under it. Its own uninstall, purging the data, ends
     # the leg.
+    # Two checks join this leg once U20 is in the branch it runs on, and not before, since both are red until then:
+    # after the move, the wrapper's text names no data directory (U20 C, on a real Mac that moved with none named); and
+    # after going back, the previous release's own jason update apply moves it into Jason Desktop again (U20 D).
     previous="$1"; feed="$2"; version="$3"
+    # It runs on the account's own home and default data directory, which a moved installation and the previous release
+    # share: a GitHub-hosted runner's alone, never a person's Mac.
+    if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "way-back runs on the account's own home and data directory, and on a GitHub-hosted runner alone."; fi
     # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, as a JSON array.
     read_all() {
         python3 - "$@" <<'PY'
