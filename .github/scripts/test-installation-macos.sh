@@ -51,10 +51,10 @@ ROOT="$HOME/Jason"
 OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
-# HARD SINCE U19. The application's removal takes this build's ~/.net/jason/<id> (other builds' are counted and left on
+# HARD: the application's removal takes this build's ~/.net/jason/<id> (other builds' are counted and left on
 # macOS), so a line of this build's left after a removal counts, in the compares and in the clean check at a leg's start
 # (left_over) alike. Set to 1, the two print that line under "seen, and expected until the removal takes them" and fail
-# nothing: for a build before U19 alone. Test-InstallationWindows.ps1's $extractedSoft is the same switch there, and the
+# nothing: for a build whose removal does not take it alone. Test-InstallationWindows.ps1's $extractedSoft is the same switch there, and the
 # two are flipped together.
 EXTRACTED_SOFT=0
 
@@ -231,7 +231,7 @@ left_over() {
         | grep -vE '^- profile \.(zprofile|zshrc)	absent$' \
         | while IFS= read -r line; do
             # Another release's extraction folder is excused here as in the compares. This build's follows EXTRACTED_SOFT,
-            # as the compares do: ignored while it is soft, since no product door takes it before U19 and a reset could
+            # as the compares do: ignored while it is soft, since before the removal took it no product door did and a reset could
             # not; counted once it is hard, so that no leg starts on a machine a removal left dirty. The one commit that
             # flips EXTRACTED_SOFT makes both hard.
             case "$line" in
@@ -730,9 +730,9 @@ way-back)
     # with its kind and moment, no entry has appeared among the old ones, and the previous release's jason says its
     # version and its status is ready. No update and no rollback runs under it. Its own uninstall, purging the data, ends
     # the leg.
-    # Two checks join this leg once U20 is in the branch it runs on, and not before, since both are red until then:
-    # after the move, the wrapper's text names no data directory (U20 C, on a real Mac that moved with none named); and
-    # after going back, the previous release's own jason update apply moves it into Jason Desktop again (U20 D).
+    # Two checks are to join this leg, each once it has run in a rehearsal: after the move, the wrapper's text names no
+    # data directory (on a real Mac that moved with none named); and after going back, the previous release's own jason
+    # update apply moves it into Jason Desktop again.
     previous="$1"; feed="$2"; version="$3"
     # It runs on the account's own home and default data directory, which a moved installation and the previous release
     # share: a GitHub-hosted runner's alone, never a person's Mac.

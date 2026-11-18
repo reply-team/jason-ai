@@ -89,10 +89,10 @@ $temporary = [IO.Path]::GetTempPath().TrimEnd('\')
 # The ids of the folders this build's executables extract to, written by the Extracted step; any other id under
 # %TEMP%\.net\jason is another release's (the previous release's jason runs in several legs).
 $thisBuild = Join-Path $Out 'this-build-extracted.txt'
-# HARD SINCE U19. The carried removal takes this build's extraction folder (%TEMP%\.net\jason\<id>), on Windows every
+# HARD: the carried removal takes this build's extraction folder (%TEMP%\.net\jason\<id>), on Windows every
 # other build's as well, and sweeps the retired folders, so a line of either left after a removal counts, in the compares
 # and in the clean check at a leg's start (Get-LeftOver) alike. Set to $true, the two print those lines under "seen, and
-# expected until the removal takes them" and fail nothing: for a build before U19 alone. test-installation-macos.sh's
+# expected until the removal takes them" and fail nothing: for a build whose removal takes neither alone. test-installation-macos.sh's
 # EXTRACTED_SOFT is the same switch there, and the two are flipped together.
 $extractedSoft = $false
 
@@ -489,7 +489,7 @@ function Get-LeftOver {
     $before = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
     $after = @(Get-Content -LiteralPath $now)
     # Another release's extraction folder is excused here as in the compares. This build's and the retired folders follow
-    # $extractedSoft, as the compares do: ignored while it is soft, since no product door takes them before U19 and a reset
+    # $extractedSoft, as the compares do: ignored while it is soft, since before the removal took them no product door did and a reset
     # could not, so every later leg would go unrun; counted once it is hard, so that no leg starts on a machine a removal
     # left dirty. The one commit that flips $extractedSoft makes both hard.
     $kept = '^(data directory|harness root)'
