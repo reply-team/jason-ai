@@ -1,6 +1,7 @@
 using Jason.Cli.Status;
 using Jason.Contracts.Api;
 using Jason.Contracts.Hosts;
+using Jason.Cli.Update;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -212,4 +213,102 @@ public partial class PageClaimsTests
             "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
             Flat(Page(page.Split('/'))),
             StringComparison.Ordinal);
+
+    /// <summary>
+    /// On macOS and Windows a Jason Desktop installed by hand, from its disk image or its installer, sets the machine up as
+    /// the install script does: the application's first start of each version runs the <c>jason install</c> it carries, and
+    /// the Windows installer runs it too. The pages that offer the download say so; the installer's own include is where
+    /// the Windows half is held, and the desktop's tests hold the first start (<c>desktop/test/one-installation-pages.test.ts</c>).
+    /// </summary>
+    [Fact]
+    public void The_pages_say_a_package_installed_by_hand_sets_the_machine_up_at_its_first_start()
+    {
+        var installer = Page("desktop", "installer", "uninstall.nsh");
+        Assert.Contains("!macro customInstall", installer, StringComparison.Ordinal);
+        Assert.Contains("nsExec::Exec '\"$INSTDIR\\resources\\bundle\\jason.exe\" install'", installer, StringComparison.Ordinal);
+
+        Assert.Contains("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
+        Assert.Contains("the Windows installer runs it too, at every install and update.", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found.", Flat(Page("README.md")), StringComparison.Ordinal);
+        Assert.Contains("and so does the package for your system below, installed by hand: the application's first start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows, the application's first start of each version puts `jason` in the terminal and Jason's skills where Claude Code and Codex read them, each where it is found, through the `jason` it carries; the Windows installer does the same at every install and update.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On macOS and Windows the carried <c>jason update apply</c> hands the update to Jason Desktop's own updater and the new
+    /// version's <c>jason</c> finishes it, as the verb's own help says. Another update or a <c>jason install</c> holding the
+    /// update's lock is refused with <c>update_in_progress</c> or <c>install_in_progress</c>, which mean later: the
+    /// refusals the lock itself raises say to let that one end and run it again, and the pages say so in the same sense.
+    /// </summary>
+    [Fact]
+    public async Task The_pages_say_the_carried_update_goes_through_Jason_Desktop_and_a_held_lock_means_later()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        await CliApp.RunAsync(["update", "apply", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+        Assert.Contains("Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window", Flat(output.ToString()), StringComparison.Ordinal);
+
+        var update = new UpdatePaths(dir.Paths);
+        using (UpdateLock.Take(update, "a test's update"))
+        {
+            var held = Assert.Throws<UpdateException>(() => UpdateLock.Take(update, "this update"));
+            Assert.Equal(UpdateCodes.InProgress, held.Code);
+            Assert.Contains("Let that one end, then run this again", held.Message, StringComparison.Ordinal);
+        }
+
+        using (UpdateLock.Take(update, "a test's setup", holder: UpdateLock.Holder.Install))
+        {
+            var held = Assert.Throws<UpdateException>(() => UpdateLock.Take(update, "this update"));
+            Assert.Equal(CliErrors.InstallInProgress, held.Code);
+            Assert.Contains("let it end, then run this again", held.Message, StringComparison.Ordinal);
+        }
+
+        var handbook = Flat(Page("docs", "handbook.md"));
+        Assert.Contains("On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: `apply` hands the update to the application's own updater, with no window, and the new version's `jason` finishes it", handbook, StringComparison.Ordinal);
+        Assert.Contains($"it is refused with `{UpdateCodes.InProgress}` or `{CliErrors.InstallInProgress}`, which mean later: let that one end, then run it again.", handbook, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's `jason` takes these steps when it finishes it", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows, `jason update apply` typed into the `jason` the application carries is such a word too: it hands the update to the same updater with no window, and the new version's `jason` finishes it", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An install, an update or the desktop's set-up that stops the runtime leaves a note that a start is owed, and the
+    /// install page names that note by the path the command line writes it to.
+    /// </summary>
+    [Fact]
+    public async Task The_install_page_names_the_note_of_a_start_that_is_owed_and_both_ways_it_goes()
+    {
+        using var dir = new TempPaths();
+        var relative = Path.GetRelativePath(dir.Paths.Root, dir.Paths.StartOwedFile).Replace('\\', '/');
+        Assert.Equal("run/start-owed.json", relative);
+
+        var start = Flat(Section(Page("docs", "INSTALL.md"), "## 6. Start it, and keep it started"));
+        Assert.Contains($"An install, an update or Jason Desktop's set-up that stops the runtime leaves a note that a start is owed, `<data>/{relative}`, and Jason Desktop's next start starts one from the `jason` it carries where it finds the note and no runtime answering", start, StringComparison.Ordinal);
+        Assert.Contains("The note goes in two ways: when a runtime starts on that data directory again, and when you stop the runtime yourself with `jason runtime stop`, so a stop of your own is never taken for one an install owes.", start, StringComparison.Ordinal);
+
+        // The second way is the stop's own: a person's `jason runtime stop` that succeeded takes the note back.
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        dir.WriteDescriptor(Commands.RuntimeVerbs.Descriptor("rt_LIVE"));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(dir.Paths.DescriptorFile);
+            return Commands.RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, Commands.RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (person, _, _) = Commands.RuntimeVerbs.Environment(dir, handler, new Process.FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], person, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a person's own stop left the note that a start is owed");
+    }
+
+    /// <summary>
+    /// The Command Line item is the machine set-up's status on macOS and Windows and the PATH command on Linux; the README
+    /// says which, and no longer says the item puts a folder on the PATH on macOS. The desktop's own split is held by
+    /// <c>desktop/test/one-installation-pages.test.ts</c>.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_what_the_command_line_item_is_on_each_system()
+    {
+        var readme = Flat(Page("README.md"));
+        Assert.Contains("on macOS and Windows the first start of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("and on macOS and Linux puts its folder on your terminal's PATH", readme, StringComparison.Ordinal);
+    }
 }

@@ -10,8 +10,10 @@ It adds three things the browser cannot do: a chat that is a session with your o
 computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
 what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
 else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
-the Command Line item of its menu puts a command there, `jason`, or `jason-desktop` where another `jason` already
-stands, and on macOS and Linux puts its folder on your terminal's PATH where it is not yet, as the installer does
+on macOS and Windows the first start of each version puts `jason` where a new terminal finds it and gives your agents
+Jason's skills, by the `jason install` the application carries, and the Command Line item of its menu says what that
+placed and puts it back; on Linux that item puts a command there, `jason`, or `jason-desktop` where another `jason`
+already stands, and puts its folder on your terminal's PATH where it is not yet, as the installer does
 ([The command line, and the login items](#the-command-line-and-the-login-items)).
 
 This page is for the person using it. [desktop/README.md](../desktop/README.md) is the builder's view of the same
@@ -24,8 +26,10 @@ Each release publishes Jason Desktop beside the runtime's downloads ([release-an
 
 On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
 your terminal and your agents use. It is installed once, updated once and removed once. The install script installs it
-([INSTALL.md](INSTALL.md) §2), and so does the package for your system below. On Linux the deb and the AppImage are
-separate downloads beside the command line.
+([INSTALL.md](INSTALL.md) §2), and so does the package for your system below, installed by hand: the application's first
+start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each
+where it is found, and its [Command Line item](#the-command-line-and-the-login-items) says what that placed. On Linux
+the deb and the AppImage are separate downloads beside the command line.
 
 | System | File | Notes |
 | --- | --- | --- |
@@ -108,9 +112,12 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
-  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
-  could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
+  channel, and narrows to All, Approvals or Questions. A paid search is named "Find people" and shows, under what it
+  will do, its definition by its own names and values, with what it leaves out on a line of its own, and the search's
+  own arguments in plain words. An approval's **Approve** is live only once Needs you has read that approval whole,
+  with any doubt about a send shown
+  above it; until then the row says it is being read, or why it could not be, and **Details** stays. Under the mailbox
+  an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
   and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
@@ -118,8 +125,9 @@ shows before anything is typed and what you send waits, while the window is open
   agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
-  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
-  and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
+  channel, and the subject and text, or a search's definition and arguments as in Needs you, with **Approve**, **Edit**
+  (a message written as text), **Reject**, which asks once, and **Details**, which opens it in Needs you; a question's
+  card has its options as buttons and a box for your own
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
   when the card is drawn, never from what the AI wrote, and not part of what you approve, so it changes no button. A
@@ -214,6 +222,9 @@ them on.
   once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
+- `<data>/desktop/machine-setup.json`: on macOS and Windows, the version `jason install` last completed for at a start or
+  from the Command Line item, and what it reported, which the item shows (below). It counts among the desktop's own
+  records, so a new installation's first start, which writes it, still opens on the demo.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
   holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
   held before, so the paired list keeps one row for the window.
@@ -277,7 +288,7 @@ and no more than that:
   whose data that other one works with is not something the desktop can tell;
 - none: "jason is not on your PATH, so a terminal there does not find Jason.".
 
-Where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
+On Linux, where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
 on the PATH where there is none; where another `jason` is found, the one that gives this window's Jason the name
 `jason-desktop`, the other keeping `jason`; where a command of the desktop's points elsewhere, the one that points it
 back at this window's Jason, and to type `jason-desktop` afterwards where that is its name; and where a `jason-desktop`
@@ -357,8 +368,8 @@ The demo is a page: a mock of Jason at work on sample data, so you can see what 
 your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
 shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
-writes only its own records in your data directory (the record of the mode, Electron's profile under `desktop/electron/`
-and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
+writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
+Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
 reaches the network there: Demo runs no runtime, checks for no update and loads nothing but the application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
@@ -368,6 +379,54 @@ directory of yours, or one holding nothing but the desktop's own records (the re
 the desktop's own log), and no record of a mode writes the record as the demo and shows the page. Nothing of your own
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
+
+**The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed runs the
+application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
+you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
+installed, and retires an older command-line install of Jason. Then it runs the command line's finishing step,
+`jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
+skills deployments and the UI up to the version installed and starts no runtime; with an update a terminal's
+`jason update apply` handed to the application still in flight and the application now its version, it finishes that
+update, the runtime's start included. Neither is given a time limit. Whether an installation is there is the command
+line's to say, by one definition, and the desktop reads its answer (`installation_found`): where the data directory holds
+nothing but the desktop's own, as at a new installation's first start, the finishing step reads no release and makes
+nothing, and that is done with nothing left to say, so a first start writes nothing more under the data directory and asks
+no network; a data directory it could not list is not done, and runs again at the next start. The version is recorded as done only when both succeeded, so a start
+after one that did not get there runs both again; one that fails every time runs again at every start, which the Command
+Line item says in Live and only the desktop's log says in the Demo. Where another `jason` holds the update's lock, a
+`jason install` or an update, its finish or a rollback (`install_in_progress`, `update_in_progress`), nothing is set up and
+nothing recorded, the item says it is left for the next start, and it is no failure. The set-up writes nothing under your
+data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
+window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,
+and then goes on while it finishes; a runtime start an update in flight refused meanwhile is made again once the set-up
+has ended, the window saying meanwhile that it waits for the set-up to finish updating the installation. A start that
+finds an update still holding the runtime's start, its own set-up's or a terminal's `jason update apply`
+(`update_in_progress`, `install_in_progress`, or a set-up left for later), asks again every five seconds for up to ten
+minutes and is never counted as a failed first start of the version; past that the window says the update is still being
+finished, nothing is recorded of that start, and the next start decides; where the last refusal was not the update's own
+code but counted as one because the set-up was left for later, the window says the start's own last sentence beside it. The application never ends a run; one still running after five minutes is said in the Command Line item as
+taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
+start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
+run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in
+Demo as in Live and after a put back too, and the item says so; a start that is refused while a runtime answers again
+is said as a runtime answering, never as a failure. That runtime is your installation's, with your campaigns; the demo
+goes on showing its samples.
+
+**The start that is owed.** An install, an update or a set-up that stops your runtime leaves a note,
+`<data>/run/start-owed.json`, which stands until a runtime starts on that data directory again (§9). At every start of its
+own, Demo or Live, the application starts a runtime from the `jason` it carries where it finds the note standing and none
+answering: on macOS and Windows after the set-up where one runs, and on its own where none does; on Linux a Live start
+brings the runtime up anyway, and a Demo start starts one from the deb's `jason`, or from the AppImage's copy a Live start
+made. The application writes no note of its own and removes none: the runtime's own start takes it away. A runtime you
+stop yourself while the set-up runs is started again too, since one answered before the set-up and none after it. A start
+that fails is in the desktop's log, and in the Demo it is tried again at the next start, through the same note.
+
+**A missing `jason.exe` put back.** On Windows, a `jason update apply` moves its own file out of the application's folder
+while the installer replaces it, into the updater's store (`%LOCALAPPDATA%\jason-desktop-updater\jason-carried\<request>\`),
+with `jason.version` beside it naming the version it came from. Where the installer then installed nothing, a start of
+the application that finds `resources\bundle\jason.exe` missing, and a stored file whose `jason.version` names the version
+the application still is, copies that file back before anything else is started, and says so in its log. A stored file of
+another version is never put back.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
 for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
@@ -379,7 +438,10 @@ of its own: a band of the page's colours above the page holds the window's butto
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
-the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
+the same. Your own installation's top bar carries the same switch, with **Demo** to come back. Where the machine set-up
+is still running when the switch is chosen, the window says so and the new start waits for it at most thirty seconds, so
+`jason install` is not cut off mid-write; past that the switch goes on and the set-up finishes on its own. Quit is never
+held.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
@@ -907,8 +969,22 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## The command line, and the login items
 
-- **Command Line** places a `jason` that your terminal finds and that runs the executable the application carries. On
-  macOS and Linux it is a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
+- **Command Line**, on macOS and Windows, shows what the machine set-up placed, by its report: where a new terminal finds
+  `jason` (on macOS the wrapper `~/.local/bin/jason`, with the installer's two lines in your shell profiles where a new
+  terminal's PATH lacked that folder; on Windows the application's `resources\bundle` folder on your account's Path), the
+  full path a terminal already open types instead, the folders Jason's skills were deployed to and for which programs, and
+  what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. Where
+  `jason install` read the command back as not in place (a profile it could not write, a Path entry not written), the item
+  says jason is not yet where a new terminal finds it, with what stopped it. **Put Back
+  jason and the Skills…** runs `jason install` again on your word, after a confirmation that says what it writes, and then
+  tells what it did in its own sentences. The application places no command of its own there any more; the `jason.cmd`
+  shim and the Git Bash wrapper an earlier version put in `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the
+  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, are taken back by `jason install`. On macOS the update item also
+  says where the application is and whether its update can write there: where the application or the folder it is in is
+  not writable by your account, an update asks for an administrator's password. The menu always shows the executable's
+  full path.
+- **Command Line**, on Linux, places a `jason` that your terminal finds and that runs the executable the application
+  carries: a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
   your login shell gave when the window started, or, where it gave none, taken as not holding it), the same act puts it
   there by the installer's own rule: the line `# added by jason install` and under it
   `export PATH="$HOME/.local/bin:$PATH"` (with your home spelled out) go into the file a login shell of your account
@@ -923,15 +999,9 @@ What Jason Placed on Linux, takes
   `~/.local/bin` then holds nothing but what Jason's installer or the application writes there (`jason`,
   `jason-desktop`, `jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`), the rule `jason uninstall` keeps: that folder is shared,
   and where the line puts it on the PATH, the other programs in it are found through it too. While it holds anything
-  else, or another `jason`, the lines stay, and the item says why. On Windows it is a `jason.cmd` shim and, beside it, an extensionless
-  `jason` for Git Bash (which finds a `.cmd` only by its full name) in `%LOCALAPPDATA%\Microsoft\WindowsApps`, placed only
-  when that folder is on your PATH, since no PATH entry is ever written. It is placed and removed on your word, read back
+  else, or another `jason`, the lines stay, and the item says why. It is placed and removed on your word, read back
   on every look, never rewritten silently, and never put in the place of a `jason` that is not ours: it is then named
   `jason-desktop`. The menu always shows the executable's full path.
-- The Windows shim hands its arguments to cmd.exe's parser a second time, with `%*`, so a quoted argument beside `&`, `|`,
-  `<`, `>` or `^` (JSON passed from PowerShell 7.3 or later, which hands a `.cmd` its arguments in its legacy way) can be
-  split, or run as a command of its own. The shim is for a person typing; a script or an agent passes such arguments to the
-  executable's full path, or runs `jason` from Git Bash, where the wrapper beside the shim passes them whole.
 - **Open Jason at Login** is a Windows login item, a macOS LaunchAgent (`~/Library/LaunchAgents/ai.jasonharness.desktop.plist`)
   or a Linux autostart entry (`~/.config/autostart/ai.jasonharness.desktop.desktop`), and opens the window only.
   **Start the Runtime at Logon** is `jason runtime autostart` for the `jason` the application carries.
@@ -969,7 +1039,12 @@ the skills, sets the terminal command up and places the UI ([release and update]
 update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
-also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. A build that is not installed says "Updates Come to an Installed Build", and where
+also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. While such
+a request runs with no window it holds the application's single-instance lock, for up to forty-five minutes where it
+waits for the command's go: opening Jason Desktop meanwhile shows one message that Jason is updating, and the application
+opens as the request ends, unless the request installed the update, after which the new version opens at your next start. Where a
+window takes the request and may close for it, the menu's install refuses while the request is under way, since the
+request installs itself. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
 the package names.
 
@@ -1021,7 +1096,9 @@ removal takes them off too.
   nothing when it does not stop, then takes off Open Jason at Login, the `jason-desktop://` link registration when it
   names this application, the `jason` command and the skills `jason install` placed, an older command-line install, an
   earlier demo's marked folders and the updater's cache, and names what it leaves; then the application's folder goes.
-  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays.
+  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays. The uninstaller's
+  start of the application holds its single-instance lock while it runs; where Jason Desktop is still open, or an update
+  of it is under way, it says so, takes nothing off, and the uninstaller removes nothing.
 - **macOS.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal with
   Jason quit. Either is the one uninstall, with the Windows uninstall's steps and, just before the application, the
   application's own state under `~/Library` and Squirrel's update state. The menu item asks first, with a box for

@@ -12,6 +12,7 @@ import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
+import { linesOf, searchIntent, firstSearchLines, topUpArguments } from '../test/search-words';
 import { ASKING_MARK, QUEUED_SENTENCE } from '../screens/attention/reasking-model';
 import { noteEdit } from '../screens/attention/reasking';
 import { here } from './state';
@@ -423,6 +424,47 @@ describe('Needs you', () => {
         expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('Grace Hopper');
         expect(words(row('apr_1').querySelector('.needs-row-t')!)).toBe('Add to sequence Ada Lovelace');
         expect(words(row('apr_2'))).not.toContain('to Grace');
+    });
+
+    describe('a paid search of the provider’s people', () => {
+        const searches = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/search-pending')
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/search-first', 'approval.get/search-top-up');
+
+        it('is named in words, and shows its definition as written and its arguments in plain words under its intent', async () => {
+            const fake = searches();
+            await renderConsole(fake);
+            await waitFor(() => expect(pane().querySelector('.needs-search')).toBeTruthy());
+            expect(words(row('apr_1').querySelector('.needs-row-t')!)).toBe('Find people');
+            expect(words(pane().querySelector('.needs-title')!)).toBe('Find people');
+            expect(words(pane().querySelector('.needs-intent')!)).toBe(searchIntent);
+            expect(linesOf(pane(), '.needs-search')).toEqual(firstSearchLines);
+            // Nothing else of the card moves: the reason, and the three properties as they always read.
+            expect(words(pane().querySelector('.ask-w')!)).toBe(
+                'Approval is required for every operation of this kind for this agent.',
+            );
+            expect([...pane().querySelectorAll('.needs-facts > *')].map((each) => words(each))).toEqual([
+                'Reach: control',
+                'Reversibility: irreversible',
+                'Cost: metered',
+            ]);
+            expect(words(pane())).not.toContain(fixtures['approval.get/search-first'].response.preview.summary);
+            expect(sent(fake, 'workitem.get')).toEqual([]);
+        });
+
+        it('approves a top-up, which shows the audience it adds to among its arguments', async () => {
+            const fake = searches().answer('approval.approve', 'approval.approve/search-top-up');
+            await renderConsole(fake);
+            await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
+            await choose('apr_2');
+            await waitFor(() => expect(linesOf(pane(), '.needs-search').at(-1)).toBe(topUpArguments));
+            fake.answer('approval.list', 'approval.list/search-after-top-up');
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Approve' }));
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_2' }]));
+            await waitFor(() => expect(needs().querySelector('[data-row="apr_2"]')).toBeNull());
+        });
     });
 
     it("shows a message's sender and its channel in words beside the recipient, subject and the whole body", async () => {

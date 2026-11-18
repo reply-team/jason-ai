@@ -13,6 +13,10 @@ that a person needs.
 
 | Step | How |
 | --- | --- |
+| Set the machine up, on macOS and Windows, at a windowed start of a version it has not yet completed for, in Demo as in Live, before Live brings the installation up; again on Put Back jason and the Skills (`src/machine-setup.ts`) | `jason install`, with `--terminal-path` naming the login shell's own PATH (the empty value where it printed none) on macOS and nothing on Windows; never `--roles`, so nothing is written under the data directory but the desktop's record `<data>/desktop/machine-setup.json`; then `jason update apply --finish`, after every run of `jason install` but one refused as `install_in_progress` or `update_in_progress`, which are later, no failure and no record; the record is written only when both completed (the finish's document `complete`, or an update's `step` at `complete`); once a start, both with no time limit, Live waiting for them at most thirty seconds and a runtime start refused meanwhile made again once they ended; a runtime that answered before them (`jason runtime status`, asked only where `<data>/run/runtime.json` is there), or the note `<data>/run/start-owed.json`, and none after them, whatever they reported, is started again with `jason runtime start`, in Demo as in Live and after Put Back, a refused start read again before it is said to have failed; the Command Line item shows the report as facts, saying that a new terminal finds `jason` only where the report's `command.placed` is true |
+| Pay the note that a start is owed, at every windowed start where no set-up runs (`payOwedStart` in `src/machine-setup.ts`) | where `<data>/run/start-owed.json` stands and `jason runtime status` finds none answering, `jason runtime start` from the carried `jason`; on Linux in a Demo start only, from the deb's `jason` or the AppImage's copy; the desktop never writes or removes the note |
+| Stop the runtime for the installer (`--stop-runtime`, `src/uninstall-start.ts`) | `jason runtime stop --start-owed`, always, so the next start owes a runtime; a person's own stop never passes it |
+| Put back a missing carried `jason.exe` on Windows (`src/carried-restore.ts`) | at a windowed start, before the set-up: a stored image under `%LOCALAPPDATA%\jason-desktop-updater\jason-carried\<request>\` whose `jason.version` names the version the bundle's `version.json` names, copied through a file beside the target |
 | Know whether a runtime is up and whether it is this build | `jason status` |
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
@@ -114,6 +118,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
   `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
   between its mark and the runtime's naming of the default).
+- `<data>/desktop/machine-setup.json`: on macOS and Windows, `ran_for`, the version `jason install` last completed for,
+  and `report`, the document it printed then; one of the records `isNewInstallation` counts as the desktop's own.
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
@@ -763,9 +769,10 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS, and where a new terminal's PATH
-  lacks that folder it writes the installer's PATH lines into the shell profiles by the installer's own rule, as on macOS
-  (`src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)).
+- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, and where a new terminal's PATH lacks that folder
+  it writes the installer's PATH lines into the shell profiles by the installer's own rule (`src/path-command.ts`,
+  `src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)). On macOS and Windows the
+  item is the machine set-up's report instead (`src/machine-setup.ts`), and `jason install` places the command.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link

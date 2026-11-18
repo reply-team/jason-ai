@@ -204,6 +204,11 @@ download, drain, stop, swap, start, health check — driven by a ledger written 
 that dies half-way is finished or put back by the next run, and it ends by redeploying the skills this machine
 recorded at the new release's tag and placing the release's UI; an update applied by a build before 0.12.0 needs one
 `jason skills update` after it, and one applied by a build older than the UI step needs one `jason ui install`. `status` says where one stands, and reads the ledger without needing a runtime.
+On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: `apply` hands the update to the
+application's own updater, with no window, and the new version's `jason` finishes it — the plugin packages, the
+runtime's start, the skills, the terminal command and the UI ([release-and-update.md](release-and-update.md) §7). Where
+another update or a `jason install` is under way, it is refused with `update_in_progress` or `install_in_progress`, which
+mean later: let that one end, then run it again.
 
 ### Can this installation start work?
 

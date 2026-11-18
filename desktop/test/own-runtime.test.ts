@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
@@ -302,4 +302,30 @@ test('with the data directory reached through a link, a runtime that reports the
     const held = join(linked, 'jason-desktop', 'resources', 'bundle', 'jason.exe');
     const { cli } = fakeCli({ status: () => ok({ instance_id: 'rt_A', runtime_version: '0.34.0' }) });
     assert.equal((await whoseRuntime({ ...deps(s, { file: runFile('rt_A', s.executable) }, cli), executable: held })).whose, 'ours');
+});
+
+test('the stop on an installer’s behalf passes --start-owed, so the note stands for the next start; a person’s stop does not', async (t) => {
+    const s = scratch(t);
+    for (const [options, verb] of [[{ startOwed: true }, 'runtime stop --start-owed'], [{}, 'runtime stop']] as const) {
+        const state = { alive: true, file: runFile('rt_A', s.executable) as string | null };
+        const asked: string[] = [];
+        const cli: Cli = {
+            async run(args) {
+                const said = args.join(' ');
+                asked.push(said);
+                if (said === 'runtime status') return state.alive ? ok({ instance_id: 'rt_A' }) : refused(3, 'runtime_unreachable');
+                state.alive = false;
+                return ok({ stopped: true });
+            },
+        };
+        const own = { ...deps(s, state, cli), isRunning: () => state.alive };
+        assert.deepEqual(await stopOwnRuntime(own, options), { kind: 'stopped' });
+        assert.deepEqual(asked, ['runtime status', verb, 'runtime status']);
+    }
+    // The installer's door, `--stop-runtime`, always passes it; the window's own stops, a person's quit among them, never do.
+    const start = readFileSync(new URL('../src/uninstall-start.ts', import.meta.url), 'utf8');
+    const door = start.slice(start.indexOf('export async function runStopRuntime('), start.indexOf('\n}\n', start.indexOf('export async function runStopRuntime(')));
+    assert.ok(door.includes('stopOwnRuntime(own, { startOwed: true })'));
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.equal(main.includes('startOwed: true'), false, 'no stop of the window passes it');
 });

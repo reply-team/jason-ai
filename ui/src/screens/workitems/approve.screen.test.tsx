@@ -14,6 +14,7 @@ import { stubDesktop, stubStream } from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
 import { fixtures, type FixtureName } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
+import { linesOf, searchIntent, firstSearchLines } from '../../test/search-words';
 import { nothingWaitsInChats } from '../../test/waiting';
 import { STALE_SENTENCE } from '../attention/message-edit';
 import { doubtWords } from '../send-modes/model';
@@ -94,15 +95,32 @@ function movedSend(listed: readonly FixtureName[]): FakeApi {
         .answer('approval.get', 'approval.get/panel-moved');
 }
 
+/** A paid search waiting: what the page reads to show its panel. */
+function waitingSearch(listed: readonly FixtureName[]): FakeApi {
+    return new FakeApi()
+        .answer('role.list', 'role.list/all')
+        .answer('workitem.list', 'workitem.list/search-now')
+        .answer(
+            'workitem.count',
+            'workitem.count/search-now',
+            'workitem.count/search-planned',
+            'workitem.count/search-done',
+        )
+        .answer('workitem.get', 'workitem.get/search-first')
+        .answer('journal.list', 'journal.list/search-first')
+        .answer('approval.list', ...listed, 'approval.list/search-first-item')
+        .answer('approval.get', 'approval.get/search-first');
+}
+
 /** The browser's own shell, opened at the item's address. */
-async function inClassic(fake: FakeApi): Promise<void> {
+async function inClassic(fake: FakeApi, at: Route = address): Promise<void> {
     renderApp(fake);
-    location.hash = href(address);
-    route.value = address;
+    location.hash = href(at);
+    route.value = at;
 }
 
 /** The console, with the page brought into its one area at the item's address, as a link or the palette brings it. */
-async function inConsole(fake: FakeApi): Promise<void> {
+async function inConsole(fake: FakeApi, at: Route = address): Promise<void> {
     mode.value = 'live';
     chats.value = {};
     conversations.value = [];
@@ -127,7 +145,7 @@ async function inConsole(fake: FakeApi): Promise<void> {
     );
     render(<Console api={shell} desktop={stubDesktop()} stream={stubStream().stream} />);
     await waitFor(() => expect(attention.loaded.value).toBe(true));
-    flush(() => here().dock.page(address));
+    flush(() => here().dock.page(at));
 }
 
 const panel = () => document.querySelector<HTMLElement>('.panel')!;
@@ -139,7 +157,7 @@ const sent = (fake: FakeApi, operation: string) =>
 const before = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 // Needs you reads what waits everywhere as the console starts: nothing does, in these stories, but the item's approval.
-const shells: [string, readonly FixtureName[], (fake: FakeApi) => Promise<void>][] = [
+const shells: [string, readonly FixtureName[], (fake: FakeApi, at?: Route) => Promise<void>][] = [
     ['the classic browser shell', [], inClassic],
     ["the console's area", ['approval.list/empty'], inConsole],
 ];
@@ -179,6 +197,16 @@ describe.each(shells)('Work items in %s: Approve by the rule', (_, listed, open)
         expect(sent(fake, 'workitem.get').slice(reads, reads + 1)).toEqual([{ work_item_id: item.id }]);
         await waitFor(() => expect(within(panel()).queryByRole('button', { name: 'Approve' })).toBeNull());
         expect(words(panel())).toMatch(/in Spring launch · \S+ created/);
+    });
+
+    it('names a paid search waiting in words, and shows its definition as written and its arguments in plain words under its intent', async () => {
+        const fake = waitingSearch(listed);
+        await open(fake, { screen: 'workitems', tab: 'now', filters: {}, id: 'wi_1' });
+        await waitFor(() => expect(approveButton().disabled).toBe(false));
+        expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe('Find people');
+        expect(within(panel()).getByText(searchIntent)).toBeTruthy();
+        expect(linesOf(panel(), '.search-lines')).toEqual(firstSearchLines);
+        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
     });
 
     it('holds Approve when the approval could not be read, says so with what failed, and still lets Reject act', async () => {

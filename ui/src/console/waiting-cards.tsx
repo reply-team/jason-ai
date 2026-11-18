@@ -3,6 +3,7 @@ import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { MessageEditor } from '../screens/attention/message-editor';
+import { SearchLines } from '../screens/attention/search-lines';
 import { SenderLine } from '../screens/attention/sender-line';
 import { repeated } from '../screens/attention/store';
 import { editable, readItem, sentence } from '../screens/attention/message-edit';
@@ -149,6 +150,7 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                 </div>
             )}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
+            <SearchLines search={card.search} />
             {saved !== undefined && (
                 <div className="note waiting-reasking" role="status">
                     {stateSentence(saved)}
