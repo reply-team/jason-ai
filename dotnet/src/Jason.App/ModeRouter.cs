@@ -59,10 +59,23 @@ public static class ModeRouter
     };
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task<int> RunVersion()
+    private static Task<int> RunVersion() => Task.FromResult(WriteVersion(Console.Out, Console.Error, JasonVersion.TestBuild));
+
+    /// <summary>
+    /// <c>jason --version</c>: the version alone on standard output, which installers and updaters read as it is, and in a
+    /// test build <see cref="JasonVersion.TestBuildSentence"/> on standard error; a released build writes nothing there.
+    /// </summary>
+    internal static int WriteVersion(TextWriter output, TextWriter error, bool testBuild)
     {
-        Console.Out.WriteLine(JasonVersion.Current);
-        return Task.FromResult(0);
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(error);
+        output.WriteLine(JasonVersion.Current);
+        if (testBuild)
+        {
+            error.WriteLine(JasonVersion.TestBuildSentence);
+        }
+
+        return 0;
     }
 
     /// <summary>

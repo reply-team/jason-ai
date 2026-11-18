@@ -149,8 +149,12 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
-written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+which account and on which channel, and through which provider. A paid search of the provider's people is named "Find
+people", and under its operation's intent shows its definition: each filter by its own name with the values it takes,
+what it leaves out on one line, and the search's own arguments in plain words ("People to find: up to 50", "At most 2
+per company" and the rest). An approval to send a message shows it under "The message as written", before the raw
+request, which stays
+folded: an email's sender, recipient, subject and body in that order, with the
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
 is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the
@@ -190,8 +194,9 @@ goes automatically. Nothing is chosen for you; **Remember this** sets `send_mode
 (`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. Once a kind
 is remembered as going automatically, the mode is on, and the card says "Jason now sends messages in your name without
 you reading each one first. Saying who writes and how, in Settings under "Your name and tone", helps them sound like
-you.", with **Open Settings** beside it and nothing to answer. A send that was doubted shows, above the message, who
-doubted it and why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
+you.", with **Open Settings** beside it and nothing to answer. A send that was doubted shows, above the message under
+"Why this message was flagged" (flagged is the screen's word for a doubt a role or a person raised), who doubted it and
+why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
 automatically, the installation's own or that of the card's agent (`send_modes_in_force` of `campaign.get`), and the
 name or the tone is unset, a quiet line points to Settings, "Your name and tone"; while every mode waits for you it
 never shows, and it goes once both are set. **Hide for 7 days** keeps it away for a week in this browser's own storage,
@@ -290,9 +295,11 @@ conversation and keeps what is shown, and **Remove conversation**, which asks fi
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
 transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
-from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
-text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
-in Needs you; a question's card has its options as buttons and a box for your own answer. Under the mailbox an email goes
+from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
+the account this conversation is in, which it does not name), on which channel, and the subject and text, or a search's
+definition and arguments as on [Attention](#attention), with **Approve**, **Edit** (a message written as text),
+**Reject**, which asks once, and **Details**, which opens it in Needs you; a question's card has its options as buttons
+and a box for your own answer. Under the mailbox an email goes
 from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
 not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
 wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
@@ -565,13 +572,22 @@ here: they are the **Notifications** section of Settings.
 
 ## Notifications in Settings
 
-**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows, read only, what
+**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows what
 `system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
-The section says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
-question is waiting, and how a channel is turned on or off: by asking the AI, and in Jason Desktop a provider's channel can also be connected or
-disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The section writes no setting.
+Each channel has a switch, its on or off pill, which turns that one channel on or off as `jason notification enable` and
+`disable` do (`notification.enable`, `notification.disable`), in the paired person's name, as the command names who
+switches a channel; the section then shows the channels as the answer says them, and a refusal in the runtime's own
+sentence, with the switch where it was. There is no switch for every notification at once: while `Notifications:Enabled`
+is `false` in the settings file every switch is off and inert, and the section says that line is the one to change. A
+plugin channel that could not deliver (the runtime's `readiness`) says what is missing: that it cannot be turned on while
+it is off, with an inert switch, and that it cannot deliver while it is on, when it can still be turned off. What the
+operating system itself holds off stays words: a toast Windows did not show keeps its own switch, with the words beside
+it. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
+when an approval or a question is waiting, and how one channel is switched, there or with the command, in the person's
+name; in Jason Desktop a provider's channel is connected or disconnected on the Connect panel, which never changes the
+desktop toast; a browser has no Connect panel.
 
 ## Inside Jason Desktop
 

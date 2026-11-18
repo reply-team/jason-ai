@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { readFence } from '../src/chat-deny.ts';
+import { helpNouns, readFence } from '../src/chat-deny.ts';
 import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
@@ -63,8 +63,12 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
-test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
-    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`)]);
+test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+        ...claudeAllowedTools,
+        ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`),
+        ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
+    ]);
     assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
     assert.ok(!claudeArguments(turn).includes('Bash(jason:*)'));
     for (const tool of ['Skill', 'WebSearch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
@@ -77,7 +81,7 @@ test('the allowed tools are the skills, web search, subagents, the task list, tw
 
 test('no allowed rule begins the spellings that ran with no prompt under one rule for all of jason', () => {
     const prefixes = valuesOf(claudeArguments(turn), '--allowedTools')
-        .filter((rule) => rule.startsWith('Bash(jason'))
+        .filter((rule) => rule.startsWith('Bash(jason') && rule.endsWith(':*)'))
         .map((rule) => rule.slice('Bash('.length, -':*)'.length));
     for (const spelling of ['jason  runtime stop', 'jason runtime\tstop', 'jason approval --actor human:x approve apr_A', 'jason @args.txt', 'jason export --stop', 'jason import --replace backup.zip']) {
         assert.ok(!prefixes.some((prefix) => spelling.startsWith(prefix)), spelling);
@@ -97,12 +101,33 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
     assert.ok(disallowed.includes('Bash(jason project link:*)'));
-    const allowed = valuesOf(args, '--allowedTools').filter((rule) => rule.startsWith('Bash(jason '));
+    const allowed = valuesOf(args, '--allowedTools').filter((rule) => rule.startsWith('Bash(jason ') && rule.endsWith(':*)'));
     assert.ok(!allowed.includes('Bash(jason role add:*)'));
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
     assert.equal(allowed.length, 71);
+});
+
+test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before', () => {
+    const nouns = helpNouns(fence.allowed, fence.reads);
+    assert.deepEqual(nouns, ['approval', 'audience', 'block', 'campaign', 'contact', 'decision', 'events', 'journal', 'operation', 'plugin', 'preference', 'project', 'reply', 'report', 'role', 'rolenote', 'route', 'sender', 'subscription', 'suppression', 'workitem']);
+    const rules = nouns.map((noun) => `Bash(jason ${noun} --help)`);
+    const denied = valuesOf(claudeArguments({ ...turn, reads: fence.reads }), '--disallowedTools');
+    for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
+        const args = claudeArguments({ ...turn, reads: fence.reads, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
+        const help = valuesOf(args, '--allowedTools').filter((rule) => rule.endsWith(' --help)'));
+        assert.deepEqual(help, rules, mode);
+        // The deny rules are not touched: every jason that starts with an option stays refused by the host, root help included.
+        const refused = valuesOf(args, '--disallowedTools');
+        assert.ok(refused.includes('Bash(jason -*)'), mode);
+        for (const rule of denied) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
+    }
+    // Only `--help`, and no rule for all of a noun, the root's help or a noun the deny list takes away whole.
+    const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
+    for (const rule of ['Bash(jason --help)', 'Bash(jason -h)', 'Bash(jason campaign -h)', 'Bash(jason campaign --help:*)', 'Bash(jason campaign:*)', 'Bash(jason runtime --help)', 'Bash(jason profile --help)', 'Bash(jason update --help)', 'Bash(jason skills --help)', 'Bash(jason ui --help)', 'Bash(jason session --help)', 'Bash(jason status --help)', 'Bash(jason logs --help)']) {
+        assert.ok(!allowed.includes(rule), rule);
+    }
 });
 
 test('a Claude turn is denied starting a campaign in every mode, and keeps the acts that stop reaching a person', () => {

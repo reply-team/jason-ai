@@ -99,10 +99,12 @@ The conventions the code follows — the layout, the boundaries the build enforc
 API, of persistence and of the logs — are in `CLAUDE.md`, which every AI session reads and which holds for people just
 the same. This section is how a change travels from a branch to a release.
 
-**Two kinds of branch.** `main` is what has been released: it changes when a release merges, and the release's tag
+**Three kinds of branch.** `main` is what has been released: it changes when a release merges, and the release's tag
 follows that merge. A release branch, `release/<name>`, carries one release's scope, and several can run at once. A
 change is made on a feature branch cut from its release branch, and its pull request targets that release branch.
-When no release branch is open, a change starts as an issue or a discussion; `CONTRIBUTING.md` says where.
+When no release branch is open, a change starts as an issue or a discussion; `CONTRIBUTING.md` says where. The third
+kind is a hotfix's branch, `hotfix/<name>`, cut from `main` for a small fix that cannot wait for the next release; "A
+hotfix" below says what it is and what CI runs for it.
 
 **One pull request per increment.** A branch carries one change: a feature, a fix, a document, a skill's text. Two
 independent things are two pull requests, so that a problem found in one half does not hold up the other, and the
@@ -111,7 +113,8 @@ commit the change leaves says one thing.
 **Squash merges.** A pull request into a release branch is squash-merged: the release branch takes one commit per pull
 request, and that commit's message is the pull request's title and body, written for a reader who was not there —
 what changed, why, how it was verified. The release's own pull request into `main` is squash-merged too, so `main` takes
-one commit per release, and after it the one that moves `main` to the next version.
+one commit per release, and after it the one that moves `main` to the next version; a hotfix's pull request is
+squash-merged into `main` the same way, and is its release's one commit.
 
 **What CI runs, by stage.** Before a push, the critical tier is run locally: the tests that carry the `Critical` trait,
 run with `--filter-trait "Category=Critical"`, about three minutes on a workstation. The tier holds the test of each
@@ -126,6 +129,59 @@ Windows and macOS, and the release merges only when that run is green. At the ta
 critical tier again and packages and smoke-tests the executable for each platform; it does not run the whole suite
 again, since the tag is the tree that run tested. `.github/workflows/ci.yml` says which run each event gets,
 `CiRunsTests` holds the workflow to that rule, and `docs/release-and-update.md` is the release's contract.
+
+**A hotfix.** A hotfix is a small, local fix of what was released that cannot wait for the next release: no database
+migration, no contract document, no CLI verb or Runtime API change, nothing of the installers or of the update path.
+Anything wider is an ordinary patch, made through a release branch. A hotfix is made on a branch `hotfix/<name>` of this
+repository, cut from `main`, and lands through one pull request into `main` that carries all of it: the failing test,
+then the fix, and the release notes of the version `main` builds. No release branch is opened for it. A hotfix cannot
+move the version, since the version prefix's file is on the list below, so the version pull request that moves `main` to
+the next version after a release comes before the next hotfix, as it does after every release. One reviewer reads the
+change while CI runs. A draft's push runs the Linux set; once the pull request is ready, CI runs the hotfix set: every
+platform's package and, on Linux, Windows and macOS, the critical tier under the platform's own check, with the install
+script on Ubuntu, an update on linux-x64, the UI's checks and the desktop's. On Linux that is less than any other pull
+request into `main` runs, which tests the whole suite there: a hotfix trades the whole suite before its merge for the
+tier on every platform. Of the other checks the ruleset on `main` requires, an update on win-x64 reports as skipped by
+rule, and the suite under a release's version, the executable on a Windows older than 24H2 and the install script on
+Windows skip by their own condition, which reports success as well; all four run on `main` after the merge. Each test
+job's summary says how many minutes its tests took. After the squash, `main` passes over the hotfix's record of the tree
+it tested, so the push the squash makes is decided as one no run recorded and runs every check there, the whole suite on
+every platform included, with one exception: a hotfix that changes documentation alone gets the version check alone
+there, as any such push to `main` does, and whoever leads the release starts every check by hand. That run blocks
+nothing: whoever leads the release watches it, and a check red there is the next hotfix. Then the merge is tagged and the
+release runs. No dry run comes before the tag, since a hotfix touches nothing of building or packaging, and a release
+run that fails costs a version number — the version pull request moves `main` to the next one, and the fix is released
+under it — and never moves a tag.
+
+The version check refuses a hotfix's pull request, draft or ready, that changes, adds or removes a path of the list
+below — a path renamed into or out of the list, and a file whose mode alone changed, among them — in one sentence naming
+the first such path, and nothing else of its run starts: such a change goes through a release branch. A name git prints
+quoted, one with a character outside ASCII, a tab, a quote or a backslash in it, cannot be judged against the list, and
+is refused the same way. The list is the one the workflow reads, kind by kind; a path is matched whole, `**/` standing
+for any number of folders, none included, `/**` at the end for everything under a folder, and `*` for any run of
+characters within one name.
+
+- the database's shape: `dotnet/src/Jason.Runtime/Persistence/Migrations/**`
+- the contract documents and the operation catalog: `docs/contracts/**`, `dotnet/src/Jason.Contracts/Api/Operations.cs`
+- CI and the release's machinery: `.github/**`
+- installing, updating and uninstalling: `install/**`, `desktop/installer/**`, `dotnet/src/Jason.Cli/Update/**`,
+  `dotnet/src/Jason.Cli/Installation/**`, `dotnet/src/Jason.Cli/Uninstall/**`, `dotnet/src/Jason.Cli/Ui/**`,
+  `dotnet/src/Jason.Cli/Skills/**`, `dotnet/src/Jason.Cli/Autostart/**`, `dotnet/src/Jason.Cli/Plugins/**`,
+  `dotnet/src/Jason.Contracts/Update/**`, `dotnet/src/Jason.Runtime/Update/**`, `desktop/src/update*.ts`,
+  `desktop/src/uninstall*.ts`, `desktop/src/rollback*.ts`, `desktop/src/installation*.ts`,
+  `desktop/src/machine-setup*.ts`, `desktop/src/carried-*.ts`, `desktop/src/own-runtime*.ts`, `desktop/src/path-*.ts`,
+  `desktop/src/remove-placed*.ts`, `desktop/src/bundle-copy*.ts`, `desktop/src/linux-package*.ts`,
+  `desktop/src/login-item*.ts`
+- the build and what it depends on: `**/*.csproj`, `**/*.props`, `**/*.targets`, `**/*.slnx`, `**/*.manifest`,
+  `**/*.entitlements`, `global.json`, `**/dotnet-tools.json`, `**/package.json`, `**/package-lock.json`,
+  `**/tsconfig.json`, `desktop/electron-builder.config.mjs`, `desktop/electron-builder.config.d.mts`,
+  `desktop/scripts/**`, `ui/scripts/**`, `ui/vite.config.ts`, `**/THIRD-PARTY-NOTICES`
+
+`RELEASE-NOTES.md` and the recorded exchanges under `docs/api/fixtures/` are a hotfix's to change; whether a change adds
+or alters a CLI verb or the Runtime API is the reviewer's to read, not a path's. The check is a rail for the lane's honest
+use, not a wall: a pull request into `main` from any other branch still runs the Linux set with no such check, as before,
+and what stands behind every pull request into `main` is that whoever leads the release reads it and merges it. A branch
+of that name from a fork is any other pull request into `main`, and its paths are not judged.
 
 **Nothing internal in what reaches this repository.** Every branch here is public. Commit messages and pull request
 bodies carry no tracker key, no link to a private system, no pointer to a plan or a note outside the repository, and no

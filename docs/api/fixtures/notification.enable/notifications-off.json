@@ -1,0 +1,15 @@
+{
+  "operation": "notification.enable",
+  "case": "notifications-off",
+  "request": {
+    "channel": "toast"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "notifications_off",
+      "message": "Every notification is off: Notifications:Enabled is false in the settings file, and no channel is turned on while it is. Take that line out of the settings file to turn notifications back on as a whole.",
+      "retryable": false
+    }
+  }
+}

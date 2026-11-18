@@ -51,6 +51,15 @@ public sealed class UpdatePaths(JasonPaths paths)
     /// </summary>
     public string DesktopRequest => Path.Combine(Root, "desktop-request.id");
 
+    /// <summary>
+    /// The record of the move of a command-line install into Jason Desktop, which runs once an update of that install is
+    /// complete and never fails it (<see cref="CommandLineMove"/>): the last step done, and where it stands.
+    /// </summary>
+    public string Move => Path.Combine(Root, "move.json");
+
+    /// <summary>What the move downloads: Jason Desktop's installer on Windows, its zip on macOS.</summary>
+    public string MoveDownloads => Path.Combine(Root, "move");
+
     /// <summary>Everything downloaded for updates, whichever version.</summary>
     public string Staging => Path.Combine(Root, "staged");
 

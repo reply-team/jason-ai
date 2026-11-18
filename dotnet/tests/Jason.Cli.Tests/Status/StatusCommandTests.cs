@@ -443,6 +443,72 @@ public class StatusCommandTests
         Assert.DoesNotContain("skills", check.Fact.Replace(harness, string.Empty, StringComparison.Ordinal).Replace("skill packs", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A role Jason ships whose skill in the role skills directory is a folder the record there does not name is the
+    /// person's: every deployment leaves it alone and a launch teaches it, so the check says so, by name, in the class of a
+    /// role of their own, and never counts it silently as Jason's. A role the record names is not said.
+    /// </summary>
+    [Fact]
+    public async Task A_shipped_role_whose_skill_is_a_folder_of_your_own_is_said_and_never_counted_silently()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var roles = dir.Paths.RoleSkillsDirectory;
+        Running(dir, roles: ["researcher", "planner"], skills: new SkillsInfo(roles, 1048576, [Taught("researcher"), Taught("planner")]));
+        Deploy(roles);
+        Skills.SkillsLeftAloneTests.Plant(roles, "planner");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains($" 'planner' is a role Jason ships, and its skill in {roles} is a folder Jason did not deploy: the runtime teaches 'planner' from that folder, and no deployment writes over it. To have the one Jason ships, move or remove that folder, then run `jason skills install --roles-only`.", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("'researcher' is a role Jason ships", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The harness check names each skill a deployment left alone as the person's: one still there as theirs, which a host
+    /// reading the root runs under the shipped name, and one since taken away as a root without that skill, which an
+    /// update writes.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_harness_check_names_a_skill_left_alone_as_yours_and_one_taken_away_as_missing(bool stillThere)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        DeployPacks(harness, ("jason-runtime-skills", "operating", "v0.1.0", false));
+        var record = SkillsRecord.Read(harness)!;
+        SkillsRecord.Write(harness, record with { Packs = [record.Packs[0] with { LeftAlone = ["quick-start"] }] });
+        if (stillThere)
+        {
+            Skills.SkillsLeftAloneTests.Plant(harness, "quick-start");
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        var folder = Path.Combine(harness, "quick-start");
+        if (stillThere)
+        {
+            // Said, and never a failure: the check stays ok, so `ready` does not move.
+            Assert.Equal(CheckState.Ok, check.State);
+            Assert.Contains($"{folder} is a folder Jason did not deploy, under a name Jason ships, left as it is: Jason's 'quick-start' is not installed for ", check.Fact, StringComparison.Ordinal);
+            Assert.Contains(", and an agent there asked to use 'quick-start' reads that folder. To have the one Jason ships, move or remove that folder, then run `jason skills update`.", check.Fact, StringComparison.Ordinal);
+        }
+        else
+        {
+            // The state and repair a recorded skill missing from the disk is given, since it is the same fact.
+            Assert.Equal(CheckState.Failed, check.State);
+            Assert.Equal("jason skills update", check.Fix);
+            Assert.False(check.Required, "harness_skills moves `ready`");
+            Assert.Contains($"{folder}, a folder Jason left as it was, no longer holds a skill, so {harness} has no 'quick-start': `jason skills update` writes the one Jason ships.", check.Fact, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>And what the record in the role root says is reported by the check whose subject it is.</summary>
     [Fact]
     public async Task The_role_check_names_the_pack_and_ref_its_own_record_carries()

@@ -1323,6 +1323,32 @@ body,
     width: 100%;
     margin: 0 auto;
 }
+/* The words sent while a turn runs: under the thread, at its width, drawn as a message sent is, with a quiet line under. */
+.jc-console .chat-panel .chat-queued {
+    padding: 0 20px 8px;
+    max-width: 820px;
+    width: 100%;
+    margin: 0 auto;
+}
+/* The region a screen reader hears queuing from: in the page, never on the screen. */
+.jc-console .chat-announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+.jc-console .chat-queued .queued-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 6px;
+    color: var(--mute);
+    font-size: 12px;
+}
 .jc-console .said {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1343,6 +1369,12 @@ body,
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.jc-console .perm-why {
+    margin: 6px 0 0;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.45;
 }
 .jc-console .perm-detail {
     margin: 8px 0 0;
@@ -1758,6 +1790,11 @@ body,
 }
 .jc-console .needs-facts {
     margin-top: 8px;
+}
+/* A search's definition and arguments, under its intent, as the runtime returned them. */
+.jc-console .needs-search {
+    margin-top: 8px;
+    overflow-wrap: anywhere;
 }
 .jc-console .needs-pane .ask-a > .inp {
     flex: 1 1 200px;
@@ -2570,8 +2607,12 @@ body,
     color: var(--mute);
 }
 .jc-console .waiting-card .waiting-body,
-.jc-console .waiting-card .waiting-intent {
+.jc-console .waiting-card .waiting-intent,
+.jc-console .waiting-card .search-lines {
     margin-top: 4px;
+}
+.jc-console .waiting-card .search-lines {
+    overflow-wrap: anywhere;
 }
 /* Who doubted a send and why, above the message's words: on a chat's card and in Needs you's pane. */
 .jc-console .waiting-card .send-doubts,

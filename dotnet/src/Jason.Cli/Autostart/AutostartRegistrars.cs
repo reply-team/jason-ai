@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Security.Principal;
 using System.Text;
+using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Autostart;
@@ -213,9 +214,9 @@ public static class AutostartRegistrars
     }
 
     /// <summary>Runs one command that has to work, and says what the tool said when it did not.</summary>
-    internal static void Must(string tool, IReadOnlyList<string> command)
+    internal static void Must(string tool, IReadOnlyList<string> command, BoundedRun? run = null)
     {
-        var (exit, output, error) = Run(command);
+        var (exit, output, error) = run is null ? Run(command) : run(command, null);
         if (exit != 0)
         {
             throw Refused(tool, error, output);
@@ -403,9 +404,10 @@ internal sealed class WindowsRegistrar(WindowsAccount account) : IAutostartRegis
 }
 
 /// <summary>A macOS LaunchAgent: a file under the account's own Library, loaded at login.</summary>
-/// <param name="run">How launchctl is run when the job is taken out; a test's stub.</param>
+/// <param name="run">How launchctl is run; a test's stub.</param>
 /// <param name="home">The home whose Library holds the file; a test's own.</param>
-internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home = null) : IAutostartRegistrar
+/// <param name="userId">The account whose launchd domains are read; a test's own, else this process's.</param>
+internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home = null, uint? userId = null) : IAutostartRegistrar
 {
     public AutostartPlatform Platform => AutostartPlatform.MacOs;
 
@@ -426,13 +428,21 @@ internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home 
     {
         ArgumentNullException.ThrowIfNull(registration);
 
+        // launchd's record of the label is read before anything changes it. The job is loaded with `-w` only where the
+        // label is recorded as disabled, which an earlier `disable` leaves and a plain load does not clear; where no record
+        // stands it is loaded plainly and none is written. A record that cannot be read is taken as one that may stand.
+        var launchctl = run ?? AutostartRegistrars.Run;
+        var account = userId ?? AccountDatabase.UserId();
+        var disabled = account is { } uid ? LaunchdJobs.RecordedDisabled(registration.Name, LaunchdJobs.Domains(uid), launchctl) : null;
+
         // Unloaded first where something is already loaded: launchd refuses to load a label twice, and an
-        // `enable` that follows an `enable` is the ordinary case rather than a mistake.
+        // `enable` that follows an `enable` is the ordinary case rather than a mistake. Unloaded without `-w`, which
+        // would record the label as disabled only for the load to clear it again.
         if (Read().Registered)
         {
             foreach (var command in registration.Remove)
             {
-                AutostartRegistrars.Run(command);
+                launchctl(LaunchdJobs.WritingNothing(command), null);
             }
         }
 
@@ -444,7 +454,7 @@ internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home 
             {
                 foreach (var command in registration.Apply)
                 {
-                    AutostartRegistrars.Must("launchctl", command);
+                    AutostartRegistrars.Must("launchctl", disabled is false ? command : LaunchdJobs.ClearingDisabled(command), launchctl);
                 }
             });
     }
@@ -455,9 +465,11 @@ internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home 
 
         // The job goes out of launchd before its file goes, bounded, and by its label as well, which holds for a job whose
         // file is gone already: a job left loaded with no plist is never this one's doing (LaunchdJobs). What an uninstall
-        // clears for the label goes last, file or none: an earlier removal may have taken the file and left the label disabled.
+        // clears for the label goes last, file or none: an earlier removal may have taken the file and left the label
+        // disabled. It is cleared only where a domain records it so, and nothing is written where no record stands.
         var registered = Read().Registered;
-        LaunchdJobs.TakeOut(registered ? registration.Remove : [], registration.Name, run, registration.Forget);
+        LaunchdJobs.TakeOut(registered ? registration.Remove : [], registration.Name, run);
+        LaunchdJobs.ClearDisabled(registration.Name, registration.ClearsDisabledIn, run);
         AutostartRegistrars.Discard(registration.ArtifactPath);
         return new AutostartRemoval(registered, Legacy: false);
     }

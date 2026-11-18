@@ -101,7 +101,7 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
         platform: browserPlatform(),
         onCommand: none,
         theme: { get: seam.theme.get, set: rejected },
-        updates: { key: async () => null },
+        updates: { key: async () => null, item: rejected, press: rejected, onChanged: none },
         dailyTrends: { get: async () => null, set: rejected },
         mode: {
             get: seam.mode.get,
@@ -174,7 +174,7 @@ export function noDesktop(): JasonDesktop {
         platform: browserPlatform(),
         onCommand: none,
         theme: { get: async () => null, set: needs },
-        updates: { key: async () => null },
+        updates: { key: async () => null, item: needs, press: needs, onChanged: none },
         dailyTrends: { get: async () => null, set: needs },
         mode: {
             get: async () => ({ mode: 'live', unopened: null, preparing: false }),

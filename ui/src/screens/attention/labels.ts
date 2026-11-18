@@ -12,6 +12,7 @@ const verbs: Record<string, string> = {
     'conversation.list': 'Read conversations of',
     'conversation.get': 'Read a conversation of',
     'engagement.summarize': 'Summarize engagement of',
+    'audience.search': 'Find people',
 };
 
 export function operationLabel(operation: string): string {

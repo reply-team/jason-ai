@@ -1,0 +1,60 @@
+{
+  "operation": "notification.disable",
+  "case": "plugin",
+  "request": {
+    "channel": "pager"
+  },
+  "status": 200,
+  "response": {
+    "enabled": true,
+    "channels": [
+      {
+        "channel": "toast",
+        "kind": "toast",
+        "on": true,
+        "outcome": null,
+        "reason": null,
+        "code": null,
+        "class": null,
+        "detail": null,
+        "at": null,
+        "presence": "available",
+        "presence_detail": null,
+        "readiness": null,
+        "readiness_detail": null
+      },
+      {
+        "channel": "chat-room",
+        "kind": "plugin",
+        "on": true,
+        "outcome": null,
+        "reason": null,
+        "code": null,
+        "class": null,
+        "detail": null,
+        "at": null,
+        "presence": null,
+        "presence_detail": null,
+        "readiness": "binding_invalid",
+        "readiness_detail": "/chat required"
+      },
+      {
+        "channel": "pager",
+        "kind": "plugin",
+        "on": false,
+        "outcome": null,
+        "reason": null,
+        "code": null,
+        "class": null,
+        "detail": null,
+        "at": null,
+        "presence": null,
+        "presence_detail": null,
+        "readiness": "ready",
+        "readiness_detail": null
+      }
+    ],
+    "last_notification_id": null,
+    "last_at": null
+  }
+}

@@ -1,6 +1,6 @@
 manifest_version: 1
 id: journal-forwarder
-version: 1.6.0
+version: 1.7.0
 kind: subscriber
 name: Journal forwarder
 description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names, a file in a directory they grant, or both - the smallest complete subscriber.
@@ -64,6 +64,7 @@ subscriptions:
   - inbound_reply_observed
   - message_bounce_observed
   - message_sent_observed
+  - notification_channel_updated
   - notification_sent
   - plugin_grants_updated
   - plugins_reloaded

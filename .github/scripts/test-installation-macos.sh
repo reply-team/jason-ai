@@ -11,19 +11,29 @@
 #
 #   listing <name>                 the places an installation can touch, written to $OUT/<name>.txt
 #   compare <after> <before>       every line equal but those of the data directory and the harness root, which are kept
-#   install <feed> <version> <script>
+#                                  (with previous-profiles: also the empty profiles and the enabled launchd record the
+#                                  previous release's own install and registration leave, each named and said)
+#   install <feed> <version> <script> [pinned]
 #                                  install.sh from the feed as an agent runs it, in a shell whose PATH does not name
 #                                  ~/.local/bin and whose account shell is zsh, as a person's Mac has it: the place, the
 #                                  version, jason in a new login shell, the skills records, the person's own skill left
 #                                  alone, the role skills; and the machine set-up an application's start runs, which
-#                                  writes nothing under a data directory
+#                                  writes nothing under a data directory. Unpinned, as an agent runs it; with pinned, by
+#                                  the pinned line, --version, after a pin naming another version was refused
+#   enable-starts-now              jason runtime autostart enable with no runtime running: whether a runtime answers
+#                                  within 30 s after it, said by name and asserted neither way
 #   refuse-while-open              jason uninstall while Jason Desktop runs: refused, nothing removed
 #   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged
 #   uninstall-menu                 the uninstall the application's Uninstall Jason item starts: the carried jason with
 #                                  --wait-for the application's process, which then quits
 #   from-previous <previous> <feed> <version>
 #                                  the previous release's command-line Jason, installed by its own script, with a runtime
-#                                  and a logon registration, updated by its own jason update apply from a served feed
+#                                  and a logon registration, updated by its own jason update apply --version from a served
+#                                  feed and moved into Jason Desktop: the application in place, ~/.local/bin/jason its
+#                                  wrapper, the runtime running from the carried file, the logon registration naming it,
+#                                  the move's record done, the command-line install retired; and whether the build says it
+#                                  is a test build, as JASON_PROOF_BUILD says it must (test on CI's build, release on the
+#                                  release's packages). The uninstall is the next step's
 #   requirement <zip>              install.sh's APP_REQUIREMENT against a published application: admitted, and refused for another team
 #   held                           fails when any compare above found the machine after an uninstall not the one before
 #   assess                         Gatekeeper's assessment of the placed application at its final path: accepted, as a
@@ -192,6 +202,7 @@ stand-in)
     awk -v n="$number" -v s="$standin" 'NR == n { print s; next } { print }' install/install.sh > "$copy"
     diff install/install.sh "$copy" || true
     [ "$(diff install/install.sh "$copy" | grep -c '^[<>]' || true)" = 2 ] || fail "the copy differs from install.sh in more than the one line naming the signature"
+    printf 'cdhash H"%s"\n' "$cdhash" > "$copy.requirement"
     say "install.sh refused the ad hoc test build; the copy run here differs from it in line $number alone, naming this build's own signature"
     ;;
 
@@ -216,6 +227,17 @@ compare)
                 went="$(printf '%s\n' "$went" | grep -vE "^profile \\$name	absent\$" || true)"
             done
         fi
+        # And the record the previous release's own registration wrote: its autostart enable loads with -w, which records
+        # the runtime's label as enabled, a record no command run without administrator rights removes, and which this
+        # version's uninstall reads and leaves, since it clears a disabled record alone. Named, said, and not counted; a
+        # disabled record, or any other label, still counts.
+        expected_left="$(printf '%s\n' "$left" | grep -E '^launchd record (gui|user)	ai\.jason\.runtime enabled$' || true)"
+        if [ -n "$expected_left" ]; then
+            say "expected after the previous release's own autostart enable (load -w): $(printf '%s' "$expected_left" | tr '\n\t' '; ') (the earlier release's enabled record, which does nothing)"
+            left="$(printf '%s\n' "$left" | grep -vE '^launchd record (gui|user)	ai\.jason\.runtime enabled$' || true)"
+        else
+            say "no enabled record of the previous release's registration is left in launchd"
+        fi
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
     cat "$diffed"
@@ -236,13 +258,28 @@ held)
     ;;
 
 install)
-    feed="$1"; version="$2"; script="$3"
-    # The agent's install: the script read by sh, with a terminal's PATH and a zsh account.
+    feed="$1"; version="$2"; script="$3"; pinned="${4:-}"
     said="$OUT/install.txt"
+    set --
+    if [ "$pinned" = pinned ]; then
+        # The pinned line reads its pin: one naming another version than the feed's is refused, naming both, and places
+        # nothing, before the pin naming this one installs.
+        status=0
+        within 300 'install.sh --version 9.9.9' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" --version 9.9.9 > "$OUT/install-wrong-pin.txt" 2>&1 || status=$?
+        cat "$OUT/install-wrong-pin.txt"
+        [ "$status" -ne 0 ] || fail "install.sh --version 9.9.9 ended 0 against a feed of $version"
+        grep -q "version asked for 9.9.9 and .* names $version; nothing was installed" "$OUT/install-wrong-pin.txt" || fail "install.sh --version 9.9.9 was refused for another reason than the pin"
+        [ -z "$(app)" ] || fail "the refused pinned install left $(app)"
+        say "install.sh --version 9.9.9 against a feed of $version was refused, naming both versions, and placed nothing: the pin is read"
+        set -- --version "$version"
+    fi
+    # The agent's install: the script read by sh, with a terminal's PATH and a zsh account; by the pinned line,
+    # --version, where this leg is the pinned one.
     status=0
-    within 300 'install.sh' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$said" 2>&1 || status=$?
+    within 300 'install.sh' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" "$@" > "$said" 2>&1 || status=$?
     cat "$said"
-    [ "$status" -eq 0 ] || fail "install.sh exited with $status"
+    [ "$status" -eq 0 ] || fail "install.sh $* exited with $status"
+    if [ "$pinned" = pinned ]; then say "install.sh ran by the pinned line: --version $version"; else say "install.sh ran unpinned, with no --version, as an agent runs it"; fi
     placed="$(app)"
     [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications"
     carried="$placed/Contents/Resources/bundle/jason"
@@ -264,7 +301,9 @@ install)
     # The skills of both hosts found, each recorded; the person's own skill of a name Jason ships left alone and named.
     for root in .claude/skills .agents/skills; do [ -f "$HOME/$root/.jason-skills.json" ] || fail "no skills record in ~/$root"; done
     [ -f "$DATA/skills/roles/.jason-skills.json" ] || fail "no role skills record under $DATA"
-    if [ -f "$OWN_SKILL/SKILL.md" ]; then
+    if grep -q "person's own" "$OUT/failed-legs.txt" 2>/dev/null; then
+        say "the skills of Claude Code and Codex are recorded in both folders and the role skills under ~/.jason; the person's own quick-start was lost in a leg before, as recorded, so this install's handling of it is not seen"
+    elif [ -f "$OWN_SKILL/SKILL.md" ]; then
         [ "$(cat "$OWN_SKILL/SKILL.md")" = "a person's own skill" ] || fail "the person's own skill at $OWN_SKILL was changed"
         if grep -q '"quick-start/' "$HOME/.agents/skills/.jason-skills.json"; then fail "the record in ~/.agents/skills claims the person's own quick-start"; fi
         grep -q 'quick-start' "$said" || fail "the install did not name the person's own quick-start it left alone"
@@ -282,6 +321,29 @@ install)
     say "jason install as an application's start runs it writes no entry under the data directory"
     ;;
 
+enable-starts-now)
+    # Whether jason runtime autostart enable starts a runtime at once (the LaunchAgent carries RunAtLoad), against the
+    # page's "`enable` starts nothing now": on a machine where no runtime runs, checked first, a runtime looked for for
+    # 30 s after it, and what was seen said by name. A fact, asserted neither way.
+    placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
+    if within 60 'jason runtime status before enable' "$carried" runtime status > /dev/null 2>&1; then fail_held "a runtime answered before enable, so whether enable starts one could not be seen"; exit 0; fi
+    if ps -axo command= | grep -F "$carried runtime run" | grep -v grep > /dev/null; then fail_held "a runtime process ran before enable, so whether enable starts one could not be seen"; exit 0; fi
+    within 60 'jason runtime autostart enable' "$carried" runtime autostart enable > "$OUT/enable-starts-now.json" 2>&1 || fail "jason runtime autostart enable failed: $(cat "$OUT/enable-starts-now.json")"
+    cat "$OUT/enable-starts-now.json"
+    seen=""
+    waited=0
+    while [ "$waited" -lt 60 ]; do
+        if "$carried" runtime status > /dev/null 2>&1; then seen=yes; break; fi
+        sleep 0.5; waited=$((waited + 1))
+    done
+    if [ -n "$seen" ]; then
+        say "enable started the runtime at once (RunAtLoad): a runtime answered $((waited / 2)) s after jason runtime autostart enable, where none ran before"
+    else
+        say "enable started nothing now: no runtime answered within 30 s after jason runtime autostart enable"
+    fi
+    say "launchd's records after this build's autostart enable: $(launchd_records | tr '\t\n' ' ;' || true)"
+    ;;
+
 refuse-while-open)
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     record="$HOME/.agents/skills/.jason-skills.json"
@@ -294,10 +356,11 @@ refuse-while-open)
     while [ "$waited" -lt 120 ] && [ "$(stat -f %m "$record" 2>/dev/null || echo none)" = "$before" ]; do sleep 0.5; waited=$((waited + 1)); done
     if [ "$(stat -f %m "$record" 2>/dev/null || echo none)" = "$before" ]; then moment='not written again within 60 s of the start'; else moment="written again $((waited / 2)) s after the start"; fi
     sleep 2
-    claims="$(grep -n 'quick-start' "$record" 2>/dev/null | tr '\n' ';' || true)"
+    claims="$(grep -o '"quick-start/[^"]*"' "$record" 2>/dev/null | sort -u | tr '\n' ' ' || true)"
     own="$(cat "$OWN_SKILL/SKILL.md" 2>/dev/null || echo '(absent)')"
     say "after the application's first start the record in ~/.agents/skills was $moment; it names quick-start in: ${claims:-no line}; the person's own SKILL.md reads: $own"
     if [ -n "$claims" ] || [ "$own" != "a person's own skill" ]; then fail_held "the application's first start took the person's own quick-start: the record names it in ${claims:-no line}, and the file reads '$own'"; fi
+    say "launchd's records after the application's first start, before any uninstall: $(launchd_records | tr '\t\n' ' ;' || true)"
     status=0
     within 120 'jason uninstall while the application runs' "$carried" uninstall > "$OUT/refused.json" 2>&1 || status=$?
     cat "$OUT/refused.json"
@@ -325,6 +388,7 @@ uninstall-terminal)
     if grep -qx '# added by jason install' "$HOME/.zprofile" 2>/dev/null; then fail "~/.zprofile still carries the line"; fi
     [ ! -e "$DATA" ] || fail "~/.jason is left after --purge-data"
     [ -f "$OWN_SKILL/SKILL.md" ] || fail_held "the person's own skill went with the uninstall"
+    say "launchd's records after this build's jason uninstall from a new login shell: $(launchd_records | tr '\t\n' ' ;' || true)"
     say "jason uninstall from a new login shell: the runtime stopped, Jason.app, the wrapper, the profile lines, the skills and the data directory gone"
     ;;
 
@@ -353,33 +417,93 @@ uninstall-menu)
 
 from-previous)
     previous="$1"; feed="$2"; version="$3"
-    # The previous release's command-line Jason, by its own script from its own assets, with a terminal's PATH.
+    build="${JASON_PROOF_BUILD:-}"
+    case "$build" in test|release) ;; *) fail "JASON_PROOF_BUILD says '$build': it must say test (CI's build) or release (the release's packages)" ;; esac
+    # The previous release's command-line Jason, by its own script from its own assets, with a terminal's PATH, a runtime
+    # running and its start at login registered.
     within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" || fail "the previous release's install.sh failed"
     old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)"
     within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > "$OUT/autostart.json" || fail "the previous release could not register its logon start: $(cat "$OUT/autostart.json")"
-    say "the previous release's command-line Jason $old installed by its own script, with a runtime and a logon registration"
+    [ -z "$(app)" ] || fail "an application is in place before the move: $(app)"
+    say "the previous release's command-line Jason $old installed by its own script at $WRAPPER, with a runtime running and a logon registration"
     say "launchd's records after the previous release's registration: $(launchd_records | tr '\t\n' ' ;' || true)"
 
+    # Its own update, pinned to this version, from the feed served on this machine. The update is the previous
+    # release's; the move is this version's, which it hands the rest to.
     python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/feed-server.log" 2>&1 &
     server=$!
     trap 'kill "$server" 2>/dev/null || true' EXIT
     wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
     status=0
-    within 600 "the previous release's jason update apply" "$WRAPPER" update apply --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/update-from-previous.json" 2>&1 || status=$?
+    within 900 "the previous release's jason update apply --version $version" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/update-from-previous.json" 2> "$OUT/update-from-previous.err" || status=$?
+    cat "$OUT/update-from-previous.err"
     cat "$OUT/update-from-previous.json"
-    [ "$status" -eq 0 ] || fail "the previous release's jason update apply exited with $status"
-    say "the previous release's own jason update apply took the feed served on this machine"
+    [ "$status" -eq 0 ] || fail "the previous release's jason update apply --version $version exited with $status"
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    [ "$(read_field "$OUT/update-from-previous.json" step)" = complete ] || fail "the update did not end complete: $(cat "$OUT/update-from-previous.json")"
+    [ "$(read_field "$OUT/update-from-previous.json" to)" = "$version" ] || fail "the update went to $(read_field "$OUT/update-from-previous.json" to), not $version"
+    state="$(read_field "$OUT/update-from-previous.json" move.state)"
+    [ -n "$state" ] || fail "the update document carries no move: the jason it handed to did not move the install"
+    [ "$state" = done ] || fail "the move is $state at $(read_field "$OUT/update-from-previous.json" move.step): $(read_field "$OUT/update-from-previous.json" move.reason)"
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications after the move"
+    [ "$(read_field "$OUT/update-from-previous.json" move.application)" = "$placed" ] || fail "the move names $(read_field "$OUT/update-from-previous.json" move.application), and the application is at $placed"
+    say "the previous release's own jason update apply --version $version took the feed served on this machine and ended complete, its move done"
 
-    # THE MOVE (the unit that moves a command-line install into the application) is asserted here once it lands: the
-    # application in place, ~/.local/bin/jason its wrapper, the runtime running from the carried file, the logon
-    # registration naming it, the move's record complete. Until then the update is the command-line update, read back so.
-    [ "$(within 60 'jason --version after the update' "$WRAPPER" --version | cut -d+ -f1)" = "$version" ] || fail "after the update ~/.local/bin/jason does not say $version"
-    within 60 'jason runtime status after the update' "$WRAPPER" runtime status > /dev/null || fail "no runtime answers after the update"
-    say "the command-line install now says $version and its runtime answers (the move into the application is asserted once it lands)"
+    # THE MOVE. The application in place, at this version.
+    carried="$placed/Contents/Resources/bundle/jason"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+    if [ -w /Applications ]; then [ "$placed" = /Applications/Jason.app ] || fail "/Applications is writable, and the move put the application at $placed"; fi
+    say "Jason Desktop $version is at $placed"
 
-    within 300 "jason uninstall of the updated command-line install" "$WRAPPER" uninstall > "$OUT/uninstall-previous.json" || fail "jason uninstall of the updated command-line install failed: $(cat "$OUT/uninstall-previous.json")"
-    say "launchd's records after $version's jason uninstall: $(launchd_records | tr '\t\n' ' ;' || true)"
+    # The terminal command as the routine places it: ~/.local/bin/jason the application's wrapper, no executable of its
+    # own, and a new login shell finds it.
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is still an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')"
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    say "~/.local/bin/jason is the application's wrapper running $carried, and a new zsh login shell finds it saying $version"
+
+    # The command-line install retired: its executable replaced by the wrapper, its notice files gone.
+    for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
+    say "the command-line install is retired: no executable of its own at $WRAPPER and no notice file in ~/.local/bin"
+
+    # The runtime answering, from the carried file.
+    within 60 'jason runtime status after the move' "$carried" runtime status > "$OUT/status-after-move.json" 2>/dev/null || fail "no runtime answers after the move"
+    ps -axo command= | grep -F "$carried runtime run" | grep -v grep > /dev/null || fail "no runtime runs from $carried: $(ps -axo pid,command | grep -F 'runtime run' | grep -v grep || true)"
+    say "the runtime answers, running from $carried"
+
+    # The logon registration names the carried file.
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/autostart-after-move.json" 2>/dev/null || fail "jason runtime autostart status failed after the move"
+    [ "$(read_field "$OUT/autostart-after-move.json" registered)" = true ] || fail "no logon registration after the move: $(cat "$OUT/autostart-after-move.json")"
+    [ "$(read_field "$OUT/autostart-after-move.json" executable)" = "$carried" ] || fail "the logon registration names $(read_field "$OUT/autostart-after-move.json" executable), not $carried"
+    say "the logon registration names $carried"
+    say "launchd's records after the move: $(launchd_records | tr '\t\n' ' ;' || true)"
+
+    # The move's record, complete.
+    [ -f "$DATA/update/move.json" ] || fail "no move record at $DATA/update/move.json"
+    [ "$(read_field "$DATA/update/move.json" state)" = done ] || fail "the move record says $(read_field "$DATA/update/move.json" state) at $(read_field "$DATA/update/move.json" step)"
+    say "the move record at ~/.jason/update/move.json says done"
+
+    # Whether this build says it is a test build: a release never does, CI's build always.
+    said="$("$carried" --version 2>&1 > /dev/null || true)"
+    test_build="$(read_field "$OUT/status-after-move.json" test_build)"
+    if [ "$build" = release ]; then
+        [ -z "$said" ] || fail "a released jason --version wrote on standard error: $said"
+        [ -z "$test_build" ] || fail "a released runtime's report carries test_build: $test_build"
+        say "released: jason --version writes nothing on standard error, and the runtime's report carries no test_build"
+    else
+        [ "$said" = 'This jason is a test build, not a release.' ] || fail "CI's test build does not say so on standard error: '$said'"
+        [ "$test_build" = true ] || fail "CI's test build's runtime report does not carry test_build: true"
+        say "a test build, and it says so: jason --version on standard error, and test_build: true in the runtime's report"
+    fi
     ;;
 
 previous-removal)

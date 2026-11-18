@@ -1,7 +1,7 @@
 import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopCommand } from '../platform/desktop';
+import type { DesktopCommand, DesktopFullAccessWhy } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
@@ -567,8 +567,13 @@ describe('the console', () => {
         const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
         const type = (text: string) => fireEvent.change(box(), { target: { value: text } });
         const enter = () => fireEvent.keyDown(box(), { key: 'Enter' });
+        const escape = (init: { isComposing?: boolean } = {}) => fireEvent.keyDown(box(), { key: 'Escape', ...init });
         const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
-        const waiting = () => screen.queryByRole('status', { name: 'Waiting message' });
+        const stops = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.stop');
+        const queued = () => screen.queryByRole('group', { name: 'Queued message' });
+        const blank = String.fromCharCode(10, 10);
+        /** The composer's round button, by its name: the one button of the row that sends or stops. */
+        const round = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.chat-panel .crow > .send'));
 
         /** A chat whose first turn, "Go", runs. */
         async function running(): Promise<{ desktop: StubDesktop; id: string }> {
@@ -580,7 +585,74 @@ describe('the console', () => {
             return { desktop, id: sends(desktop)[0]!.args[0] as string };
         }
 
-        it('waits, one at a time, and is sent once as the next turn when the turn ends', async () => {
+        it('has one round button: Stop with the box empty, the arrow that queues with words typed', async () => {
+            const { desktop } = await running();
+            // The box is empty: the turn is stopped by the button.
+            expect(round().map((each) => each.getAttribute('aria-label'))).toEqual(['Stop']);
+            expect(round()[0]!.querySelector('svg')).toBeTruthy();
+            expect(box().placeholder).toBe('Sent when this turn ends · Esc stops it');
+            // Words typed: the same place holds the arrow, which sends them to wait for the turn's end.
+            type('And then?');
+            const arrow = round();
+            expect(arrow.map((each) => each.getAttribute('aria-label'))).toEqual(['Send when this turn ends']);
+            expect(arrow[0]!.title).toBe('Send when this turn ends (Esc stops the turn)');
+            expect(arrow[0]!.type).toBe('submit');
+            expect(arrow[0]!.disabled).toBe(false);
+            expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+            // The text button and Replace are gone.
+            expect(screen.queryByRole('button', { name: 'Send when the turn ends' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Replace' })).toBeNull();
+            fireEvent.click(arrow[0]!);
+            await waitFor(() => expect(queued()).toBeTruthy());
+            expect(round().map((each) => each.getAttribute('aria-label'))).toEqual(['Stop']);
+            expect(stops(desktop)).toHaveLength(0);
+            // While the stop is asked for, words typed cannot be queued: the button stays Stop, and Enter keeps them.
+            fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+            type('More');
+            expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([['Stop', false]]);
+            enter();
+            expect(box().value).toBe('More');
+            expect(queued()).toBeNull();
+        });
+
+        it('is Stop, never an arrow that cannot send, while the model name is still to be typed', async () => {
+            const { desktop } = await running();
+            fireEvent.click(within(openMenu('Model')).getByRole('menuitemradio', { name: 'Another model…' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
+            type('More');
+            expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([['Stop', false]]);
+            fireEvent.click(round()[0]!);
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+        });
+
+        it('is Stop, never an arrow that cannot send, when the host is gone while the turn runs', async () => {
+            const { desktop } = await running();
+            setup.value = { ...setup.value!, hosts: [] };
+            type('More');
+            await waitFor(() =>
+                expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([
+                    ['Stop', false],
+                ]),
+            );
+            fireEvent.click(round()[0]!);
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+        });
+
+        it('says that a message is queued to a screen reader, in the queued line’s words', async () => {
+            await running();
+            const region = () => document.querySelector<HTMLElement>('.chat-panel .chat-announce')!;
+            expect(region().getAttribute('role')).toBe('status');
+            expect(region().textContent).toBe('');
+            type('And then?');
+            enter();
+            await waitFor(() => expect(region().textContent).toBe('Queued · Jason takes it when this turn ends'));
+            fireEvent.click(within(queued()!).getByRole('button', { name: 'Take back' }));
+            await waitFor(() => expect(region().textContent).toBe(''));
+        });
+
+        it('is drawn in the conversation as a message sent, with a line that it is queued, and sent once when the turn ends', async () => {
             const { desktop, id } = await running();
             flush(() => desktop.emit(id, { kind: 'step', text: 'Ran jason status' }));
             const steps = await waitFor(() => {
@@ -589,16 +661,20 @@ describe('the console', () => {
                 return element!;
             });
             type('And then?');
-            fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-            await waitFor(() => expect(waiting()).toBeTruthy());
-            expect(waiting()!.textContent).toContain('And then?');
+            enter();
+            await waitFor(() => expect(queued()).toBeTruthy());
+            const drawn = queued()!;
+            // In the conversation, below the thread and above the box, drawn as the person's message is.
+            expect(drawn.closest('.chat-scroll')).toBeTruthy();
+            expect(drawn.querySelector('.m.user .bub')?.textContent).toBe('And then?');
+            expect(drawn.querySelector('.queued-line')?.textContent).toContain(
+                'Queued · Jason takes it when this turn ends',
+            );
+            expect(document.querySelector('.composer .chat-waiting')).toBeNull();
             expect(box().value).toBe('');
             // Typing does not draw the thread again.
             type('Third');
             expect(document.querySelector('.thread details')).toBe(steps);
-            enter();
-            expect(box().value).toBe('Third');
-            expect(waiting()!.textContent).toContain('And then?');
             expect(sends(desktop)).toHaveLength(1);
             flush(() => {
                 desktop.emit(id, { kind: 'done', error: null });
@@ -606,7 +682,7 @@ describe('the console', () => {
             });
             await waitFor(() => expect(sends(desktop)).toHaveLength(2));
             expect(sends(desktop)[1]!.args).toEqual([id, 'And then?', { host: 'claude' }]);
-            expect(waiting()).toBeNull();
+            expect(queued()).toBeNull();
             expect(box().value).toBe('Third');
             expect(Array.from(document.querySelectorAll('.thread .m.user'), (each) => each.textContent)).toEqual([
                 'Go',
@@ -614,24 +690,38 @@ describe('the console', () => {
             ]);
         });
 
-        it('is swapped with the box by Replace, and taken back only into an empty box', async () => {
+        it('adds a second message under the first, a blank line between, and both go as one turn', async () => {
             const { desktop, id } = await running();
             type('First');
             enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
-            expect(screen.queryByRole('button', { name: 'Replace' })).toBeNull();
+            await waitFor(() => expect(queued()).toBeTruthy());
             type('Second');
-            fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
-            await waitFor(() => expect(waiting()!.textContent).toContain('Second'));
-            expect(box().value).toBe('First');
-            // Take back never overwrites the box: it waits for the box to be empty.
-            expect(screen.getByRole('button', { name: 'Take back' })).toHaveProperty('disabled', true);
-            type('');
-            fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
-            await waitFor(() => expect(waiting()).toBeNull());
-            expect(box().value).toBe('Second');
+            fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+            await waitFor(() =>
+                expect(queued()!.querySelector('.bub')!.textContent).toBe(['First', 'Second'].join(blank)),
+            );
+            expect(screen.getAllByRole('group', { name: 'Queued message' })).toHaveLength(1);
+            expect(box().value).toBe('');
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+            await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+            expect(sends(desktop)[1]!.args).toEqual([id, ['First', 'Second'].join(blank), { host: 'claude' }]);
+        });
+
+        it('is taken back only into an empty box', async () => {
+            const { desktop, id } = await running();
+            type('First');
+            enter();
+            await waitFor(() => expect(queued()).toBeTruthy());
+            type('Typed');
+            const takeBack = within(queued()!).getByRole('button', { name: 'Take back' });
+            expect(takeBack).toHaveProperty('disabled', true);
+            expect(takeBack.title).toBe('Empty the box to take it back');
+            type('');
+            fireEvent.click(within(queued()!).getByRole('button', { name: 'Take back' }));
+            await waitFor(() => expect(queued()).toBeNull());
+            expect(box().value).toBe('First');
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(chats.value[id]!.running).toBe(false));
             expect(sends(desktop)).toHaveLength(1);
         });
 
@@ -639,26 +729,98 @@ describe('the console', () => {
             const { desktop, id } = await running();
             type('Later');
             enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
+            await waitFor(() => expect(queued()).toBeTruthy());
             fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-            expect(desktop.calls.some((each) => each.name === 'chat.stop')).toBe(true);
+            expect(stops(desktop)).toHaveLength(1);
             await waitFor(() => expect(box().value).toBe('Later'));
-            expect(waiting()).toBeNull();
-            expect(screen.getByRole('button', { name: 'Send when the turn ends' })).toHaveProperty('disabled', true);
+            expect(queued()).toBeNull();
             // The person types again before the stopped turn's end arrives.
             type('Something else');
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+            await waitFor(() => expect(chats.value[id]!.running).toBe(false));
             expect(box().value).toBe('Something else');
-            expect(waiting()).toBeNull();
+            expect(queued()).toBeNull();
             expect(sends(desktop)).toHaveLength(1);
+        });
+
+        it('is stopped by Escape in the box with words typed, which stay, and what waited comes back above them', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(queued()).toBeTruthy());
+            type('More');
+            // A key the input method still composes is its own.
+            escape({ isComposing: true });
+            expect(stops(desktop)).toHaveLength(0);
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+            await waitFor(() => expect(box().value).toBe(['Later', 'More'].join(blank)));
+            // The box is the one place the unsent words are: nothing in the conversation says they are queued.
+            expect(queued()).toBeNull();
+            expect(document.querySelector('.chat-scroll')!.textContent).not.toMatch(/Queued|Not sent/);
+            expect(screen.queryByText(/Not sent/)).toBeNull();
+            // A stop already asked for is asked once.
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(chats.value[id]!.running).toBe(false));
+            expect(box().value).toBe(['Later', 'More'].join(blank));
+            expect(sends(desktop)).toHaveLength(1);
+            // With no turn running Escape does nothing.
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+        });
+
+        it('stops by Escape while a dialog stands open only in a pane that is hidden, as panes not shown are', async () => {
+            const { desktop } = await running();
+            type('More');
+            const pane = document.createElement('section');
+            pane.hidden = true;
+            pane.innerHTML = '<div role="alertdialog" aria-label="Reject this?"></div>';
+            document.querySelector('.jc-console')!.append(pane);
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+            pane.remove();
+        });
+
+        it('leaves the turn running while a dialog is shown, which takes the Escape', async () => {
+            const { desktop } = await running();
+            type('More');
+            const pane = document.createElement('section');
+            pane.innerHTML = '<div role="alertdialog" aria-label="Reject this?"></div>';
+            document.querySelector('.jc-console')!.append(pane);
+            escape();
+            expect(stops(desktop)).toHaveLength(0);
+            pane.remove();
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+        });
+
+        it('leaves the turn running when Escape closes a menu open while the focus is in the box', async () => {
+            const { desktop, id } = await running();
+            type('More');
+            const side = within(document.querySelector<HTMLElement>('.side')!);
+            fireEvent.click(side.getByRole('button', { name: 'Filter' }));
+            await waitFor(() => side.getByRole('menu', { name: 'Show' }));
+            box().focus();
+            expect(document.activeElement).toBe(box());
+            escape();
+            await waitFor(() => expect(side.queryByRole('menu', { name: 'Show' })).toBeNull());
+            expect(stops(desktop)).toHaveLength(0);
+            expect(chats.value[id]!.running).toBe(true);
+            expect(box().value).toBe('More');
+            // With nothing else open, the next Escape is the box's.
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
         });
 
         it('ends as a turn that could not start when no host is left to send it to, and goes back to the box', async () => {
             const { desktop, id } = await running();
             type('Later');
             enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
+            await waitFor(() => expect(queued()).toBeTruthy());
             setup.value = { ...setup.value!, hosts: [] };
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
             await waitFor(() =>
@@ -667,7 +829,7 @@ describe('the console', () => {
                 ),
             );
             expect(sends(desktop)).toHaveLength(1);
-            expect(waiting()).toBeNull();
+            expect(queued()).toBeNull();
             expect(box().value).toBe('Later');
             expect(chats.value[id]!.running).toBe(false);
             expect(Array.from(document.querySelectorAll('.thread .m.user'), (each) => each.textContent)).toEqual([
@@ -680,7 +842,7 @@ describe('the console', () => {
             const { desktop, id } = await running();
             type('Later');
             enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
+            await waitFor(() => expect(queued()).toBeTruthy());
             const unreadable = `The version of Claude Code could not be read, so the chat does not run on it. Run \`claude --version\` in a terminal to see it. ${hostile}`;
             setup.value = {
                 ...setup.value!,
@@ -696,36 +858,17 @@ describe('the console', () => {
             expect(box().value).toBe('Later');
         });
 
-        it('stays in sight, not sent, when the turn stops or fails while the box holds other words', async () => {
+        it('comes back above what is typed when the turn fails while the box holds other words', async () => {
             const { desktop, id } = await running();
-            type('Later');
-            enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
-            type('More');
-            fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-            await waitFor(() => expect(waiting()!.textContent).toContain('Not sent'));
-            expect(waiting()!.textContent).toContain('Later');
-            expect(box().value).toBe('More');
-            flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
-            expect(waiting()!.textContent).toContain('Later');
-            expect(sends(desktop)).toHaveLength(1);
-
-            type('');
-            fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
-            await waitFor(() => expect(box().value).toBe('Later'));
-            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-            await waitFor(() => expect(sends(desktop)).toHaveLength(2));
             type('Then this');
             enter();
-            await waitFor(() => expect(waiting()).toBeTruthy());
+            await waitFor(() => expect(queued()).toBeTruthy());
             type('And more');
             flush(() => desktop.emit(id, { kind: 'done', error: `Not logged in ${hostile}` }));
-            await waitFor(() => expect(waiting()!.textContent).toContain('Not sent'));
-            expect(waiting()!.textContent).toContain('Then this');
-            expect(box().value).toBe('And more');
-            expect(screen.getByRole('button', { name: 'Take back' })).toHaveProperty('disabled', true);
-            expect(sends(desktop)).toHaveLength(2);
+            await waitFor(() => expect(box().value).toBe(['Then this', 'And more'].join(blank)));
+            expect(queued()).toBeNull();
+            expect(screen.queryByText(/Not sent/)).toBeNull();
+            expect(sends(desktop)).toHaveLength(1);
             expect(document.querySelector('.chat-error')!.textContent).toContain(`Not logged in ${hostile}`);
         });
     });
@@ -767,6 +910,88 @@ describe('the console', () => {
         flush(() => desktop.emit(id, { kind: 'permission_gone', request: 'req_2' }));
         await waitFor(() => screen.getByText('This request has ended'));
         expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull();
+    });
+
+    it('says under a Full access card why it asks, as text, and nothing under a card of any other mode', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        flush(() => {
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_1',
+                title: 'Full access asks about this one',
+                detail: 'ls *.md',
+                remember: null,
+                why: { reason: 'command.glob' },
+            });
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_2',
+                title: 'Full access asks about this one',
+                detail: '{"x":"<b>y</b>"}',
+                remember: null,
+                why: { reason: 'request.unknown_tool', tool: '<b>Frob</b>' },
+            });
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_3',
+                title: 'Run a command',
+                detail: 'git status',
+                remember: null,
+            });
+        });
+        await waitFor(() => screen.getByText('Run a command'));
+        const cards = [...document.querySelectorAll<HTMLElement>('.ask.perm')];
+        expect(cards.map((card) => card.querySelector('.perm-why')?.textContent ?? null)).toEqual([
+            'This command has a wildcard (*, ? or [ ]), which the shell turns into file names only as it runs, so Jason cannot read plainly what it would touch.',
+            'Jason does not know the tool <b>Frob</b>, so it cannot tell what it would do.',
+            null,
+        ]);
+        // The line sits between the title and the request, and a tool's name in it is text, never markup.
+        expect(cards[0]!.querySelector('.ask-h + .perm-why + .perm-detail')).toBeTruthy();
+        expect(cards[1]!.querySelector('.perm-why b')).toBeNull();
+    });
+
+    it('draws a Full access card whose why this page has no words for exactly as before: no line, the card and its buttons', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        // A code a newer desktop names, and values not in the declared shape, as they could come over the seam.
+        const unknown = [
+            { reason: 'command.not_known_here' },
+            { reason: 'request.unknown_tool' },
+            { reason: 'command.glob', tool: 'Bash' },
+            { reason: 7 },
+            'command.glob',
+        ] as unknown as DesktopFullAccessWhy[];
+        flush(() => {
+            unknown.forEach((why, at) =>
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: `req_${at + 1}`,
+                    title: 'Full access asks about this one',
+                    detail: `ls ${at}`,
+                    remember: null,
+                    why,
+                }),
+            );
+        });
+        await waitFor(() => expect(document.querySelectorAll('.ask.perm')).toHaveLength(unknown.length));
+        for (const card of document.querySelectorAll<HTMLElement>('.ask.perm')) {
+            expect(card.querySelector('.perm-why')).toBeNull();
+            expect(card.querySelector('.ask-h + .perm-detail')).toBeTruthy();
+            expect(within(card).getByRole('button', { name: 'Allow' })).toBeTruthy();
+            expect(within(card).getByRole('button', { name: "Don't allow" })).toBeTruthy();
+        }
     });
 
     it('says a turn parked on a permission card waits for the person, and thinks again once it is answered', async () => {

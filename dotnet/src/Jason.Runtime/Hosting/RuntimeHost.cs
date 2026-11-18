@@ -617,6 +617,7 @@ public static class RuntimeHost
         app.MapReplyOperations();
         app.MapReportOperations();
         app.MapProfileOperations();
+        app.MapNotificationOperations();
         app.MapRoleNoteOperations();
         app.MapPluginOperations();
         app.MapRouteOperations();

@@ -8,7 +8,8 @@ changed.
 ## How to ask
 
 - **In the desktop**, choose **Open in › Change Jason itself** ([the desktop guide](desktop.md#open-in)). It opens your
-  own AI (the one your preference names, else Claude Code, else Codex) on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
+  own AI (the one your preference names, else the program marked In use in Settings › Models, else Claude Code, else
+  Codex) on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
   them on purpose (on Codex it can read those files but not change them), so that it can never rewrite the instructions Jason's own agents work by.
 - **From a terminal**, run `jason session open --setup`. It opens the same session, and opening it changes nothing.
 
@@ -93,6 +94,10 @@ refuses. `jason route list` shows what is in force. [Routing](routing.md) is the
 
 - A role skill you edited is kept and reported; `jason skills update --force`, which is yours to type, overwrites it with
   the release's text.
+- A skill or a role of your own under a name a release ships — a folder no record of Jason's names — is left as it is,
+  and every deployment and `jason status` name it: an agent asked to use that skill reads your folder, and the runtime
+  teaches that role from yours. No flag writes over it. To have the release's, move or remove the folder, then run
+  `jason skills update` for an agent host's folder, or `jason skills install --roles-only` for a role.
 - A plugin package you wrote or edited is left as it is; `jason update apply` replaces only the packages installed as an
   earlier release's with the release's own.
 - Your settings file, with the grants, routes and plugin configuration in it, and your database stay: an update touches

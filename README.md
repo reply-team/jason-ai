@@ -53,8 +53,9 @@ If anything stops you, ask me directly and tell me why.
 ```
 
 **Or with [Jason Desktop](#jason-desktop)**, if you would rather start from a window: one download, and its window sets
-the rest up. On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries. Everything
-about installing: [docs/INSTALL.md](docs/INSTALL.md).
+the rest up. On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first
+start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where
+it is found. Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
@@ -161,9 +162,9 @@ to.
 | **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. On macOS and Windows one installation, Jason Desktop and the `jason` it carries; on Linux one self-contained executable. No admin rights: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows and Linux all of it is. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
-| **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 984 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
+| **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 987 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1174 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1184 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -308,9 +309,11 @@ the runtime, not a second Jason: it works on the data directory the CLI uses, st
 `jason runtime start`, and changes the installation only through the CLI's verbs. Its chat is a session with your own
 agent, started for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads
 and advises. Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification
-channels and your AI provider's key. The terminal stays open to you at any time: the Command Line item of its menu
-puts a command there, `jason`, or `jason-desktop` where another `jason` already stands, and on macOS and Linux puts its
-folder on your terminal's PATH where it is not yet, as the installer does.
+channels and your AI provider's key. The terminal stays open to you at any time: on macOS and Windows the first start
+of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the
+Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there, `jason`,
+or `jason-desktop` where another `jason` already stands, and puts its folder on your terminal's PATH where it is not
+yet, as the installer does.
 
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
@@ -671,8 +674,8 @@ yourself. Nothing else. No telemetry.
 
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
-**In numbers:** 21 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 984 contract fixtures and
-611 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 9 runtime skills and 9 role
+**In numbers:** 21 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 987 contract fixtures and
+634 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 9 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |

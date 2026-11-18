@@ -88,6 +88,7 @@ public static class OperationFamilies
         Operations.RoleAdd, Operations.RoleSetProfile, Operations.RoleNoteSet,
         Operations.ProfileCreate, Operations.ProfileUpdate, Operations.ProfileDisable, Operations.ProfileEnable,
         Operations.ProfileSetDefault, Operations.ProfileUnsetDefault,
+        Operations.NotificationEnable, Operations.NotificationDisable,
         Operations.PluginReload, Operations.PluginGrant, Operations.PluginRevoke,
         Operations.RouteSet, Operations.RouteUnset,
         Operations.EventsBackfill, Operations.EventsSignal,

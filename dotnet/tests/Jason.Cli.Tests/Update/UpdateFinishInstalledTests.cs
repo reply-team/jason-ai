@@ -1,11 +1,13 @@
 using System.Net;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Skills;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Skills;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 
@@ -353,6 +355,59 @@ public sealed class UpdateFinishInstalledTests
         Assert.True(report.InstallationFound);
         Assert.True(report.Complete, string.Join(" | ", report.Parts.Select(part => $"{part.Part}: {part.State} {part.Reason}")));
         Assert.All(report.Parts, part => Assert.NotEqual(UpdateFinishStates.NotDone, part.State));
+    }
+
+    /// <summary>
+    /// The finishing step's skills part is a door of the one rule: a folder of the person's under a name the application now
+    /// ships is left as it is and named in the part's lines — after a set-up that recorded the root before the name shipped,
+    /// and after one that met the folder already there, as the Desktop's start runs <c>jason install</c> and then this step.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Critical(Family.I3, "the finishing step leaves a person's own skill alone and names it")]
+    public async Task The_finishing_step_leaves_a_folder_of_your_own_under_a_shipped_name_alone_and_names_it(bool recordedBefore)
+    {
+        var (installation, desktop) = FakeDesktop.Carried(to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        var bundle = Path.GetDirectoryName(installation.InstallPath)!;
+        foreach (var (file, text) in SkillsPackage.Files($"v{SemanticVersion.Current}").Where(entry => entry.Name.StartsWith("skills/", StringComparison.Ordinal)))
+        {
+            var path = Path.Combine(bundle, file.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, text);
+        }
+
+        Directory.CreateDirectory(Path.Combine(desktop.Home, ".claude"));
+        var harness = Path.Combine(desktop.Home, ".claude", "skills");
+        if (recordedBefore)
+        {
+            Assert.True(await CliApp.RunAsync(["install"], installation.Machine!, Ct) == ExitCodes.Success, installation.Out.ToString());
+            Assert.NotNull(SkillsRecord.Read(harness));
+        }
+
+        SkillsLeftAloneTests.Skill(Path.Combine(bundle, "skills", "runtime", "quick-start"), "quick-start", "Jason's");
+        var own = SkillsLeftAloneTests.Plant(harness, "quick-start");
+        var before = SkillsLeftAloneTests.Snapshot(own);
+        if (!recordedBefore)
+        {
+            Assert.True(await CliApp.RunAsync(["install"], installation.Machine!, Ct) == ExitCodes.Success, installation.Out.ToString());
+        }
+
+        installation.Out.GetStringBuilder().Clear();
+        var report = await FinishAsync(installation);
+
+        Assert.Equal(before, SkillsLeftAloneTests.Snapshot(own));
+
+        // Complete with a skill left alone: the Desktop's set-up runs again only where it is not, so a folder of the
+        // person's never makes it run over that folder at every start.
+        Assert.True(report.Complete, string.Join(" | ", report.Parts.Select(part => $"{part.Part}: {part.State} {part.Reason}")));
+        var skills = report.Parts.Single(part => part.Part == "skills");
+        var sentence = SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(harness, SkillPacks.Runtime, "quick-start"));
+        Assert.True(skills.Lines.Any(line => line.Contains(sentence, StringComparison.Ordinal)), string.Join(" | ", skills.Lines));
+        Assert.DoesNotContain(SkillsRecord.Read(harness)!.Packs.SelectMany(pack => pack.Files), file => file.Path.StartsWith("quick-start/", StringComparison.Ordinal));
+        Assert.True(File.Exists(Path.Combine(harness, "operating", "SKILL.md")));
     }
 
     /// <summary>A folder this account cannot list, for as long as it lives; null where the account lists it all the same.</summary>

@@ -177,6 +177,11 @@ operation, in `jason plugin list`'s JSON (`--human` shortens the list), or with
   yours and names each one it kept; reconciling the two is yours. `--force` overwrites your edit with the release's
   text, and it is the person's to type, never yours to add. A file you deleted is put back. `jason update apply`
   redeploys the skills the installation recorded as its last step.
+- **A skill or a role of your own under a name a release ships is left alone.** A folder no record of Jason's names is
+  taken for the person's: no deployment writes over it, `--force` included, each one names it, an agent asked to use that
+  skill reads their folder, and the runtime teaches that role from theirs. To have the release's instead, the person
+  moves or removes that folder, then runs the command the deployment's sentence names, for an agent host's folder and for
+  the roles home each its own, which `operating-the-installation` teaches.
 - **A package built or edited here is left as it is.** `jason update apply` replaces each plugin package installed as
   an earlier release's with the release's own, and touches no other package under the plugins folder, one you wrote
   included.

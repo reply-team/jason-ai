@@ -33,6 +33,16 @@ namespace Jason.Contracts.Discovery;
 /// program image fails with its error code and puts no box on the desktop.
 /// </para>
 /// <para>
+/// On Windows a child that is Windows PowerShell, <c>powershell.exe</c> by its file name, is started without the
+/// <c>PSModulePath</c> this process inherited (<see cref="ModulePathVariable"/>). A PowerShell 7 session puts its own module
+/// folders first in that variable, and every program it starts inherits it, this one included; Windows PowerShell 5.1
+/// started with that value finds some of its own commands - <c>Get-ExecutionPolicy</c>, for one - in PowerShell 7's modules
+/// and cannot load them. Started without the variable it builds its own path, from the user's and the machine's settings
+/// and its own folder; an empty value it would keep empty, so the variable is removed rather than emptied. PowerShell 7
+/// itself, <c>pwsh</c>, and every other program keep the variable as it is; elsewhere nothing is removed, since a
+/// <c>powershell</c> there is PowerShell 7.
+/// </para>
+/// <para>
 /// <c>NoChildGetsAWindowTests</c> reads the compiled product and holds it to this door: nothing else makes a start
 /// info or starts a process, nothing sets the window, the shell, a redirect or an encoding, nothing starts a process
 /// from a bare file name, and nothing reaches into a process for the start info it was given.
@@ -43,13 +53,37 @@ public static class ChildProcess
     /// <summary>The one encoding a child that speaks to Jason is read and written in.</summary>
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
-    /// <summary>A start for <paramref name="fileName"/> with no window, no shell and no stream redirected.</summary>
-    public static ProcessStartInfo StartInfo(string fileName) =>
-        new(fileName)
+    /// <summary>The variable Windows PowerShell finds its modules by, which no Windows PowerShell child of Jason's inherits.</summary>
+    public const string ModulePathVariable = "PSModulePath";
+
+    /// <summary>
+    /// A start for <paramref name="fileName"/> with no window, no shell and no stream redirected; on Windows, for Windows
+    /// PowerShell, without the inherited <see cref="ModulePathVariable"/>.
+    /// </summary>
+    public static ProcessStartInfo StartInfo(string fileName)
+    {
+        var start = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        if (OperatingSystem.IsWindows() && IsWindowsPowerShell(fileName))
+        {
+            start.Environment.Remove(ModulePathVariable);
+        }
+
+        return start;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="program"/> is Windows PowerShell: <c>powershell.exe</c>, or <c>powershell</c>, by its file name
+    /// wherever it stands, whatever its case. PowerShell 7 is <c>pwsh</c> and is not.
+    /// </summary>
+    public static bool IsWindowsPowerShell(string? program)
+    {
+        var name = Path.GetFileName(program);
+        return string.Equals(name, "powershell.exe", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "powershell", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window and no shell, and the standard streams of a child of

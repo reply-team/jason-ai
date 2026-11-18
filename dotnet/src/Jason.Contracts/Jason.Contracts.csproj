@@ -38,6 +38,14 @@
     <InternalsVisibleTo Include="Jason.Runtime.Tests" />
   </ItemGroup>
 
+  <!-- A test build, and only one built with -p:JasonTestBuild=true, the build's one symbol for it: the build then says it
+       is one wherever it states its version to a person and in the runtime's own report (JasonVersion.TestBuild), and only
+       then may the move into Jason Desktop hold the application to a signer the environment names (MoveSignatures). No
+       release passes it; a guard holds it out of the release workflow and the package action. -->
+  <PropertyGroup Condition="'$(JasonTestBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);JASON_TEST_BUILD</DefineConstants>
+  </PropertyGroup>
+
   <!-- And the application's tests, whose guard over the compiled product holds every start the door makes to the
        error mode it is made under (StartErrorMode). -->
   <ItemGroup>

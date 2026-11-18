@@ -4,7 +4,7 @@
 import type { Approval, ApprovalSummary, Decision, DecisionOption, DecisionSummary } from '../api/types';
 import { reasonLabel, title } from '../screens/attention/labels';
 import { isMessage } from '../screens/attention/message-edit';
-import { ageOf, operationWords, toApprovalDetail } from './live';
+import { ageOf, operationWords, toApprovalDetail, type SearchWords } from './live';
 
 /** What the runtime said: its code, when it gave one, and its words. */
 export interface Said {
@@ -61,6 +61,8 @@ export interface ApprovalCard {
     body: string | null;
     /** What will happen, said when there is no message to show. */
     intent: string | null;
+    /** What a search is for, once it is read whole; null for any other approval. */
+    search: SearchWords | null;
     /** Why it waits for a person, in a sentence. */
     why: string;
     age: string;
@@ -74,7 +76,7 @@ export interface ApprovalCard {
  */
 export function toApprovalCard(row: ApprovalSummary, whole: Approval | undefined, now: number): ApprovalCard {
     const operation = whole?.operation ?? row.operation;
-    const detail = whole ? toApprovalDetail(whole.preview) : null;
+    const detail = whole ? toApprovalDetail(whole.preview, operation) : null;
     const name = row.contact_name;
     return {
         id: row.id,
@@ -86,6 +88,7 @@ export function toApprovalCard(row: ApprovalSummary, whole: Approval | undefined
         subject: detail?.subject ?? null,
         body: detail?.body ?? null,
         intent: detail && detail.subject === null && detail.body === null ? detail.intent : null,
+        search: detail?.search ?? null,
         why: reasonLabel(whole?.reason ?? row.reason),
         age: ageOf(row.requested_at, now),
         message: isMessage(operation),

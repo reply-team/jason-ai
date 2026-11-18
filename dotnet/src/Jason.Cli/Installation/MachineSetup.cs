@@ -125,6 +125,10 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(places);
         ArgumentNullException.ThrowIfNull(options);
 
+        // The command-line executables an earlier run renamed aside while a process held them, once that process ended: before
+        // this run renames any, whose process still runs.
+        RetiredSweep.Sweep(places, options.Retire);
+
         var run = new Run(env, carried, places, options);
         string? old = null;
         var runtime = RuntimeStates.NotRunning;
@@ -666,10 +670,9 @@ public static class MachineSetup
             foreach (var root in roots)
             {
                 var hosts = root.Hosts.Select(Jason.Contracts.Hosts.AgentHosts.Word).ToList();
-                HashSet<string> recorded;
                 try
                 {
-                    recorded = SkillsRecord.Read(root.Directory)?.Packs.SelectMany(pack => pack.Files).Select(file => file.Path.Split('/')[0]).ToHashSet(StringComparer.Ordinal) ?? [];
+                    _ = SkillsRecord.Read(root.Directory);
                 }
                 catch (SkillsRecordUnreadable unreadable)
                 {
@@ -677,37 +680,13 @@ public static class MachineSetup
                     continue;
                 }
 
+                // The whole plan: what is the person's in this root is judged by the deployer's one rule, which every door
+                // deploys through, and comes back named in its report.
                 var plan = SkillsPlanner.Compose(staged, null, [root], SkillsPlanner.DocumentedCap, false, null);
-                var unrecorded = plan.Packs.SelectMany(pack => pack.Units)
-                    .Where(unit => !recorded.Contains(unit.Name) && (Directory.Exists(unit.Unit) || File.Exists(unit.Unit)))
-                    .ToList();
-
-                // A deployment cut off before its record was written (the record goes last) left skills that equal the
-                // bundle's file for file: Jason's, adopted and recorded now, never mistaken for the person's own.
-                var adopted = unrecorded.Where(SameAsBundle).Select(unit => unit.Name).Distinct(StringComparer.Ordinal).ToList();
-                var leftAlone = unrecorded.Select(unit => unit.Name).Where(name => !adopted.Contains(name)).Distinct(StringComparer.Ordinal).ToList();
-                if (adopted.Count > 0)
-                {
-                    Done.Add($"Adopted {adopted.Count} skill(s) in {root.Directory} that an earlier deployment wrote without its record, each equal to this jason's: {string.Join(", ", adopted)}.");
-                }
-                plan = plan with { Packs = [.. plan.Packs.Select(pack => pack with { Units = [.. pack.Units.Where(unit => !leftAlone.Contains(unit.Name))] })] };
-
-                outcomes.Add(Deploy(plan, root.Directory, hosts, leftAlone));
+                outcomes.Add(Deploy(plan, root.Directory, hosts));
             }
 
             return outcomes;
-        }
-
-        /// <summary>Whether a skill folder holds exactly the files the bundle would write there, byte for byte, and nothing else.</summary>
-        private static bool SameAsBundle(PlannedUnit unit)
-        {
-            if (!Directory.Exists(unit.Unit) || IsLink(unit.Unit))
-            {
-                return false;
-            }
-
-            return Directory.GetFiles(unit.Unit, "*", SearchOption.AllDirectories).Length == unit.Files.Count
-                && unit.Files.All(file => File.Exists(file.Target) && string.Equals(SkillsRecord.Digest(file.Target), file.Sha256, StringComparison.Ordinal));
         }
 
         /// <summary>The role skills, from the skills this jason carries, into the data directory: <c>--roles</c> alone.</summary>
@@ -719,7 +698,7 @@ public static class MachineSetup
             }
 
             var plan = SkillsPlanner.Compose(staged, env.Paths.RoleSkillsDirectory, [], SkillsPlanner.DocumentedCap, false, SkillPacks.Runtime);
-            return Deploy(plan, env.Paths.RoleSkillsDirectory, [], []);
+            return Deploy(plan, env.Paths.RoleSkillsDirectory, []);
         }
 
         private StagedSource? _staged;
@@ -744,7 +723,7 @@ public static class MachineSetup
             }
         }
 
-        private InstallSkillsOutcome Deploy(SkillsPlan plan, string root, IReadOnlyList<string> hosts, IReadOnlyList<string> leftAlone)
+        private InstallSkillsOutcome Deploy(SkillsPlan plan, string root, IReadOnlyList<string> hosts)
         {
             foreach (var refusal in plan.Refusals)
             {
@@ -753,7 +732,7 @@ public static class MachineSetup
 
             if (plan.Refusals.Count > 0)
             {
-                return new InstallSkillsOutcome(root, hosts, 0, 0, leftAlone);
+                return new InstallSkillsOutcome(root, hosts, 0, 0, []);
             }
 
             var report = SkillsDeployer.Apply(plan, env.Paths, force: false, env.Clock ?? TimeProvider.System);
@@ -767,10 +746,10 @@ public static class MachineSetup
                 Left.Add(string.Create(CultureInfo.InvariantCulture, $"Kept {report.Edited.Count} file(s) in {root} that you have edited: {string.Join(", ", report.Edited)}."));
             }
 
-            foreach (var name in leftAlone)
-            {
-                Left.Add($"{Path.Combine(root, name)} is a skill under a name Jason ships that no record of Jason's names there, so it is yours: left as it is.");
-            }
+            // Each said in the deployer's own words, as every door says them: adopted as done, left alone as left.
+            Done.AddRange(report.Adopted.Select(SkillsDeployer.AdoptedSentence));
+            Left.AddRange(SkillsDeployer.LeftAloneSentences(report.LeftAlone));
+            var leftAlone = report.LeftAlone.Select(skill => skill.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
             Done.Add(report.Written == 0
                 ? $"The skills in {root} were current."

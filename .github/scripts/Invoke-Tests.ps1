@@ -13,7 +13,8 @@ times fails it, and this script exits 1 when any target failed.
 Every attempt writes a TRX report under the target's results directory, the repeats under Retries/<run>/<attempt>/. Read
 in attempt order, a test that failed once and passed last is said in the job's summary under "passed after a repeat", and
 as a warning in the run's annotations, so a repeat never hides a flaky test; one that failed every attempt is said under
-"failed every attempt".
+"failed every attempt". The summary also says how many minutes the whole run took, so a platform or a part whose tests
+grow slow shows on every run.
 
 .PARAMETER Projects
 Test projects to run, by name (Jason.App.Tests), each as dotnet/tests/<name>/<name>.csproj. None runs dotnet/Jason.slnx.
@@ -63,6 +64,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+$clock = [Diagnostics.Stopwatch]::StartNew()
 
 # How many times a failed test is run again: at most twice, so three attempts in all.
 $repeats = 2
@@ -162,7 +165,7 @@ $repeated = @($repeated | Sort-Object -Unique)
 $neverPassed = @($neverPassed | Sort-Object -Unique)
 foreach ($test in $repeated) { Write-Host "::warning title=Passed after a repeat ($Title)::$test" }
 
-$summary = @("### $Title", '')
+$summary = @("### $Title", '', "Took $($clock.Elapsed.TotalMinutes.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)) minutes.", '')
 $summary += if ($repeated.Count -eq 0) { 'Passed after a repeat: none.' } else { @("Passed after a repeat: $($repeated.Count)", '') + @($repeated | ForEach-Object { "- ``$_``" }) }
 if ($neverPassed.Count -gt 0) { $summary += @('', "Failed every attempt: $($neverPassed.Count)", '') + @($neverPassed | ForEach-Object { "- ``$_``" }) }
 if ($failed.Count -gt 0) { $summary += @('', "Failed: $($failed -join '; ')") }

@@ -60,6 +60,42 @@ public class RuntimeStatusCommandTests
     private static readonly UpdateInfo Newer = new(true, "0.2.0", new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), "https://example.test/notes");
 
     /// <summary>
+    /// A runtime that is a test build says so after its version, in the human status and as <c>test_build</c> in the
+    /// document; a released one says neither, and its document has no such member at all.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_test_build_runtime_says_so_after_its_version_and_a_released_one_says_nothing(bool testBuild)
+    {
+        var info = JsonSerializer.Deserialize<SystemInfoResponse>(InfoJson("rt_LIVE", update: null), JasonJson.Options)! with
+        {
+            TestBuild = Jason.Contracts.JasonVersion.ReportMember(testBuild),
+        };
+        var json = JsonSerializer.Serialize(info, JasonJson.Options);
+
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, json)));
+        Assert.Equal(ExitCodes.Success, await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None));
+
+        var (plainEnv, plain, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, json)));
+        Assert.Equal(ExitCodes.Success, await RuntimeStatusCommand.RunAsync(plainEnv, human: false, CancellationToken.None));
+
+        if (testBuild)
+        {
+            Assert.Contains("Version:    0.1.0-dev (a test build, not a release)", output.ToString(), StringComparison.Ordinal);
+            Assert.Contains("\"test_build\":true", plain.ToString(), StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("Version:    0.1.0-dev" + System.Environment.NewLine, output.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("test build", output.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("test_build", plain.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// The reviews this runtime has summoned, beside the counters they belong with. A loop that is running and
     /// has summoned nothing is exactly what somebody checking on it wants to see, and the number is no use in a
     /// field nothing reads.

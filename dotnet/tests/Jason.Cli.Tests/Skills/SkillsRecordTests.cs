@@ -29,7 +29,7 @@ public class SkillsRecordTests
     public void A_record_round_trips_and_names_every_path_that_was_written()
     {
         using var tree = new TempPaths();
-        var record = new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment()]);
+        var record = new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment() with { LeftAlone = ["quick-start"] }]);
 
         SkillsRecord.Write(tree.Paths.Root, record);
 
@@ -39,9 +39,31 @@ public class SkillsRecordTests
         Assert.NotNull(read);
         Assert.Equal(record.Version, read.Version);
         var pack = Assert.Single(read.Packs);
-        Assert.Equal(record.Packs[0] with { Files = [] }, pack with { Files = [] });
+        Assert.Equal(record.Packs[0] with { Files = [], LeftAlone = [] }, pack with { Files = [], LeftAlone = [] });
         Assert.Equal(record.Packs[0].Files, pack.Files);
+        Assert.Equal(["quick-start"], pack.LeftAlone);
         Assert.True(File.Exists(Path.Combine(tree.Paths.Root, SkillsRecord.FileName)));
+    }
+
+    /// <summary>
+    /// A record an older Jason wrote has no <c>left_alone</c>: it reads as none, never as unreadable, and one that says
+    /// <c>null</c> reads as none too. An older Jason reads this build's member by ignoring it, so the version stays.
+    /// </summary>
+    [Fact]
+    public void A_record_without_the_skills_left_alone_reads_as_leaving_none()
+    {
+        using var tree = new TempPaths();
+        SkillsRecord.Write(tree.Paths.Root, new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment()]));
+        var file = Path.Combine(tree.Paths.Root, SkillsRecord.FileName);
+        var text = File.ReadAllText(file);
+        Assert.Contains("\"left_alone\":[]", text, StringComparison.Ordinal);
+
+        File.WriteAllText(file, text.Replace(",\"left_alone\":[]", string.Empty, StringComparison.Ordinal));
+        Assert.Empty(Assert.Single(SkillsRecord.Read(tree.Paths.Root)!.Packs).LeftAlone);
+
+        File.WriteAllText(file, text.Replace("\"left_alone\":[]", "\"left_alone\":null", StringComparison.Ordinal));
+        Assert.Empty(Assert.Single(SkillsRecord.Read(tree.Paths.Root)!.Packs).LeftAlone);
+        Assert.Equal(1, SkillsRecord.CurrentVersion);
     }
 
     /// <summary>No record is a root nobody installed into. That is an answer, and it is answerable.</summary>

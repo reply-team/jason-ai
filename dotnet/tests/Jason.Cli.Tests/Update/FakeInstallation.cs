@@ -740,6 +740,9 @@ public sealed class FakeInstallation : HttpMessageHandler
         Content = new StringContent(JsonSerializer.Serialize(body, JasonJson.Options), Encoding.UTF8, "application/json"),
     };
 
+    /// <summary>The executable the runtime names in its descriptor as the one it runs from; none where a test names none.</summary>
+    public string? RunsFrom { get; set; }
+
     private void Publish()
     {
         // Each start is an instance of its own, as on a machine: a descriptor left behind by the last one names that
@@ -749,7 +752,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         File.WriteAllText(
             Paths.DescriptorFile,
             JsonSerializer.Serialize(
-                new RuntimeDescriptor("v1", Installed(), InstanceId, Pid, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch),
+                new RuntimeDescriptor("v1", Installed(), InstanceId, Pid, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch, RunsFrom),
                 JasonJson.Options));
     }
 

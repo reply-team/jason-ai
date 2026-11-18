@@ -89,6 +89,13 @@ internal static partial class StatusChecks
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 
+        /// <summary>
+        /// The repair for a move into Jason Desktop that has not ended, where the jason that reads it is the application's: its own
+        /// setup, which retires the command-line install it finds. From the command-line install the move is carried on by
+        /// <see cref="FinishUpdate"/> instead.
+        /// </summary>
+        public const string SetUpMachine = "jason install";
+
         public const string ReloadPlugins = "jason plugin reload";
 
         /// <summary>
@@ -280,6 +287,7 @@ internal static partial class StatusChecks
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
             checks.Add(UpdateInFlight(unfinished));
+            checks.Add(Move(env));
             checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
@@ -299,7 +307,7 @@ internal static partial class StatusChecks
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
             checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env), profileNames));
             checks.Add(Autostart(env));
-            checks.Add(Notifications(info));
+            checks.Add(Notifications(info, env.ToastSetting));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
             checks.Add(HarnessRoot(info));
             checks.Add(SendModes(info));
@@ -356,7 +364,7 @@ internal static partial class StatusChecks
 
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there." + owes, Repair.Start)
-            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {JasonVersion.Stated(info.RuntimeVersion, info.TestBuild == true)}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
     /// <summary>
@@ -395,6 +403,75 @@ internal static partial class StatusChecks
     /// required check would stop every agent that branches on <c>ready</c> until the network came back. From that step
     /// on the required runtime check fails as well, and a ledger that cannot be read is said there.
     /// </summary>
+    /// <summary>
+    /// Where the move of a command-line install into Jason Desktop stands, from its record alone: optional, since every prefix
+    /// of a move leaves a working installation. A move that is not done names the one command that carries it on from the jason
+    /// this is: <c>jason update apply</c> typed into the command-line install, which carries it on at the version it is; and,
+    /// where the application's jason answers already, <c>jason install</c>, the routine the move had still to finish.
+    /// </summary>
+    internal static StatusCheck Move(CliEnvironment env)
+    {
+        const string Name = "move";
+        var file = new Jason.Cli.Update.UpdatePaths(env.Paths).Move;
+        Jason.Cli.Update.MoveRecord? record;
+        try
+        {
+            record = Jason.Cli.Update.MoveRecord.Read(file);
+        }
+        catch (Jason.Cli.Update.MoveRecordUnreadable unread)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, unread.Message, null);
+        }
+
+        if (record is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No command-line install is being moved into Jason Desktop.", null);
+        }
+
+        if (record.State == Jason.Cli.Update.MoveStates.Done)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, $"The command-line install at {record.From} was moved into Jason Desktop at {record.Application}.", null);
+        }
+
+        // The routine retired the command-line install, renamed aside on Windows or a wrapper over the application's jason on
+        // macOS, and the move that asked for it ended before it said so: the install is in the application, and a start it
+        // owes is the runtime check's to name.
+        if (Jason.Cli.Update.MoveRecord.Retired(record.From))
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Ok,
+                $"The command-line install at {record.From} is retired into Jason Desktop{(record.Application is { } application ? " at " + application : string.Empty)}; the move's record stopped before it said so.",
+                null);
+        }
+
+        // Waiting on what no command typed here changes - an Intel Mac, an older or unreadable application: what stands and what
+        // would move it, with no repair that cannot help.
+        if (record.Waits is { } waits)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Unknown,
+                $"The move of the command-line install at {record.From} into Jason Desktop waits: {record.Reason ?? "it says no more."} It goes on once {waits}.",
+                null);
+        }
+
+        var carried = CarriedExecutable.Of(env) is not null;
+        var repair = carried ? Repair.SetUpMachine : Repair.FinishUpdate;
+        var fact = record.State == Jason.Cli.Update.MoveStates.Moving
+            ? $"The move of the command-line install at {record.From} into Jason Desktop was begun and has not ended: it runs now, or it was stopped at '{record.Doing ?? "the beginning"}'"
+              + (record.Step is { } done ? $", after '{done}'" : string.Empty)
+              + $". The command-line install answers as jason until the move retires it. `{repair}` carries it on once none runs."
+            : $"The move of the command-line install at {record.From} into Jason Desktop is {record.State}"
+              + (record.Step is { } last ? $" after '{last}'" : string.Empty)
+              + $": {record.Reason ?? "it says no more."}";
+        return carried
+            ? new StatusCheck(Name, false, CheckState.Failed, fact, Repair.SetUpMachine)
+            : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
+    }
+
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
@@ -695,6 +772,81 @@ internal static partial class StatusChecks
             : $" '{role.Name}' is a role of your own, and no skill Jason ships teaches it: it launches untaught unless a skill named after it is in {directory}."));
 
     /// <summary>
+    /// The roles Jason ships whose skill in the role skills directory is a folder the record there does not name: the
+    /// person's own, which every deployment leaves as it is (<see cref="Skills.SkillsDeployer.Judge"/>), and which a launch
+    /// teaches the role. Said as a role of the person's, each by name, never counted silently as Jason's. A record that
+    /// cannot be read says nothing here: what is Jason's there cannot be told.
+    /// </summary>
+    private static string OwnUnderShippedName(IEnumerable<string> present, string directory)
+    {
+        // A directory this machine does not hold is a runtime's that is not here to read: nothing is said of it.
+        if (!Directory.Exists(directory))
+        {
+            return string.Empty;
+        }
+
+        SkillsRecord? record;
+        try
+        {
+            record = SkillsRecord.Read(directory);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return string.Empty;
+        }
+
+        var named = record?.Packs.SelectMany(pack => pack.Files).Select(file => file.Path.Split('/')[0]).ToHashSet(StringComparer.Ordinal) ?? [];
+        var roles = present.Where(role => !named.Contains(role)).Order(StringComparer.Ordinal).ToList();
+        if (roles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // One sentence for the directory, naming every such role, a link said as a link.
+        var quoted = Skills.SkillsDeployer.Listed(roles.Select(role => $"'{role}'"));
+        var what = Skills.SkillsDeployer.Things([.. roles.Select(role => new FileInfo(System.IO.Path.Combine(directory, role)).LinkTarget is not null)]);
+        return roles.Count == 1
+            ? $" {quoted} is a role Jason ships, and its skill in {directory} is a {what} Jason did not deploy: the runtime teaches {quoted} from that {what}, and no deployment writes over it. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`."
+            : $" {quoted} are roles Jason ships, and their skills in {directory} are {what} Jason did not deploy: the runtime teaches each of them from what stands there, and no deployment writes over it. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that still stand there: one sentence for
+    /// the root, in its singular or plural form, each by its path, a link said as a link. Null for none.
+    /// </summary>
+    internal static string? LeftAloneStanding(string root, IReadOnlyList<string> names, string hosts)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        var quoted = Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"));
+        var what = Skills.SkillsDeployer.Things([.. names.Select(name => new FileInfo(System.IO.Path.Combine(root, name)).LinkTarget is not null)]);
+        return names.Count == 1
+            ? $"{paths} is a {what} Jason did not deploy, under a name Jason ships, left as it is: Jason's {quoted} is not installed for {hosts}, and an agent there asked to use {quoted} reads that {what}. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployHost}`."
+            : $"{paths} are {what} Jason did not deploy, under names Jason ships, left as they are: Jason's {quoted} are not installed for {hosts}, and an agent there asked to use one of them reads what stands there. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployHost}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that no longer hold a skill: one sentence
+    /// for the root. Null for none.
+    /// </summary>
+    internal static string? LeftAloneGone(string root, IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        return names.Count == 1
+            ? $"{paths}, a folder Jason left as it was, no longer holds a skill, so {root} has no '{names[0]}': `{Skills.SkillsDeployer.RedeployHost}` writes the one Jason ships."
+            : $"{paths}, folders Jason left as they were, no longer hold a skill, so {root} has none of {Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"))}: `{Skills.SkillsDeployer.RedeployHost}` writes the ones Jason ships.";
+    }
+
+    /// <summary>
     /// The skills the roles are taught from, reported, with the deployment their record names as fields a program reads.
     /// </summary>
     /// <remarks>
@@ -842,6 +994,7 @@ internal static partial class StatusChecks
             ? string.Empty
             : $" {string.Join(", ", stranger.Select(name => $"'{name}'"))} is deployed and is no role on this runtime's roster, so nothing reads it.";
         note += Own(roster.Where(role => !role.Builtin && !deployed.Contains(role.Name)), skills.RoleSkillsDirectory);
+        note += OwnUnderShippedName(seeded.Intersect(deployed), skills.RoleSkillsDirectory);
         var taught = string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}");
 
         // Present and launchable is not current. After `jason update apply` the roles went on being taught from the
@@ -1786,6 +1939,7 @@ internal static partial class StatusChecks
         var behind = new List<string>();
         var empty = new List<string>();
         var pinned = new List<string>();
+        var yours = new List<string>();
         foreach (var root in roots.Select(root => root.Directory).Distinct(HarnessLocators.SamePath))
         {
             try
@@ -1802,6 +1956,23 @@ internal static partial class StatusChecks
                         {
                             gone.Add(string.Create(CultureInfo.InvariantCulture, $"{pack.Pack} in {root}: {missing} of the {pack.Files.Count} file(s) its record names are not there."));
                         }
+
+                    }
+
+                    // The names the last deployment left alone, each looked at on disk and never repeated blind, said once
+                    // for the root. One still standing is the person's: said, host by host, and never a failure, so `ready`
+                    // does not move. One that no longer holds a skill leaves the root without Jason's skill of that name,
+                    // which is the fact a recorded skill missing from the disk is, and takes its state and repair (`gone`).
+                    var left = record.Packs.SelectMany(pack => pack.LeftAlone).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+                    var standing = left.Where(name => Skills.SkillsDeployer.Occupied(System.IO.Path.Combine(root, name))).ToList();
+                    if (LeftAloneStanding(root, standing, HostsReading(root)) is { } said)
+                    {
+                        yours.Add(said);
+                    }
+
+                    if (LeftAloneGone(root, [.. left.Except(standing)]) is { } missingSaid)
+                    {
+                        gone.Add(missingSaid);
                     }
 
                     deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}{ReadBy(root)}"));
@@ -1844,14 +2015,20 @@ internal static partial class StatusChecks
         // the source and at the ref its record names and into the roots it names; and it moves a pack that is behind. An
         // install would move a pack from another source, or pinned, to this build's default, and deploy into every harness.
         return gone.Count > 0 || behind.Count > 0
-            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned).Concat(unfilled)), Repair.UpdateSkills)
-            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Concat(unfilled).Select(note => " " + note)), null);
+            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned).Concat(yours).Concat(unfilled)), Repair.UpdateSkills)
+            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Concat(yours).Concat(unfilled).Select(note => " " + note)), null);
 
         // The hosts that read a folder, by their words.
         List<string> HostWords(string root) =>
             [.. roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().Select(AgentHosts.Word)];
 
         // The hosts that read a folder, by their words, after it; a folder named with --root and no host says none.
+        // The hosts that read a root, by name, for a sentence about what each of them is given there.
+        string HostsReading(string root) =>
+            roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
+                ? string.Join(" and ", hosts.Select(AgentHosts.Word))
+                : $"a host reading {root}";
+
         string ReadBy(string root) =>
             roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
                 ? " (" + string.Join(", ", hosts.Select(AgentHosts.Word)) + ")"
@@ -2212,12 +2389,22 @@ internal static partial class StatusChecks
     /// </summary>
     /// <remarks>
     /// A person's own choice is never a failure: notifications switched off, or a machine with no desktop by design.
+    /// Windows' switches are read as they stand now where they can be (<see cref="IToastSetting"/>), and trusted one way:
+    /// a switch off now is said as a fact of now, whether the last toast was shown or not, and after a failure, which is
+    /// never hidden and comes first; a switch not off now never promises that a toast reaches anybody, it only says that
+    /// the last one, which Windows did not show, was not shown then.
     /// A runtime in session 0 is: a service or an SSH session runs there, but on a desktop it is most likely a runtime a
     /// 0.1.0 logon task left running, and for that one the fact names the acts in the order docs/release-and-update.md
     /// §8 gives them — the registration, the stop, a start — never the stop alone, which would leave the old task to
     /// start another runtime at the next sign-in.
     /// </remarks>
-    private static StatusCheck Notifications(SystemInfoResponse? info)
+    /// <summary>
+    /// What a sentence that sends a person to the switch named Jason adds: the entry meant is the runtime's, since Jason
+    /// Desktop's entry goes by the same name.
+    /// </summary>
+    private const string TwoEntries = "the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.";
+
+    private static StatusCheck Notifications(SystemInfoResponse? info, IToastSetting? toastSetting)
     {
         const string Name = "notifications";
         if (info is null)
@@ -2236,6 +2423,9 @@ internal static partial class StatusChecks
             return new StatusCheck(Name, false, CheckState.Absent, "Notifications are off: nothing tells anybody when Jason starts waiting for them.", null);
         }
 
+        // Windows' switches as they stand now, read only where a toast is on: null where they cannot be read, or off Windows.
+        var switchNow = on.Any(channel => channel.Kind == ChannelKinds.Toast) ? toastSetting?.Read() : null;
+
         var failures = new List<string>();
         var asides = new List<string>();
         var reaching = new List<string>();
@@ -2244,6 +2434,15 @@ internal static partial class StatusChecks
         DateTimeOffset? lastDelivered = null;
         foreach (var channel in on)
         {
+            // A channel that is on and could not deliver were it asked now — its plugin not loaded, not declaring the
+            // delivery contract, or its binding refused — reaches nobody, whatever its last outcome says. A runtime older
+            // than readiness says none, and its channels are read as before.
+            if (channel.Readiness is { } readiness && readiness != ChannelReadiness.Ready)
+            {
+                failures.Add($"{channel.Channel} is on but cannot deliver: {readiness}{Detail(channel.ReadinessDetail)}.");
+                continue;
+            }
+
             // Whether there is a desktop is this runtime's own fact, decided when it started and found again by its own
             // sends: a toast outcome a line from an earlier runtime carried never outweighs it.
             var noDesktop = NotificationReading.NoDesktop(channel, info.StartedAt);
@@ -2262,25 +2461,37 @@ internal static partial class StatusChecks
             }
             else if (noDesktop is not null)
             {
-                asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `Notifications:Toast` set to `false` turns the toast off.");
+                asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `jason notification disable toast --actor human:<Name>` turns the toast off.");
+            }
+            else if (outcome == ChannelResults.Failed)
+            {
+                // A failure is never hidden by a switch: it comes first, and a switch off now follows it.
+                failures.Add($"{channel.Channel}: {channel.Code} ({channel.Class}) at {When(channel.At)}{Detail(channel.Detail)}.");
+                failures.AddRange(OffNow(channel, switchNow));
+            }
+            else if (outcome == ChannelResults.NotAttempted)
+            {
+                failures.Add($"{channel.Channel} was not attempted at {When(channel.At)}: {channel.Reason}{Detail(channel.Detail)}.");
+                failures.AddRange(OffNow(channel, switchNow));
+            }
+            else if (OffNow(channel, switchNow) is [var offNow])
+            {
+                asides.Add(offNow);
+            }
+            else if (channel.Kind == ChannelKinds.Toast && switchNow == ToastSwitch.NotOff && outcome == ChannelResults.Silenced
+                && channel.Reason is SilencedReasons.DisabledForApplication or SilencedReasons.DisabledForUser or SilencedReasons.DisabledByGroupPolicy)
+            {
+                asides.Add($"Windows' switches for Jason's notifications read as on now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
             }
             else if (outcome == ChannelResults.Silenced)
             {
                 asides.Add(channel.Reason switch
                 {
-                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).",
+                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), " + TwoEntries,
                     SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
                     SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
                     _ => "Windows has notifications switched off for every app.",
                 });
-            }
-            else if (outcome == ChannelResults.Failed)
-            {
-                failures.Add($"{channel.Channel}: {channel.Code} ({channel.Class}) at {When(channel.At)}{Detail(channel.Detail)}.");
-            }
-            else if (outcome == ChannelResults.NotAttempted)
-            {
-                failures.Add($"{channel.Channel} was not attempted at {When(channel.At)}: {channel.Reason}{Detail(channel.Detail)}.");
             }
             else
             {
@@ -2333,6 +2544,21 @@ internal static partial class StatusChecks
             at?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "an unknown time";
 
         static string Detail(string? detail) => detail is null ? string.Empty : ": " + detail;
+
+        // The toast's sentence for a switch off now, or none: for any other channel, or where no switch is off or none was read.
+        static string[] OffNow(NotificationChannelInfo channel, ToastSwitch? now) =>
+            channel.Kind == ChannelKinds.Toast && now is { } off && off != ToastSwitch.NotOff ? [SwitchedOffNow(off)] : [];
+
+        // Which of Windows' three switches is off now, each with its own way out. Only the runtime's own entry is named by
+        // the name it shares with Jason Desktop's, so only a sentence that sends the person there says which of the two is meant.
+        static string SwitchedOffNow(ToastSwitch now) => now switch
+        {
+            ToastSwitch.OffForJason =>
+                "Windows has Jason's notifications switched off now, so none is shown: switch them on in Settings > System > Notifications > Jason, " + TwoEntries,
+            ToastSwitch.OffForEveryApp =>
+                "Windows has notifications switched off now for every app, so none of Jason's is shown: switch Notifications on at the top of Settings > System > Notifications.",
+            _ => "A group policy on this machine switches Windows' notifications off now, so none of Jason's is shown: only an administrator can change it.",
+        };
     }
 
     private static async Task<T?> ReadAsync<T>(RuntimeClient client, string operation, CancellationToken cancellationToken)

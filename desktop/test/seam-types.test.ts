@@ -23,11 +23,13 @@ import type {
     DesktopReplyOpened,
     DesktopReplyRefusal,
     DesktopSetup,
+    DesktopUpdateItem,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
 import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary, FullAccessStanding } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
+import type { UpdateItemAnswer } from '../src/update-item.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
 import type { ContinueOffer, OpenInAnswer, OpenInRefusal, Place, PlaceId } from '../src/open-in.ts';
@@ -87,7 +89,8 @@ type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop['setup'], 'setup.'>
     | Subscriptions<JasonDesktop['links'], 'links.'>
     | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>
-    | Subscriptions<JasonDesktop['mode'], 'mode.'>;
+    | Subscriptions<JasonDesktop['mode'], 'mode.'>
+    | Subscriptions<JasonDesktop['updates'], 'updates.'>;
 
 // ipc.ts registers a channel for every call the page declares, and for nothing else.
 type InvokeChannelsAreTheSeam = Holds<Equal<InvokeMember, DeclaredCalls>>;
@@ -100,6 +103,7 @@ const eventChannelOf = {
     'links.onOpen': 'links.open',
     'fullAccess.onChanged': 'fullAccess.changed',
     'mode.onPreparing': 'mode.preparing',
+    'updates.onChanged': 'updates.changed',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
 type EventChannelsAreTheSeam = [
     Holds<Equal<keyof typeof eventChannelOf, DeclaredSubscriptions>>,
@@ -137,6 +141,14 @@ type ReplyLinkIsTheSeam = [
 
 // The standing choice of Full access reaches the page as the chat reads it: when it was given and whether new chats start in it.
 type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStanding>>;
+
+// The update item reaches the page as the desktop's version and the menu's label and whether it is enabled, never the act
+// it names, which a press reads again; a press sends the label the page drew, and nothing else.
+type UpdateIsTheSeam = [
+    Holds<Equal<UpdateItemAnswer, DesktopUpdateItem>>,
+    Holds<Equal<Awaited<ReturnType<JasonDesktop['updates']['item']>>, DesktopUpdateItem>>,
+    Holds<Equal<Parameters<JasonDesktop['updates']['press']>, [label: string]>>,
+];
 
 // A link reaches the page as the page the desktop parsed it to, never as the address.
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
@@ -183,9 +195,10 @@ export type SeamHeld = [
     SendIsTheSeam,
     DoneIsTheSeam,
     LinkIsTheSeam,
+    UpdateIsTheSeam,
     StandingIsTheSeam,
 ];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged', 'mode.onPreparing']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged', 'mode.onPreparing', 'updates.onChanged']);
 });

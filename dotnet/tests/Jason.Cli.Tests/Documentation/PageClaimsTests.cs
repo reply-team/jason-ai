@@ -1151,7 +1151,7 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("puts a `jason` the terminal finds", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries.", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("Prefer a window?", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
@@ -1177,6 +1177,26 @@ public partial class PageClaimsTests
         {
             Assert.DoesNotContain("recommended", text, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>
+    /// Change Jason itself opens, in this order, the host a person's stated preference names, else the program marked In
+    /// use in Settings › Models, else Claude Code (<c>OpenIn.changeJason</c>); the desktop's page and the page on changing
+    /// Jason say that order, and neither says the preference is followed by Claude Code alone.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_which_program_change_Jason_itself_opens()
+    {
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains(
+            "The program it opens is, in this order: the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or Codex and is installed; else Claude Code.",
+            desktop,
+            StringComparison.Ordinal);
+        Assert.Contains("with `--host` naming the program in use only where you have stated no preference", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("which opens the host the preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only", desktop, StringComparison.Ordinal);
+
+        var customising = Flat(Page("docs", "customising.md"));
+        Assert.Contains("(the one your preference names, else the program marked In use in Settings › Models, else Claude Code, else Codex)", customising, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1913,7 +1933,7 @@ public partial class PageClaimsTests
         var page = Page("docs", "golden-path.md");
         var inputs = FencedLines(page).Where(line => line.Contains("--input", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal(6, inputs.Count);
+        Assert.Equal(7, inputs.Count);
         Assert.All(inputs, line => Assert.Contains("--input '{", line, StringComparison.Ordinal));
         Assert.DoesNotContain(inputs, line => line.Contains("\\\"", StringComparison.Ordinal));
         Assert.Contains(
@@ -2046,9 +2066,7 @@ public partial class PageClaimsTests
         Assert.True(start >= 0 && create > start, $"Step 6 creates the provider's campaign at line {create} of its commands and starts Jason's campaign at line {start}.");
         Assert.NotEmpty(others);
         Assert.All(others, row => Assert.True(row.index > create, $"Step 6 runs this before the create: {row.line}"));
-        Assert.DoesNotContain(
-            FencedLines(page),
-            line => line.Contains("--kind provider_op", StringComparison.Ordinal) && line.Contains("external_id", StringComparison.Ordinal));
+        Assert.False(ProviderIdentifierOutsideSender(page), "A provider operation's line names a provider identifier outside message.send's sender.");
     }
 
     /// <summary>
@@ -2130,16 +2148,113 @@ public partial class PageClaimsTests
             Flat(Section(page, "## 8. ")),
             StringComparison.Ordinal);
 
-        var scanned = string.Join("\n\n", page.Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
-        var sender = Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+        var sender = SendingSideWords(page);
         Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index} of the page without the paragraph on the provider's web app.");
 
-        var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
-        var to = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
-        Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"What this guarantees\".");
-        var made = Regex.Match(page[from..to], @"\b(?:schedules?|sending address(?:es)?|sends? from)\b", RegexOptions.IgnoreCase);
-        Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {from + made.Index}.");
+        var made = ScheduleWordsInSteps(page);
+        Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {made.Index}.");
     }
+
+    /// <summary>
+    /// The page without its section on a direct send, from that section's heading to the next heading and no further:
+    /// the one place where a mailbox is the subject, since a direct send goes from one. Every other word of the page stays
+    /// under the bans the guards above and below hold.
+    /// </summary>
+    private static string WithoutDirectSend(string page)
+    {
+        var direct = Section(page, "## A direct send");
+        Assert.StartsWith("## A direct send\n", direct, StringComparison.Ordinal);
+        Assert.Contains(direct, page, StringComparison.Ordinal);
+        return page.Replace(direct, string.Empty, StringComparison.Ordinal);
+    }
+
+    private static Match SendingSideWords(string page)
+    {
+        var scanned = string.Join("\n\n", WithoutDirectSend(page).Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
+        return Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+    }
+
+    private static Match ScheduleWordsInSteps(string page)
+    {
+        var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
+        var to = page.IndexOf("\n## A direct send\n", StringComparison.Ordinal);
+        Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"A direct send\".");
+        var made = Regex.Match(page[from..to], @"\b(?:schedules?|sending address(?:es)?|sends? from)\b", RegexOptions.IgnoreCase);
+        return made;
+    }
+
+    /// <summary>
+    /// The section on a direct send says first what it is: a real send that cannot be undone, to the person's own address.
+    /// It reads the send mode before the item is made, makes the approval's preview be read before the approval is given,
+    /// and gives the approval in a named person's name; and it is the email channel's alone.
+    /// </summary>
+    [Fact]
+    public void The_direct_send_says_it_is_real_reads_the_approval_before_it_is_given_and_names_who_gives_it()
+    {
+        var section = Section(Page("docs", "golden-path.md"), "## A direct send");
+        var first = Flat(section.Split("\n\n")[1]);
+        Assert.StartsWith(
+            "This is a real send, and it cannot be undone: one email that arrives, from one of your mailboxes at the provider, to your own address",
+            first,
+            StringComparison.Ordinal);
+        Assert.Contains("It is run only when you ask for it.", first, StringComparison.Ordinal);
+
+        var lines = FencedLines(section);
+        var mode = lines.FindIndex(line => line.StartsWith("jason campaign get ", StringComparison.Ordinal));
+        var create = lines.FindIndex(line => line.StartsWith("jason workitem create ", StringComparison.Ordinal) && line.Contains("--operation message.send ", StringComparison.Ordinal));
+        var get = lines.FindIndex(line => line.StartsWith("jason approval get ", StringComparison.Ordinal));
+        var approve = lines.FindIndex(line => line.StartsWith("jason approval approve ", StringComparison.Ordinal));
+        Assert.True(mode >= 0 && create > mode, "the send mode is read after the item is made, or not at all.");
+        Assert.True(get > create && approve > get, "`approval get` does not stand between the item and `approval approve`.");
+        Assert.Contains(" --actor human:", lines[approve], StringComparison.Ordinal);
+        Assert.Contains("--channel email", lines.Single(line => line.Contains("--operation sender.list", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.Contains("--channel email", lines.Single(line => line.StartsWith("jason sender list ", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.Contains("`automatic`", section, StringComparison.Ordinal);
+        Assert.Contains("the yes comes before the item is made", Flat(section), StringComparison.Ordinal);
+        Assert.Contains("so there is none for LinkedIn.", Flat(section), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The exclusions above are exact. A banned word put into step 6, where the provider's campaign is made, is found
+    /// again; so is one put into the page's opening, and a provider identifier put into a provider operation's input. Only
+    /// the direct send's own section and its <c>sender</c> are let through.
+    /// </summary>
+    [Fact]
+    public void The_exclusions_for_the_direct_send_let_the_old_bans_bite_everywhere_else()
+    {
+        var page = Page("docs", "golden-path.md");
+        Assert.False(SendingSideWords(page).Success);
+        Assert.False(ScheduleWordsInSteps(page).Success);
+
+        var step6 = page.Replace("## 6. Create the work\n", "## 6. Create the work\n\nThe campaign has a mailbox and a schedule.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, step6);
+        Assert.True(SendingSideWords(step6).Success, "a mailbox named in step 6 is no longer found.");
+        Assert.True(ScheduleWordsInSteps(step6).Success, "a schedule named in step 6 is no longer found.");
+
+        var opening = page.Replace("# The wiring check\n", "# The wiring check\n\nThis page names a sender.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, opening);
+        Assert.True(SendingSideWords(opening).Success, "a sender named in the opening is no longer found.");
+
+        var guarantees = page.Replace("## What this guarantees\n", "## What this guarantees\n\nA mailbox is named here.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, guarantees);
+        Assert.True(SendingSideWords(guarantees).Success, "a mailbox named after the direct send's section is no longer found.");
+
+        Assert.True(ProviderIdentifierOutsideSender(page + "\n```\njason workitem create cmp_1 --kind provider_op --operation campaign.get --input '{\"external_id\":\"7\"}'\n```\n"));
+        Assert.True(ProviderIdentifierOutsideSender(
+            "```\njason workitem create cmp_1 --kind provider_op --operation message.send --input '{\"sender\":{\"x\":1},\"external_id\":\"7\"}'\n```\n"));
+        Assert.False(ProviderIdentifierOutsideSender(page));
+    }
+
+    /// <summary>
+    /// A provider operation's printed line carries no provider identifier, except inside <c>message.send</c>'s own
+    /// <c>sender</c>: the account a person chose from the list, which is no pin of a campaign the run made.
+    /// </summary>
+    private static bool ProviderIdentifierOutsideSender(string page) =>
+        FencedLines(page).Any(line =>
+            line.Contains("--kind provider_op", StringComparison.Ordinal)
+            && line.Contains("external_id", StringComparison.Ordinal)
+            && (!line.Contains("--operation message.send ", StringComparison.Ordinal)
+                || Regex.Replace(line, "\"sender\":\\{[^{}]*\\}", string.Empty).Contains("external_id", StringComparison.Ordinal)));
 
     /// <summary>
     /// The way back takes the person out of the provider's campaign, on their word, and then leaves the campaign where it
@@ -2544,7 +2659,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:0fa5ba03ceeab24b3fa683b7c676def482d09aec7bca7ed0868511d1fa7a33e4";
+    private const string AgentSectionDigest = "sha256:3f3dd577e89692e870d7bf087075d093ceaab68df1c1889380d53f1fa0240e17";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
@@ -2682,6 +2797,91 @@ public partial class PageClaimsTests
     /// <summary>A pinned install's version: in a release's address, after the option that names it, or in the sentence that says so.</summary>
     [GeneratedRegex(@"releases/download/v(?<version>[0-9]+\.[0-9]+\.[0-9]+)/|(?:--version|-Version) (?<version>[0-9]+\.[0-9]+\.[0-9]+)|These install (?<version>[0-9]+\.[0-9]+\.[0-9]+) with (?<version>[0-9]+\.[0-9]+\.[0-9]+)'s own script")]
     private static partial Regex PinnedVersion();
+
+    /// <summary>
+    /// The browser UI says what an approval would do in plain words: one line per value of an operation's
+    /// <c>reach</c>, <c>reversibility</c> and <c>cost</c>, and, where an operation's contract makes one of them depend on
+    /// the moment, one sentence of its own, keyed in <c>ui/src/locale/en.ts</c> by operation and property. That sentence
+    /// is a person's reading of the contract's detail, so the two are held together: these are the conditional
+    /// properties the sentences were written from, the contract's detail word for word. When this list has to change,
+    /// read the sentence for that operation and property (<c>approval.fact.&lt;operation&gt;.&lt;property&gt;</c>)
+    /// against the new detail first, then move the pin.
+    /// </summary>
+    private static readonly (string Operation, string Property, string Detail)[] FactSentencesReadFrom =
+    [
+        ("campaign.activate", "reach", "`act`, with magnitude equal to the enrolled population; `control` only where the campaign holds no enrolments, and even then it arms the campaign so the next enrolment sends immediately."),
+        ("campaign.enroll", "cost", "none while the campaign is not live; metered once it is."),
+        ("campaign.enroll", "reach", "bookkeeping while the campaign is not live, `act` the moment it is; resolved by the preview, never assumed."),
+        ("campaign.enroll", "reversibility", "compensatable until the first touch goes, irreversible after."),
+        ("contact.delete", "reversibility", "compensatable inside the account's restore window; irreversible after it."),
+        ("conversation.reply", "cost", "metered against the message allowance on channels that meter sending; `none` on channels that do not."),
+        ("message.send", "cost", "metered against the message allowance on channels that meter sending; `none` on channels that do not."),
+    ];
+
+    private static readonly string[] FactProperties = ["reach", "reversibility", "cost"];
+
+    /// <summary>A changed or a new conditional detail is red until its plain sentence is read again.</summary>
+    [Fact]
+    public void Every_conditional_detail_is_the_one_its_plain_sentence_was_written_from()
+    {
+        var found = FactConditionals()
+            .OrderBy(each => each.Operation, StringComparer.Ordinal)
+            .ThenBy(each => each.Property, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(FactSentencesReadFrom, found);
+    }
+
+    /// <summary>Every conditional property has its sentence in the UI's words, and no sentence outlives its property.</summary>
+    [Fact]
+    public void Every_conditional_property_has_its_plain_sentence_and_every_sentence_its_property()
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in FactKey().Matches(Page("ui", "src", "locale", "en.ts")))
+        {
+            var rest = match.Groups["rest"].Value;
+            var last = rest.LastIndexOf('.');
+            if (last > 0 && rest.IndexOf('.', StringComparison.Ordinal) != last && FactProperties.Contains(rest[(last + 1)..]))
+            {
+                keys.Add(rest);
+            }
+        }
+
+        var wanted = FactConditionals().Select(each => $"{each.Operation}.{each.Property}").ToHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(wanted);
+        Assert.Empty(wanted.Except(keys, StringComparer.Ordinal));
+        Assert.Empty(keys.Except(wanted, StringComparer.Ordinal));
+    }
+
+    /// <summary>Every value an operation document gives these properties has its plain line in the UI's words.</summary>
+    [Fact]
+    public void Every_value_of_reach_reversibility_and_cost_has_its_plain_line()
+    {
+        var locale = Page("ui", "src", "locale", "en.ts");
+        var values = OperationDocuments()
+            .SelectMany(document => FactProperties.Select(property => (Property: property, Value: document[property] is JsonObject block ? (string)block["value"]! : (string)document[property]!)))
+            .Distinct()
+            .ToArray();
+
+        Assert.NotEmpty(values);
+        Assert.All(values, each => Assert.Contains($"'approval.fact.{each.Property}.{each.Value}':", locale, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<(string Operation, string Property, string Detail)> FactConditionals() =>
+        from document in OperationDocuments()
+        from property in FactProperties
+        where document[property] is JsonObject block && block["conditional"]?.GetValue<bool>() == true
+        select ((string)document["id"]!, property, (string)document[property]!["detail"]!);
+
+    private static IEnumerable<JsonObject> OperationDocuments() =>
+        Directory.GetFiles(Path.Combine(Root(), "docs", "contracts", "operations"), "*.json")
+            .Order(StringComparer.Ordinal)
+            .Select(file => JsonNode.Parse(File.ReadAllText(file))!.AsObject());
+
+    /// <summary>A key of the UI's approval facts, after its prefix.</summary>
+    [GeneratedRegex(@"'approval\.fact\.(?<rest>[a-z_.]+)':")]
+    private static partial Regex FactKey();
 
     private static string Page(params string[] path) =>
         File.ReadAllText(Path.Combine([Root(), .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);

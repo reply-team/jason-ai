@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, instructionsFile, parsePlanList, parseAllowList, parseDenyList, planListFile, readFence } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, helpNouns, helpRules, instructionsFile, parsePlanList, parseAllowList, parseDenyList, planListFile, readFence } from '../src/chat-deny.ts';
 
 const desktop = join(import.meta.dirname, '..');
 const list = parseDenyList(readFileSync(join(desktop, denyListFile), 'utf8'));
@@ -161,4 +161,24 @@ test('the plan list names verbs of the allow list only, each once: a verb that i
     assert.throws(() => parsePlanList(lines('campaign list', 'campaign create'), ['campaign list']), /not on the allow list/);
     assert.throws(() => parsePlanList(lines('status', 'status'), ['status']), /twice/);
     assert.throws(() => parsePlanList(lines('--yes'), ['status']));
+});
+
+test('the nouns whose help runs are the first words of the verbs of two words or more on either list, each once, and each noun has one exact rule', () => {
+    assert.deepEqual(helpNouns(['campaign list', 'status', 'campaign get', 'logs', 'workitem list'], ['contact get', 'campaign list']), ['campaign', 'workitem', 'contact']);
+    assert.deepEqual(helpNouns(['status', 'logs'], []), []);
+    assert.deepEqual(helpRules(['campaign', 'workitem']), ['Bash(jason campaign --help)', 'Bash(jason workitem --help)']);
+    const fence = readFence(desktop);
+    for (const noun of helpNouns(fence.allowed, fence.reads)) {
+        assert.ok(!entries.includes(noun), `${noun} is taken away whole by the deny list`);
+        assert.ok(fence.allowed.some((verb) => verb.startsWith(`${noun} `)), noun);
+    }
+});
+
+test('rule 18 of the chat\'s instructions names exactly the nouns whose help runs, in their order, and says that root help is refused', () => {
+    const fence = readFence(desktop);
+    const rule = (fence.instructions ?? '').split(/\r?\n/).find((line) => line.startsWith('18. ')) ?? '';
+    const listed = /with one of these nouns: ([^.]+)\./.exec(rule)?.[1] ?? '';
+    assert.deepEqual([...listed.matchAll(/`([a-z-]+)`/g)].map((match) => match[1]), helpNouns(fence.allowed, fence.reads));
+    assert.match(rule, /run `jason <noun> --help`, exactly those three words with nothing after them/);
+    assert.match(rule, /`jason --help` itself is refused\./);
 });

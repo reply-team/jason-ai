@@ -9,6 +9,7 @@ import * as shell from '../../shell/shell';
 import { SendModesSettings } from '../send-modes/settings-section';
 import { chosenSection, type SettingsSection } from './chosen';
 import { NotificationsSection } from './notifications';
+import { UpdateFooter } from './update-footer';
 import { VoiceSection } from './voice';
 
 const themes: readonly ThemeChoice[] = ['light', 'dark', 'system'];
@@ -140,6 +141,7 @@ export function SettingsScreen() {
                     <p className="settings-announce" role="alert">
                         {said?.text}
                     </p>
+                    <UpdateFooter />
                 </nav>
             )}
             <section data-section="appearance">

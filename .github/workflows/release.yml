@@ -904,13 +904,17 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
 
-      - name: Update the previous release's command-line Jason with its own update apply
+      # The path every command-line user takes, on the release's signed packages: the move asserted in full, and a
+      # released start that says nothing of a test build.
+      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
         if: steps.previous.outputs.tag != ''
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
+          JASON_PROOF_BUILD: release
         run: |
           ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
 
@@ -1032,11 +1036,16 @@ jobs:
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Update the previous release's command-line Jason with its own update apply
+      # The path every command-line user takes, on the release's signed packages: the move asserted in full, and a
+      # released start that says nothing of a test build.
+      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
         if: steps.previous.outputs.tag != ''
         shell: bash
+        env:
+          JASON_PROOF_BUILD: release
         run: |
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
 
