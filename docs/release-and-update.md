@@ -1296,6 +1296,95 @@ where the copy is. Putting the previous application back is one step by hand, as
 The verb waits for the settling start at most two minutes, ends it past that and says so in its `settle:` line: the next
 Live window's start records the update then.
 
+### Moving a command-line install into Jason Desktop
+
+From 0.49 on, Jason on macOS and Windows is Jason Desktop and the `jason` it carries. A command-line install of an
+earlier version reaches it through its own update: `jason update apply`, typed into the 0.48 install, puts this version
+at the install's path and hands the rest of the update to it, and that `jason`, once the update is complete, moves the
+install into Jason Desktop. Its 0.48 parent reads what it prints as it reads every handed-over answer and never changes,
+so the move is entirely the new version's.
+
+**It never fails the update.** The update is complete before the move begins, and whatever the move meets, the answer
+is the update's success: one document whose `step` is `complete`, its own lines in `steps` with the move's after them,
+each beginning `move:`, and, apart, where the move stands:
+
+```json
+{
+  "from": "0.48.2",
+  "to": "0.49.0",
+  "step": "complete",
+  "steps": ["...", "complete: 0.49.0", "move: installed Jason Desktop 0.49.0 to /Users/you/Applications/Jason.app", "move: done: /Users/you/.local/bin/jason is in Jason Desktop at /Users/you/Applications/Jason.app"],
+  "move": { "state": "done", "step": "started", "application": "/Users/you/Applications/Jason.app", "reason": null }
+}
+```
+
+| `move.state` | Meaning |
+|---|---|
+| `done` | the install is retired into the application, and a runtime it stopped runs again from the application's `jason` |
+| `pending` | the move waits for something outside it, and nothing was changed that a later run cannot carry on; `reason` says what and how |
+| `failed` | a check refused or a step did not succeed; nothing of what it refused ran, and the command-line install answers as it did |
+| `not_applicable` | Linux: the command-line install is the installation there, and nothing was moved or written |
+
+`move.step` is the last step done, `application` where the application is or goes, and `reason` one sentence, `null`
+at `done`. The same is kept in `<data>/update/move.json`, with the step being done while one is, written before it
+begins; `jason status` reads it as its `move` check, which names a move that has not ended and the command that carries
+it on: `jason update apply` from the command-line install, which at the version it already is carries the move on rather
+than refuse with `update_up_to_date`, and answers with `from` and `to` both that version. A move that is `done` is not
+carried on again, and a command-line install the application's routine retired is reported as moved, whatever the
+record says. Where the move waits on what no command typed here changes — an Intel Mac, an application older than 0.49 or
+one of no readable version — the check says what stands and what would move it, with no repair. Each step, and a running
+download every fifteen seconds, says so in one line beginning `move:` on standard error, which the 0.48 parent passes
+through as it comes; the document is untouched by them.
+
+**The steps**, each recorded before it is taken, after the folders an earlier routine renamed a still-running executable
+into are removed where their process has ended:
+
+| Step | What it does |
+|---|---|
+| `looked` | on Windows, first, this jason's own Authenticode signature, verified by the routine that verifies the installer: a jason with no signature, or whose signature does not verify, moves nothing and fetches nothing, and the move is `failed`, saying to install Jason Desktop from the release page, whose first start takes the command-line install in; `jason status` names no repair for it. A test build takes the signer `JASON_TEST_BUILD_SIGNER` names before its own. Then, on Windows, while the installer this move downloaded still runs, left by an earlier run past its bound or after a kill, nothing at the place is used, reused or installed over, and the move is `pending` until that installer has ended. Otherwise an application is looked for: on Windows in `%LOCALAPPDATA%\Programs\jason-desktop`; on macOS at `~/Applications/Jason.app`, then `/Applications/Jason.app`. One of 0.49.0 or later is reused as it is once it verifies — its signature on macOS, its jason's signer on Windows — and the next three steps are taken as done. An application is never replaced, renamed or closed from a terminal: one whose window is open, of any version, leaves the move `pending` until it is closed; one older than 0.49 leaves it `pending`, saying to update Jason Desktop from its own menu, whose first start of 0.49 or later takes the install in; one of no readable version, `pending`, saying to run its installer from the release page again — except on Windows the one a setup this move began there left, which is set up again where nothing runs from it |
+| `fetched` | the release of this version read again, and refused where it names another; `checksums.txt` and the application's asset downloaded under `<data>/update/move/`: `jason-desktop-windows-x64-setup.exe`, or `jason-desktop-macos-arm64.zip`. A download is given 30 minutes whole and never two without a byte; one that does not arrive is `pending` |
+| `verified` | the SHA-256 against its line in `checksums.txt`, then the publisher: on Windows the installer's Authenticode signature, valid and naming the publisher that signed this jason, the signer's simple name in full and in the same case, read from this jason's own signature at the first step; on macOS `codesign --verify --deep --strict` with the designated requirement `install.sh` holds it to, on the application unpacked from the zip, before anything of it runs. A refusal is `failed`, and the download is removed |
+| `placed` | Windows: the place looked at again, then the setup run with the raw command line `/S /D=<place>`, the place last and unquoted as NSIS takes it, spaces included, with no window, and waited for at most ten minutes; one that has not ended then is left running and never killed, and the move is `pending`. Its exit 1, a Jason process still running from the place or a look for one that failed and could not tell, is `failed`; so is its exit 2, which it ends with before Jason Desktop is installed, either because another installer of Jason Desktop holds the installer's mutex (the template's `.onInit` aborts) or because the installed version's uninstaller refused and was left as it put itself back (the include's uninstall-check hooks); the sentence names both and says to run `jason update apply` once no other installer runs and Jason Desktop is quit; its exit 3, Jason Desktop running in its window or the tray, or a look that could not tell, on which a silent installer kills nothing and changes nothing, is `pending`, saying to quit Jason Desktop if it runs and run `jason update apply` again. macOS: the zip unpacked with `ditto -x -k` into a folder beside the place, so that putting it there is one rename on one volume, and renamed into the place only while it is empty; the shared folder is chosen where this account may write in it, as the updater needs, else the account's own |
+| `set_up` | the application's own `jason install --retire <the command-line install>`, handed the update's lock and read by its report (§9): it places the application's `jason` in the terminal before it retires anything, stops the command-line install's runtime, leaving the note that a start is owed, and retires that install |
+| `started` | where the routine stopped a runtime, or the note stands and nothing answers, one started from the application's `jason` and waited for for a minute |
+
+**One at a time, and one stop.** The move takes `<data>/update/update.lock` and holds it to its end; a move that finds it
+held is `pending` and writes nothing. It gives the setup an environment with no nonce of the lock's and with `JASON_MOVE`,
+the marker its record keeps from one run to the next while it stands not done. The installer's own last step, `jason
+install` with no flags, finds that marker naming a record standing not done and does nothing — nothing placed, retired or
+stopped — says so in its document and exits 0; a `JASON_MOVE` naming no such record is ignored. So the routine that runs
+is the move's, once the installer has returned, and a setup the move left running, past its bound or after a kill, changes
+nothing of the command-line install or its runtime: the next `jason update apply` finds the application, reuses it and runs
+the routine under its own hold. The only runtime stopped is the routine's, after the download and both checks, and the
+move, having asked for it, starts one again. Nothing of the move, the sweep of retired executables included, fails the
+update.
+
+**Every prefix leaves a working installation.** Until `set_up` the command-line install is untouched and answers as
+`jason`, its runtime with it; from `set_up` on, the application's `jason` answers in a new terminal. A move ended at any
+point, the runtime's start it owed with it, leaves the note that a start is owed, which the application's own start and
+`jason status` read (§9). `jason update apply` from the command-line install carries a move on from where it stopped.
+
+**What the move never does.** It never renames, replaces or deletes an application that is there, and never closes one.
+It is `pending`, never begun, in a process `update_elevated` would refuse (elevated above the account's ordinary
+rights, another account than the session's, root) and for an install a package manager made, and writes no record
+there; on an Intel Mac it is `pending` at `looked`, with nothing changed.
+
+**After a move,** the executable the update replaced stays in `<data>/update/previous/` until the next update, and
+`jason update rollback` refuses, pointing to the section below, once the move is done or the command-line install is
+retired, whatever the record says.
+
+**A test build.** A CLI built with `-p:JasonTestBuild=true` takes the Windows signer `JASON_TEST_BUILD_SIGNER` names before
+its own and the macOS requirement `JASON_TEST_BUILD_REQUIREMENT` names, so a CI run can move into an application it signed itself;
+no released build is one, which a guard holds. A test build says so: `jason --version` writes `This jason is a test build, not a
+release.` on standard error, its version alone staying on standard output; `jason runtime status --human` and `jason status`
+say `(a test build, not a release)` after the version; and `system.info` carries `test_build: true`, a member a released
+build's report never has.
+
+### Going back from 0.49
+
+`jason update rollback` does not roll Jason 0.49 back from a move of a command-line install into Jason Desktop: once the
+move is done, it refuses with `update_carried_by_desktop` and points here.
+
 ## 8. Starting at logon
 
 Nothing is registered until you ask. `jason runtime autostart enable` registers **the runtime itself** to start
@@ -1631,7 +1720,7 @@ part-way is named under `problems`, and the steps after it still run. Its steps,
 |---|---|
 | a command-line install's runtime | where an older command-line install is found — the executable `--retire` names, else the one the last `jason update apply` recorded, else the installer's default place (`~/.local/bin/jason`, `%LOCALAPPDATA%\Programs\jason\jason.exe`), each only where it is Jason's: a `jason-LICENSE` or `jason-THIRD-PARTY-NOTICES` beside it, the record, or on Windows that folder, and `--retire` only a regular file named `jason` (`jason.exe` on Windows) with one of those signs, anything else named and left — a runtime running from that executable is drained and stopped. **No runtime is ever started**: the report says `stopped`, and `jason runtime start` starts one from the carried file; a caller that goes on to use Jason runs it. Just before it drains and stops the runtime, it writes the note that a start is owed (below), and takes it back where the runtime then does not stop. Where nothing is to be retired, no runtime is asked anything. A runtime that will not stop is resumed and leaves that install as it is, and so does one that does not name the executable it runs from. Where the data directory's `layout.json` refuses this `jason` (`layout_newer`, `layout_unreadable`), no runtime is stopped, no registration moved and nothing of that install retired, with `--roles` or without |
 | the terminal command | macOS: `~/.local/bin/jason`, the application's own two-line `sh` wrapper running the carried file (naming `JASON_DATA_DIR` where that is set), written over an earlier wrapper, the retired executable or a link to an application's `jason`, and over no other file; then, only where the PATH a terminal has does not name `~/.local/bin` already — `install.sh`'s own test, `case ":$PATH:" in *":$INSTALL_DIR:"*)` — `install.sh`'s marker and line, `export PATH="<home>/.local/bin:$PATH"`, appended to the login profile and to `~/.zshrc` or `~/.bashrc`, each only where the line is not already a line of that file — the rule `install.sh` appends by, held to it word for word. The PATH a terminal has is the one `--terminal-path` names, and without it the routine's own, which is a terminal's when a script runs it; `--terminal-path ""`, the empty value, says the login shell gave no answer, and the folder counts as not there. A home whose folder holds a line break, `"`, `$`, a backtick or `\` takes no line, as `install.sh` refuses it, and a profile that is a link is appended through only to a regular file; either is named with the line to add by hand. A home whose folder holds `:`, which separates PATH's entries, takes no line either, since no line could name it. And the application's 0.48 `~/.local/bin/jason-desktop` wrapper is taken back, only where it is the application's shape. Windows: one entry in this account's Path naming the carried file's folder, `resources\bundle`, only where it is not there, the value's kind kept and running programs told, as `install.ps1` wrote its own before 0.49, and a Path of a kind that is not a string refused and left; and the `jason`/`jason-desktop` command files the application placed in `%LOCALAPPDATA%\Microsoft\WindowsApps` taken back, each only where it is one of the application's shapes. The command files go, and the next step runs, only once the terminal command reads back as placed — the wrapper and its lines, or the Path entry — since otherwise the old install stays: where it sat at `~/.local/bin/jason` the wrapper has already taken its executable's place, and elsewhere it is what still answers `jason`. A shell already open finds neither, and runs the path the report gives as `open_shell` |
-| the rest of the retired install | its logon registration, where it names that executable and this data directory, or no data directory (and then it names none again), registered again naming the carried file — on macOS the file is moved and launchd loads it at the next logon, so nothing starts now, and until that login the old job stays loaded and idle; its notice files, and on Windows `jason.previous.exe`, removed. Windows: the executable removed, or, while a running process holds it, renamed into a `jason-retired-<id>` folder on its own volume and left there, with nothing started to wait for that process; its Path entry taken off where its folder then holds nothing but what `install.ps1` wrote there before 0.49; the folder once empty. macOS: the wrapper has taken its place at the default path; one elsewhere is removed, with its profile block by §9's rule |
+| the rest of the retired install | its logon registration, where it names that executable and this data directory, or no data directory (and then it names none again), registered again naming the carried file — on macOS the file is moved and launchd loads it at the next logon, so nothing starts now, and until that login the old job stays loaded and idle; its notice files, and on Windows `jason.previous.exe`, removed. Windows: the executable removed, or, while a running process holds it, renamed into a `jason-retired-<id>` folder on its own volume and left there, with nothing started to wait for that process, until a later `jason install`, `jason update apply --finish` or move finds that process ended and removes the folder; its Path entry taken off where its folder then holds nothing but what `install.ps1` wrote there before 0.49; the folder once empty. macOS: the wrapper has taken its place at the default path; one elsewhere is removed, with its profile block by §9's rule |
 | the harness skills | both packs, from the skills beside the carried file, read where they stand, into the folder of each of these two hosts found by its home folder, and of no other: Claude Code (`~/.claude` → `~/.claude/skills`) and Codex (`~/.codex` → `~/.agents/skills`, which other hosts read too), recorded as `jason skills install` records them. A skill folder there under a name Jason ships that no record of Jason's names is the person's own: left as it is, and named under `left_alone`; one whose files equal the carried skills byte for byte is what an earlier deployment wrote before its record, and is adopted and recorded |
 | the role skills | with `--roles` only, into the data directory, as `jason skills install --roles-only` deploys them |
 

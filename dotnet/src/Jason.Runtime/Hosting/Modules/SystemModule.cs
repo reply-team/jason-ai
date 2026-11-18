@@ -105,7 +105,9 @@ public static class SystemModule
                     // comes from, never who set it, which preference.list says.
                     SendModes: SendModes.InForce(null, await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false)),
                     // Where this runtime's parts are, from its own paths alone: nothing is read, so this cannot fail.
-                    Setup: SetupInfo.From(dataPaths))));
+                    Setup: SetupInfo.From(dataPaths),
+                    // Present only in a test build, so a released runtime's report is as it was.
+                    TestBuild: Jason.Contracts.JasonVersion.ReportMember(Jason.Contracts.JasonVersion.TestBuild))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

@@ -317,6 +317,38 @@ public class ContractsShapeTests
             JsonSerializer.Serialize(skills, JasonJson.Options));
     }
 
+    /// <summary>
+    /// A test build says so in the runtime's report, as <c>test_build: true</c> after every other section, and after its
+    /// version wherever that is stated to a person; the words are <see cref="JasonVersion.TestBuildMark"/>.
+    /// </summary>
+    [Fact]
+    public void A_test_build_says_so_in_the_report_and_after_its_version()
+    {
+        var info = SystemInfo() with { TestBuild = JasonVersion.ReportMember(testBuild: true) };
+        var json = JsonSerializer.Serialize(info, JasonJson.Options);
+
+        Assert.EndsWith(",\"send_modes\":null,\"setup\":null,\"test_build\":true}", json, StringComparison.Ordinal);
+        Assert.True(JsonSerializer.Deserialize<SystemInfoResponse>(json, JasonJson.Options)!.TestBuild);
+        Assert.Equal("0.49.0-dev+abc (a test build, not a release)", JasonVersion.Stated("0.49.0-dev+abc", testBuild: true));
+        Assert.Equal("This jason is a test build, not a release.", JasonVersion.TestBuildSentence);
+    }
+
+    /// <summary>
+    /// A released build says nothing: no member in the report, never a <c>false</c>, so its document is the one it was, and
+    /// its version as it is. This build is not a test build.
+    /// </summary>
+    [Fact]
+    public void A_released_build_says_nothing_of_a_test_build()
+    {
+        Assert.False(JasonVersion.TestBuild);
+        var json = JsonSerializer.Serialize(SystemInfo() with { TestBuild = JasonVersion.ReportMember(JasonVersion.TestBuild) }, JasonJson.Options);
+
+        Assert.DoesNotContain("test_build", json, StringComparison.Ordinal);
+        Assert.EndsWith(",\"send_modes\":null,\"setup\":null}", json, StringComparison.Ordinal);
+        Assert.Null(JsonSerializer.Deserialize<SystemInfoResponse>(json, JasonJson.Options)!.TestBuild);
+        Assert.Equal("0.49.0", JasonVersion.Stated("0.49.0", testBuild: false));
+    }
+
     private static SystemInfoResponse SystemInfo() =>
         new(
             "0.1.0", "v1", "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
