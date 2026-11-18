@@ -1743,20 +1743,29 @@ switch ($Step) {
             if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the command-line install still holds $file at ${commandLine}: it was not retired into the application" }
         }
         # The move's record is written by a move, which jason update apply makes; the setup's own jason install retires with
-        # none. Where one stands it must say done, naming this application.
+        # none. Where one stands it says done, naming this application, which stands; where none does, jason status's move
+        # check reads absent. The check is never failed, and which of the two was read is said.
         $recordFile = Join-Path $data 'update\move.json'
-        $recordSaid = 'no move record was written, as the setup''s own jason install writes none'
+        $status = Read-Document (Invoke-Program $carried @('status') $quiet).Said
+        $checks = @(if ($status -and $status.PSObject.Properties['checks']) { $status.checks })
+        $moveCheck = @($checks | Where-Object { $_.name -ceq 'move' })
+        $moveSaid = if ($moveCheck.Count -eq 1) { "$($moveCheck[0].state): $($moveCheck[0].fact)" } else { 'no move check read' }
+        if ($moveCheck.Count -eq 1 -and $moveCheck[0].state -ceq 'failed') { Fail "jason status's move check fails after the setup: $moveSaid" }
         if (Test-Path -LiteralPath $recordFile) {
             $record = Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json
             if ($record.state -cne 'done') { Fail "the move record at $recordFile says $($record.state) at $($record.step)" }
             if ([string]$record.application -ine $app -or -not (Test-Path -LiteralPath $app)) { Fail "the move record at $recordFile names $($record.application), which is not the application standing at $app" }
-            $recordSaid = "the move record at $recordFile says done, naming $app, which stands"
+            $recordSaid = "a move record was written: $recordFile says done, naming $app, which stands"
+        } else {
+            if ($moveCheck.Count -ne 1 -or $moveCheck[0].state -cne 'absent') { Fail "no move record was written, and jason status's move check does not read absent: $moveSaid" }
+            $recordSaid = 'no move record was written, as the setup''s own jason install writes none, and jason status''s move check reads absent'
         }
-        $status = Read-Document (Invoke-Program $carried @('status') $quiet).Said
-        $moveCheck = if ($status -and $status.PSObject.Properties['checks']) { @($status.checks | Where-Object { $_.name -ceq 'move' }) } else { @() }
-        $moveSaid = if ($moveCheck.Count -eq 1) { "$($moveCheck[0].state): $($moveCheck[0].fact)" } else { 'no move check read' }
-        if ($moveCheck.Count -eq 1 -and $moveCheck[0].state -ceq 'failed') { Fail "jason status's move check fails after the setup: $moveSaid" }
         Say "one installation: one Installed apps entry, $app at $Version, the command-line install's files gone from $commandLine; $recordSaid; jason status's move check: $moveSaid"
+
+        # A fact, not an assertion: jason status as a whole after the update, read by eye in the run.
+        $ready = if ($status -and $status.PSObject.Properties['ready']) { "$($status.ready)" } else { 'not read' }
+        $notOk = @($checks | Where-Object { $_.state -cne 'ok' } | ForEach-Object { "$($_.name) ($($_.state)): $($_.fact)" })
+        Say "jason status after the update: ready $ready; $(if ($status) { "$($checks.Count) check(s), $($notOk.Count) not ok$(if ($notOk) { ': ' + ($notOk -join ' | ') })" } else { 'no document read' })"
 
         # The terminal command.
         if ((Count-Entry $bundle) -ne 1) { Fail "the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $((Get-UserPath).Raw)" }
