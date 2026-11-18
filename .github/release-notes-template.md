@@ -91,7 +91,9 @@ word, and to stable releases only. A candidate's feed files stay on the candidat
 latest release, so an installed desktop, a candidate included, never moves to a candidate. On macOS and Windows, `jason update apply` typed into
 the `jason` the application carries is such a word too: it hands the update to the same updater with no window, and the
 new version's `jason` finishes it, the plugin packages, the runtime's start, the skills, the terminal command and the
-UI.
+UI. A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own
+`jason update apply`: it installs the application and moves the command line into it, and the update never fails because
+of the move; `jason status` says where the move stands. Linux has no move.
 
 Installing an update restarts the runtime: the runtime the application carries is stopped first, with
 `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again

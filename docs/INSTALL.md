@@ -481,6 +481,18 @@ then `jason update apply`. Its own `jason update check` names 0.19.0 as `install
 `upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0. A
 package manager's upgrade goes straight to the newest release.
 
+**A command-line install moves into Jason Desktop.** On macOS and Windows, a command-line install of an earlier version
+moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason
+Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it, so that the
+terminal's `jason` is the one the application carries. The update never fails because of the move. Where the move cannot
+go on, the command-line install is left as it was and still answers as `jason`, `jason status` says where the move
+stands in its `move` check, and where a command helps, the check names it: `jason update apply` typed again carries the
+move on. On Windows the move first verifies this `jason`'s own signature; where that does not verify, it fetches nothing
+and says to install Jason Desktop from the release page, whose first start takes the command-line install in. Once the
+install is moved, `jason update rollback` does not take it back
+([release-and-update.md](release-and-update.md), "Going back from 0.49"). On Linux there is no move: the command-line
+install is the installation there.
+
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and

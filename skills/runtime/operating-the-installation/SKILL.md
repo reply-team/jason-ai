@@ -435,6 +435,20 @@ Desktop that is running, one of another data directory included: say that to the
 command again only on their word. On Linux the `jason` the deb or the AppImage carries is refused with
 `update_carried_by_desktop`: the desktop's own update item updates it.
 
+**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason update apply` typed into a
+command-line install of an earlier version updates it and then moves it into Jason Desktop: it installs the application,
+or takes one of 0.49.0 or later that is already there, and has that application's `jason install` retire the
+command-line install, so the terminal's `jason` becomes the one the application carries. Its answer is the update's
+success whatever the move meets, with the move's own state beside it in `move.state`: `done`, `pending`, `failed`, or
+`not_applicable` on Linux, where there is no move. Every step leaves a working installation: until the move retires it,
+the command-line install answers as `jason`, its runtime with it. `jason status` says where the move stands in its
+optional `move` check. Where the check names a command, that command carries the move on, and it is the person's to ask
+for, like any update; where it names none, the move waits on something no command typed here changes, so say what it
+waits for. On Windows the move first verifies this `jason`'s own signature: where that does not verify, nothing is
+fetched or changed, and the way on is installing Jason Desktop from the release page, whose first start takes the
+command-line install in. Once the install is moved, `jason update rollback` refuses with `update_carried_by_desktop` and
+points to "Going back from 0.49" in `docs/release-and-update.md`: tell the person so, and do not look for another way back.
+
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
 line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
