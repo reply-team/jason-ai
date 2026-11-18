@@ -2277,7 +2277,8 @@ ran-from-image-end)
         while IFS= read -r id; do
             [ -n "$id" ] || continue
             folder="$HOME/.net/jason/$id"
-            case "$id" in *[!A-Za-z0-9]*) line="  $folder: not an id of the shape a build's is, left" ;; *)
+            # .NET spells the id in the URL-safe base64 alphabet: a letter, a digit, '_' or '-'; anything else names no build's folder.
+            case "$id" in ''|*[!A-Za-z0-9_-]*) line="  $folder: not an id of the shape a build's is, left" ;; *)
                 if grep -qxF "$(printf 'extracted\t%s' "$id")" "$started"; then line="  $folder: there at this leg's begin, left"
                 elif [ -L "$folder" ]; then line="  $folder: a link, left"
                 elif [ -d "$folder" ]; then

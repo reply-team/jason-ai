@@ -868,6 +868,75 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The disk image leg's end takes this build's extraction folder by the id the build was read to extract to, and .NET
+    /// spells that id in the URL-safe base64 alphabet: a letter, a digit, '_' or '-'. The pattern the end refuses an id by,
+    /// read from the script, takes an id holding both '_' and '-' (one a run's build had) and refuses one that is empty or
+    /// would name anything but one folder. Read as a glob everywhere; run by bash itself where there is one.
+    /// </summary>
+    [Fact]
+    public void The_disk_image_leg_s_end_takes_an_extraction_id_holding_both_underscore_and_hyphen()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var end = macos[macos.IndexOf("\nran-from-image-end)\n", StringComparison.Ordinal)..];
+        end = end[..end.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
+        var refusal = Regex.Match(end, @"\n *case ""\$id"" in (?<pattern>[^)\n]+)\) line=""  \$folder: not an id of the shape a build's is, left"" ;; \*\)\n");
+        Assert.True(refusal.Success, "the disk image leg's end refuses no id by one case pattern");
+        var pattern = refusal.Groups["pattern"].Value;
+        var taken = new[] { "4_Z-4a36gQYZ", "5NxLCBGAJEwA", "a_b", "a-b" };
+        var refused = new[] { "", "../x", "a/b", "a b", "a.b", "*" };
+        var glob = new Regex(GlobAsRegex(pattern));
+        foreach (var id in taken)
+        {
+            Assert.False(glob.IsMatch(id), $"the disk image leg's end refuses the id '{id}' by '{pattern}', and a build's id may be spelled so");
+        }
+
+        foreach (var id in refused)
+        {
+            Assert.True(glob.IsMatch(id), $"the disk image leg's end takes the id '{id}' by '{pattern}', which names no build's folder");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            foreach (var id in taken.Concat(refused))
+            {
+                var (exit, stdout, stderr) = Run("/bin/bash", new Dictionary<string, string>(), "-c", $"case \"$1\" in {pattern}) echo refused ;; *) echo taken ;; esac", "row", id);
+                Assert.True(exit == 0, stderr);
+                Assert.Equal(taken.Contains(id) ? "taken" : "refused", stdout.Trim());
+            }
+        }
+
+        // A case pattern of the shell's, as a regular expression: alternatives by '|', '*' any run, '?' one character,
+        // a bracket as a class ('!' negating it), and '' the empty word.
+        static string GlobAsRegex(string cases)
+        {
+            var alternatives = new List<string>();
+            foreach (var alternative in cases.Split('|'))
+            {
+                var regex = new StringBuilder();
+                for (var at = 0; at < alternative.Length; at++)
+                {
+                    var c = alternative[at];
+                    if (c == '*') { regex.Append(".*"); }
+                    else if (c == '?') { regex.Append('.'); }
+                    else if (c == '\'' && alternative.IndexOf('\'', at + 1) is var close and > 0) { regex.Append(Regex.Escape(alternative[(at + 1)..close])); at = close; }
+                    else if (c == '[')
+                    {
+                        var close2 = alternative.IndexOf(']', at + 2);
+                        var inside = alternative[(at + 1)..close2];
+                        regex.Append('[').Append(inside.StartsWith('!') ? "^" + inside[1..] : inside).Append(']');
+                        at = close2;
+                    }
+                    else { regex.Append(Regex.Escape(c.ToString())); }
+                }
+
+                alternatives.Add(regex.ToString());
+            }
+
+            return "^(?:" + string.Join('|', alternatives) + ")$";
+        }
+    }
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
