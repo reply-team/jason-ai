@@ -1852,6 +1852,7 @@ switch ($Step) {
         $release = $scratchHeldFile
         Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
         $holder = $null
+        $noProof = $null
         try {
             $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
             Register-Scratch 'the process holding a skill file jason uninstall removes' $holder
@@ -1866,15 +1867,30 @@ switch ($Step) {
             $landed = -not $verb.HasExited
             New-Item -ItemType File -Path $release -Force | Out-Null
             $null = $holder.WaitForExit(15000)
-            if (-not $landed) { Fail "jason uninstall ended (exit $($verb.ExitCode)) before the window's process ran, with $held held: the leg proves nothing" }
-            Say "the window opened once jason uninstall had stopped the runtime, past its own check, while the verb was still running, held at $held; then let go"
+            $noProof = if (-not $landed) { "jason uninstall ended (exit $($verb.ExitCode)) before the window's process ran, with $held held: the leg proves nothing" } else { $null }
+            if ($landed) { Say "the window opened once jason uninstall had stopped the runtime, past its own check, while the verb was still running, held at $held; then let go" }
         } finally {
             New-Item -ItemType File -Path $scratchHeldFile -Force | Out-Null
             if ($holder) { $null = $holder.WaitForExit(15000) }
         }
         if (-not $verb.WaitForExit(300000)) { Fail 'jason uninstall did not end within 300 s' }
         Say "jason uninstall ended, exit $($verb.ExitCode)"
-        if (Test-Path -LiteralPath $held) { Fail "jason uninstall ended and $held, which it was held at, is still there: it was let go after the verb's wait ran out" }
+        if (-not $noProof -and (Test-Path -LiteralPath $held)) { $noProof = "jason uninstall ended and $held, which it was held at, is still there: it was let go after the verb's wait ran out, and the leg proves nothing" }
+        if ($noProof) {
+            # The leg proved nothing, and the window was opened: its clean-up still runs, so the next leg meets neither the
+            # window nor an uninstaller's question. The window closed first, so a silent run the waiter starts finds none; then,
+            # while the waiter this verb left still runs (up to 120 s), every uninstaller run it shows ended by its id.
+            Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            $waiterLine = "Wait-Process -Id $($verb.Id) -Timeout 600;"
+            $until = (Get-Date).AddSeconds(120)
+            do {
+                $waiters = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'powershell.exe' -and "$($_.CommandLine)".Contains($waiterLine) })
+                Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                if ($waiters.Count -gt 0) { Start-Sleep -Milliseconds 500 }
+            } while ($waiters.Count -gt 0 -and (Get-Date) -lt $until)
+            Say "the leg proved nothing; the window was closed and the waiter $(if ($waiters.Count -gt 0) { 'still runs after 120 s' } else { 'has ended' }), every uninstaller run it showed ended, before it fails"
+            Fail $noProof
+        }
         $shown = $null
         $until = (Get-Date).AddSeconds(150)
         while ((Get-Date) -lt $until -and -not $shown) {
