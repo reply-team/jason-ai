@@ -72,7 +72,27 @@
 !define JASON_RUNTIME_STILL "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\resources\bundle\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again."
 !define JASON_LOOK_FAILED "Jason could not look for its own processes, so it cannot tell whether Jason is running from this application's folder, and nothing was changed. Run this again."
 
+; Every PowerShell this setup runs is Windows PowerShell, by its fixed path, and it is run with the module path it builds
+; for itself. A setup inherits the environment of whatever started it, and a PowerShell 7 session puts its own module
+; folders first in PSModulePath; Windows PowerShell 5.1 started with that value finds Get-ExecutionPolicy in PowerShell
+; 7's Microsoft.PowerShell.Security, cannot load it, and the template's test whether PowerShell is available
+; (IS_POWERSHELL_AVAILABLE) fails, so every look below would be taken as one that could not be made - and a silent run
+; would end with 3 over nothing running. So the variable is removed from this process's environment, never set to a
+; value of ours: Windows PowerShell started without it builds its own, from the user's and the machine's settings and its
+; own folder. It is removed at the first hook each run reaches, before any PowerShell of the template's or of this file:
+; preInit, which the installer's .onInit runs before anything else of the template's that starts a program; and the check
+; below, which the uninstaller's un.onInit runs before any other hook. What this process starts after it, the old
+; version's uninstaller and jason install among them, inherits the same.
+!macro jasonForgetModulePath
+  System::Call 'Kernel32::SetEnvironmentVariable(t "PSModulePath", i 0)'
+!macroend
+
+!macro preInit
+  !insertmacro jasonForgetModulePath
+!macroend
+
 !macro customCheckAppRunning
+  !insertmacro jasonForgetModulePath
   System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_APP", t "$INSTDIR\${APP_EXECUTABLE_FILENAME}")'
   System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\resources\bundle\jason.exe")'
   ${if} ${isUpdated}

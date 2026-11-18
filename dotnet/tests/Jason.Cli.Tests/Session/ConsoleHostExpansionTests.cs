@@ -128,16 +128,19 @@ public sealed class ConsoleHostExpansionTests
     }
 
     /// <summary>
-    /// The block the scan reads is the one the start is given: this process's variables less the confinement variable, and
-    /// the launch's two on top. Making a start info starts nothing.
+    /// The block the scan reads is the one the start is given: this process's variables less the confinement variable, less
+    /// PSModulePath where the host is Windows PowerShell, and the launch's two on top. Making a start info starts nothing.
     /// </summary>
-    [Fact]
-    public void The_block_is_the_environment_the_console_host_is_started_with()
+    [Theory]
+    [InlineData("C:/Tools/claude.exe")]
+    [InlineData("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")]
+    [InlineData("C:/Program Files/PowerShell/7/pwsh.exe")]
+    public void The_block_is_the_environment_the_console_host_is_started_with(string host)
     {
         var variables = new Dictionary<string, string> { [JasonPaths.DataDirectoryVariable] = Own.DataDirectory, ["PATH"] = TerminalPlan.SearchPathFirst(TerminalPlatform.Windows, Own.ExecutableFolder!, Own.SearchPath) };
-        var start = TerminalStartInfo.For(TerminalPlatform.Windows, ["C:/Windows/System32/conhost.exe", "--", "C:/Tools/claude.exe"], "C:/Jason", variables);
+        var start = TerminalStartInfo.For(TerminalPlatform.Windows, ["C:/Windows/System32/conhost.exe", "--", host], "C:/Jason", variables);
 
-        var block = TerminalPlan.Block(TerminalPlatform.Windows, Process(), Own);
+        var block = TerminalPlan.Block(TerminalPlatform.Windows, Process(), Own, [host]);
 
         var started = start.Environment.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value!, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(started.Count, block.Count);
@@ -146,6 +149,30 @@ public sealed class ConsoleHostExpansionTests
             Assert.True(block.TryGetValue(name, out var held), $"The block has no {name}.");
             Assert.Equal(value, held);
         }
+    }
+
+    /// <summary>
+    /// The console host hands its own environment to the host it starts, so where that host is Windows PowerShell -
+    /// <c>jason session open --shell</c>'s on Windows - the console host is started without the PSModulePath this process
+    /// inherited, which a PowerShell 7 session fills with folders Windows PowerShell cannot load its own commands from;
+    /// every other host, PowerShell 7 among them, keeps it, and so does a terminal elsewhere.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows, "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", false)]
+    [InlineData(TerminalPlatform.Windows, "C:/Windows/System32/WindowsPowerShell/v1.0/POWERSHELL.EXE", false)]
+    [InlineData(TerminalPlatform.Windows, "C:/Program Files/PowerShell/7/pwsh.exe", true)]
+    [InlineData(TerminalPlatform.Windows, "C:/Tools/claude.exe", true)]
+    [InlineData(TerminalPlatform.Linux, "/usr/bin/powershell", true)]
+    public void The_console_host_starts_Windows_PowerShell_without_the_inherited_module_path(TerminalPlatform os, string host, bool keeps)
+    {
+        var inherited = Environment.GetEnvironmentVariable(ChildProcess.ModulePathVariable);
+        Assert.SkipWhen(inherited is null, "This process has no PSModulePath to hand on.");
+        IReadOnlyList<string> argv = os == TerminalPlatform.Windows ? ["C:/Windows/System32/conhost.exe", "--", host] : ["/usr/bin/x-terminal-emulator", "-e", host];
+
+        var start = TerminalStartInfo.For(os, argv, os == TerminalPlatform.Windows ? "C:/Jason" : "/home/marta/Jason");
+
+        Assert.Equal(keeps, start.Environment.ContainsKey(ChildProcess.ModulePathVariable));
+        Assert.Equal(!keeps, TerminalPlan.HostsWindowsPowerShell(os, [host]));
     }
 
     /// <summary>
