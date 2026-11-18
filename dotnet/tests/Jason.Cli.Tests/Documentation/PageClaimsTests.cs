@@ -824,6 +824,7 @@ public partial class PageClaimsTests
     [Theory]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
+    [Critical(Family.D1, "the prompt hosts were read against")]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector(string page)
     {
         var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason by following");
@@ -839,6 +840,7 @@ public partial class PageClaimsTests
     /// walk after it. Until that reading, the digest stands for a deliberate change.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the agent section hosts were read against")]
     public void The_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(AgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Agent()))));
 
@@ -1786,6 +1788,7 @@ public partial class PageClaimsTests
     /// agent follows on a first run against a real account are in it, and a change to them is a deliberate one.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the golden path's agent section hosts were read against")]
     public void The_golden_path_s_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(GoldenAgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(GoldenAgent()))));
 
