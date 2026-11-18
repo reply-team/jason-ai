@@ -1,5 +1,5 @@
-# A throwaway workflow on a throwaway branch: the two proof jobs of ci.yml, copied unchanged, run on a push to this
-# branch alone, so that they can be tried without running every check. It is never merged.
+# A throwaway workflow on a throwaway branch: the macOS proof job of ci.yml, copied unchanged, run on a push to this
+# branch alone, so that it can be tried without running every check. It is never merged.
 name: Union trial
 
 on:
