@@ -35,10 +35,11 @@ import {
     takingLongSentence,
     type RuntimeDoor,
     type SetupState,
+    vanishingCode,
 } from '../src/machine-setup.ts';
 import { cliAt } from '../src/cli.ts';
 import { keepFirstStart, readMode } from '../src/mode.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { desktopPaths, namedDataDirectory } from '../src/paths.ts';
 import { isNewInstallation } from '../src/theme.ts';
 import { memoryLog } from './harness.ts';
 
@@ -333,10 +334,10 @@ test('a record that is no record reads as none, so the next start runs the routi
     mkdirSync(join(data, 'desktop'), { recursive: true });
     for (const text of ['', 'not json', '[]', '{"ran_for":7}', '{"ran_for":"0.49.0","report":"x"}']) {
         writeFileSync(desktopPaths(data).machineSetup, text);
-        assert.deepEqual(readSetupRecord(desktopPaths(data).machineSetup), { ranFor: null, report: null }, text);
+        assert.deepEqual(readSetupRecord(desktopPaths(data).machineSetup), { ranFor: null, ranFrom: null, report: null }, text);
     }
-    assert.deepEqual(readSetupRecord(join(data, 'none.json')), { ranFor: null, report: null });
-    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    assert.deepEqual(readSetupRecord(join(data, 'none.json')), { ranFor: null, ranFrom: null, report: null });
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', ran_from: macExe, report: report() }));
     assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
     assert.equal(readFileSync(desktopPaths(data).machineSetup, 'utf8').includes('"ran_for"'), true);
 });
@@ -600,7 +601,7 @@ test('THE OWED START (the Demo case): a terminal-started runtime, an install sto
     // The installation exists, the mode record says demo, and the set-up already ran for this version.
     mkdirSync(join(data, 'desktop'), { recursive: true });
     writeFileSync(desktopPaths(data).mode, 'demo\n');
-    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', ran_from: macExe, report: report() }));
     // A runtime a terminal started was stopped by the installer's `jason install`, which left the note; its descriptor is gone.
     mkdirSync(join(data, 'run'), { recursive: true });
     const note = '{"stopped_at":"2026-11-17T15:05:35Z"}\n';
@@ -621,7 +622,7 @@ test('THE OWED START: at every start, Demo or Live, only a standing note with no
     const quiet = installationCli({ up: false, inFlight: false });
     const recorded = join(folder(), '.jason');
     mkdirSync(join(recorded, 'desktop'), { recursive: true });
-    writeFileSync(desktopPaths(recorded).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    writeFileSync(desktopPaths(recorded).machineSetup, JSON.stringify({ ran_for: '0.49.0', ran_from: macExe, report: report() }));
     await wiredOn(recorded, quiet).setup.atStart();
     assert.deepEqual(quiet.calls, []);
     // A note and a runtime that answers: none is started.
@@ -912,7 +913,7 @@ test('N3: the logon start is moved from another copy only once the machine set-u
 test('a fresh machine holding only the set-up’s record still counts as new', () => {
     const data = join(folder(), '.jason');
     mkdirSync(join(data, 'desktop'), { recursive: true });
-    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', ran_from: macExe, report: report() }));
     assert.deepEqual(readdirSync(data), ['desktop']);
     assert.equal(isNewInstallation(data), true);
 });
@@ -988,4 +989,96 @@ test('L1: the finishing step runs at every first start, and where the command li
     const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('\n}\n', main.indexOf('function makeMachineSetup(')));
     assert.doesNotMatch(factory, /\bisNew\b/);
     assert.doesNotMatch(readFileSync(new URL('../src/machine-setup.ts', import.meta.url), 'utf8'), /\bisNew\b/);
+});
+
+const imageExe = '/Volumes/Jason 0.49.0/Jason.app/Contents/Resources/bundle/jason';
+
+test('THE PLACE: a set-up is recorded by the application’s place as well as its version, and a start from another place sets up again', async () => {
+    const data = join(folder(), '.jason');
+    // Run from Applications: recorded with its place.
+    const first = fakeCli(printed(report()));
+    await setupOn(data, first).setup.atStart();
+    assert.equal(first.calls.length, 1);
+    assert.deepEqual(
+        { ranFor: readSetupRecord(desktopPaths(data).machineSetup).ranFor, ranFrom: readSetupRecord(desktopPaths(data).machineSetup).ranFrom },
+        { ranFor: '0.49.0', ranFrom: macExe },
+    );
+    // The same version from the same place: nothing runs, and the item shows the kept report.
+    const again = fakeCli(printed(report()));
+    const same = setupOn(data, again).setup;
+    assert.equal(same.state.state, 'reported');
+    await same.atStart();
+    assert.deepEqual(again.calls, []);
+    // The same version from another place: idle, and the start runs the routine.
+    const moved = fakeCli(printed(report({ executable: imageExe })));
+    const elsewhere = setupOn(data, moved, { executable: imageExe }).setup;
+    assert.equal(elsewhere.state.state, 'idle');
+    await elsewhere.atStart();
+    assert.equal(moved.calls.length, 1);
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFrom, imageExe);
+    // A record an earlier desktop wrote names no place: the start sets up again, once.
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    const older = fakeCli(printed(report()));
+    await setupOn(data, older).setup.atStart();
+    assert.equal(older.calls.length, 1);
+    // On Windows a place is the same whatever the case of its letters.
+    const winExe = 'C:\\Users\\a\\AppData\\Local\\Programs\\jason-desktop\\resources\\bundle\\jason.exe';
+    const winData = join(folder(), '.jason');
+    mkdirSync(join(winData, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(winData).machineSetup, JSON.stringify({ ran_for: '0.49.0', ran_from: winExe.toUpperCase(), report: report() }));
+    const win = fakeCli(printed(report()));
+    await setupOn(winData, win, { executable: winExe, platform: 'win32' }).setup.atStart();
+    assert.deepEqual(win.calls, []);
+});
+
+test('THE VANISHING PLACE: install_vanishing_place is said in the item, runs no finishing step, starts no runtime and writes no record, so each start from there asks again', async () => {
+    assert.equal(vanishingCode, 'install_vanishing_place');
+    const data = join(folder(), '.jason');
+    const sentence = 'This Jason runs from a disk image. Nothing was placed, retired or stopped.';
+    const refusing = () => installationCli({ up: false, inFlight: false, install: printed({ error: { code: vanishingCode, message: sentence, retryable: false } }, 1) });
+    // A note that a start is owed stands: from such a place no runtime is started for it either.
+    mkdirSync(join(data, 'run'), { recursive: true });
+    writeFileSync(desktopPaths(data).startOwed, '{}');
+    const cli = refusing();
+    const { setup } = wiredOn(data, cli, { executable: imageExe });
+    await setup.atStart();
+    assert.deepEqual(cli.calls, ['install --terminal-path /usr/bin:/bin'], 'no finishing step and no runtime asked about or started');
+    assert.equal(setup.state.state, 'refused');
+    assert.equal(setup.state.state === 'refused' && setup.state.runtimeAfter, undefined);
+    assert.ok(setupMenuOf(setup.state, imageExe).lines.includes(`The set-up did not finish: ${sentence}`));
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false);
+    assert.deepEqual(readdirSync(join(data, 'run')), ['start-owed.json']);
+    // The next start from there asks again, and is refused again.
+    const next = refusing();
+    await wiredOn(data, next, { executable: imageExe }).setup.atStart();
+    assert.deepEqual(next.calls, ['install --terminal-path /usr/bin:/bin']);
+});
+
+test('the default data directory is compared as the command line compares folders: whatever the case on macOS and Windows, letter for letter on Linux', () => {
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.JASON' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/USERS/A/.Jason/' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'c:\\users\\a\\.Jason' }, 'C:\\Users\\a', 'win32'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/home/a/.JASON' }, '/home/a', 'linux'), '/home/a/.JASON');
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/home/a/.jason/' }, '/home/a', 'linux'), null);
+    // The command line's rule, which the desktop's must be: FolderPaths, case ignored on Windows and macOS alone.
+    const folders = readFileSync(new URL('../../dotnet/src/Jason.Contracts/Harness/FolderPaths.cs', import.meta.url), 'utf8');
+    assert.ok(folders.includes('OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal'));
+});
+
+test('the data directory a wrapper names is none where JASON_DATA_DIR is unset or names the default, as the command line writes its wrapper', () => {
+    assert.equal(namedDataDirectory({}, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.jason' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.jason/' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/work' }, '/Users/a', 'darwin'), '/Users/a/work');
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'C:\\Users\\A\\.JASON\\' }, 'C:\\Users\\a', 'win32'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'D:\\jason' }, 'C:\\Users\\a', 'win32'), 'D:\\jason');
+    // The wrapper the command line writes on the default names none, and Open in reads it as this window's.
+    const wrapper = '/Users/a/.local/bin/jason';
+    const look = jasonOnPath({ platform: 'darwin', path: '/Users/a/.local/bin', executable: macExe, dataDirectory: namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.jason' }, '/Users/a', 'darwin'), isProgram: (file) => file === wrapper, read: () => wrapperScript(macExe) });
+    assert.deepEqual(look, { found: 'this' });
+    // main.ts reads the variable through it wherever it compares a wrapper's data directory.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.equal(main.includes("process.env['JASON_DATA_DIR'] || null"), false);
+    assert.equal(main.split('namedDataDirectory(process.env, home, process.platform)').length - 1, 2);
 });
