@@ -684,9 +684,11 @@ public sealed class UninstallCarriedTests : IDisposable
         Directory.CreateSymbolicLink(linked, real);
         var image = Path.Combine(linked, "Jason.app", "Contents", "MacOS", "Jason");
 
-        var start = new System.Diagnostics.ProcessStartInfo(image)
+        // Perl becomes the image, through the link, under the name sleep: a coreutils that is one program for every tool
+        // picks the tool by that name, and the system names the process by its file, Jason.
+        var start = new System.Diagnostics.ProcessStartInfo("/usr/bin/perl")
         {
-            ArgumentList = { "120" },
+            ArgumentList = { "-e", "exec { $ARGV[0] } 'sleep', '120' or die", image },
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
