@@ -85,15 +85,17 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// application itself, which this uninstall takes off too; null for any other installation.
 /// </param>
 /// <param name="ExtractedLibraryBases">
-/// The temporary folders of this account looked under for what builds of this program unpacked, this build's own first:
-/// on Windows, the account's Temp folder where this build's is a session's numbered folder in it, and that folder's other
-/// numbered folders, each where builds unpacked under it. Null where none but this build's own was looked under: elsewhere
-/// than Windows, where the host was told to unpack somewhere else, or where this build's directory is not known.
+/// The temporary folders looked under for what builds of this program unpacked, on Windows where the host unpacks into
+/// its own default base: this build's own temporary folder first, always, then the folder it is numbered inside where it
+/// is a numbered folder, and the numbered folders of that folder, or of its own where it is none, each where builds
+/// unpacked under it. Holding this build's own alone where no other was found. Null where the look was not widened at
+/// all: elsewhere than Windows, where the host was told to unpack somewhere else, or where this build's directory is not
+/// known or not shaped as the host unpacks.
 /// </param>
 /// <param name="ExtractedLibrariesElsewhere">
 /// What builds of this program unpacked under the bases in <paramref name="ExtractedLibraryBases"/> other than this
-/// build's own, one directory each: named and left, never removed, since it was unpacked from another session of this
-/// account and may be in use there. Null where <paramref name="ExtractedLibraryBases"/> is.
+/// build's own, one directory each: named and left, never removed, since this removal takes only what stands under its
+/// own temporary folder and a copy may be in use from there. Null where <paramref name="ExtractedLibraryBases"/> is.
 /// </param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,

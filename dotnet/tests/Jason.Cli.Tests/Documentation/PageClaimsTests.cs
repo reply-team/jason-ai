@@ -64,8 +64,9 @@ public partial class PageClaimsTests
     {
         var text = Flat(Page(page.Split('/')));
 
-        Assert.Contains("the Temp folder a session's numbered temporary folder is in, and its other numbered folders", text, StringComparison.Ordinal);
-        Assert.Contains("unpacked from another session of this account, it is safe to remove once nothing runs from it", text, StringComparison.Ordinal);
+        Assert.Contains("the folder its own temporary folder is numbered inside, where it is one, and that folder's numbered folders, or its own numbered folders where it is none", text, StringComparison.Ordinal);
+        Assert.Contains("this removal takes only what stands under its own temporary folder, and what it names is safe to remove once nothing runs from it", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("another session of this account", text, StringComparison.Ordinal);
     }
 
     /// <summary>

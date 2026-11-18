@@ -1037,6 +1037,27 @@ public class UninstallExecutableTests
         Assert.Empty(left);
     }
 
+    /// <summary>
+    /// The line that names what stands under another temporary folder says only what the look knows: a build of Jason
+    /// unpacked it there, under that folder; this removal takes only what stands under its own; and it is safe to remove
+    /// once nothing runs from it. Nothing in the folder says which session or account made it, so the line claims neither.
+    /// </summary>
+    [Fact]
+    public void The_line_naming_what_another_temporary_folder_holds_names_that_folder_and_claims_no_maker()
+    {
+        using var dir = new TempPaths();
+        var temp = Path.Combine(dir.Paths.Root, "Temp");
+        var left = UnpackedUnder(temp, "Xq7tzCSumrk");
+
+        var line = UninstallRunner.LeftElsewhere(left);
+
+        Assert.Equal(
+            $"Left '{left}': a build of Jason unpacked it under another temporary folder, '{temp}'. This removal takes only what stands under its own temporary folder; it is safe to remove once nothing runs from it.",
+            line);
+        Assert.DoesNotContain("session", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("this account", line, StringComparison.Ordinal);
+    }
+
     private static string UnpackedUnder(string temporary, string bundle)
     {
         var extracted = Directory.CreateDirectory(Path.Combine(temporary, ".net", "jason", bundle)).FullName;

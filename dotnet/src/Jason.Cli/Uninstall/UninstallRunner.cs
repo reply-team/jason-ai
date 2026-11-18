@@ -662,7 +662,7 @@ public static class UninstallRunner
     /// uninstall leaves: where it is, and why it stays.
     /// </summary>
     internal static string LeftElsewhere(string directory) =>
-        $"Left '{directory}': unpacked from another session of this account, under another of its temporary folders; it is safe to remove once nothing runs from it.";
+        $"Left '{directory}': a build of Jason unpacked it under another temporary folder, '{Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(directory)))}'. This removal takes only what stands under its own temporary folder; it is safe to remove once nothing runs from it.";
 
     /// <summary>
     /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are

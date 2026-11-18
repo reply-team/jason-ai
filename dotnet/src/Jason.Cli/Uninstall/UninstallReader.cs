@@ -291,8 +291,8 @@ public static class UninstallReader
         && (installDirectory is null || !Holds(directory, installDirectory));
 
     /// <summary>
-    /// The temporary folders of this account that builds of this program unpack under, beside the one this build unpacked
-    /// under, and what was unpacked there: named to be left, never removed. On Windows only, and only where the host
+    /// The other temporary folders that builds of this program unpack under, beside the one this build unpacked under, and
+    /// what was unpacked there: named to be left, never removed. On Windows only, and only where the host
     /// unpacks into its own default base; otherwise no base is looked under and the bases are null.
     /// </summary>
     /// <remarks>
@@ -311,8 +311,9 @@ public static class UninstallReader
     /// and the rest are still read.
     /// </para>
     /// <para>
-    /// What is there is named and left, not removed: a session's own folder goes with the session at sign-out by default,
-    /// and what is unpacked from another session may be in use there. Only what is shaped as the host unpacks is named.
+    /// What is there is named and left, not removed: nothing in it says which process unpacked it — another session's, or
+    /// another account's where a temporary folder is shared — and a copy may be in use from there; a session's own folder
+    /// goes with the session at sign-out by default. Only what is shaped as the host unpacks is named.
     /// </para>
     /// </remarks>
     internal static (IReadOnlyList<string>? Bases, IReadOnlyList<string> Left) OtherBases(
