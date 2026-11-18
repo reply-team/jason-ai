@@ -1125,6 +1125,69 @@ print(len(doc["items"]))' "$OUT/over-running-cli-campaigns.json"
     say "after the one line: $after_count campaign(s), as before, and the login registration names $carried"
     ;;
 
+vanishing-place)
+    # An application opened from its disk image sets nothing up: this build's application put in a read-only disk image,
+    # as a download is, and the image mounted; jason install from the application on it, as its first start runs it,
+    # refused with install_vanishing_place; the application opened from the image as a person opens a download, and quit;
+    # the image ejected. Asserted: the refusal by its code, nothing placed, and no jason in a new terminal after the eject.
+    # The listing and the compare after it are the leg's next steps.
+    built="$1"
+    [ -d "$built" ] || fail "no application at $built"
+    [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
+    [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
+    image="$RUNNER_TEMP/jason-vanishing-place.dmg"
+    mount="$RUNNER_TEMP/jason-vanishing-place"
+    [ ! -e "$image" ] && [ ! -e "$mount" ] || fail "$image or $mount is there before the leg makes it"
+    within 300 'hdiutil create' hdiutil create -srcfolder "$built" -volname 'Jason Test' -format UDZO "$image" > "$OUT/vanishing-create.txt" 2>&1 || fail "hdiutil create failed: $(tail -n 3 "$OUT/vanishing-create.txt")"
+    within 120 'hdiutil attach' hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$image" > "$OUT/vanishing-attach.txt" 2>&1 || fail "hdiutil attach failed: $(tail -n 3 "$OUT/vanishing-attach.txt")"
+    mounted="$mount/Jason.app"
+    [ -d "$mounted" ] || fail "no Jason.app on the mounted image at $mount"
+    say "this build's application put in a read-only disk image (UDZO) and mounted at $mount"
+
+    # jason install from the application on the image, as its first start runs it.
+    status=0
+    within 120 'jason install from the disk image' env SHELL=/bin/zsh "$mounted/Contents/Resources/bundle/jason" install > "$OUT/vanishing-install.json" 2> "$OUT/vanishing-install.err" || status=$?
+    cat "$OUT/vanishing-install.json" "$OUT/vanishing-install.err"
+    [ "$status" -ne 0 ] || fail "jason install from the disk image ended 0"
+    code="$(python3 -c 'import json,sys
+code = ""
+for path in sys.argv[1:]:
+    for line in open(path, encoding="utf-8").read().splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                doc = json.loads(line)
+            except ValueError:
+                continue
+            error = doc.get("error") if isinstance(doc, dict) else None
+            if isinstance(error, dict) and error.get("code"):
+                code = error["code"]
+print(code)' "$OUT/vanishing-install.json" "$OUT/vanishing-install.err")" || fail "the refusal could not be read"
+    [ "$code" = install_vanishing_place ] || fail "jason install from the disk image exited $status with the code '$code', not install_vanishing_place"
+    [ -z "$(app)" ] || fail "the refused jason install placed an application at $(app)"
+    [ ! -e "$WRAPPER" ] || fail "the refused jason install placed a terminal command at $WRAPPER"
+    say "jason install from the application on the disk image exited $status, refused with install_vanishing_place, and placed nothing"
+
+    # Opened from the image, as a person opens a download, then quit.
+    "$mounted/Contents/MacOS/Jason" > "$OUT/vanishing-window.log" 2>&1 &
+    window=$!
+    sleep 15
+    kill -0 "$window" 2>/dev/null || fail "Jason Desktop opened from the disk image did not stay running: $(tail -n 20 "$OUT/vanishing-window.log")"
+    end_process "$window" 'Jason Desktop opened from the disk image'
+    pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true
+    sleep 3
+    [ -z "$(app)" ] || fail "opening the application from its disk image placed an application at $(app)"
+    [ ! -e "$WRAPPER" ] || fail "opening the application from its disk image placed a terminal command at $WRAPPER: $(cat "$WRAPPER")"
+    say "Jason Desktop opened from the disk image and quit, and set nothing up: no application placed, no terminal command"
+
+    # Ejected, as a person ejects a download's image.
+    within 120 'hdiutil detach' hdiutil detach "$mount" > "$OUT/vanishing-detach.txt" 2>&1 || fail "the disk image could not be ejected: $(tail -n 3 "$OUT/vanishing-detach.txt")"
+    rm -f "$image"
+    found="$(within 60 'a new login shell looking for jason' fresh 'command -v jason || echo none')" || true
+    [ "$found" = none ] || fail "after the disk image was ejected a new login shell finds jason at '$found'"
+    say "the disk image ejected, and a new zsh login shell finds no jason"
+    ;;
+
 previous-removal)
     # The previous release's own removal of its logon registration, said in launchd's records: its command-line Jason
     # installed by its own script, its logon registration, and its own jason uninstall. Facts for the release before this
@@ -1219,7 +1282,7 @@ intel)
     ;;
 
 *)
-    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|assess|quarantine|intel ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|over-running-cli|vanishing-place|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac

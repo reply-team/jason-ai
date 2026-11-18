@@ -2670,6 +2670,23 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-over-running-cli-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # Opened from its disk image: this build's application in a read-only image, its jason install refused with
+      # install_vanishing_place, the application opened from the image and quit, the image ejected; nothing set up, and the
+      # listing held to the machine before.
+      - name: Open this build from its disk image, then eject it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          LEG: "Open this build from its disk image, then eject it"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh vanishing-place desktop/dist/mac-arm64/Jason.app
+          bash .github/scripts/test-installation-macos.sh listing after-vanishing-place
+          bash .github/scripts/test-installation-macos.sh compare after-vanishing-place before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
       # The previous release's own uninstall, for what it leaves in launchd's records: said, and its listing kept.
       - name: Say what the previous release's own uninstall leaves in launchd
         if: ${{ !cancelled() }}
