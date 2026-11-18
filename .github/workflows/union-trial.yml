@@ -40,7 +40,7 @@ jobs:
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
     # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 100
+    timeout-minutes: 120
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -73,6 +73,16 @@ jobs:
           version: ${{ env.VERSION }}
           artifact: ci-union-win-x64
           retention-days: 3
+
+      # The id of the folder this build's jason extracts its native libraries to under %TEMP%\.net\jason, read with the host's
+      # base pointed elsewhere, so that the compares tell this build's extraction folder from the previous release's.
+      - name: Read the folder this build's jason extracts its native libraries to
+        id: extracted
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Extracted -Out $env:OUT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
 
       - uses: actions/setup-node@v5
         with:
@@ -160,6 +170,14 @@ jobs:
           "script=$script" >> $env:GITHUB_OUTPUT
           "signer=$standIn" >> $env:GITHUB_OUTPUT
           exit 0
+
+      # The account's Path as an ordinary account has it: ExpandString, with an entry spelled through a variable. Every
+      # install after it holds both by name: the kind after is the kind before, and the entry is still unexpanded.
+      - name: Give the account's Path the shape an ordinary account has, ExpandString with an entry spelled through a variable
+        id: path-shape
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step PathShape -Out $env:OUT
 
       # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
       # Jason ships. Then the listing everything after is compared with, and every leg starts from.
@@ -318,6 +336,27 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
+      # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
+      # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
+      # status; then its own uninstall, and the listing held to the machine before. The leg above keeps 0.49's own
+      # --purge-data uninstall of a moved machine.
+      - name: Move again from the previous release, then go back to it as the update page says
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Move again from the previous release, then go back to it as the update page says"
+          JASON_Update__CheckEnabled: 'false'
+          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       # The next version, packaged and built as a test build the same way at this version and one: its own jason, its
       # setup, its update feed and a manifest naming it, in a folder of its own that the update below reads.
       - name: Package jason at the next version
@@ -343,6 +382,7 @@ jobs:
           JASON_DESKTOP_TEST_BUILD: '1'
         run: |
           ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version $env:NEXT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+          ../.github/scripts/Test-InstallationWindows.ps1 -Step Extracted -Out $env:OUT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
           $next = Join-Path $env:GITHUB_WORKSPACE 'next'
           New-Item -ItemType Directory -Force -Path $next | Out-Null
           Copy-Item ../artifacts/release/jason-win-x64.zip, ../artifacts/release/jason-win-x64.zip.sha256, ../artifacts/release/jason-win-x64.fragment.json $next
@@ -378,7 +418,7 @@ jobs:
         env:
           LEG: "Read the module path Windows PowerShell rebuilds from an empty one"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Reading
           if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
           ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
