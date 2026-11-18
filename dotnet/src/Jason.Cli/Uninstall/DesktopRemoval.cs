@@ -910,7 +910,7 @@ public static partial class DesktopRemoval
                 window,
                 $"The application at {application} was not deleted",
                 image,
-                $"move {application} to the Bin (the Trash) in the Finder");
+                $"move {application} to the Trash in the Finder");
     }
 
     /// <summary>The application itself, the last act: kept, handed to its uninstaller, or deleted.</summary>
@@ -972,7 +972,7 @@ public static partial class DesktopRemoval
                     // macOS may refuse a terminal the right to delete an application (Privacy & Security, App Management), and
                     // a delete refused part-way leaves part of the bundle. Never passed over: the verb ends 1 on it.
                     var left = Directory.Exists(application) ? $"{application} is still there, and may be only part of the application now" : $"{application} is gone";
-                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Bin (the Trash) in the Finder to remove it.");
+                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Trash in the Finder to remove it.");
                 }
 
                 return;

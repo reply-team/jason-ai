@@ -159,7 +159,7 @@ public static class UninstallCommand
             the folder itself next. --keep-application with --purge-data is refused (uninstall_refused).
             macOS: the bundle is deleted only where its Contents/Info.plist names ai.jasonharness.desktop. If
             macOS refuses the delete, the report says what is left and the verb exits 1: move the bundle it
-            names, wherever it is, to the Bin.
+            names, wherever it is, to the Trash.
         Elsewhere (Linux), and where no system's places are known, the jason the application carries refuses
         (uninstall_carried_by_desktop) before anything is read or removed, and the message names the way the
         system removes the application.

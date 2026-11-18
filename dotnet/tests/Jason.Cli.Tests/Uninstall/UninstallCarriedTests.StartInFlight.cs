@@ -258,7 +258,7 @@ public sealed partial class UninstallCarriedTests
         {
             var application = ApplicationOf(executable);
             Assert.StartsWith($"The application at {application} was not deleted", problem, StringComparison.Ordinal);
-            Assert.EndsWith($"then move {application} to the Bin (the Trash) in the Finder.", problem, StringComparison.Ordinal);
+            Assert.EndsWith($"then move {application} to the Trash in the Finder.", problem, StringComparison.Ordinal);
             Assert.True(Directory.Exists(application));
         }
     }

@@ -584,7 +584,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var problem = Assert.Single(problems);
         Assert.Contains($"{application} is still there", problem, StringComparison.Ordinal);
         // The bundle where it is, which need not be /Applications: the test's own folder here.
-        Assert.Contains($"Move {application} to the Bin (the Trash) in the Finder", problem, StringComparison.Ordinal);
+        Assert.Contains($"Move {application} to the Trash in the Finder", problem, StringComparison.Ordinal);
         Assert.DoesNotContain("from Applications", problem, StringComparison.Ordinal);
     }
 
