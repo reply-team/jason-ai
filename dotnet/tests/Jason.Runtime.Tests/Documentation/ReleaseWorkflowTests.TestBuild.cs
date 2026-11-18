@@ -23,6 +23,7 @@ public partial class ReleaseWorkflowTests
     /// do, each in the one step that builds the desktop; the configuration reads it only in its default export.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "a test build switch named by a release step, which a unit's run into the release branch and the tag's run test only through the tier, would package a test build as the release")]
     public void The_test_build_switch_is_named_by_ci_s_proof_jobs_alone_and_never_by_a_release()
     {
         Assert.DoesNotContain(TestBuildSwitch, Read(Release), StringComparison.Ordinal);
@@ -67,6 +68,7 @@ public partial class ReleaseWorkflowTests
     /// and what they upload is named outside <c>jason-*</c>, which the release's download takes.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "a test build CI's proof keeps under a name the release's download takes would be published with the release")]
     public void Ci_s_proof_jobs_hold_no_secret_and_upload_nothing_a_release_takes()
     {
         var ci = Read(Ci);
@@ -109,6 +111,7 @@ public partial class ReleaseWorkflowTests
     /// makes anything. Neither the release nor the action ever makes a copy, a certificate or a trust.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "a copy of an install script that changes more than its signer line would let CI's proof pass on a script no release publishes")]
     public void Ci_runs_a_copy_of_each_install_script_changed_in_the_signer_line_alone_after_the_released_one_refused()
     {
         var ci = Read(Ci);
@@ -148,6 +151,7 @@ public partial class ReleaseWorkflowTests
     /// <c>codesign -R</c> it runs tests.
     /// </summary>
     [Fact]
+    [Critical(Family.B7, "an install script whose signer something it reads can change would install whatever that names as the release")]
     public void Each_install_script_names_one_signer_that_nothing_it_reads_can_change()
     {
         var ps1 = Read(Ps1Script).ReplaceLineEndings("\n").Split('\n');

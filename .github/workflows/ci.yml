@@ -2124,20 +2124,21 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-pinned-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
-      # to until that is published, read from where the public releases' latest redirects, and its files from its public
-      # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
+      # The previous release, named: v0.48.5, a release of the line before 0.49, whose install puts a command-line Jason of
+      # its own where every leg that starts from a previous release expects one. Never the latest published release: once
+      # 0.49.0 is published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its
+      # files come from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: pwsh
+        env:
+          PREVIOUS_RELEASE: v0.48.5
         run: |
           $release = "v$($env:VERSION -replace '-.*$', '')"
-          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing -TimeoutSec 60).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
-          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
-          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
-          if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
+          $tag = $env:PREVIOUS_RELEASE
+          if ($tag -ceq $release) { throw "the previous release named, $tag, is the one this tree builds: there is no previous release to update from here" }
           New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
           # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
           # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
@@ -2629,16 +2630,21 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-by-hand-uninstall before
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The previous release, named: v0.48.5, a release of the line before 0.49, whose install puts a command-line Jason of
+      # its own where every leg that starts from a previous release expects one. Never the latest published release: once
+      # 0.49.0 is published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its
+      # files come from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
+        env:
+          PREVIOUS_RELEASE: v0.48.5
         run: |
           release="v${VERSION%%-*}"
-          tag="$(curl -sS --max-time 60 -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
-          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
-          [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
+          tag="$PREVIOUS_RELEASE"
+          [ "$tag" != "$release" ] || { echo "::error::the previous release named, $tag, is the one this tree builds: there is no previous release to update from here"; exit 1; }
           mkdir -p "$PREVIOUS"
           # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
           # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
@@ -2853,7 +2859,7 @@ jobs:
           {
             echo '### What this job does not prove'
             echo "- The release's signature and Gatekeeper: the application here is signed ad hoc, and install.sh is run as a copy naming that signature. The release's proof job runs the released script on the signed, notarized packages, with a quarantined variant."
-            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job updates a signed build to a signed next one."
+            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job makes no next build either, so a signed build updating to a signed next one is proven by no job."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- The previous release's own Desktop updater reaching this version: it reads only the published releases."
             echo "- The old application's own updater replacing its bundle: its download, its signature check and its swap. The two legs that replace the previous release's bundle make the swap themselves, by ditto and a rename."

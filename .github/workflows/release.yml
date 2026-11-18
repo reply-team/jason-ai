@@ -821,6 +821,9 @@ jobs:
   # its public downloads. What they keep is named outside jason-*, which the release job's download takes, and the
   # release job needs all three. The scripts are .github/scripts/Test-InstallationWindows.ps1 and
   # test-installation-macos.sh, the ones ci.yml's jobs run.
+  # They take the shape of those jobs step for step, with the differences ReleaseWorkflowTests names: the same framing
+  # and every leg between a begin and an end, so a leg's failure stops no leg after it and the held step fails the job
+  # with the list.
   #
   # THE UPDATER, END TO END, is a named place in both platform jobs, for the unit that has jason update apply hand an
   # update to Jason Desktop: a next build at this version and one, signed as this one is, served on the loopback feed and
@@ -841,6 +844,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # One temporary folder for the whole job: the one a new shell of this account has, where a terminal the legs open,
+      # and every program it starts, unpacks and renames aside. A step otherwise reads the runner's own TEMP, which can be
+      # another (a per-session folder), and its listings would look where no leg's program wrote. Every listing fails
+      # where its step's and a new shell's differ.
+      - name: Give the job's steps the temporary folder a new shell of this account has
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step OneTemporary -Out $env:OUT
+
       # The archive, the desktop's installer, its block map and update feed, and the skills' package, as the win-x64 job
       # and the skills' job uploaded them, with the manifest and the checksums written over them for win-x64 alone.
       - uses: actions/download-artifact@v7
@@ -858,13 +870,10 @@ jobs:
           name: jason-skills
           path: feed
 
-      - name: Assemble the feed the way a release is assembled
-        shell: pwsh
-        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid win-x64 -Version $env:VERSION -Directory $env:FEED
-
       # The id of the folder this release's jason extracts its native libraries to under %TEMP%\.net\jason, read from the
       # archive with the host's base pointed elsewhere, so that the compares tell it from the previous release's.
       - name: Read the folder this release's jason extracts its native libraries to
+        timeout-minutes: 20
         shell: pwsh
         run: |
           $unpacked = Join-Path $env:RUNNER_TEMP 'extract-probe-archive'
@@ -873,96 +882,178 @@ jobs:
           if ($executable.Count -ne 1) { throw "jason-win-x64.zip holds $($executable.Count) jason.exe, not one" }
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Extracted -Out $env:OUT -Executable $executable[0].FullName
 
+      - name: Assemble the feed the way a release is assembled
+        id: feed
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid win-x64 -Version $env:VERSION -Directory $env:FEED
+
+      # The account's Path as an ordinary account has it: ExpandString, with an entry spelled through a variable. Every
+      # install after it holds both by name: the kind after is the kind before, and the entry is still unexpanded.
+      - name: Give the account's Path the shape an ordinary account has, ExpandString with an entry spelled through a variable
+        id: path-shape
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step PathShape -Out $env:OUT
+
+      # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
+      # Jason ships. Then the listing everything after is compared with, and every leg starts from.
       - name: The machine before anything is installed
+        id: before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.claude'), (Join-Path $env:USERPROFILE '.codex'), (Join-Path $env:USERPROFILE '.agents\skills\quick-start') | Out-Null
           [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.agents\skills\quick-start\SKILL.md'), "a person's own skill`n")
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name before
 
+      # From here on no leg's failure stops the legs after it: each runs unless the job was cancelled, begins from the
+      # machine before (one an earlier failed leg left is taken off by the product's own uninstalls, and said so) or says
+      # it was not run and which step it needed, and the job fails at its end, in the last step, with the list.
       # install.ps1 as this release publishes it, unchanged: it holds the setup to the release's signer.
       - name: Install as an agent does, with the released install.ps1
+        id: install
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
         env:
-          JASON_Update__CheckEnabled: 'false'
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script (Join-Path $env:GITHUB_WORKSPACE 'install\install.ps1')
-
-      - name: Uninstall from a new terminal
-        shell: pwsh
-        env:
+          LEG: "Install as an agent does, with the released install.ps1"
           JASON_Update__CheckEnabled: 'false'
         run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script (Join-Path $env:GITHUB_WORKSPACE 'install\install.ps1')
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
+      - name: Uninstall from a new terminal
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          LEG: "Uninstall from a new terminal"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Needs 'Install as an agent does, with the released install.ps1=${{ steps.install.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
           ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # The previous release: the latest published one, read from where the public releases' latest lands, and its files
-      # from its public downloads, each checked against its checksums.txt. A fix to an older line, published while a newer
-      # release is the latest, has no previous release to update from: the legs that need one say so and are skipped.
+      # The previous release, named: v0.48.5, a release of the line before 0.49, whose install puts a command-line Jason of
+      # its own where every leg that starts from a previous release expects one. Never the latest published release: once
+      # 0.49.0 is published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its
+      # files come from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
+        env:
+          PREVIOUS_RELEASE: v0.48.5
         run: |
-          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
-          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
-          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
-          if ([semver]$tag.Substring(1) -ge [semver]$env:VERSION) {
-            Write-Host "::notice title=Previous release::The latest published release is $tag, not older than $env:VERSION: the legs that update from a previous release are skipped."
-            exit 0
-          }
+          $release = "v$($env:VERSION -replace '-.*$', '')"
+          $tag = $env:PREVIOUS_RELEASE
+          if ($tag -ceq $release) { throw "the previous release named, $tag, is the one this tree builds: there is no previous release to update from here" }
           New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
-          foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
-            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          $verified = @('jason-win-x64.zip', 'jason-desktop-windows-x64-setup.exe')
+          $unverifiable = @('install.ps1', 'manifest.json')
+          foreach ($name in @('checksums.txt') + $verified + $unverifiable) {
+            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing -TimeoutSec 600
           }
+          $listed = @{}
           foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
             $hash, $name = $line -split '  ', 2
-            $file = Join-Path $env:PREVIOUS $name
-            if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
+            if ($name) { $listed[$name] = $hash }
+          }
+          foreach ($name in $verified) {
+            if (-not $listed.ContainsKey($name)) { throw "$name has no line in $tag's checksums.txt" }
+            if ((Get-FileHash -LiteralPath (Join-Path $env:PREVIOUS $name) -Algorithm SHA256).Hash -ne $listed[$name]) { throw "$name does not match $tag's checksums.txt" }
+            Write-Host "$name matches $tag's checksums.txt"
+          }
+          foreach ($name in $unverifiable) {
+            if ($listed.ContainsKey($name)) { throw "$name is now listed in $tag's checksums.txt: it belongs with the verified files" }
+            $said = "$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            Write-Host $said
+            "- $said" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
           Write-Host "the previous release is $tag"
           "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
-          "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Install this release over the previous release's Jason Desktop, as its updater runs an installer
-        if: steps.previous.outputs.tag != ''
+        id: over-previous
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
         env:
-          JASON_Update__CheckEnabled: 'false'
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-
-      - name: Uninstall from Installed apps
-        if: steps.previous.outputs.tag != ''
-        shell: pwsh
-        env:
+          LEG: "Install this release over the previous release's Jason Desktop, as its updater runs an installer"
           JASON_Update__CheckEnabled: 'false'
         run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
+      - name: Uninstall from Installed apps
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          LEG: "Uninstall from Installed apps"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Needs 'Install this release over the previous release''s Jason Desktop, as its updater runs an installer=${{ steps.over-previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
           ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
       # The path every command-line user takes, on the release's signed packages: the move asserted in full, and a
       # released start that says nothing of a test build.
       - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
-        if: steps.previous.outputs.tag != ''
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
         shell: pwsh
         env:
+          LEG: "Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop"
           JASON_Update__CheckEnabled: 'false'
           JASON_PROOF_BUILD: release
         run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
           ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
           ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
       - name: Read the module path Windows PowerShell rebuilds from an empty one
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
+        env:
+          LEG: "Read the module path Windows PowerShell rebuilds from an empty one"
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Reading
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that
+      # failed or was not run is recorded by its name. All of it is read here, last, and fails the job with the list.
       - name: The machine after every uninstall is the machine before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: pwsh
         run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
 
       - name: Say what this job does not prove
+        timeout-minutes: 20
         if: always()
         shell: pwsh
         run: |
@@ -974,6 +1065,7 @@ jobs:
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Keep the listings
+        timeout-minutes: 20
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -1013,13 +1105,10 @@ jobs:
           name: jason-skills
           path: feed
 
-      - name: Assemble the feed the way a release is assembled
-        shell: pwsh
-        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid osx-arm64 -Version $env:VERSION -Directory $env:FEED
-
       # The id of the folder this release's jason extracts its native libraries to under ~/.net/jason, read from the archive
       # with the host's base pointed elsewhere, so that the compares tell it from the previous release's.
       - name: Read the folder this release's jason extracts its native libraries to
+        timeout-minutes: 20
         shell: bash
         run: |
           unpacked="$RUNNER_TEMP/extract-probe-archive"
@@ -1029,79 +1118,142 @@ jobs:
           [ "$(printf '%s\n' "$executable" | grep -c .)" = 1 ] || { echo "::error::jason-osx-arm64.tar.gz holds no single jason: $executable"; exit 1; }
           bash .github/scripts/test-installation-macos.sh extracted "$executable"
 
+      - name: Assemble the feed the way a release is assembled
+        id: feed
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid osx-arm64 -Version $env:VERSION -Directory $env:FEED
+
       - name: The machine before anything is installed
+        id: before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
         run: |
           mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills/quick-start"
           printf "a person's own skill" > "$HOME/.agents/skills/quick-start/SKILL.md"
           bash .github/scripts/test-installation-macos.sh listing before
 
+      # From here on no leg's failure stops the legs after it: each runs unless the job was cancelled, begins from the
+      # machine before (one an earlier failed leg left is taken off by the product's own uninstalls, and said so) or says
+      # it was not run and which step it needed, and the job fails at its end, in the last step, with the list.
       # install.sh as this release publishes it, unchanged: it holds the application to the release's requirement. Then
       # Gatekeeper's own assessment of the application where it was put.
       - name: Install as an agent does, with the released install.sh, and assess it where it was put
+        id: install
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
+        env:
+          LEG: "Install as an agent does, with the released install.sh, and assess it where it was put"
         run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "$GITHUB_WORKSPACE/install/install.sh"
           bash .github/scripts/test-installation-macos.sh assess
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       - name: Uninstall from a new terminal, refused first while the application runs
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
+        env:
+          LEG: "Uninstall from a new terminal, refused first while the application runs"
         run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" "Install as an agent does, with the released install.sh, and assess it where it was put=${{ steps.install.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh refuse-while-open
           bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-terminal-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-terminal-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # The application's archive as a browser leaves what it downloads, quarantined, installed by the same script, assessed
       # and started; then the uninstall the application's Uninstall Jason item starts.
       - name: Install from a quarantined download, and uninstall from the application's Uninstall Jason item
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
+        env:
+          LEG: "Install from a quarantined download, and uninstall from the application's Uninstall Jason item"
         run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh quarantine "$FEED" "$RUNNER_TEMP/feed-quarantined"
           bash .github/scripts/test-installation-macos.sh install "$RUNNER_TEMP/feed-quarantined" "$VERSION" "$GITHUB_WORKSPACE/install/install.sh"
           bash .github/scripts/test-installation-macos.sh assess
           bash .github/scripts/test-installation-macos.sh uninstall-menu
           bash .github/scripts/test-installation-macos.sh listing after-menu-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The previous release, named: v0.48.5, a release of the line before 0.49, whose install puts a command-line Jason of
+      # its own where every leg that starts from a previous release expects one. Never the latest published release: once
+      # 0.49.0 is published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its
+      # files come from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
-        shell: bash
-        run: |
-          tag="$(curl -sS -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
-          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
-          newest="$(printf '%s\n%s\n' "${tag#v}" "${VERSION%%-*}" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
-          if [ "${tag#v}" = "${VERSION%%-*}" ] || [ "$newest" = "${tag#v}" ]; then
-            echo "::notice title=Previous release::The latest published release is $tag, not older than $VERSION: the legs that update from a previous release are skipped."
-            exit 0
-          fi
-          mkdir -p "$PREVIOUS"
-          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json; do
-            curl -fsSL -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
-          done
-          (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
-          echo "the previous release is $tag"
-          echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      # The path every command-line user takes, on the release's signed packages: the move asserted in full, and a
-      # released start that says nothing of a test build.
-      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
-        if: steps.previous.outputs.tag != ''
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
         env:
+          PREVIOUS_RELEASE: v0.48.5
+        run: |
+          release="v${VERSION%%-*}"
+          tag="$PREVIOUS_RELEASE"
+          [ "$tag" != "$release" ] || { echo "::error::the previous release named, $tag, is the one this tree builds: there is no previous release to update from here"; exit 1; }
+          mkdir -p "$PREVIOUS"
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          verified="jason-osx-arm64.tar.gz jason-desktop-macos-arm64.zip"
+          unverifiable="install.sh manifest.json"
+          for name in checksums.txt $verified $unverifiable; do
+            curl -fsSL --max-time 600 -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          listed() { awk -v n="$1" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$PREVIOUS/checksums.txt"; }
+          for name in $verified; do
+            line="$(listed "$name")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$PREVIOUS" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$name matches $tag's checksums.txt"
+          done
+          for name in $unverifiable; do
+            [ -z "$(listed "$name")" ] || { echo "::error::$name is now listed in $tag's checksums.txt: it belongs with the verified files"; exit 1; }
+            said="$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            echo "$said"
+            echo "- $said" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "the previous release is $tag"
+          echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      # The path every command-line user takes, on the release's signed packages: the move asserted in full, and a
+      # released start that says nothing of a test build. Its begin names the previous release among what it needs, so the
+      # held step excuses what that release's own install leaves, the launchd record and the profiles, only as this leg's.
+      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop"
           JASON_PROOF_BUILD: release
         run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       - name: The machine after every uninstall is the machine before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
         run: bash .github/scripts/test-installation-macos.sh held
 
       - name: Say what this job does not prove
+        timeout-minutes: 20
         if: always()
         shell: bash
         run: |
@@ -1114,6 +1266,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the listings
+        timeout-minutes: 20
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -1123,7 +1276,7 @@ jobs:
 
   # The x64 application on an Intel Mac: put in place by the plain steps a person takes with the archive, since install.sh
   # refuses an Intel Mac, then its signature, Gatekeeper's assessment, its jason and runtime, its window and its
-  # uninstall, compared with the machine before. Nothing here announces Intel Macs.
+  # uninstall, compared with the machine before. Nothing here announces Intel Macs. One leg, framed as every leg is.
   proof-macos-intel:
     name: The proof on an Intel Mac
     needs: [version, macos]
@@ -1137,7 +1290,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v7
+      - name: Download the x64 application
+        uses: actions/download-artifact@v7
+        id: download
         with:
           name: jason-desktop-osx-x64
           path: feed
@@ -1145,6 +1300,7 @@ jobs:
       # The id of the folder the x64 application's jason extracts its native libraries to under ~/.net/jason, read with the
       # host's base pointed elsewhere, so that the compare tells it from another build's.
       - name: Read the folder the x64 application's jason extracts its native libraries to
+        timeout-minutes: 20
         shell: bash
         run: |
           unpacked="$RUNNER_TEMP/extract-probe-archive"
@@ -1153,18 +1309,34 @@ jobs:
           bash .github/scripts/test-installation-macos.sh extracted "$unpacked/Jason.app/Contents/Resources/bundle/jason"
 
       - name: The machine before anything is installed
+        id: before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
         run: bash .github/scripts/test-installation-macos.sh listing before
 
       - name: Put the x64 application in place, run it and uninstall it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         shell: bash
+        env:
+          LEG: "Put the x64 application in place, run it and uninstall it"
         run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Download the x64 application=${{ steps.download.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-installation-macos.sh intel "$GITHUB_WORKSPACE/feed/jason-desktop-macos-x64.zip" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-intel-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-intel-uninstall before
-          bash .github/scripts/test-installation-macos.sh held
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      - name: The machine after every uninstall is the machine before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh held
 
       - name: Keep the listings
+        timeout-minutes: 20
         if: always()
         uses: actions/upload-artifact@v7
         with:
