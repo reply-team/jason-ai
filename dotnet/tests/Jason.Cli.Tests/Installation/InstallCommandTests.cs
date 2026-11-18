@@ -77,6 +77,45 @@ public sealed class InstallCommandTests : IDisposable
     }
 
     /// <summary>
+    /// An elevated <c>jason install</c> - run as an administrator or as another account than the session's on Windows, as
+    /// root on macOS - would write the terminal command, the skills and a logon registration as that account, into a
+    /// profile the person's own jason cannot change: it refuses with install_elevated before anything is read, its own
+    /// version.json included, and before the update's lock is looked at, which another jason holds here.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_elevated_setup_is_refused_before_anything_is_read(bool windows)
+    {
+        var executable = Path.Combine(_tree.Paths.Root, "loose", windows ? "jason.exe" : "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "jason");
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        var places = windows ? WindowsPlaces(@"Software\Jason.Tests\never-opened") : MacPlaces();
+        var (env, output) = Environment(places with { Elevated = true }, executable);
+
+        using (Jason.Cli.Update.UpdateLock.Take(update, "a test's update"))
+        {
+            var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            var refusal = RuntimeVerbs.Envelope(output.ToString());
+            Assert.Equal(CliErrors.InstallElevated, refusal.Code);
+            Assert.False(refusal.Retryable);
+            Assert.Contains(
+                windows
+                    ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
+                    : "This jason runs as root",
+                refusal.Message,
+                StringComparison.Ordinal);
+            Assert.Contains("so nothing was read or written", refusal.Message, StringComparison.Ordinal);
+            Assert.Contains(windows ? "not run as an administrator" : "without sudo", refusal.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
+        }
+    }
+
+    /// <summary>
     /// One at a time with an update: while another jason holds the update's lock - an update whose finish sets the machine up
     /// itself, or the installer's own run beside it - the setup refuses with update_in_progress and sets nothing up; once the
     /// lock is let go it runs, and takes the lock while it does.
@@ -1294,7 +1333,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }

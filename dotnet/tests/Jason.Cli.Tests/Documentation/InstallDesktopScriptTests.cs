@@ -51,6 +51,18 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
     private const string ShortCircuited = "    function Assert-Signed([string] $file) { return";
 
+    /// <summary>
+    /// The line the published script's elevation check opens with. A test build answers it as a row says, not elevated by
+    /// default, so no row depends on how the shell that runs the tests was started; a published run reads the real token.
+    /// </summary>
+    private const string ElevationCheck = "    function Test-Elevated {";
+
+    /// <summary>What install.ps1 says in an elevated PowerShell, before it reads the feed.</summary>
+    private const string ElevatedRefusal =
+        "This PowerShell runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session, "
+        + "and Jason Desktop, jason in the terminal and the skills would be set up the same way or in another account's profile, so nothing was downloaded or installed: "
+        + "run the install line again from an ordinary PowerShell of the account signed in here, not run as an administrator.";
+
     /// <summary>The verification install.sh asks of codesign, as the stand-in logs it with the application's path left out.</summary>
     private const string VerifyCall = "codesign --verify --deep --strict -R=" + Requirement;
 
@@ -378,6 +390,35 @@ public sealed class InstallDesktopScriptTests : IDisposable
         AssertSaid(said, run.Stderr);
         Assert.DoesNotContain("manifest.json", run.Stderr, StringComparison.Ordinal);
         Assert.Empty(windows.Calls());
+    }
+
+    /// <summary>
+    /// An elevated PowerShell - an administrator's, with User Account Control on, or another account's than the session's -
+    /// would run the setup, `jason install` and the runtime the same way, or into another account's profile: the script
+    /// stops before it reads the feed, under both shells. The published script reads the token's kind and the session's
+    /// account, as <c>jason install</c> and an update do, and refuses before the feed.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Windows_an_elevated_powershell_is_refused_before_anything_is_downloaded(bool windowsPowerShell)
+    {
+        var windows = Windows.Start(_tree);
+
+        var run = windows.Run(_tree.NewDirectory("empty-feed"), windowsPowerShell: windowsPowerShell, elevated: true);
+
+        Assert.Equal(1, run.Exit);
+        AssertSaid(ElevatedRefusal, run.Stderr);
+        Assert.DoesNotContain("manifest.json", run.Stderr, StringComparison.Ordinal);
+        Assert.Empty(windows.Calls());
+        Assert.False(Directory.Exists(windows.App));
+
+        var code = Script("install.ps1");
+        Assert.DoesNotContain(ElevationCheck + " return", code, StringComparison.Ordinal);
+        Assert.Contains("GetTokenInformation", code, StringComparison.Ordinal);
+        Assert.Contains("WTSQuerySessionInformation", code, StringComparison.Ordinal);
+        var refused = code.IndexOf("    if (Test-Elevated) {", StringComparison.Ordinal);
+        Assert.True(refused > 0 && refused < code.IndexOf("# --- the feed ---", StringComparison.Ordinal), "install.ps1 does not refuse an elevated PowerShell before the feed.");
     }
 
     [Fact]
@@ -962,15 +1003,19 @@ public sealed class InstallDesktopScriptTests : IDisposable
         /// <summary>The calls the stand-ins were given, in order: <c>setup &lt;arguments&gt;</c>, else <c>&lt;arguments&gt;|&lt;data directory&gt;</c>.</summary>
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];
 
-        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, string signatureCheck = ShortCircuited, params string[] arguments)
+        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, string signatureCheck = ShortCircuited, bool elevated = false, params string[] arguments)
         {
             var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
             if (!published)
             {
                 var text = File.ReadAllText(script);
                 Assert.Equal(1, Count(text.ReplaceLineEndings("\n"), SignatureCheck + "\n"));
+                Assert.Equal(1, Count(text.ReplaceLineEndings("\n"), ElevationCheck + "\n"));
                 script = Path.Combine(_tree.NewDirectory("test-build"), "install.ps1");
-                File.WriteAllText(script, text.Replace(SignatureCheck, signatureCheck, StringComparison.Ordinal));
+                File.WriteAllText(
+                    script,
+                    text.Replace(SignatureCheck, signatureCheck, StringComparison.Ordinal)
+                        .Replace(ElevationCheck, ElevationCheck + (elevated ? " return $true" : " return $false"), StringComparison.Ordinal));
             }
 
             var environment = new Dictionary<string, string>(Variables)

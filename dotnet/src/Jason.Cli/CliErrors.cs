@@ -69,6 +69,13 @@ public static class CliErrors
     /// </summary>
     public const string InstallInProgress = "install_in_progress";
 
+    /// <summary>
+    /// <c>jason install</c> run elevated - on Windows as an administrator above the account's ordinary rights, or as another
+    /// account than the session's; on macOS as root - which would set the terminal command, the skills and a logon
+    /// registration up as that account: nothing was read or written.
+    /// </summary>
+    public const string InstallElevated = "install_elevated";
+
     /// <summary><c>jason install</c> on a system it does not set up — anything but macOS and Windows: nothing was read or written.</summary>
     public const string InstallUnsupported = "install_unsupported";
 
