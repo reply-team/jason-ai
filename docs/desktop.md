@@ -29,7 +29,9 @@ your terminal and your agents use. It is installed once, updated once and remove
 ([INSTALL.md](INSTALL.md) §2), and so does the package for your system below, installed by hand: the application's first
 start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each
 where it is found, and its [Command Line item](#the-command-line-and-the-login-items) says what that placed. On Linux
-the deb and the AppImage are separate downloads beside the command line.
+the deb and the AppImage are separate downloads beside the command line. A command-line install of an earlier version on
+macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application, or takes
+one of 0.49.0 or later that is already there, and moves the command line into it ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop"); on Linux there is no move.
 
 | System | File | Notes |
 | --- | --- | --- |

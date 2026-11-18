@@ -105,4 +105,22 @@ public partial class InteractiveSkillTests
         var carried = Regex.Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "CarriedUpdate.cs")), @"""\s*\+\s*""", string.Empty);
         Assert.Contains("The likely cause is a Jason Desktop that is running, one of another data directory included", carried, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The operating skill says how a command-line install moves into Jason Desktop on its update, in the states the move
+    /// reports and the code a rollback refuses with after it; the troubleshooting skill names the <c>move</c> check and says
+    /// it never stops work.
+    /// </summary>
+    [Fact]
+    public void The_skills_say_how_a_command_line_install_moves_into_Jason_Desktop()
+    {
+        var operating = Flattened("operating-the-installation");
+        Assert.Contains("On macOS and Windows, `jason update apply` typed into a command-line install of an earlier version updates it and then moves it into Jason Desktop", operating, StringComparison.Ordinal);
+        Assert.Contains($"`move.state`: `{MoveStates.Done}`, `{MoveStates.Pending}`, `{MoveStates.Failed}`, or `{MoveStates.NotApplicable}` on Linux, where there is no move.", operating, StringComparison.Ordinal);
+        Assert.Contains("On Windows the move first verifies this `jason`'s own signature: where that does not verify, nothing is fetched or changed, and the way on is installing Jason Desktop from the release page", operating, StringComparison.Ordinal);
+        Assert.Contains($"Once the install is moved, `jason update rollback` refuses with `{UpdateCodes.CarriedByDesktop}` and points to \"Going back from 0.49\" in `docs/release-and-update.md`", operating, StringComparison.Ordinal);
+
+        var troubleshooting = Flattened("troubleshooting-jason");
+        Assert.Contains("On macOS and Windows, `jason status`'s optional `move` check says where the move of a command-line install into Jason Desktop stands. It never stops work", troubleshooting, StringComparison.Ordinal);
+    }
 }

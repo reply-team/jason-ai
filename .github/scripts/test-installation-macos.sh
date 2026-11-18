@@ -51,12 +51,12 @@ ROOT="$HOME/Jason"
 OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
-# SOFT UNTIL U19. The application's removal does not yet take this build's ~/.net/jason/<id>, so a compare prints that line
-# under "seen, and expected until the removal takes them" and fails no leg, and the clean check at a leg's start
-# (left_over) ignores it. The commit that merges into this branch the
-# release/49 head holding U19 (the carried removal taking or naming the extraction folder) sets this to 0 in the same
-# commit, and Test-InstallationWindows.ps1's $extractedSoft to $false; the gate run is made with both hard.
-EXTRACTED_SOFT=1
+# HARD: the application's removal takes this build's ~/.net/jason/<id> (other builds' are counted and left on
+# macOS), so a line of this build's left after a removal counts, in the compares and in the clean check at a leg's start
+# (left_over) alike. Set to 1, the two print that line under "seen, and expected until the removal takes them" and fail
+# nothing: for a build whose removal does not take it alone. Test-InstallationWindows.ps1's $extractedSoft is the same switch there, and the
+# two are flipped together.
+EXTRACTED_SOFT=0
 
 # A failed assertion ends its step; its words are kept beside the leg's name for the held step's list as well.
 fail() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT/leg-failure.txt" 2>/dev/null || true; exit 1; }
@@ -183,7 +183,7 @@ write_listing() {
         done
         # The native libraries the single-file executable extracts, under ~/.net/jason/<id> (the host's default base on
         # macOS, one id per build): one line per folder.
-        find "$HOME/.net/jason" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r extracted; do printf 'extracted\t%s\n' "${extracted##*/}"; done
+        { find "$HOME/.net/jason" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true; } | while IFS= read -r extracted; do printf 'extracted\t%s\n' "${extracted##*/}"; done
         folder 'claude skills' "$HOME/.claude/skills"
         folder 'agents skills' "$HOME/.agents/skills"
         folder 'data directory' "$DATA"
@@ -231,17 +231,34 @@ left_over() {
         | grep -vE '^- profile \.(zprofile|zshrc)	absent$' \
         | while IFS= read -r line; do
             # Another release's extraction folder is excused here as in the compares. This build's follows EXTRACTED_SOFT,
-            # as the compares do: ignored while it is soft, since no product door takes it before U19 and a reset could
+            # as the compares do: ignored while it is soft, since before the removal took it no product door did and a reset could
             # not; counted once it is hard, so that no leg starts on a machine a removal left dirty. The one commit that
             # flips EXTRACTED_SOFT makes both hard.
             case "$line" in
-                "+ extracted	"*|"- extracted	"*)
+                # One gone is the removal's taking, never a reason to reset.
+                "- extracted	"*) continue ;;
+                "+ extracted	"*)
                     id="${line#? extracted	}"
                     if [ -s "$OUT/this-build-extracted.txt" ] && ! grep -qxF -- "$id" "$OUT/this-build-extracted.txt"; then continue; fi
                     [ "$EXTRACTED_SOFT" = 1 ] && continue ;;
             esac
             printf '%s\n' "$line"
         done || true
+}
+
+# Whether one fact of jason status, in the file $1, names the folder $2 itself, by its path, in its list of folders Jason
+# did not deploy under a name Jason ships: the list before the sentence's verb, split as the list is joined (", " and
+# " and "), one item the path or ending in it after a space.
+names_own_skill() {
+    python3 - "$1" "$2" <<'PY'
+import re, sys
+text, own = open(sys.argv[1], encoding='utf-8').read().replace('\\\\', '\\'), sys.argv[2]
+for fact in re.finditer(r'(?P<list>[^"]+?) (?:is a (?:folder|link)|are (?:folders and links|folders|links)) Jason did not deploy, under (?:a name|names) Jason ships', text):
+    for item in re.split(r', | and ', fact.group('list')):
+        if item == own or item.endswith(' ' + own):
+            sys.exit(0)
+sys.exit(1)
+PY
 }
 
 step="${1:-}"; shift || true
@@ -276,7 +293,7 @@ extracted)
     executable="$1"
     probe="$RUNNER_TEMP/extract-probe-$$-$(date +%s)"
     within 120 "$executable --version" env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$probe" "$executable" --version > /dev/null 2>&1 || fail "$executable --version failed"
-    ids="$(find "$probe" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | sed 's|.*/||')"
+    ids="$({ find "$probe" -mindepth 2 -maxdepth 2 -type d 2>/dev/null || true; } | sed 's|.*/||')"
     [ -n "$ids" ] || fail "$executable extracted nothing under $probe: no id to tell this build's extraction folder by"
     printf '%s\n' "$ids" >> "$OUT/this-build-extracted.txt"
     rm -rf "$probe"
@@ -322,9 +339,23 @@ compare)
             fi
         fi
     fi
+    # An extraction folder gone since the listing against is the removal's taking (this build's own; another release's by
+    # that release's own removal): said, and not counted.
+    taken_x="$(printf '%s\n' "$went" | grep -E '^extracted	' || true)"
+    if [ -n "$taken_x" ]; then
+        say "taken by the removal in $1: $(printf '%s' "$taken_x" | tr '\t\n' ' ;') (a removal takes what its build unpacked)"
+        went="$(printf '%s\n' "$went" | grep -vE '^extracted	' || true)"
+    fi
     # An extraction folder of another release's id is that release's own, named as expected with its reason; one of this
-    # build's ids counts - softly until U19 (see EXTRACTED_SOFT), as a section of its own.
+    # build's ids counts (softly only while EXTRACTED_SOFT says so, as a section of its own).
     ours="$(cat "$OUT/this-build-extracted.txt" 2>/dev/null || true)"
+    # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
+    # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
+    if [ "$EXTRACTED_SOFT" != 1 ] && [ -z "$(printf '%s' "$ours" | tr -d '[:space:]')" ]; then
+        why="$1 against $2: no id of this build is recorded ($OUT/this-build-extracted.txt is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
+        echo "::error title=Uninstall::$why"
+        printf '%s\n' "$why" >> "$OUT/divergent.txt"
+    fi
     expected_x=""; soft_x=""; rest=""
     while IFS= read -r line; do
         [ -n "$line" ] || continue
@@ -340,7 +371,7 @@ compare)
     left="$(printf '%s' "$rest" | sed '/^$/d')"
     [ -z "$expected_x" ] || say "expected in $1: $(printf '%s' "$expected_x" | tr '\t\n' ' ;') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)"
     if [ -n "$soft_x" ]; then
-        say "seen, and expected until the removal takes them (soft until U19), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
+        say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
         printf '%s: %s\n' "$1" "$(printf '%s' "$soft_x" | tr '\t\n' ' ;')" >> "$OUT/soft-seen.txt"
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
@@ -387,11 +418,13 @@ begin)
             resets="$OUT/resets.txt"
             last="$(cat "$OUT/last-leg.txt" 2>/dev/null || true)"
             [ -n "$last" ] || { skip_leg "not run: the machine is not the machine before, and no leg before this one changed it: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"; exit 0; }
-            ended=""; if [ -f "$OUT/legs-ended.txt" ] && grep -qxF -- "$last" "$OUT/legs-ended.txt"; then ended=1; fi
+            # A leg recorded once as having ended leaving the machine is a failed leg from then on: never recorded again.
+            ended=""; if [ -f "$OUT/legs-ended.txt" ] && grep -qxF -- "$last" "$OUT/legs-ended.txt" && ! grep -qxF -- "$last" "$OUT/legs-dirty.txt" 2>/dev/null; then ended=1; fi
             if [ -n "$ended" ]; then
                 why="the leg '$last' ended, but the machine after it is not the machine before: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"
                 echo "::error title=Installation::$why"
                 printf '%s\n' "$why" >> "$OUT/failed-legs.txt"
+                printf '%s\n' "$last" >> "$OUT/legs-dirty.txt"
                 after_last="ended leaving it, recorded as its failure"
             else
                 after_last="failed"
@@ -434,7 +467,7 @@ end)
 
 held)
     close_leg
-    [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft until U19; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
+    [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
     [ ! -s "$OUT/not-run.txt" ] || cat "$OUT/not-run.txt" >> "$OUT/failed-legs.txt"
     [ ! -s "$OUT/failed-legs.txt" ] || fail "$(paste -sd '|' "$OUT/failed-legs.txt" | sed 's/|/ | /g')$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
     [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"
@@ -712,13 +745,24 @@ way-back)
     # with its kind and moment, no entry has appeared among the old ones, and the previous release's jason says its
     # version and its status is ready. No update and no rollback runs under it. Its own uninstall, purging the data, ends
     # the leg.
-    # Two checks join this leg once U20 is in the branch it runs on, and not before, since both are red until then:
-    # after the move, the wrapper's text names no data directory (U20 C, on a real Mac that moved with none named); and
-    # after going back, the previous release's own jason update apply moves it into Jason Desktop again (U20 D).
+    # Two checks are to join this leg, each once it has run in a rehearsal: after the move, the wrapper's text names no
+    # data directory (on a real Mac that moved with none named); and after going back, the previous release's own jason
+    # update apply moves it into Jason Desktop again.
     previous="$1"; feed="$2"; version="$3"
     # It runs on the account's own home and default data directory, which a moved installation and the previous release
     # share: a GitHub-hosted runner's alone, never a person's Mac.
     if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "way-back runs on the account's own home and data directory, and on a GitHub-hosted runner alone."; fi
+    # The person's own quick-start, as the page's going back says: named by jason status before step 1, moved out of the
+    # skills folder before step 3, then either put back after step 3 (put-back) or kept out while the previous release is
+    # installed (keep-out). The one switch is JASON_PROOF_OWN_SKILL_GOING_BACK in ci.yml. Its SKILL.md is read, by its
+    # bytes, at four moments: before step 1, after step 3, after the put-back where the words have one, and after the
+    # previous release's own uninstall.
+    way="${JASON_PROOF_OWN_SKILL_GOING_BACK:-}"
+    case "$way" in put-back|keep-out) ;; *) fail "JASON_PROOF_OWN_SKILL_GOING_BACK is '$way', where it says put-back or keep-out" ;; esac
+    outside="$RUNNER_TEMP/own-quick-start-out"
+    own_out="$outside/quick-start"
+    # A quick-start folder's SKILL.md by its bytes: its length and its SHA-256, or absent.
+    own_bytes() { if [ -f "$1/SKILL.md" ]; then printf '%s bytes, sha256 %s' "$(wc -c < "$1/SKILL.md" | tr -d ' ')" "$(shasum -a 256 < "$1/SKILL.md" | cut -d' ' -f1)"; else printf absent; fi; }
     # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, as a JSON array.
     read_all() {
         python3 - "$@" <<'PY'
@@ -778,6 +822,14 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ "$counted" -ge 1 ] || fail 'the campaign made under the previous release is not listed under the moved 0.49'
     [ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-journal-before.json")" -ge 1 ] || fail 'the journal is empty under the moved 0.49'
     say "under the moved 0.49: $counted campaign(s), archived included; the journal holds $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print("%d entries, the newest %s" % (len(j), j[0]["id"] if j else "none"))' "$OUT/way-back-journal-before.json")"
+    # Before step 1, as the page says: jason status names the person's own quick-start as a folder Jason did not deploy.
+    within 120 'jason status under the moved 0.49' "$carried" status > "$OUT/way-back-status-before.json" 2>&1 || true
+    names_own_skill "$OUT/way-back-status-before.json" "$OWN_SKILL" \
+        || fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $(cat "$OUT/way-back-status-before.json")"
+    say "before step 1, jason status under the moved 0.49 names the person's own quick-start, $OWN_SKILL, as a folder Jason did not deploy, under a name Jason ships, left as it is"
+    own1="$(own_bytes "$OWN_SKILL")"
+    [ "$own1" != absent ] || fail "the person's own quick-start is not at $OWN_SKILL before going back"
+    say "moment 1, before step 1: the person's own quick-start/SKILL.md at $OWN_SKILL is $own1"
 
     # Step 1: the leg's own application quit, then jason uninstall with no --purge-data.
     pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
@@ -794,12 +846,34 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ -x "$WRAPPER" ] || fail "the pinned line of $old placed no jason at $WRAPPER"
     say "$old installed by its pinned line from the real release page: $line"
 
+    # Before step 3: the person's own quick-start moved out of the skills folder, as it stood after steps 1 and 2.
+    own="$(own_bytes "$OWN_SKILL")"
+    [ "$own" = "$own1" ] || fail "steps 1 and 2 changed the person's own quick-start: it is $own, where it was $own1"
+    [ ! -e "$outside" ] || fail "$outside is there before the person's own quick-start is moved to it"
+    mkdir -p "$outside"
+    mv "$OWN_SKILL" "$own_out" || fail "the person's own quick-start could not be moved to $own_out"
+    say "before step 3: the person's own quick-start moved out of the skills folder, to $own_out"
+
     # Step 3: its skills, its UI, its runtime and its login start.
     for words in 'skills install' 'ui install' 'runtime start' 'runtime autostart enable'; do
         # shellcheck disable=SC2086
         within 600 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-step3.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-step3.txt")"
     done
     say "under $old: jason skills install, ui install, runtime start and runtime autostart enable each ended 0"
+    own2="$(own_bytes "$own_out")"
+    say "moment 2, after step 3: the person's own SKILL.md, out at $own_out, is $own2; at $OWN_SKILL stands $(own_bytes "$OWN_SKILL")"
+    [ "$own2" = "$own1" ] || fail "the person's own quick-start, out of the skills folder, changed during step 3: $own2, where it was $own1"
+    if [ "$way" = put-back ]; then
+        # The put-back: the person's own quick-start in its place again, over the one the previous release's skills wrote.
+        rm -rf "$OWN_SKILL"
+        mv "$own_out" "$OWN_SKILL" || fail "the person's own quick-start could not be put back at $OWN_SKILL"
+        rmdir "$outside"
+        own3="$(own_bytes "$OWN_SKILL")"
+        say "moment 3, after the put-back: the person's own SKILL.md at $OWN_SKILL is $own3"
+        [ "$own3" = "$own1" ] || fail "the person's own quick-start put back is $own3, where it was $own1"
+    else
+        say "moment 3: none; the page's words keep the person's own quick-start out while $old is installed"
+    fi
 
     # (i) The campaigns, as many; the journal, held by id.
     read_all "$WRAPPER" campaign list --include-archived > "$OUT/way-back-campaigns-after.json" || fail "the campaigns could not be read under $old"
@@ -847,6 +921,23 @@ PY
         within 300 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-end.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-end.txt")"
     done
     say "$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+    if [ "$way" = put-back ]; then
+        own4="$(own_bytes "$OWN_SKILL")"
+        say "moment 4, after $old's own uninstall: the person's own SKILL.md at $OWN_SKILL is $own4"
+        [ "$own4" = "$own1" ] || fail "$old's own uninstall took or changed the person's own quick-start: it is $own4, where it was $own1"
+    else
+        own4="$(own_bytes "$own_out")"
+        place4="$(own_bytes "$OWN_SKILL")"
+        say "moment 4, after $old's own uninstall: the person's own SKILL.md, out at $own_out, is $own4; at $OWN_SKILL stands $place4"
+        [ "$own4" = "$own1" ] || fail "the person's own quick-start, out of the skills folder, changed while $old was installed: $own4, where it was $own1"
+        [ ! -e "$OWN_SKILL" ] || fail "after $old's own uninstall a quick-start stands at $OWN_SKILL ($place4), where the person's own goes back"
+        mkdir -p "$(dirname "$OWN_SKILL")"
+        mv "$own_out" "$OWN_SKILL" || fail "the person's own quick-start could not be put back at $OWN_SKILL"
+        rmdir "$outside"
+        back="$(own_bytes "$OWN_SKILL")"
+        [ "$back" = "$own1" ] || fail "the person's own quick-start put back is $back, where it was $own1"
+        say "the person's own quick-start put back at $OWN_SKILL, $back"
+    fi
     ;;
 
 previous-removal)

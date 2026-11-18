@@ -19,12 +19,19 @@ public static partial class RetiredSweep
     /// Sweeps the places the routine renames into: the temporary directory, the folder beside the default command-line
     /// install's, and the one beside <paramref name="retired"/>'s folder, the executable a move retires. Windows only.
     /// </summary>
-    public static void Sweep(SetupPlaces places, string? retired = null)
+    /// <returns>
+    /// Each of the routine's folders taken, and each of them left because the process it was renamed from still runs: an
+    /// install, an update and a move say nothing of either and leave the second for the next sweep; the removal, after
+    /// which no sweep comes, says both.
+    /// </returns>
+    public static RetiredSweepOutcome Sweep(SetupPlaces places, string? retired = null)
     {
         ArgumentNullException.ThrowIfNull(places);
+        var swept = new List<string>();
+        var left = new List<string>();
         if (places.Platform is not SetupSystem.Windows)
         {
-            return;
+            return new RetiredSweepOutcome(swept, left);
         }
 
         var parents = new List<string> { places.Temporary, Beside(places.DefaultCommandLineExecutable) };
@@ -37,7 +44,7 @@ public static partial class RetiredSweep
         {
             try
             {
-                SweepIn(places, parent);
+                SweepIn(places, parent, swept, left);
             }
             catch (Exception unexpected) when (unexpected is not OutOfMemoryException)
             {
@@ -45,6 +52,8 @@ public static partial class RetiredSweep
                 // failed by it. What it could not take is left for the next sweep.
             }
         }
+
+        return new RetiredSweepOutcome(swept, left);
     }
 
     /// <summary>The folder that holds a command-line install's folder: where its aside folder goes on another volume.</summary>
@@ -61,7 +70,7 @@ public static partial class RetiredSweep
         }
     }
 
-    private static void SweepIn(SetupPlaces places, string parent)
+    private static void SweepIn(SetupPlaces places, string parent, List<string> swept, List<string> left)
     {
         IEnumerable<string> folders;
         try
@@ -75,6 +84,7 @@ public static partial class RetiredSweep
 
         foreach (var folder in folders)
         {
+            var routines = false;
             try
             {
                 var info = new DirectoryInfo(folder);
@@ -90,16 +100,22 @@ public static partial class RetiredSweep
                 }
 
                 // Through the setup's own delete, which a test stands a running process's image in for.
+                routines = true;
                 foreach (var entry in entries)
                 {
                     places.Delete(entry.FullName);
                 }
 
                 info.Delete();
+                swept.Add(folder);
             }
             catch (Exception held) when (held is IOException or UnauthorizedAccessException)
             {
-                // The process it was renamed from still runs: left for the next sweep.
+                // The process it was renamed from still runs: left for the next sweep, and said where it is the routine's.
+                if (routines)
+                {
+                    left.Add(folder);
+                }
             }
         }
     }
@@ -107,3 +123,8 @@ public static partial class RetiredSweep
     [GeneratedRegex("^\\.?jason-retired-[0-9a-f]{32}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex Name();
 }
+
+/// <summary>What a sweep took, and what it left because the process it was renamed from still runs.</summary>
+/// <param name="Swept">Each folder of the routine's that went.</param>
+/// <param name="Left">Each folder of the routine's that a running process held.</param>
+public sealed record RetiredSweepOutcome(IReadOnlyList<string> Swept, IReadOnlyList<string> Left);

@@ -47,6 +47,40 @@ public sealed class DispatcherCheckTests
     }
 
     /// <summary>
+    /// A draining runtime of an older build than this CLI may run from an executable another build has replaced, and where it
+    /// does a resume would have it claim work again and start its plugin hosts from a file that is no longer its own; after a
+    /// held install it still runs from its own, so the fact says only what is known. Its repair is the restart,
+    /// the one <c>runtime_version</c> names, and the resume is offered nowhere. A runtime of a newer build keeps the resume,
+    /// since a restart from this older jason is what <c>runtime_version</c> refuses.
+    /// </summary>
+    [Theory]
+    [InlineData("0.48.5", "jason runtime restart")]
+    [InlineData("0.50.0", "jason runtime resume")]
+    public async Task A_draining_runtime_of_another_build_is_offered_the_repair_that_build_takes(string running, string repair)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir, version: running);
+        StatusCommandTests.Dispatcher(dir, new DispatcherInfo(DispatcherState.Draining, 10, 4, 1, null, 0, 0));
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: "0.49.0"), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "dispatcher");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal(repair, check.Fix);
+        if (repair == "jason runtime restart")
+        {
+            Assert.Equal(
+                "The runtime is draining, and it is 0.48.5, not this CLI's 0.49.0: where another build has replaced its executable, a resume would start its plugin hosts from that file, so the repair is a restart of the runtime; 1 attempt is still running.",
+                check.Fact);
+            var human = new StringWriter();
+            await CliApp.RunAsync(["status", "--human"], StatusCommandTests.Machine(dir, human, build: "0.49.0"), Ct);
+            var text = human.ToString();
+            Assert.DoesNotContain("jason runtime resume", text[text.IndexOf("To repair:", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// While an update's ledger stands unfinished the drain is the update's: the check says the runtime is draining for the
     /// update and its repair is the apply that carries it on, never a resume in the middle of it. Still not ready.
     /// </summary>
