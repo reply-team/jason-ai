@@ -174,3 +174,4 @@ if ($env:GITHUB_STEP_SUMMARY) { $summary + @('') | Add-Content -LiteralPath $env
 
 if ($failed.Count -gt 0) { exit 1 }
 exit 0
+# A trial of the hotfix lane: this line is never merged.
