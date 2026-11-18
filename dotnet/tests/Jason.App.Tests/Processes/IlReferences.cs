@@ -31,17 +31,23 @@ internal static class IlReferences
         Declaring(type).Concat(type.GetNestedTypes(Declared).SelectMany(Methods));
 
     /// <summary>Every method a body names through a method token. A token that does not resolve throws: never skipped.</summary>
-    public static IReadOnlyList<MethodBase> Called(MethodBase method)
+    public static IReadOnlyList<MethodBase> Called(MethodBase method) => Read(method).Called;
+
+    /// <summary>Every string a body loads as a literal (<c>ldstr</c>), by its token. A token that does not resolve throws.</summary>
+    public static IReadOnlyList<string> Strings(MethodBase method) => Read(method).Strings;
+
+    private static (IReadOnlyList<MethodBase> Called, IReadOnlyList<string> Strings) Read(MethodBase method)
     {
         var il = method.GetMethodBody()?.GetILAsByteArray();
         if (il is null)
         {
-            return [];
+            return ([], []);
         }
 
         var typeArguments = method.DeclaringType is { IsGenericType: true } generic ? generic.GetGenericArguments() : null;
         var methodArguments = method.IsGenericMethod ? method.GetGenericArguments() : null;
         var called = new List<MethodBase>();
+        var strings = new List<string>();
         var at = 0;
         while (at < il.Length)
         {
@@ -52,6 +58,10 @@ internal static class IlReferences
             if (code.OperandType == OperandType.InlineMethod)
             {
                 called.Add(method.Module.ResolveMethod(BitConverter.ToInt32(il, at), typeArguments, methodArguments)!);
+            }
+            else if (code.OperandType == OperandType.InlineString)
+            {
+                strings.Add(method.Module.ResolveString(BitConverter.ToInt32(il, at)));
             }
 
             at += code.OperandType switch
@@ -65,7 +75,7 @@ internal static class IlReferences
             };
         }
 
-        return called;
+        return (called, strings);
     }
 
     private static IEnumerable<MethodBase> Declaring(Type type) =>
