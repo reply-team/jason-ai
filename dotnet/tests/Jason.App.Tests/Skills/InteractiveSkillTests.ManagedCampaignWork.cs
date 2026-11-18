@@ -647,6 +647,36 @@ public partial class InteractiveSkillTests
         return text[from..to];
     }
 
+    /// <summary>
+    /// The wiring check's section on a direct send prints a work item for <c>message.send</c>. The guard over printed commands
+    /// asks only whether a line parses; the arguments are judged at <c>workitem.create</c>, against the operation's own
+    /// document. So the page's <c>--input</c> is judged here against that document, and the page cannot drift from it.
+    /// </summary>
+    [Fact]
+    public void The_input_the_wiring_check_prints_for_a_direct_send_is_accepted_by_the_operations_document()
+    {
+        var page = Path.Combine(SkillPack.RepositoryRoot(), "docs", "golden-path.md");
+        var line = Assert.Single(
+            SkillPack.PrintedCommands(page),
+            printed => printed.StartsWith("jason workitem create ", StringComparison.Ordinal)
+                && printed.Contains("--operation message.send ", StringComparison.Ordinal));
+
+        var words = ShellWords.Split(line);
+        var input = ValueOf(words, "--input");
+        Assert.True(input is not null, $"docs/golden-path.md prints a message.send work item with no --input: {line}");
+        Assert.True(ValueOf(words, "--idempotency-key") is not null, $"docs/golden-path.md prints a message.send work item with no key: {line}");
+        Assert.True(ValueOf(words, "--contact") is not null, $"message.send needs the person a work item is about, and the page's line names none: {line}");
+
+        var contract = OperationCatalog.Find("message.send");
+        Assert.True(contract is not null, "message.send is no published operation.");
+        var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(JsonNode.Parse(input), contract.ArgumentSchema));
+        Assert.True(
+            problems.Count == 0,
+            "The --input docs/golden-path.md prints for message.send is refused by its document: "
+            + $"{string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}. The line: {line}");
+        Assert.Equal("email", JsonNode.Parse(input)!["channel"]!.GetValue<string>());
+    }
+
     /// <summary>The word after an option on a split command line, or null where the line does not give the option.</summary>
     private static string? ValueOf(IReadOnlyList<string> words, string option)
     {

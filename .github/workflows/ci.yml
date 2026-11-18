@@ -2172,8 +2172,9 @@ jobs:
           JASON_SEALED_PROBE: '1'
         run: npm run e2e
 
-  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the
-  # electron package's own download never runs; the tests run their TypeScript as it is, on node 22 or later. Then the
+  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the install
+  # fetches no Electron binary; one step fetches it for the rows that run code under it as Node, and the tests run their
+  # TypeScript as it is, on node 22 or later. Then the
   # Linux packages, the one platform's whose packages need no signature: the package action builds a deb and an
   # AppImage as a release does, around a jason this job publishes at a candidate's version, reads them back and starts
   # each once under a virtual display, with Electron's Linux distribution held to the sha256 the lockfile's electron
@@ -2213,7 +2214,18 @@ jobs:
           sudo apt-get -o Acquire::Retries=5 update -qq
           sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends zsh
 
+      # Electron's own binary, for the rows that run code under it as Node, where the file system reads an .asar as an
+      # archive the way the application's main process does: the copy an update keeps aside is one. The electron
+      # package fetches it only when asked, held to the sha256 its checksums.json names, and the tests are told its
+      # absence is a failure here, never a skip.
+      - name: Install Electron's binary for the rows that run under it
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+        run: node node_modules/electron/install.js
+
       - name: Node tests
+        env:
+          JASON_DESKTOP_ELECTRON_REQUIRED: '1'
         run: npm test
 
       # The download address's short paths (get/) on Node's own runner, with the node this job already set up: get/ has

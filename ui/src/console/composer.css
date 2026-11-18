@@ -400,6 +400,12 @@
     color: var(--ink);
     font-weight: 600;
 }
+.jc-console .uinote .start-note-para {
+    display: block;
+}
+.jc-console .uinote .start-note-para + .start-note-para {
+    margin-top: 6px;
+}
 .jc-console .uinote .start-note-close {
     flex: none;
     margin-left: auto;

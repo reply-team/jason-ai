@@ -1,0 +1,22 @@
+{
+  "operation": "notification.enable",
+  "case": "not-configured",
+  "request": {
+    "channel": "chat-room"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "notification_channel_not_configured",
+      "message": "The notification channel chat-room cannot be turned on: its binding does not satisfy the plugin's own schema (/chat required). Mend Notifications:Plugins:chat-room:Binding in the settings file, then try again.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "channel",
+          "code": "binding_invalid",
+          "message": "its binding does not satisfy the plugin's own schema (/chat required)"
+        }
+      ]
+    }
+  }
+}

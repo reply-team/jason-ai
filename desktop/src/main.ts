@@ -26,6 +26,7 @@ import { startDetached } from './open-in-start.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
+import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
@@ -441,7 +442,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
     // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
     const modeDeps = modeSwitch(log, form);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps) });
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps), menuChanged: () => toPage('updates.changed') });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {
@@ -481,6 +482,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(seam, 'updates.key', origin, updateKey, refused);
+    // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
+    // on the label the page drew and only while the item still says it.
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);
+    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -629,6 +634,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
+            // The program the Models page marks In use, read by its own routine at the click: the host named where the
+            // person has stated no preference of their own.
+            inUse: () => setup.rolesHost(),
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
                 event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
         },

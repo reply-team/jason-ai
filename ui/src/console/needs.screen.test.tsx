@@ -453,6 +453,28 @@ describe('Needs you', () => {
         expect(words(pane())).not.toMatch(/From|Channel|unknown/);
     });
 
+    it('says a reply in a thread goes from the account the conversation is in, names none, and reads no sending name', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/needs-inbox')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply');
+        await renderConsole(fake);
+        await waitFor(() => expect(row('apr_2')).toBeTruthy());
+        // The message beside it still names the mailbox it goes from, with the sending name under it.
+        await choose('apr_1');
+        await waitFor(() => expect(words(pane().querySelector('.needs-from')!)).toBe('From owner@example.test'));
+        await choose('apr_2');
+        await waitFor(() => within(pane()).getByText('Thanks Kai, Thursday at ten works for me.'));
+        expect(words(pane().querySelector('.needs-from')!)).toBe('From the account this conversation is in');
+        expect(pane().querySelector('.needs-from')!.nextElementSibling?.classList.contains('sender-line')).not.toBe(
+            true,
+        );
+        expect(pane().querySelector('.sender-line')).toBeNull();
+        const asked = fake.calls.filter((each) => each.operation === 'sender.list').length;
+        await settle();
+        expect(fake.calls.filter((each) => each.operation === 'sender.list').length).toBe(asked);
+    });
+
     it('draws a hostile sender, channel and recipient as text', async () => {
         await renderConsole(messages());
         await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
@@ -861,13 +883,19 @@ describe('Needs you', () => {
             expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
         });
 
-        it('names no plugin in the pane’s header, and sets a fact’s quoted names as code', async () => {
+        it('names no plugin in the pane’s header, and says what the act is in plain words', async () => {
             await renderConsole(inbox());
             await waitFor(() => expect(pane().querySelector('.needs-facts')).toBeTruthy());
             expect(words(pane().querySelector('.ask-h .meta')!)).toMatch(/^Spring launch · [^·]+$/);
             expect(words(pane().querySelector('.ask-h')!)).not.toMatch(/\breply\b/);
+            // A message's cost depends on its channel, so its line is the one sentence for message.send's cost.
+            expect([...pane().querySelectorAll('.needs-facts .meta')].map((each) => each.textContent)).toEqual([
+                'Contacts the person: something is sent or shown to them',
+                'Cannot be undone',
+                'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+            ]);
             expect(pane().querySelector('.needs-facts')!.textContent).not.toContain('`');
-            expect([...pane().querySelectorAll('.needs-facts code')].map((each) => each.textContent)).toEqual(['none']);
+            expect(pane().querySelectorAll('.needs-facts code')).toHaveLength(0);
         });
     });
 
@@ -1164,7 +1192,7 @@ describe('Needs you', () => {
             await renderConsole(fake);
             await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
             const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
-            const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
+            const doubted = `The critic role flagged this: ${whyWords('unsupported_claim')}`;
             // Before the whole read Approve is held and there is no doubt to draw; the moment it is live, the doubt stands.
             expect(live(approve('apr_1'))).toBe(false);
             expect(within(at('apr_1')).queryByText(doubted)).toBeNull();

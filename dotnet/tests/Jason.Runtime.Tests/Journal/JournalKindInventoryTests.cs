@@ -53,8 +53,8 @@ public sealed class JournalKindInventoryTests
 
     /// <summary>
     /// The kinds whose entries hold only metadata: ids, counts, statuses, attempt numbers, moments, codes, sizes and
-    /// hashes, the names of fields that changed, the names of roles, profiles and plugins, and the keys of named
-    /// preferences — whose values the chronicle never holds.
+    /// hashes, the names of fields that changed, the names of roles, profiles and plugins, the keys of named
+    /// preferences — whose values the chronicle never holds — and a setting's path with whether a channel was on.
     /// </summary>
     /// <remarks>
     /// <c>external_id_origin</c> is keyed like the pin it follows, by plugin and kind, and its value is one of two words,
@@ -100,6 +100,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ProfileDisabled,
         JournalKinds.ProfileEnabled,
         JournalKinds.DefaultProfileUpdated,
+        JournalKinds.NotificationChannelUpdated,
         JournalKinds.PluginsReloaded,
         JournalKinds.ExternalIdOrigin,
         JournalKinds.DecisionRaised,

@@ -193,7 +193,7 @@ public class GlobalRouteWriteTests
 
         Assert.Equal("settings_file_unreadable", error.Code);
         Assert.False(error.Retryable);
-        Assert.Matches(@"^The settings file could not be read \(at line 3, byte \d+\), so nothing was written; fix it, then run the command again\.$", error.Message);
+        Assert.Matches(@"^The settings file could not be read \(at line 3, byte \d+\), so nothing was written; fix it, then try again\.$", error.Message);
         Assert.DoesNotContain("Exception", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(Secret, error.Message, StringComparison.Ordinal);
         Assert.Equal(broken, File.ReadAllText(api.Paths.UserSettingsFile));
@@ -804,7 +804,7 @@ public class GlobalRouteWriteTests
         Assert.Equal("settings_file_not_writable", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then try again.",
             error.Message);
         Assert.Equal(Original, File.ReadAllText(path));
         Assert.Empty(TemporaryFiles(api.Paths));

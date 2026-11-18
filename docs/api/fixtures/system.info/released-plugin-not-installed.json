@@ -147,7 +147,9 @@
           "detail": null,
           "at": null,
           "presence": "available",
-          "presence_detail": null
+          "presence_detail": null,
+          "readiness": null,
+          "readiness_detail": null
         }
       ],
       "last_notification_id": null,

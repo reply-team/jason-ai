@@ -1,0 +1,7 @@
+{
+  "kind": "notification_channel_updated",
+  "version": 1,
+  "case": "the toast is turned off",
+  "body": { "key": "Notifications:Toast", "old": true, "new": false },
+  "expect": "valid"
+}

@@ -242,8 +242,8 @@ public static class DomainErrors
             StatusCodes.Status409Conflict,
             Plugins.Manifest.ProblemCodes.SettingsFileUnreadable,
             failure.Place() is { } place
-                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then run the command again."
-                : "The settings file could not be read, so nothing was written; fix it, then run the command again.",
+                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then try again."
+                : "The settings file could not be read, so nothing was written; fix it, then try again.",
             retryable: false);
 
     /// <summary>
@@ -273,7 +273,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_changed",
-            "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
+            "The settings file kept changing while this wrote it, so nothing was written; try again.",
             retryable: true);
 
     /// <summary>Another program held the settings file open, so it could not be read or replaced; nothing was written.</summary>
@@ -281,7 +281,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_busy",
-            "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
+            "Another program holds the settings file open, so nothing was written; close it, then try again.",
             retryable: true);
 
     /// <summary>
@@ -292,7 +292,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_not_writable",
-            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then try again.",
             retryable: false);
 
     /// <summary>
@@ -422,6 +422,91 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and which profile agent work runs on by default is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
+    /// A notification channel turned on or off from inside a run, refused by the run's header with the code the run gate
+    /// gives, before the body is read: which channels tell the person is Jason's own setting.
+    /// </summary>
+    public static ForbiddenException NotificationInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and which channels tell the person that something waits for them is part of it: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
+    /// A channel no switch could turn: neither the toast nor a plugin installed in this data directory. A plugin that is
+    /// installed and is not a channel is <see cref="NotificationChannelNotNamed"/>.
+    /// </summary>
+    public static NotFoundException NotificationChannelNotFound(string channel) =>
+        new(
+            "notification_channel_not_found",
+            $"No notification channel is called {channel}: a channel is the toast, or a notification plugin installed in this data directory, by its id. jason runtime status --human says each on its Notify: line.");
+
+    /// <summary>
+    /// An installed plugin nothing names under <c>Notifications:Plugins</c>, said by what the plugin is: one that could
+    /// deliver is no channel until it is named with the binding that says where it delivers, which a switch cannot write,
+    /// so there is nothing yet to turn off and turning it on is naming it; one that does not declare the delivery contract
+    /// — a plugin of another kind, or a notification plugin that leaves it out — never is one, so naming it would only be
+    /// refused again; and one that is not loaded cannot be told apart until it is. The word under the field
+    /// <c>channel</c> is <c>not_named</c>, <c>not_declared</c> or <c>unavailable</c>, as the readiness of a named channel
+    /// would say. Not retryable: something else changes first.
+    /// </summary>
+    public static DomainException NotificationChannelNotNamed(string channel, string reason, string? detail, bool on)
+    {
+        var (message, said) = reason switch
+        {
+            Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
+                $"The plugin {channel} does not declare the delivery contract ({detail}), so it is no notification channel, and naming it in the settings file would not make it one.",
+                detail ?? reason),
+            Contracts.Notifications.NotAttemptedReasons.Unavailable => (
+                $"The plugin {channel} is installed but is not loaded, or cannot run on this machine ({detail}), so it is no notification channel yet; the list of plugins says why. Once it is loaded, a notification plugin becomes a channel when Notifications:Plugins:{channel} in the settings file names it with its binding.",
+                detail ?? reason),
+            _ when on => (
+                $"The plugin {channel} is a notification plugin, but nothing names it under Notifications:Plugins:{channel} in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
+                "Nothing names the plugin under Notifications:Plugins."),
+            _ => (
+                $"The plugin {channel} is a notification plugin, but nothing names it under Notifications:Plugins:{channel} in the settings file, so it is no channel yet and there is nothing to turn off.",
+                "Nothing names the plugin under Notifications:Plugins."),
+        };
+        return new(StatusCodes.Status409Conflict, "notification_channel_not_configured", message, details: [new ErrorDetail("channel", reason, said)]);
+    }
+
+    /// <summary>
+    /// A channel named in the settings that a notification would not be tried on, for a reason decided before anything is
+    /// launched: the plugin is not loaded or cannot run here, does not declare the delivery contract, or its binding does not
+    /// satisfy the plugin's own schema. The reason is the word a notification's line would carry, under the field
+    /// <c>channel</c>, and the message says what is missing.
+    /// </summary>
+    public static DomainException NotificationChannelNotConfigured(string channel, string reason, string? detail)
+    {
+        var (why, remedy) = reason switch
+        {
+            Contracts.Notifications.NotAttemptedReasons.Unavailable => (
+                "its plugin is not loaded, or cannot run on this machine",
+                "No setting of the channel changes that: the list of plugins says why the plugin is not loaded; once it is, try again."),
+            Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
+                "its plugin does not declare the delivery contract",
+                $"No setting of the channel changes that: Notifications:Plugins:{channel} in the settings file names a plugin that cannot deliver a notification."),
+            _ => (
+                "its binding does not satisfy the plugin's own schema",
+                $"Mend Notifications:Plugins:{channel}:Binding in the settings file, then try again."),
+        };
+        var said = detail is null ? why : $"{why} ({detail})";
+        return new DomainException(
+            StatusCodes.Status409Conflict,
+            "notification_channel_not_configured",
+            $"The notification channel {channel} cannot be turned on: {said}. {remedy}",
+            details: [new ErrorDetail("channel", reason, said)]);
+    }
+
+    /// <summary>
+    /// A channel turned on while every notification is held off by <c>Notifications:Enabled</c>, which no channel's switch
+    /// overrides and which is no switch of this API's: the one line to change is named. Not retryable.
+    /// </summary>
+    public static DomainException NotificationsOff() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "notifications_off",
+            "Every notification is off: Notifications:Enabled is false in the settings file, and no channel is turned on while it is. Take that line out of the settings file to turn notifications back on as a whole.");
+
+    /// <summary>
     /// The configured default execution profile could not be put in force: the Roles section of the settings file does not
     /// validate (another of its settings a person broke by hand), so the runtime keeps working from the last Roles settings
     /// that did, which the log names (<see cref="Configuration.LiveSettings{TOptions}"/>). Not retryable: the file is mended first.
@@ -430,7 +515,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "setting_not_in_force",
-            $"{setting} cannot be put in force: the {section} settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the {section} section, then run the command again.",
+            $"{setting} cannot be put in force: the {section} settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the {section} section, then try again.",
             retryable: false);
 
     /// <summary>

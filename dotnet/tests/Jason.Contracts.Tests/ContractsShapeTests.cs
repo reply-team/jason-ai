@@ -226,7 +226,8 @@ public class ContractsShapeTests
     /// <summary>
     /// What each notification channel did last rides on <c>system.info</c> as a section of its own, after every
     /// section that came before it: whether notifications are on, each channel with its last outcome — or nulls
-    /// before anything was sent — and, for the toast, whether this runtime has a desktop to show one on at all.
+    /// before anything was sent — for the toast, whether this runtime has a desktop to show one on at all, and for a plugin
+    /// channel whether it could deliver now and what is missing.
     /// </summary>
     [Fact]
     public void System_info_says_what_each_notification_channel_did_last()
@@ -236,7 +237,10 @@ public class ContractsShapeTests
         {
             Notifications = new NotificationsInfo(
                 true,
-                [new NotificationChannelInfo("toast", "toast", true, "silenced", "disabled_for_application", null, null, null, at, "available", null)],
+                [
+                    new NotificationChannelInfo("toast", "toast", true, "silenced", "disabled_for_application", null, null, null, at, "available", null),
+                    new NotificationChannelInfo("ntfy", "plugin", false, null, null, null, null, null, null, null, null, "binding_invalid", "/topic required"),
+                ],
                 "ntf_01K",
                 at),
         };
@@ -244,7 +248,9 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
                 + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
-                + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
+                + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null,\"readiness\":null,\"readiness_detail\":null},"
+                + "{\"channel\":\"ntfy\",\"kind\":\"plugin\",\"on\":false,\"outcome\":null,\"reason\":null,\"code\":null,\"class\":null,\"detail\":null,"
+                + "\"at\":null,\"presence\":null,\"presence_detail\":null,\"readiness\":\"binding_invalid\",\"readiness_detail\":\"/topic required\"}],"
                 + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
