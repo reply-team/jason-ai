@@ -895,11 +895,14 @@ switch ($Step) {
                     }
                     # A release before 0.49 keeps the updater's folder by its own design (its uninstall says the updater's
                     # cache stays), and its setup stored itself there (electron-builder's installer.nsh): after Installed
-                    # apps' uninstall of one, the reset takes that folder by name. Never a proof of anything.
+                    # apps' uninstall of one, and only then, the reset itself removes that folder, directly, with nothing of
+                    # this build involved, logging what it found and what it removed. Never a proof of anything.
                     $updaterFolder = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
                     if ($before049 -and (Test-Path -LiteralPath $updaterFolder)) {
+                        $foundThere = @(Get-ChildItem -LiteralPath $updaterFolder -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { "$($_.FullName.Substring($updaterFolder.Length).TrimStart('')) $($_.Length)" })
+                        Add-Content -LiteralPath $resets -Value "  found $updaterFolder, which Installed apps' uninstall of a release before 0.49 keeps by its own design, holding: $(if ($foundThere) { $foundThere -join '; ' } else { 'no file' })"
                         Remove-Item -LiteralPath $updaterFolder -Recurse -Force
-                        Add-Content -LiteralPath $resets -Value "  removed $updaterFolder by name, which Installed apps' uninstall of a release before 0.49 keeps by its own design"
+                        Add-Content -LiteralPath $resets -Value "  removed ${updaterFolder}: it is $(if (Test-Path -LiteralPath $updaterFolder) { 'still there' } else { 'gone' })"
                     }
                 } catch {
                     Add-Content -LiteralPath $resets -Value "  the reset failed: $($_.Exception.Message)"
