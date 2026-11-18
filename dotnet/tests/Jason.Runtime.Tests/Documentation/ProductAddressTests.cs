@@ -24,9 +24,12 @@ public sealed partial class ProductAddressTests : IDisposable
 {
     /// <summary>
     /// A release's version as the texts write it: a version, the notes template's placeholder, the release workflow's
-    /// variable, or the wiring check's <c>&lt;version&gt;</c>, which its step 3 says how to read.
+    /// variable, the wiring check's <c>&lt;version&gt;</c>, which its step 3 says how to read, or the installation proof's
+    /// variables, <c>$previousVersion</c> in <c>.github/scripts/Test-InstallationWindows.ps1</c> and <c>$old</c> in
+    /// <c>.github/scripts/test-installation-macos.sh</c>, each naming the previous release by its tag in the pinned line
+    /// the way-back leg runs.
     /// </summary>
-    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>)";
+    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>|\$previousVersion|\$old)";
 
     /// <summary>
     /// What the address answers, one row per shape. Each answers 302 with the same path under
@@ -81,6 +84,14 @@ public sealed partial class ProductAddressTests : IDisposable
             "dotnet/src/Jason.Cli/Skills/SkillsSource.cs",
             1,
             "the skills' default is read from GitHub directly, as the responsible-use page says they are, so their download is never a request to the address operated for the product"),
+        new(
+            ".github/workflows/ci.yml",
+            3,
+            "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; and install.sh's requirement is held against the application the latest release published, taken the same way and checked against that release's checksums.txt; both are CI's reads and no person's install, so neither is ever a request to the address operated for the product"),
+        new(
+            ".github/workflows/release.yml",
+            2,
+            "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));
@@ -91,6 +102,7 @@ public sealed partial class ProductAddressTests : IDisposable
 
     /// <summary>(a) Every address on the product's own address that the product writes is one the redirect answers.</summary>
     [Fact]
+    [Critical(Family.I1, "a line added to a script or a page turns it red without touching it")]
     public void Every_address_the_product_writes_is_one_the_redirect_answers()
     {
         var found = Unanswered(RepositoryTree.Root());
@@ -171,6 +183,10 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("https://get.jasonharness.ai/releases/download/v<version>/jason-plugin-other.zip", null)]
     [InlineData("https://get.jasonharness.ai/releases/download/v<other>/jason-plugin-reply.zip", null)]
     [InlineData("-ReleaseNotesUrl \"https://get.jasonharness.ai/releases/tag/v$env:VERSION\"", "a release's page")]
+    [InlineData("$line = \"& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v$previousVersion/install.ps1))) -Version $previousVersion\"", "a release's asset")]
+    [InlineData("line=\"curl -fsSL https://get.jasonharness.ai/releases/download/v$old/install.sh | sh -s -- --version $old\"", "a release's asset")]
+    [InlineData("https://get.jasonharness.ai/releases/download/v$old/jason-plugin-other.zip", null)]
+    [InlineData("https://get.jasonharness.ai/releases/download/v$older/install.sh", null)]
     [InlineData("\"release_notes_url\": \"https://get.jasonharness.ai/releases/tag/v0.2.0\",", "a release's page")]
     [InlineData("<https://get.jasonharness.ai/releases/>, which redirect to", "the releases index")]
     [InlineData("\"url\": \"https://get.jasonharness.ai\"", "the root")]

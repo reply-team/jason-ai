@@ -375,7 +375,7 @@ public partial class ReleaseWorkflowTests
         var configuration = Read(["desktop", "electron-builder.config.mjs"]);
         Assert.Contains("            checkBundle(bundleFolder(context.arch), version, context.electronPlatformName);\n", configuration, StringComparison.Ordinal);
         Assert.Contains("beforePack: async (context) => {", configuration, StringComparison.Ordinal);
-        Assert.Contains("return configuration({ version: releaseVersion(process.env['JASON_VERSION']), sign });", configuration, StringComparison.Ordinal);
+        Assert.Contains("return configuration({ version: releaseVersion(environment['JASON_VERSION']), sign, testBuild: environment[testBuildVariable] === '1' });", configuration, StringComparison.Ordinal);
 
         // The executable says the version itself: each call's smoke test refuses another, and so does the Rosetta start.
         var release = Read(Release);
