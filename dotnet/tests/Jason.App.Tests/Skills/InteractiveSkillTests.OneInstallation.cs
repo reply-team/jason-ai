@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Cli;
+using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 
 namespace Jason.App.Tests.Skills;
@@ -77,5 +78,31 @@ public partial class InteractiveSkillTests
         Assert.Contains("Its repair is `jason runtime resume`; while an update stands unfinished the drain is the update's, and the repair is `jason update apply`, never a resume in the middle of it.", skill, StringComparison.Ordinal);
         Assert.Single(Regex.Matches(skill, Regex.Escape("`jason runtime drain` has the runtime claim no new work")));
         Assert.Single(Regex.Matches(skill, Regex.Escape("`dispatcher` check")));
+    }
+
+    /// <summary>
+    /// The operating skill says how a carried update goes: handed to Jason Desktop's own updater and finished by the new
+    /// version's <c>jason</c>; the desktop's first start of each version runs the set-up and the finish itself; a held lock,
+    /// <c>update_in_progress</c> or <c>install_in_progress</c>, means later; <c>update_desktop_not_installed</c> names a
+    /// running Jason Desktop as the likely cause, as the verb's own message does; and on Linux the carried <c>jason</c> is
+    /// refused. It says too that a desktop installed by hand sets the machine up at its first start, and that on macOS and
+    /// Windows a person is sent to open Jason Desktop rather than download it.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_how_the_carried_update_goes_and_what_a_held_lock_means()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran, `jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window, waits for it, and the new version's `jason` finishes it", skill, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop's first start of each version runs `jason install` and `jason update apply --finish` itself", skill, StringComparison.Ordinal);
+        Assert.Contains($"A refusal with `{UpdateCodes.InProgress}` or `{CliErrors.InstallInProgress}` means later, not a failure", skill, StringComparison.Ordinal);
+        Assert.Contains($"`{UpdateCodes.DesktopNotInstalled}` means Jason Desktop's installer had not installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason Desktop that is running, one of another data directory included", skill, StringComparison.Ordinal);
+        Assert.Contains($"refused with `{UpdateCodes.CarriedByDesktop}`", skill, StringComparison.Ordinal);
+        Assert.Contains("A person who installs Jason Desktop on macOS or Windows by hand, from its disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it carries", skill, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download link, which is for Linux", skill, StringComparison.Ordinal);
+
+        // The likely cause the skill names is the one the verb's refusal gives.
+        var carried = Regex.Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "CarriedUpdate.cs")), @"""\s*\+\s*""", string.Empty);
+        Assert.Contains("The likely cause is a Jason Desktop that is running, one of another data directory included", carried, StringComparison.Ordinal);
     }
 }

@@ -1151,7 +1151,7 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("puts a `jason` the terminal finds", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries.", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("Prefer a window?", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
