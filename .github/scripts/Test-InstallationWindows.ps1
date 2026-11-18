@@ -288,7 +288,11 @@ function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scr
         if ($whileRunning) { & $whileRunning ((Get-Date) - $started).TotalSeconds }
         Start-Sleep -Milliseconds 500
     }
-    $ended = $process.WaitForExit(0)
+    # Whether it ended is read once, as the loop read it. HasExited answers by the exit code Windows reports, which can come
+    # before the process's handle is signalled, so a zero wait asked after it can say no of a process that ended. Where it
+    # ended, its handle is waited for, bounded, before its exit code is read; it is never ended.
+    $ended = $process.HasExited
+    if ($ended -and -not $process.WaitForExit(10000)) { Write-Host "  the setup, process $($process.Id), had ended by the exit code Windows reports, and its handle was not signalled 10 s after" }
     $result = @{ Ended = $ended; Exit = $(if ($ended) { $process.ExitCode } else { $null }); Seconds = [int]((Get-Date) - $started).TotalSeconds; Windows = @($seen) }
     if (-not $ended) {
         Write-ProcessTree $process

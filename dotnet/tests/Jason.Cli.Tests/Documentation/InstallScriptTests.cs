@@ -715,6 +715,51 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows proof reads whether a process it watched ended once, after its loop, by the reading the loop used.
+    /// <c>HasExited</c> answers by the exit code Windows reports, which can come before the process's handle is signalled,
+    /// so a zero wait asked after a loop on it can say no of a process the loop saw end, and the step then fails a process
+    /// that ended and tries to end it. No loop on <c>HasExited</c> is followed by a zero wait on the same process; the
+    /// setup's watcher takes its one reading from <c>HasExited</c>, waits for the handle, bounded, before it reads the exit
+    /// code where the process ended, and ends the process only where it did not.
+    /// </summary>
+    [Fact]
+    public void The_Windows_proof_reads_once_whether_a_process_it_watched_ended()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        // Every loop on a process's HasExited, its own or Wait-Until's, and what follows it to the end of its function: no
+        // zero wait on that process.
+        var loops = Regex.Matches(windows, @"\n[ ]*(?:while \(|Wait-Until \{)(?<condition>[^\n]*?\$(?<name>\w+)\.HasExited[^\n]*)");
+        Assert.True(loops.Count >= 3, $"Test-InstallationWindows.ps1 has {loops.Count} loop(s) on HasExited; the row reads too few to mean anything.");
+        foreach (Match loop in loops)
+        {
+            var after = windows[(loop.Index + loop.Length)..];
+            var end = after.IndexOf("\n}\n", StringComparison.Ordinal);
+            after = end >= 0 ? after[..end] : after;
+            Assert.False(Regex.IsMatch(after, @"\$" + Regex.Escape(loop.Groups["name"].Value) + @"\.WaitForExit\(\s*0\s*\)"),
+                $"a loop on ${loop.Groups["name"].Value}.HasExited is followed by a zero wait on the same process, a second reading of whether it ended: {loop.Groups["condition"].Value}");
+        }
+        Assert.DoesNotMatch(@"\.WaitForExit\(\s*0\s*\)", windows);
+
+        var watch = windows[windows.IndexOf("\nfunction Watch-Setup(", StringComparison.Ordinal)..];
+        watch = watch[..watch.IndexOf("\n}\n", StringComparison.Ordinal)];
+        var loopAt = watch.IndexOf("    while (-not $process.HasExited -and ", StringComparison.Ordinal);
+        var read = watch.IndexOf("\n    $ended = $process.HasExited\n", StringComparison.Ordinal);
+        var settled = watch.IndexOf("\n    if ($ended -and -not $process.WaitForExit(10000)) { ", StringComparison.Ordinal);
+        var code = watch.IndexOf("Exit = $(if ($ended) { $process.ExitCode } else { $null })", StringComparison.Ordinal);
+        var notEnded = watch.IndexOf("\n    if (-not $ended) {\n", StringComparison.Ordinal);
+        var stop = watch.IndexOf("Stop-Process -Id $process.Id", StringComparison.Ordinal);
+        Assert.True(loopAt >= 0 && read > loopAt && settled > read && code > settled && notEnded > code && stop > notEnded,
+            "Watch-Setup does not read once, after its loop, by HasExited whether the setup ended, wait for its handle where it did before reading its exit code, and end it only where it did not");
+        Assert.Single(Regex.Matches(watch, @"\$ended = "));
+        Assert.Single(Regex.Matches(watch, @"Stop-Process"));
+        // The one Stop-Process is inside the block for a setup that did not end, never after it.
+        var block = watch[notEnded..];
+        block = block[..(block.IndexOf("\n    }\n", StringComparison.Ordinal) + 1)];
+        Assert.True(block.Contains("Stop-Process -Id $process.Id", StringComparison.Ordinal), "Watch-Setup ends the setup outside the block for a setup that did not end");
+    }
+
+    /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
     /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
     /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
