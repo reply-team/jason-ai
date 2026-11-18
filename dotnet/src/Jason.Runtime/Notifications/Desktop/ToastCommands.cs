@@ -17,6 +17,9 @@ public sealed record ToastLaunch(IReadOnlyList<string> Command, string? Stdin, I
 /// </summary>
 public static class ToastCommands
 {
+    /// <summary>osascript, where macOS keeps it: every toast is started by the full path of its program.</summary>
+    public const string Osascript = "/usr/bin/osascript";
+
     /// <summary>The protocol version the toast host reads.</summary>
     public const int Protocol = 1;
 
@@ -36,21 +39,21 @@ public static class ToastCommands
     {
         ArgumentNullException.ThrowIfNull(message);
         var script = $"display notification \"{AppleScript(message.Summary + " " + message.Look)}\" with title \"{AppleScript(message.Title)}\"";
-        return new ToastLaunch(["osascript", "-e", script], null, Empty);
+        return new ToastLaunch([Osascript, "-e", script], null, Empty);
     }
 
-    public static ToastLaunch LinuxNotifySend(NotificationMessage message)
+    public static ToastLaunch LinuxNotifySend(string program, NotificationMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return new ToastLaunch(["notify-send", "--app-name=" + message.Title, message.Title, message.Summary + "\n" + message.Look], null, Empty);
+        return new ToastLaunch([program, "--app-name=" + message.Title, message.Title, message.Summary + "\n" + message.Look], null, Empty);
     }
 
-    public static ToastLaunch LinuxGdbus(NotificationMessage message)
+    public static ToastLaunch LinuxGdbus(string program, NotificationMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
         return new ToastLaunch(
             [
-                "gdbus", "call", "--session",
+                program, "call", "--session",
                 "--dest", "org.freedesktop.Notifications",
                 "--object-path", "/org/freedesktop/Notifications",
                 "--method", "org.freedesktop.Notifications.Notify",
@@ -62,9 +65,9 @@ public static class ToastCommands
     }
 
     /// <summary>Whether a notification daemon owns its name on the session bus; it answers <c>(true,)</c> or <c>(false,)</c>.</summary>
-    public static ToastLaunch LinuxDaemonProbe() => new(
+    public static ToastLaunch LinuxDaemonProbe(string gdbus) => new(
         [
-            "gdbus", "call", "--session",
+            gdbus, "call", "--session",
             "--dest", "org.freedesktop.DBus",
             "--object-path", "/org/freedesktop/DBus",
             "--method", "org.freedesktop.DBus.NameHasOwner",
@@ -77,9 +80,9 @@ public static class ToastCommands
     /// The names the bus can start on demand. A daemon such as dunst, mako or MATE's owns its name only after its first
     /// notification; listed here, it is there to be told, and the bus starts it.
     /// </summary>
-    public static ToastLaunch LinuxActivatableProbe() => new(
+    public static ToastLaunch LinuxActivatableProbe(string gdbus) => new(
         [
-            "gdbus", "call", "--session",
+            gdbus, "call", "--session",
             "--dest", "org.freedesktop.DBus",
             "--object-path", "/org/freedesktop/DBus",
             "--method", "org.freedesktop.DBus.ListActivatableNames",

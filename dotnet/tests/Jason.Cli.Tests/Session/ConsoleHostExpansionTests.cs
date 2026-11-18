@@ -166,6 +166,8 @@ public sealed class ConsoleHostExpansionTests
     public void The_console_host_starts_Windows_PowerShell_without_the_inherited_module_path(TerminalPlatform os, string host, bool keeps)
     {
         var inherited = Environment.GetEnvironmentVariable(ChildProcess.ModulePathVariable);
+        // A system tool is started by its full path, and a macOS or Linux one names none on Windows: those rows run on their own systems.
+        Assert.SkipWhen(OperatingSystem.IsWindows() && os != TerminalPlatform.Windows, "A macOS or Linux terminal's path is no full path on Windows.");
         Assert.SkipWhen(inherited is null, "This process has no PSModulePath to hand on.");
         IReadOnlyList<string> argv = os == TerminalPlatform.Windows ? ["C:/Windows/System32/conhost.exe", "--", host] : ["/usr/bin/x-terminal-emulator", "-e", host];
 

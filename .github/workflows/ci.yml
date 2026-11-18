@@ -1895,7 +1895,7 @@ jobs:
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
     # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 120
+    timeout-minutes: 150
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -1906,6 +1906,15 @@ jobs:
       PREVIOUS: ${{ github.workspace }}\previous
     steps:
       - uses: actions/checkout@v7
+
+      # One temporary folder for the whole job: the one a new shell of this account has, where a terminal the legs open,
+      # and every program it starts, unpacks and renames aside. A step otherwise reads the runner's own TEMP, which can be
+      # another (a per-session folder), and its listings would look where no leg's program wrote. Every listing fails
+      # where its step's and a new shell's differ.
+      - name: Give the job's steps the temporary folder a new shell of this account has
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step OneTemporary -Out $env:OUT
 
       - uses: ./.github/actions/setup-dotnet
         with:
@@ -2191,6 +2200,46 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # The previous release's command-line Jason, a runtime running and its logon start registered, one campaign made,
+      # then this build's unpinned line run over it as an agent runs it, while that runtime runs: the old runtime stopped
+      # before the install is retired, a runtime again from the carried jason, the Path, a new shell, the campaigns the same
+      # by id; then taken off from a new terminal, and the listing held to the machine before.
+      - name: Run this build's line over the previous release's command-line Jason while its runtime runs
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Run this build's line over the previous release's command-line Jason while its runtime runs"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverCommandLine -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS -Script "${{ steps.stand-in.outputs.script }}"
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-line-over-command-line-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-line-over-command-line-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
+      # The previous release's Jason Desktop by its own setup and its command-line Jason by its own install.ps1, side by side
+      # and both on the Path; then this build's setup run as an update runs it: one installation, the command-line one
+      # retired into the application, the Path naming the bundle folder once, a new shell finding the carried jason; then
+      # taken off by the uninstall Installed apps runs, and the listing held to the machine before.
+      - name: Install this build as an update over the previous release's Jason Desktop and its command-line Jason side by side
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Install this build as an update over the previous release's Jason Desktop and its command-line Jason side by side"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step OverBothPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-over-both-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-over-both-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       # The next version, packaged and built as a test build the same way at this version and one: its own jason, its
       # setup, its update feed and a manifest naming it, in a folder of its own that the update below reads.
       - name: Package jason at the next version
@@ -2276,7 +2325,8 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # LAST before the held step, so that whatever going back does to the machine takes no later leg.
+      # Among the last before the held step, so that whatever going back does to the machine takes no leg but the one that
+      # goes back and moves again, which follows it.
       # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
       # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
       # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
@@ -2296,6 +2346,25 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
+      # Going back, then moving again: after going back to the previous release as the page says, its own jason update
+      # apply moves the install into Jason Desktop again, the Path naming the bundle folder once, the campaigns as many; the
+      # moved install's own uninstall ends it, and the listing is held to the machine before.
+      - name: Go back to the previous release, then move again with its own update
+        if: ${{ !cancelled() }}
+        timeout-minutes: 40
+        shell: pwsh
+        env:
+          LEG: "Go back to the previous release, then move again with its own update"
+          JASON_Update__CheckEnabled: 'false'
+          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Again -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-again-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-again-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that
@@ -2341,7 +2410,7 @@ jobs:
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
     # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 90
+    timeout-minutes: 135
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2532,12 +2601,37 @@ jobs:
           printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
           [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
           mkdir -p "$PREVIOUS"
-          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json; do
+          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json jason-desktop-macos-arm64.zip; do
             curl -fsSL --max-time 600 -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
           done
           (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
+          # The previous release's Desktop archive, held to checksums.txt as the three files beside it are: unlisted, it fails.
+          grep -qE '  jason-desktop-macos-arm64\.zip$' "$PREVIOUS/checksums.txt" || { echo "::error::jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt"; exit 1; }
+          (cd "$PREVIOUS" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      # Over the previous release's Jason Desktop: its own download placed and opened as a person does, then this build
+      # installed over it by install.sh as an agent runs it, and taken off from a new terminal.
+      - name: Install this build by install.sh over the previous release's Jason Desktop
+        if: ${{ !cancelled() }}
+        timeout-minutes: 25
+        shell: bash
+        env:
+          LEG: "Install this build by install.sh over the previous release's Jason Desktop"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh over-previous-desktop "$PREVIOUS" "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-over-previous-uninstall
+          # The previous release's Desktop's first start ran its own jason install, which wrote the ~/.local/bin lines into a
+          # profile it keeps no record of creating; docs/release-and-update.md §9 ("in place of the PATH entry and the
+          # executable") says such a file stays: "a file the person had, one they have written into since, and one with no
+          # record (an install before 0.49) stay". previous-profiles excuses that file only when empty, and that release's
+          # enabled launchd record by name, each said.
+          bash .github/scripts/test-installation-macos.sh compare after-over-previous-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # The path every command-line user takes: the previous release's own install, its own jason update apply pinned to
       # this version, and the move into Jason Desktop asserted in full; then the moved installation taken off from a new
@@ -2573,7 +2667,8 @@ jobs:
           bash .github/scripts/test-installation-macos.sh listing after-previous-own-removal
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # LAST before the held step, so that whatever going back does to the machine takes no later leg.
+      # Among the last before the held step, so that whatever going back does to the machine takes no leg but the one that
+      # goes back and moves again, which follows it.
       # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
       # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
       # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
@@ -2592,6 +2687,25 @@ jobs:
           bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-way-back-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-way-back-uninstall before previous-own
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # Going back, then moving again: after going back to the previous release as the page says, its own jason update
+      # apply moves the install into Jason Desktop again, the wrapper naming no data directory, the campaigns as many; the
+      # moved install's own uninstall ends it, and the listing is held to the machine before, the previous release's empty
+      # profiles and enabled launchd record aside.
+      - name: Go back to the previous release, then move again with its own update
+        if: ${{ !cancelled() }}
+        timeout-minutes: 35
+        shell: bash
+        env:
+          LEG: "Go back to the previous release, then move again with its own update"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
+          bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION" again
+          bash .github/scripts/test-installation-macos.sh listing after-way-back-again-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-way-back-again-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that

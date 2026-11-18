@@ -45,7 +45,7 @@ import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, fi
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
-import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths, namedDataDirectory, type DesktopPaths } from './paths.ts';
 import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
@@ -214,18 +214,18 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
 /**
- * A terminal's update requests, taken by the run whose window is open: by the updater `updater` gives, which Live's
- * window has and the Demo's makes for the request alone. Up to the download in either; on, to the install, only where the
- * switch says a window may close (`windowOpenUpdate`). `menu` says whether the window has an install item to wait under.
+ * A terminal's update requests, taken by the run whose window is open: in Live by the updater `updater` gives, up to the
+ * download, and on, to the install, only where the switch says a window may close (`windowOpenUpdate`); `menu` says
+ * whether the window has an install item to wait under. A window that shows the Demo holds no updater and refuses every
+ * request as `demo_open` (`takeRequest`).
  */
-function serveRequests(log: Logger, data: string, menu: boolean, updater: () => Pick<Updater, 'take'>): void {
+function serveRequests(log: Logger, data: string, window: { menu: boolean; updater: () => Pick<Updater, 'take'> } | 'demo'): void {
     windowRequests?.serve((request) =>
         takeRequest(request, {
             data,
             from: app.getVersion(),
-            where: { window: { menu } },
+            ...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),
             unsupported: requestSupport(app.isPackaged, process.platform),
-            updater,
             windowOpen: windowOpenUpdate,
             log,
             startRuntime: carriedRuntimeStart(data, log),
@@ -422,7 +422,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
         executable,
-        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        dataDirectory: namedDataDirectory(process.env, home, process.platform),
         path: () => process.env.PATH ?? '',
         pathext: process.env['PATHEXT'],
         isProgram: (file) => isProgramFile(file, process.platform),
@@ -521,7 +521,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     updates?.start();
     // A terminal's update request, taken by this window's own updater (a build that has none takes none: `requestSupport`).
-    serveRequests(log, paths.data, updates !== null, () => updates ?? requestUpdater({ data: paths.data, log }));
+    serveRequests(log, paths.data, { menu: updates !== null, updater: () => updates ?? requestUpdater({ data: paths.data, log }) });
     let runtimeVersion: string | null = null;
     let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
@@ -698,7 +698,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         ...(command !== null
             ? { jason: () => command.onPath() }
             : machineSetup !== null && offers.command && carried.outlives
-              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: process.env['JASON_DATA_DIR'] || null, isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
+              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: namedDataDirectory(process.env, home, process.platform), isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
               : {}),
         icon: (path) => icons.icon(path),
         changeJason: {
@@ -934,22 +934,9 @@ async function runDemo(_links: LinkPost): Promise<void> {
     const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
-    // A terminal's update request: the Demo has no updater, so one is made for the request when one comes, and only then.
-    serveRequests(log, runOn.person, false, () =>
-        requestUpdater({
-            data: runOn.person,
-            log,
-            async beforeInstall() {
-                quitting = true;
-                desk.close();
-            },
-            async afterRefused() {
-                quitting = false;
-                desk.open();
-                desk.show();
-            },
-        }),
-    );
+    // A terminal's update request: the Demo resolves no host name and holds no updater, so it refuses the request as the
+    // Demo (`demo_open`), and nothing is checked, stopped or kept.
+    serveRequests(log, runOn.person, 'demo');
 
     const unshown = demoUnshownSentence(process.platform);
     try {

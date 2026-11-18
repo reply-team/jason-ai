@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics;
 using Jason.Contracts.Notifications;
+using Jason.Contracts.Programs;
 
 namespace Jason.Runtime.Notifications.Desktop;
 
@@ -44,25 +45,14 @@ public sealed record DesktopFacts(
             File.Exists);
     }
 
-    /// <summary>A program on this environment's PATH, the way a shell would find it, or null.</summary>
-    private static string? Find(string program, Dictionary<string, string> environment)
-    {
-        if (!environment.TryGetValue("PATH", out var path))
-        {
-            return null;
-        }
-
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(directory, program);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
+    /// <summary>
+    /// A program on this environment's PATH by its full path, as every program Jason starts by name is found
+    /// (<see cref="ProgramLookup.FullPathOf"/>): in the entries that are full paths, in their order; or null.
+    /// </summary>
+    internal static string? Find(string program, Dictionary<string, string> environment) =>
+        environment.TryGetValue("PATH", out var path)
+            ? ProgramLookup.FullPathOf(program, new ProgramSearchPath(path, environment.GetValueOrDefault("PATHEXT")))
+            : null;
 }
 
 /// <summary>Whether a toast can be shown at all: a desktop, or none and why.</summary>

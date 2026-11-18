@@ -10,6 +10,23 @@ namespace Jason.Cli.Uninstall;
 public sealed record StoredPath(string Raw, RegistryValueKind Kind);
 
 /// <summary>
+/// This account's <c>Path</c> as <c>jason install</c> reads it, appends to it and takes an entry off it:
+/// <see cref="UserPathValue"/> on a machine, a value of a test's own in a test, which so writes no registry key. Windows
+/// only, as every caller is.
+/// </summary>
+internal interface IAccountPath
+{
+    /// <summary>The value as stored and its kind, or null where there is none.</summary>
+    StoredPath? Read();
+
+    /// <summary>Writes the value with that kind; an empty value is removed.</summary>
+    void Write(string raw, RegistryValueKind kind);
+
+    /// <summary>Puts the directory on the Path where it is not there already, and says whether it wrote anything.</summary>
+    bool Append(string directory);
+}
+
+/// <summary>
 /// This account's <c>Path</c> value on Windows, read and written the way the registry holds it.
 /// </summary>
 /// <remarks>
@@ -27,7 +44,7 @@ public sealed record StoredPath(string Raw, RegistryValueKind Kind);
 /// the Path a suite could otherwise reach belongs to whoever ran it.
 /// </para>
 /// </remarks>
-public sealed class UserPathValue(string subKey = UserPathValue.EnvironmentKey)
+public sealed class UserPathValue(string subKey = UserPathValue.EnvironmentKey) : IAccountPath
 {
     /// <summary>Where Windows keeps an account's own environment, under <c>HKEY_CURRENT_USER</c>.</summary>
     public const string EnvironmentKey = "Environment";

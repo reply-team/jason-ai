@@ -62,6 +62,32 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// </summary>
     internal Func<string?> AccountHome { get; init; } = AccountDatabase.Home;
 
+    /// <summary>
+    /// Windows: the machine's <c>Path</c> as the registry stores it, which a new terminal reads before the account's; null
+    /// where there is none, and everywhere but Windows. Read only, and read from the registry for this machine's places alone: any
+    /// other places have none unless a test gives one of its own, so no test reads the machine's.
+    /// </summary>
+    internal Func<StoredPath?> MachinePath { get; init; } = static () => null;
+
+    /// <summary>
+    /// Windows: the account's <c>Path</c> as a new terminal reads it and as <c>jason install</c> appends its entry and
+    /// takes a retired one off; null is the one under <see cref="PathKey"/>. A value of a test's own in a test, so a row
+    /// writes no registry key.
+    /// </summary>
+    internal IAccountPath? AccountPath { get; init; }
+
+    /// <summary>The account's <c>Path</c> this run reads and writes: <see cref="AccountPath"/>, else the value under <see cref="PathKey"/>.</summary>
+    internal IAccountPath AccountPathValue => AccountPath ?? new UserPathValue(PathKey);
+
+    /// <summary>Windows: the extensions a shell tries, in order, as <c>PATHEXT</c> lists them; null reads this process's.</summary>
+    internal string? PathExtensions { get; init; }
+
+    /// <summary>
+    /// Whether a folder is on a read-only volume, as a mounted disk image is (<see cref="VanishingPlace"/>): asked on macOS
+    /// alone, through a look that writes nothing; on every other system false. A test's own answer in a test.
+    /// </summary>
+    internal Func<string, bool> ReadOnlyVolume { get; init; } = VanishingPlace.OnReadOnlyVolume;
+
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
 
@@ -81,6 +107,7 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
             return new SetupPlaces(SetupSystem.Windows, home, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserPathValue.EnvironmentKey, null)
             {
                 Elevated = Elevation.OfThisProcess(),
+                MachinePath = MachineEnvironment.ReadPath,
             };
         }
 

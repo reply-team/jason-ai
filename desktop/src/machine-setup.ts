@@ -126,13 +126,20 @@ export function reportOf(raw: unknown): SetupReport | null {
  * What a run of the routine answered: its report, or why there is none, in its own sentence where it said one, or `later`
  * where another jason held the update's lock (`laterCodes`), which is no failure: the next start runs it again.
  */
-export type SetupAnswer = { report: SetupReport } | { refused: string } | { later: string };
+export type SetupAnswer = { report: SetupReport } | { refused: string; vanishing?: true } | { later: string };
 
 /**
  * The refusals that mean "later, at the next start", never a failure: another `jason install`, or an update, its finish or
  * a rollback, holds the update's lock (`docs/release-and-update.md` §7 and §9).
  */
 export const laterCodes: readonly string[] = ['install_in_progress', 'update_in_progress'];
+
+/**
+ * The refusal of an application that runs from a place that goes away, a mounted disk image or a copy macOS runs from a
+ * temporary place: the routine set nothing up and says to move Jason first. From there nothing on the machine changes:
+ * no finishing step, no runtime started, no record, so each start from such a place asks again.
+ */
+export const vanishingCode = 'install_vanishing_place';
 
 /** The error a CLI run printed as its document, its code and its sentence, or null. */
 function errorOf(stdout: string): { code: string; message: string } | null {
@@ -155,7 +162,10 @@ function errorSaid(stdout: string): string | null {
 export function answerOf(result: CliResult): SetupAnswer {
     if (result.exit === -1) return { refused: 'jason install could not be started, or ended before it printed a report.' };
     const error = errorOf(result.stdout);
-    if (error !== null) return laterCodes.includes(error.code) ? { later: error.message } : { refused: error.message };
+    if (error !== null) {
+        if (laterCodes.includes(error.code)) return { later: error.message };
+        return error.code === vanishingCode ? { refused: error.message, vanishing: true } : { refused: error.message };
+    }
     let parsed: unknown = null;
     try {
         parsed = JSON.parse(result.stdout);
@@ -239,13 +249,27 @@ export async function payOwedStart(owed: { note: string; exists(path: string): b
     return after;
 }
 
-/** Where the routine last ran, by the desktop's own record: the version and the report of a run that completed. */
+/**
+ * Where the routine last ran, by the desktop's own record: the version, the place the application ran from (its carried
+ * jason), and the report of a run that completed. A record an earlier desktop wrote names no place.
+ */
 export interface SetupRecord {
     ranFor: string | null;
+    ranFrom: string | null;
     report: SetupReport | null;
 }
 
-const noRecord: SetupRecord = { ranFor: null, report: null };
+const noRecord: SetupRecord = { ranFor: null, ranFrom: null, report: null };
+
+/**
+ * Pure: whether the record stands for this version run from this place, so a start runs no set-up. A start from another
+ * place, the same version opened from Applications after its disk image, sets up again; on Windows the case of a place's
+ * letters does not count.
+ */
+export function recordHolds(record: SetupRecord, version: string | null, executable: string, platform: NodeJS.Platform): boolean {
+    if (record.report === null || record.ranFrom === null || record.ranFor !== version) return false;
+    return platform === 'win32' ? record.ranFrom.toLowerCase() === executable.toLowerCase() : record.ranFrom === executable;
+}
 
 /** The record, or none where it is missing, cannot be read or is not one. */
 export function readSetupRecord(file: string): SetupRecord {
@@ -257,15 +281,15 @@ export function readSetupRecord(file: string): SetupRecord {
     }
     if (!isObject(raw) || !isText(raw.ran_for)) return noRecord;
     const report = reportOf(raw.report);
-    return report === null ? noRecord : { ranFor: raw.ran_for, report };
+    return report === null ? noRecord : { ranFor: raw.ran_for, ranFrom: isText(raw.ran_from) ? raw.ran_from : null, report };
 }
 
-/** Writes the record whole, through a file beside it renamed over it, the report as the routine printed it. */
-export function writeSetupRecord(file: string, version: string, printed: unknown): void {
+/** Writes the record whole, through a file beside it renamed over it, the place it ran from and the report as printed. */
+export function writeSetupRecord(file: string, version: string, place: string, printed: unknown): void {
     mkdirSync(dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.tmp`;
     try {
-        writeFileSync(temporary, `${JSON.stringify({ ran_for: version, report: printed }, null, 2)}\n`, { mode: 0o600 });
+        writeFileSync(temporary, `${JSON.stringify({ ran_for: version, ran_from: place, report: printed }, null, 2)}\n`, { mode: 0o600 });
         renameSync(temporary, file);
     } catch (error) {
         rmSync(temporary, { force: true });
@@ -283,7 +307,8 @@ export type SetupState =
     | { state: 'running'; long?: boolean }
     /** `later` where the routine reported and the finishing step was left for the next start. */
     | { state: 'reported'; report: SetupReport; runtimeAfter?: RuntimeAfter; later?: string }
-    | { state: 'refused'; why: string; runtimeAfter?: RuntimeAfter }
+    /** `vanishing` where the application runs from a place that goes away (`vanishingCode`). */
+    | { state: 'refused'; why: string; runtimeAfter?: RuntimeAfter; vanishing?: true }
     /** The update's lock held by another jason: nothing set up, no record, and the next start runs it again. */
     | { state: 'later'; why: string; runtimeAfter?: RuntimeAfter };
 
@@ -386,7 +411,7 @@ export class MachineSetup {
             this.#state = { state: 'unoffered' };
         } else {
             const kept = readSetupRecord(deps.record);
-            this.#state = kept.report !== null && kept.ranFor === deps.version ? { state: 'reported', report: kept.report } : { state: 'idle' };
+            this.#state = recordHolds(kept, deps.version, deps.executable, deps.platform) && kept.report !== null ? { state: 'reported', report: kept.report } : { state: 'idle' };
         }
     }
 
@@ -409,13 +434,13 @@ export class MachineSetup {
 
     /**
      * The start's run: once a start, where it is offered and the record names another version than the one carried, or
-     * none; that run pays the note that a start is owed after it. A start that runs no routine pays the note alone
-     * (`payOwedStart`), in Demo as in Live.
+     * another place than the one this application runs from, or none; that run pays the note that a start is owed after
+     * it. A start that runs no routine pays the note alone (`payOwedStart`), in Demo as in Live.
      */
     atStart(): Promise<void> {
         this.#atStart ??= (async () => {
-            const { offered, version, record, startOwed, runtime, log } = this.#deps;
-            if (offered && version !== null && readSetupRecord(record).ranFor !== version) {
+            const { offered, version, record, startOwed, runtime, log, executable, platform } = this.#deps;
+            if (offered && version !== null && !recordHolds(readSetupRecord(record), version, executable, platform)) {
                 await this.#run('start');
                 return;
             }
@@ -478,6 +503,8 @@ export class MachineSetup {
             } catch (error) {
                 next = { state: 'refused', why: messageOf(error) };
             }
+            // From a place that goes away no runtime is started either: nothing on the machine changes from there.
+            if (next.state === 'refused' && next.vanishing === true) return next;
             // After any outcome: one answered before, or the note says a start is owed, and none answers now, so one is
             // started from the carried file.
             const owed = !before && this.#owed();
@@ -513,6 +540,8 @@ export class MachineSetup {
             log.info('machine_setup_later', { Why: why });
             return { state: 'later', why: answer.later };
         }
+        // From a place that goes away: said in the item, and nothing after it, the finishing step and the record included.
+        if ('refused' in answer && answer.vanishing === true) return { state: 'refused', why: answer.refused, vanishing: true };
         let finishing: FinishingStep | null = null;
         if (this.#deps.finishingStep !== undefined) {
             finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${messageOf(error)}`] }));
@@ -521,7 +550,7 @@ export class MachineSetup {
         const completed = routineDone && (finishing === null || finishing.completed);
         if (completed) {
             try {
-                writeSetupRecord(record, version, JSON.parse(result.stdout));
+                writeSetupRecord(record, version, this.#deps.executable, JSON.parse(result.stdout));
             } catch {
                 log.warn('machine_setup_unrecorded', { Version: version });
             }

@@ -444,6 +444,12 @@ public static class TerminalPlan
 
         foreach (var directory in (searchPath ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            // An entry that is not a full path names wherever the process stands, and is not searched.
+            if (!Path.IsPathFullyQualified(directory))
+            {
+                continue;
+            }
+
             var candidate = Path.Combine(directory, program);
             if (IsProgram(candidate))
             {

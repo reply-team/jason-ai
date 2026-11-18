@@ -58,10 +58,19 @@ public static class ChildProcess
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window, no shell and no stream redirected; on Windows, for Windows
-    /// PowerShell, without the inherited <see cref="ModulePathVariable"/>.
+    /// PowerShell, without the inherited <see cref="ModulePathVariable"/>. Every child is started by its full path, and a
+    /// name that is not one is refused here, before anything is started (<see cref="IsFullPath"/>): a name the operating
+    /// system looked up would be looked up in places no caller chose, the working folder among them, and on Windows the
+    /// folder of the program starting it.
     /// </summary>
+    /// <exception cref="ArgumentException">A <paramref name="fileName"/> that is not a full path.</exception>
     public static ProcessStartInfo StartInfo(string fileName)
     {
+        if (!IsFullPath(fileName))
+        {
+            throw new ArgumentException($"A child is started by its full path, and '{fileName}' is not one.", nameof(fileName));
+        }
+
         var start = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
@@ -87,8 +96,10 @@ public static class ChildProcess
 
     /// <summary>
     /// A start for <paramref name="fileName"/> with no window and no shell, and the standard streams of a child of
-    /// that <paramref name="kind"/>; the caller adds the rest.
+    /// that <paramref name="kind"/>; the caller adds the rest. Under every kind the child is started by its full path, as
+    /// <see cref="StartInfo(string)"/> holds it.
     /// </summary>
+    /// <exception cref="ArgumentException">A <paramref name="fileName"/> that is not a full path.</exception>
     public static ProcessStartInfo StartInfo(string fileName, ChildKind kind)
     {
         var start = StartInfo(fileName);
@@ -116,6 +127,14 @@ public static class ChildProcess
 
         return start;
     }
+
+    /// <summary>
+    /// Whether <paramref name="fileName"/> names a program by its full path, as <see cref="Path.IsPathFullyQualified(string)"/>
+    /// answers: from the root on macOS and Linux, with its drive or share on Windows. A bare name, a relative path, and on
+    /// Windows a path from the top of the current drive (<c>\Windows\System32\tool.exe</c>) or relative to a drive's current
+    /// folder (<c>C:tool.exe</c>) are not.
+    /// </summary>
+    public static bool IsFullPath(string? fileName) => !string.IsNullOrEmpty(fileName) && Path.IsPathFullyQualified(fileName);
 
     /// <summary>
     /// Starts a child from a start this class made, under <see cref="StartErrorMode"/>: every child is started here,

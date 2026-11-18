@@ -79,8 +79,17 @@ public static class SelfExecutable
     /// The same decision over the two values it depends on: the path the operating system says this process is
     /// running, and the entry assembly it was handed. Public so that the answer can be tested without a process.
     /// </summary>
-    public static IReadOnlyList<string> Resolve(string? processPath, string entryAssembly)
+    public static IReadOnlyList<string> Resolve(string? processPath, string entryAssembly) =>
+        Resolve(processPath, entryAssembly, new Programs.ProgramSearchPath(Environment.GetEnvironmentVariable("PATH"), Environment.GetEnvironmentVariable("PATHEXT")));
+
+    /// <summary>
+    /// The same decision with the search path a muxer is looked for on, where the operating system gives no process path:
+    /// the muxer is then named by the full path that search path's full entries give for it, since every child is started
+    /// by its full path; with none there, by its bare name, which the door refuses.
+    /// </summary>
+    public static IReadOnlyList<string> Resolve(string? processPath, string entryAssembly, Programs.ProgramSearchPath searchPath)
     {
+        ArgumentNullException.ThrowIfNull(searchPath);
         if (processPath is not null
             && !string.Equals(Path.GetFileNameWithoutExtension(processPath), DotnetHost, StringComparison.OrdinalIgnoreCase))
         {
@@ -89,8 +98,10 @@ public static class SelfExecutable
 
         ArgumentException.ThrowIfNullOrWhiteSpace(entryAssembly);
 
-        // The muxer that is running this process, by the path it is running at. The bare name is only for a host
-        // that publishes no process path at all, where there is nothing better to say.
-        return processPath is null ? [DotnetHost, entryAssembly] : [processPath, entryAssembly];
+        // The muxer that is running this process, by the path it is running at. A host that publishes no process path at
+        // all has the muxer the search path gives, and the bare name only where it gives none.
+        return processPath is null
+            ? [Programs.ProgramLookup.FullPathOf(DotnetHost, searchPath) ?? DotnetHost, entryAssembly]
+            : [processPath, entryAssembly];
     }
 }

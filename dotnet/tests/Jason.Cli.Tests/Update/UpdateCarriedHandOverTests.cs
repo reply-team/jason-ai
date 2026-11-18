@@ -213,6 +213,44 @@ public sealed class UpdateCarriedHandOverTests
         Assert.DoesNotContain("system.drain", installation.Operations);
     }
 
+    /// <summary>
+    /// A window that shows the Demo refuses the request as the Demo before it checks anything: the verb ends with that
+    /// reason and its sentence, nothing drained, stopped or launched, the record that stood put back, and it is not worth
+    /// trying again as it stands, since the same window refuses the same request until the person leaves the Demo.
+    /// </summary>
+    [Fact]
+    public async Task A_demo_window_refuses_as_the_demo_and_the_refusal_is_not_retried()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        installation.Killed(UpdateStep.Complete);
+        installation.WithRuntime();
+        desktop.Becomes(installation.From);
+        var before = File.ReadAllText(installation.Update.Ledger);
+        var found = installation.State;
+        desktop.TakenByAWindow = true;
+        const string sentence = "Jason Desktop is showing the Demo, which takes no update, so nothing was checked, stopped or changed.";
+        desktop.Before = (id, to) =>
+        {
+            desktop.Write(id, to, "refused", reason: "demo_open", message: sentence, window: true);
+            return 0;
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal("update_refused_by_desktop", refusal.Code);
+        Assert.Contains($"(demo_open): {sentence}", refusal.Message, StringComparison.Ordinal);
+        Assert.False(refusal.Retryable, "the Demo refuses the same request again until it is left");
+        Assert.True(installation.Running);
+        Assert.Equal(found, installation.State);
+        Assert.DoesNotContain("system.drain", installation.Operations);
+        Assert.Empty(installation.Processes.Launches);
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
+    }
+
     /// <summary>A start that ends and leaves no file is no answer: said, with the runtime as it was found.</summary>
     [Fact]
     public async Task A_start_that_writes_no_answer_is_no_answer()

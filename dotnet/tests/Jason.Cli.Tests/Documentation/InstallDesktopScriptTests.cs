@@ -51,6 +51,18 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
     private const string ShortCircuited = "    function Assert-Signed([string] $file) { return";
 
+    /// <summary>
+    /// The line the published script's elevation check opens with. A test build answers it as a row says, not elevated by
+    /// default, so no row depends on how the shell that runs the tests was started; a published run reads the real token.
+    /// </summary>
+    private const string ElevationCheck = "    function Test-Elevated {";
+
+    /// <summary>What install.ps1 says in an elevated PowerShell, before it reads the feed.</summary>
+    private const string ElevatedRefusal =
+        "This PowerShell runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session, "
+        + "and Jason Desktop, jason in the terminal and the skills would be set up the same way or in another account's profile, so nothing was downloaded or installed: "
+        + "run the install line again from an ordinary PowerShell of the account signed in here, not run as an administrator.";
+
     /// <summary>The verification install.sh asks of codesign, as the stand-in logs it with the application's path left out.</summary>
     private const string VerifyCall = "codesign --verify --deep --strict -R=" + Requirement;
 
@@ -380,6 +392,35 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.Empty(windows.Calls());
     }
 
+    /// <summary>
+    /// An elevated PowerShell - an administrator's, with User Account Control on, or another account's than the session's -
+    /// would run the setup, `jason install` and the runtime the same way, or into another account's profile: the script
+    /// stops before it reads the feed, under both shells. The published script reads the token's kind and the session's
+    /// account, as <c>jason install</c> and an update do, and refuses before the feed.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Windows_an_elevated_powershell_is_refused_before_anything_is_downloaded(bool windowsPowerShell)
+    {
+        var windows = Windows.Start(_tree);
+
+        var run = windows.Run(_tree.NewDirectory("empty-feed"), windowsPowerShell: windowsPowerShell, elevated: true);
+
+        Assert.Equal(1, run.Exit);
+        AssertSaid(ElevatedRefusal, run.Stderr);
+        Assert.DoesNotContain("manifest.json", run.Stderr, StringComparison.Ordinal);
+        Assert.Empty(windows.Calls());
+        Assert.False(Directory.Exists(windows.App));
+
+        var code = Script("install.ps1");
+        Assert.DoesNotContain(ElevationCheck + " return", code, StringComparison.Ordinal);
+        Assert.Contains("GetTokenInformation", code, StringComparison.Ordinal);
+        Assert.Contains("WTSQuerySessionInformation", code, StringComparison.Ordinal);
+        var refused = code.IndexOf("    if (Test-Elevated) {", StringComparison.Ordinal);
+        Assert.True(refused > 0 && refused < code.IndexOf("# --- the feed ---", StringComparison.Ordinal), "install.ps1 does not refuse an elevated PowerShell before the feed.");
+    }
+
     [Fact]
     public void Windows_a_release_before_0_49_0_is_left_to_its_own_script()
     {
@@ -413,6 +454,44 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.Equal(1, run.Exit);
         AssertSaid(said, run.Stderr);
         Assert.DoesNotContain("call it by its full path", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "A terminal opened from now on finds jason by name" is said only where the report says that terminal finds this
+    /// jason: where it finds another file first, the script ends non-zero naming it, and the report above says what removes
+    /// it.
+    /// </summary>
+    [Fact]
+    public void Windows_a_report_naming_another_jason_first_ends_non_zero_and_says_so()
+    {
+        var windows = Windows.Start(_tree);
+        windows.Variables["JASON_STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: false, finds: @"C:\\Tools\\jason.exe", findsThis: false);
+        windows.Variables["JASON_STANDIN_INSTALL_EXIT"] = "1";
+
+        var run = windows.Run(windows.Feed());
+
+        Assert.Equal(1, run.Exit);
+        AssertSaid(@"a terminal opened from now on finds C:\Tools\jason.exe first by that name; its problems above say what to do.", run.Stderr);
+        Assert.DoesNotContain("finds jason by name", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Whether a new terminal finds this jason is decided once, by <c>jason install</c>, and the script reads that member
+    /// and compares no path: a file it names that is neither path the script knows still ends saying jason is found where
+    /// <c>finds_this</c> is true, and a report without the member, from an older kept application, reads as before it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void Windows_the_script_reads_finds_this_and_compares_no_path(bool? findsThis)
+    {
+        var windows = Windows.Start(_tree);
+        windows.Variables["JASON_STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: true, finds: @"C:\\Users\\somebody\\jason.EXE", findsThis: findsThis);
+
+        var run = windows.Run(windows.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Equal($"A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: {windows.Carried}", Lines(run.Stdout)[^1]);
     }
 
     [Fact]
@@ -564,6 +643,27 @@ public sealed class InstallDesktopScriptTests : IDisposable
         var lines = Lines(run.Stdout);
         Assert.Equal($"Jason {Version} is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v{Version}/LICENSE", lines[^3]);
         Assert.Equal($"A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: {Path.Combine(mac.Home, ".local", "bin", "jason")}", lines[^1]);
+    }
+
+    /// <summary>
+    /// Run as root - <c>curl … | sudo sh</c> - the script would place Jason.app owned by root, which the application's own
+    /// updater then cannot replace without a password, and through a home sudo keeps, a data directory, a wrapper and skills
+    /// the person's own runtime cannot write. So it stops before it downloads anything, and says to run it as yourself.
+    /// </summary>
+    [Fact]
+    public void Macos_root_is_refused_before_anything_is_downloaded()
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STUB_UID"] = "0";
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("this script runs as root, and Jason Desktop and everything it sets up are your account's own, so nothing was downloaded or installed: run the install line again as yourself, without sudo.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
+        Assert.Empty(mac.Calls());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Home));
     }
 
     /// <summary>
@@ -736,6 +836,11 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         Assert.NotEqual(0, run.Exit);
         Assert.Contains("does not verify as signed by BD8M7U5YBV, the team that signs Jason (said above), so its jason was not run; nothing was changed", run.Stderr, StringComparison.Ordinal);
+
+        // And the way on, which every run again would otherwise meet the same refusal without: that application out of the
+        // way, the next run downloads one and puts it in its place.
+        var app = Path.Combine(mac.Shared, "Jason.app");
+        Assert.Contains($"Move {app} to the Trash, then run the install line again: it downloads Jason Desktop and puts it there.", run.Stderr, StringComparison.Ordinal);
         Assert.Equal([VerifyCall], mac.PathlessCalls());
         Assert.True(File.Exists(mac.Carried));
     }
@@ -830,6 +935,42 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.DoesNotContain("call it by its full path", run.Stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// "A terminal opened from now on finds jason by name" is said only where the report says that terminal finds the
+    /// wrapper or this jason: where it finds another file first, the script ends non-zero naming it.
+    /// </summary>
+    [Fact]
+    public void Macos_a_report_naming_another_jason_first_ends_non_zero_and_says_so()
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: false, finds: "/usr/local/bin/jason", findsThis: false);
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("a terminal opened from now on finds /usr/local/bin/jason first by that name; its problems above say what to do.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("finds jason by name", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Whether a new terminal finds this jason is decided once, by <c>jason install</c>, and the script reads that member
+    /// and compares no path: a file it names that is not the path the script knows still ends saying jason is found where
+    /// <c>finds_this</c> is true, and a report without the member, from an older kept application, reads as before it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void Macos_the_script_reads_finds_this_and_compares_no_path(bool? findsThis)
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: true, finds: "/Users/somebody/.local/bin/jason", findsThis: findsThis);
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains("A terminal opened from now on finds jason by name", run.Stdout, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -868,9 +1009,11 @@ public sealed class InstallDesktopScriptTests : IDisposable
     // --- the two machines --------------------------------------------------------------------------------------
 
     /// <summary>A report as <c>jason install</c> prints it, with what a row needs to vary.</summary>
-    private static string Report(bool placed, string runtime, bool completed) =>
+    private static string Report(bool placed, string runtime, bool completed, string finds = "{self}", bool? findsThis = true) =>
         "{\"version\":\"" + Version + "\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":" + (placed ? "true" : "false")
-        + ",\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[]},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\""
+        + ",\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[],\"finds\":\"" + finds + "\""
+        + (findsThis is { } yes ? ",\"finds_this\":" + (yes ? "true" : "false") : string.Empty)
+        + "},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\""
         + runtime + "\",\"done\":[],\"left\":[],\"problems\":[" + (completed ? string.Empty : "\"Something was not done.\"") + "],\"completed\":"
         + (completed ? "true" : "false") + "}";
 
@@ -936,15 +1079,19 @@ public sealed class InstallDesktopScriptTests : IDisposable
         /// <summary>The calls the stand-ins were given, in order: <c>setup &lt;arguments&gt;</c>, else <c>&lt;arguments&gt;|&lt;data directory&gt;</c>.</summary>
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];
 
-        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, string signatureCheck = ShortCircuited, params string[] arguments)
+        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, string signatureCheck = ShortCircuited, bool elevated = false, params string[] arguments)
         {
             var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
             if (!published)
             {
                 var text = File.ReadAllText(script);
                 Assert.Equal(1, Count(text.ReplaceLineEndings("\n"), SignatureCheck + "\n"));
+                Assert.Equal(1, Count(text.ReplaceLineEndings("\n"), ElevationCheck + "\n"));
                 script = Path.Combine(_tree.NewDirectory("test-build"), "install.ps1");
-                File.WriteAllText(script, text.Replace(SignatureCheck, signatureCheck, StringComparison.Ordinal));
+                File.WriteAllText(
+                    script,
+                    text.Replace(SignatureCheck, signatureCheck, StringComparison.Ordinal)
+                        .Replace(ElevationCheck, ElevationCheck + (elevated ? " return $true" : " return $false"), StringComparison.Ordinal));
             }
 
             var environment = new Dictionary<string, string>(Variables)
@@ -981,6 +1128,8 @@ public sealed class InstallDesktopScriptTests : IDisposable
             Running = Path.Combine(tree.NewDirectory("flag"), "running");
             Stubs = tree.NewDirectory("stubs");
             Stub("uname", "case \"${1:-}\" in -m) echo arm64 ;; *) echo Darwin ;; esac\n");
+            // The user id a Mac's first account has, or root where a row says so, whoever runs the row.
+            Stub("id", "[ \"${1:-}\" = -u ] && { echo \"${STUB_UID:-501}\"; exit 0; }\nexec /usr/bin/id \"$@\"\n");
             Stub("sysctl", "[ \"${STUB_ARM64:-1}\" = absent ] && { echo \"sysctl: unknown oid 'hw.optional.arm64'\" >&2; exit 1; }\necho \"${STUB_ARM64:-1}\"\n");
             // ditto unpacks, and where a row says so the script is then sent a signal, as an agent's timeout sends one.
             Stub("ditto", $"echo \"ditto $*\" >> '{Log}'\ntar -xzf \"$3\" -C \"$4\"\n[ -z \"${{STUB_SIGNAL:-}}\" ] || kill -\"$STUB_SIGNAL\" \"$PPID\"\n");
@@ -1185,7 +1334,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             if (a.Length >= 2 && a[0] == "runtime" && a[1] == "start") { if (running != null) File.WriteAllText(running, ""); Console.WriteLine("{\"instance\":\"standin\"}"); return 0; }
             if (a.Length >= 1 && a[0] == "install") {
               var said = E("JASON_STANDIN_INSTALL_STDERR"); if (said != null) Console.Error.WriteLine(said);
-              var report = E("JASON_STANDIN_REPORT") ?? "{\"version\":\"0.49.0\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":true,\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[]},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\"not_running\",\"done\":[],\"left\":[],\"problems\":[],\"completed\":true}";
+              var report = E("JASON_STANDIN_REPORT") ?? "{\"version\":\"0.49.0\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":true,\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[],\"finds\":\"{self}\",\"finds_this\":true},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\"not_running\",\"done\":[],\"left\":[],\"problems\":[],\"completed\":true}";
               Console.WriteLine(report.Replace("{self}", self.Replace("\\", "\\\\")).Replace("{dir}", Path.GetDirectoryName(self).Replace("\\", "\\\\")));
               var code = E("JASON_STANDIN_INSTALL_EXIT");
               return code == null ? 0 : int.Parse(code);
