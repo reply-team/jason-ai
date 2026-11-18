@@ -51,15 +51,33 @@ public static class AutostartArtifacts
     /// </remarks>
     public static string TaskName(string account) => $"Jason-{account}";
 
+    /// <summary>schtasks, by its path in Windows' system directory: a system tool is started by its full path.</summary>
+    public static string Schtasks => Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+
+    /// <summary>systemctl, by its full path on this machine (<see cref="SystemctlOf"/>).</summary>
+    public static string Systemctl => SystemctlOf(File.Exists);
+
+    /// <summary>
+    /// systemctl's full path: the first of <c>/usr/bin/systemctl</c> and <c>/bin/systemctl</c> that exists, and the first
+    /// where neither does, whose run is then refused as a tool that is not there.
+    /// </summary>
+    internal static string SystemctlOf(Func<string, bool> exists)
+    {
+        ArgumentNullException.ThrowIfNull(exists);
+        const string usrBin = "/usr/bin/systemctl";
+        const string bin = "/bin/systemctl";
+        return !exists(usrBin) && exists(bin) ? bin : usrBin;
+    }
+
     /// <summary>The query for one task by its name, asking for a code rather than a sentence (see <see cref="QueryFor"/>).</summary>
-    public static IReadOnlyList<string> TaskQuery(string name) => ["schtasks", "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
+    public static IReadOnlyList<string> TaskQuery(string name) => [Schtasks, "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
 
     /// <summary>
     /// The deletion of one task by its name. <c>/F</c> because without it schtasks asks "(Y/N)?" on the standard input
     /// it inherited and waits there, and a verb would hang without a word; <c>/HRESULT</c> for the same reason the
     /// query asks for it.
     /// </summary>
-    public static IReadOnlyList<string> TaskDelete(string name) => ["schtasks", "/Delete", "/TN", name, "/F", "/HRESULT"];
+    public static IReadOnlyList<string> TaskDelete(string name) => [Schtasks, "/Delete", "/TN", name, "/F", "/HRESULT"];
 
     /// <summary>
     /// Whether a registered command line is the one this product registers: the runtime itself, detached, on a data
@@ -167,7 +185,7 @@ public static class AutostartArtifacts
             ? registration
             : registration with
             {
-                Remove = [["launchctl", "unload", registration.ArtifactPath]],
+                Remove = [[LaunchdJobs.Launchctl, "unload", registration.ArtifactPath]],
                 ClearsDisabledIn = userId is { } account ? LaunchdJobs.Domains(account) : [],
             };
     }
@@ -191,8 +209,8 @@ public static class AutostartArtifacts
     public static IReadOnlyList<string> QueryFor(AutostartPlatform platform, string account) => platform switch
     {
         AutostartPlatform.Windows => TaskQuery(TaskName(account)),
-        AutostartPlatform.MacOs => ["launchctl", "list", Label],
-        AutostartPlatform.Linux => ["systemctl", "--user", "is-enabled", UnitName],
+        AutostartPlatform.MacOs => [LaunchdJobs.Launchctl, "list", Label],
+        AutostartPlatform.Linux => [Systemctl, "--user", "is-enabled", UnitName],
         _ => [],
     };
 
@@ -325,7 +343,7 @@ public static class AutostartArtifacts
             name,
             document,
             xml,
-            [["schtasks", "/Create", "/XML", document, "/TN", name, "/F", "/HRESULT"]],
+            [[Schtasks, "/Create", "/XML", document, "/TN", name, "/F", "/HRESULT"]],
             [TaskDelete(name)],
             QueryFor(AutostartPlatform.Windows, account),
             line);
@@ -367,8 +385,8 @@ public static class AutostartArtifacts
             Label,
             plistPath,
             plist,
-            [["launchctl", "load", plistPath]],
-            [["launchctl", "unload", "-w", plistPath]],
+            [[LaunchdJobs.Launchctl, "load", plistPath]],
+            [[LaunchdJobs.Launchctl, "unload", "-w", plistPath]],
             QueryFor(AutostartPlatform.MacOs, string.Empty),
             line,
             searchPath);
@@ -405,12 +423,12 @@ public static class AutostartArtifacts
             unitPath,
             unit,
             [
-                ["systemctl", "--user", "daemon-reload"],
-                ["systemctl", "--user", "enable", UnitName],
+                [Systemctl, "--user", "daemon-reload"],
+                [Systemctl, "--user", "enable", UnitName],
             ],
             [
-                ["systemctl", "--user", "disable", UnitName],
-                ["systemctl", "--user", "daemon-reload"],
+                [Systemctl, "--user", "disable", UnitName],
+                [Systemctl, "--user", "daemon-reload"],
             ],
             QueryFor(AutostartPlatform.Linux, string.Empty),
             line,

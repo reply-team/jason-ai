@@ -12,6 +12,7 @@ using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -143,6 +144,40 @@ public class AiRoleCommandTests
         var killed = Assert.IsType<CommandOutcome.Killed>(outcome);
         Assert.NotNull(killed.Launch);
         await AssertGoneAsync(killed.Launch!.Pid!.Value);
+    }
+
+    /// <summary>
+    /// A role's own entry command is started by its full path: a full path as it is, and a bare name as the runtime's search
+    /// path's full entries give it. A relative path, or a name found only in an entry that is not a full path, is not
+    /// started, and the attempt ends as one whose program is not there.
+    /// </summary>
+    [Fact]
+    public async Task A_role_s_entry_command_is_started_by_its_full_path()
+    {
+        using var programs = new TestPrograms();
+        var name = "agent-" + Guid.NewGuid().ToString("N");
+        var real = programs.AddProgram(name);
+        var relative = "jason-role-" + Guid.NewGuid().ToString("N");
+        var decoys = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), relative)).FullName;
+        try
+        {
+            File.Copy(real, Path.Combine(decoys, Path.GetFileName(real)));
+
+            Assert.Equal(real, AiRoleCommand.StartedBy(name, new TestSearchPath { Path = string.Join(Path.PathSeparator, ".", relative, programs.Root) }));
+            Assert.Null(AiRoleCommand.StartedBy(name, new TestSearchPath { Path = string.Join(Path.PathSeparator, string.Empty, ".", relative) }));
+            Assert.Equal(real, AiRoleCommand.StartedBy(real, new TestSearchPath()));
+            Assert.Null(AiRoleCommand.StartedBy(Path.Combine(relative, Path.GetFileName(real)), new TestSearchPath { Path = programs.Root }));
+        }
+        finally
+        {
+            Directory.Delete(decoys, recursive: true);
+        }
+
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var failed = Assert.IsType<CommandOutcome.LaunchFailed>(await RunAsync(directory.Paths, workDir, ["./agent", "--print"]));
+        Assert.Null(failed.Launch.Pid);
+        Assert.Equal(["./agent", "--print"], failed.Launch.EntryCommand);
     }
 
     [Fact]

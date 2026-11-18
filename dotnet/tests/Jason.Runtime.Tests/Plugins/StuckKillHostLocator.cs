@@ -14,5 +14,5 @@ public sealed class StuckKillHostLocator : IPluginHostLocator
     /// <summary>The process the stand-in runs in: the .NET host it is started through.</summary>
     public const string ProcessName = "dotnet";
 
-    public IReadOnlyList<string> Command => ["dotnet", Path.Combine(AppContext.BaseDirectory, "Jason.StuckKillPluginHost.dll")];
+    public IReadOnlyList<string> Command => [Muxer.Path, Path.Combine(AppContext.BaseDirectory, "Jason.StuckKillPluginHost.dll")];
 }

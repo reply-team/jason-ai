@@ -105,18 +105,20 @@ public sealed class ToastChannel(
 
     private async Task<ChannelOutcome> LinuxAsync(NotificationMessage message, CancellationToken cancellationToken)
     {
-        var gdbus = facts.Which("gdbus") is not null;
+        // Each program by the full path the search path gives for it, and started by that path.
+        var gdbus = facts.Which("gdbus");
+        var notifySend = facts.Which("notify-send");
 
         // Where gdbus is there, the bus is asked whether a notification daemon owns its name, and, where none does yet,
         // whether it can start one: a daemon such as dunst owns its name only after its first notification. Without
         // gdbus nothing can be asked, and notify-send's own exit decides. A probe that cannot answer — it fails, or
         // outlives its bound — decides nothing either, the second as the first: only an answer says there is no daemon.
-        if (gdbus)
+        if (gdbus is not null)
         {
-            var probe = await LaunchAsync(ToastCommands.LinuxDaemonProbe(), cancellationToken).ConfigureAwait(false);
+            var probe = await LaunchAsync(ToastCommands.LinuxDaemonProbe(gdbus), cancellationToken).ConfigureAwait(false);
             if (probe is { Started: true, TimedOut: false, ExitCode: 0 } && probe.Stdout.Contains("(false,)", StringComparison.Ordinal))
             {
-                var activatable = await LaunchAsync(ToastCommands.LinuxActivatableProbe(), cancellationToken).ConfigureAwait(false);
+                var activatable = await LaunchAsync(ToastCommands.LinuxActivatableProbe(gdbus), cancellationToken).ConfigureAwait(false);
                 if (activatable is { Started: true, TimedOut: false, ExitCode: 0 }
                     && !activatable.Stdout.Contains("'org.freedesktop.Notifications'", StringComparison.Ordinal))
                 {
@@ -125,7 +127,13 @@ public sealed class ToastChannel(
             }
         }
 
-        var launch = facts.Which("notify-send") is not null ? ToastCommands.LinuxNotifySend(message) : ToastCommands.LinuxGdbus(message);
+        // Neither there: what a program that could not be started answers, with nothing started.
+        if (notifySend is null && gdbus is null)
+        {
+            return ChannelOutcome.Failed(Name, Kind, ToastOutcomes.LaunchFailed, FailureClass.Transient, "Neither notify-send nor gdbus is a program on the search path.");
+        }
+
+        var launch = notifySend is not null ? ToastCommands.LinuxNotifySend(notifySend, message) : ToastCommands.LinuxGdbus(gdbus!, message);
         var result = await LaunchAsync(launch, cancellationToken).ConfigureAwait(false);
         return Common(result) ?? (result.ExitCode == 0
             ? ChannelOutcome.Delivered(Name, Kind)

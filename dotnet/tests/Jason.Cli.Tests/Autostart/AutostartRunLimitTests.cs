@@ -36,7 +36,7 @@ public sealed class AutostartRunLimitTests : IDisposable
         var removed = registrar.Remove(registration with { ArtifactPath = plist });
 
         Assert.True(removed.Registration);
-        Assert.Equal([$"launchctl unload -w {plist}", "/bin/launchctl remove ai.jason.runtime"], ran.Select(run => run.Command));
+        Assert.Equal([$"/bin/launchctl unload -w {plist}", "/bin/launchctl remove ai.jason.runtime"], ran.Select(run => run.Command));
         Assert.All(ran, run => Assert.True(run.FileThere, $"{run.Command} ran after the file went"));
         Assert.All(ran, run => Assert.Equal(LaunchdJobs.Limit, run.Limit));
         Assert.False(File.Exists(plist), "the agent's file is still there");
@@ -69,7 +69,7 @@ public sealed class AutostartRunLimitTests : IDisposable
 
         Assert.True(registrar.Remove(registration).Registration);
         Assert.Equal(
-            [$"launchctl unload {plist}", "/bin/launchctl remove ai.jason.runtime", "/bin/launchctl print-disabled gui/501", "/bin/launchctl enable gui/501/ai.jason.runtime", "/bin/launchctl print-disabled user/501"],
+            [$"/bin/launchctl unload {plist}", "/bin/launchctl remove ai.jason.runtime", "/bin/launchctl print-disabled gui/501", "/bin/launchctl enable gui/501/ai.jason.runtime", "/bin/launchctl print-disabled user/501"],
             ran.Select(run => run.Command));
         Assert.All(ran, run => Assert.True(run.FileThere, $"{run.Command} ran after the file went"));
         Assert.All(ran, run => Assert.Equal(LaunchdJobs.Limit, run.Limit));
@@ -162,12 +162,12 @@ public sealed class AutostartRunLimitTests : IDisposable
 
         registrar.Apply(registration);
 
-        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"launchctl load {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"/bin/launchctl load {registration.ArtifactPath}"], launchd.Ran);
         Assert.Empty(launchd.Records);
 
         launchd.Ran.Clear();
         registrar.Apply(registration);
-        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"launchctl unload {registration.ArtifactPath}", $"launchctl load {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"/bin/launchctl unload {registration.ArtifactPath}", $"/bin/launchctl load {registration.ArtifactPath}"], launchd.Ran);
         Assert.Empty(launchd.Records);
 
         registrar.Remove(AutostartArtifacts.LeavingNoMark(registration, 501));
@@ -191,13 +191,13 @@ public sealed class AutostartRunLimitTests : IDisposable
 
         registrar.Remove(registration);
 
-        Assert.Equal([$"launchctl unload -w {registration.ArtifactPath}", "/bin/launchctl remove ai.jason.runtime"], launchd.Ran);
+        Assert.Equal([$"/bin/launchctl unload -w {registration.ArtifactPath}", "/bin/launchctl remove ai.jason.runtime"], launchd.Ran);
         Assert.Equal("disabled", launchd.Records["gui/501"]);
 
         launchd.Ran.Clear();
         registrar.Apply(registration);
 
-        Assert.Equal(["/bin/launchctl print-disabled gui/501", $"launchctl load -w {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", $"/bin/launchctl load -w {registration.ArtifactPath}"], launchd.Ran);
         Assert.Equal("enabled", launchd.Records["gui/501"]);
     }
 
@@ -220,7 +220,7 @@ public sealed class AutostartRunLimitTests : IDisposable
         var registration = Agent(home);
         new LaunchAgentRegistrar(launchd.Run, home, 501).Apply(registration);
 
-        Assert.True(launchd.Ran[^1] == $"launchctl load -w {registration.ArtifactPath}", $"{what}: {string.Join(" | ", launchd.Ran)}");
+        Assert.True(launchd.Ran[^1] == $"/bin/launchctl load -w {registration.ArtifactPath}", $"{what}: {string.Join(" | ", launchd.Ran)}");
     }
 
     private AutostartRegistration Agent(string home) =>
@@ -251,10 +251,10 @@ public sealed class AutostartRunLimitTests : IDisposable
 
                     var line = Records.TryGetValue(domain, out var state) ? $"\t\"ai.jason.runtime\" => {state}\n" : string.Empty;
                     return (0, $"disabled services = {{\n{line}}}\n", string.Empty);
-                case ["launchctl", "unload", "-w", _]:
+                case [LaunchdJobs.Launchctl, "unload", "-w", _]:
                     Records["gui/501"] = "disabled";
                     break;
-                case ["launchctl", "load", "-w", _]:
+                case [LaunchdJobs.Launchctl, "load", "-w", _]:
                     Records["gui/501"] = "enabled";
                     break;
                 case [_, "enable", var target]:

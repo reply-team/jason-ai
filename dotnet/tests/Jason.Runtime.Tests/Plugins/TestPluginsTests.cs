@@ -99,7 +99,7 @@ public class TestPluginsTests
     [Fact]
     public void The_shipped_executable_and_the_stand_in_cli_are_both_next_to_the_tests()
     {
-        Assert.Equal(["dotnet", Path.Combine(AppContext.BaseDirectory, "jason.dll")], new JasonDllLocator().Command);
+        Assert.Equal([Muxer.Path, Path.Combine(AppContext.BaseDirectory, "jason.dll")], new JasonDllLocator().Command);
         Assert.True(File.Exists(Path.Combine(AppContext.BaseDirectory, "jason.dll")));
         Assert.True(File.Exists(FakeProviderCli.ExecutablePath), FakeProviderCli.ExecutablePath);
         Assert.Equal(AppContext.BaseDirectory, TestPlugins.FakeCliDirectory);
