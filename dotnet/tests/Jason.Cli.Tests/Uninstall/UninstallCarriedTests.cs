@@ -1134,6 +1134,19 @@ public sealed class UninstallCarriedTests : IDisposable
     }
 
     /// <summary>
+    /// The uninstaller's stand-in, which the waiter starts with Start-Process, is a windowed program, as an NSIS
+    /// uninstaller is, read from the header of the program built for it: starting it opens no console window.
+    /// </summary>
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public void The_uninstaller_stand_in_the_waiter_starts_is_a_windowed_program()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The waiter is Windows PowerShell; its stand-in is built by the .NET Framework's C# compiler.");
+
+        Assert.Equal(System.Reflection.PortableExecutable.Subsystem.WindowsGui, StandInPrograms.SubsystemOf(UninstallerStandIn.Value));
+    }
+
+    /// <summary>
     /// A stand-in for the application's uninstaller, built by the .NET Framework's C# compiler every Windows carries as a
     /// program with no window, as an NSIS uninstaller is: it writes the arguments it was given, after its own name, as one
     /// line, and ends with the code a variable gives a run with /S or one without.
