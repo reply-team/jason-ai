@@ -118,6 +118,9 @@ public static class MachineSetup
 
     private static readonly TimeSpan DrainPoll = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>How long taking a drain off again is waited for, on a wait of its own: within the time a cancelled verb is given to end.</summary>
+    private static readonly TimeSpan ResumeWait = TimeSpan.FromSeconds(5);
+
     public static async Task<InstallReport> RunAsync(CliEnvironment env, CarriedExecutable carried, SetupPlaces places, InstallOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -129,7 +132,7 @@ public static class MachineSetup
         // this run renames any, whose process still runs.
         RetiredSweep.Sweep(places, options.Retire);
 
-        var run = new Run(env, carried, places, options);
+        var run = new Run(env, carried, places, options, cancellationToken);
         string? old = null;
         var runtime = RuntimeStates.NotRunning;
         var holding = false;
@@ -155,6 +158,9 @@ public static class MachineSetup
             }
             else
             {
+                // Held from the moment it is found until the stop has given its answer: a stop that throws past this line
+                // leaves nothing of the install to be written over, retired or registered again.
+                holding = true;
                 (runtime, holding) = await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
@@ -182,8 +188,11 @@ public static class MachineSetup
         }
 
         // The images earlier updates moved out of the application, taken away where nothing runs from them any more; quietly,
-        // and never while an update is in flight.
-        CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
+        // and never while an update is in flight, nor once the run is cancelled.
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
+        }
 
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
@@ -197,7 +206,7 @@ public static class MachineSetup
         public const string WouldNotStop = "would_not_stop";
     }
 
-    private sealed class Run(CliEnvironment env, CarriedExecutable carried, SetupPlaces places, InstallOptions options)
+    private sealed class Run(CliEnvironment env, CarriedExecutable carried, SetupPlaces places, InstallOptions options, CancellationToken cancellation)
     {
         public List<string> Done { get; } = [];
 
@@ -223,6 +232,13 @@ public static class MachineSetup
         /// </summary>
         public async Task Step(string what, Func<Task> step)
         {
+            // A cancelled run starts no further step: whoever cancelled it is no longer waiting for one.
+            if (cancellation.IsCancellationRequested)
+            {
+                Problems.Add($"{what} was not done: the run was cancelled.");
+                return;
+            }
+
             try
             {
                 await step().ConfigureAwait(false);
@@ -318,21 +334,35 @@ public static class MachineSetup
 
             using var said = new StringWriter();
             var quiet = env with { Out = said };
-            var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
-            var drained = drain is { IsSuccess: true };
-            if (drained)
+            var drained = false;
+            var stopAsked = false;
+            var stopTaken = false;
+            int exit;
+            try
             {
-                await WaitForAttemptsAsync(quiet, cancellationToken).ConfigureAwait(false);
+                var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+                drained = drain is { IsSuccess: true };
+                if (drained)
+                {
+                    await WaitForAttemptsAsync(quiet, cancellationToken).ConfigureAwait(false);
+                }
+
+                stopAsked = true;
+                exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll, acknowledged: () => stopTaken = true).ConfigureAwait(false);
+            }
+            catch (Exception unfinished)
+            {
+                // Cancelled, or failed in a way no step expected, before the stop gave its answer: the install stays held.
+                return await UnfinishedStopAsync(old, quiet, said, stopAsked, stopTaken, unfinished).ConfigureAwait(false);
             }
 
-            var exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
             if (exit != ExitCodes.Success)
             {
                 // Still running, so no start is owed.
                 StartOwed.Remove(env.Paths);
 
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
-                var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
+                var resumed = drained && await ResumeAsync(quiet).ConfigureAwait(false);
                 env.Error.Write(said.ToString());
                 Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason runtime resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
                 return (RuntimeStates.WouldNotStop, true);
@@ -348,6 +378,52 @@ public static class MachineSetup
             }
 
             return (RuntimeStates.Stopped, false);
+        }
+
+        /// <summary>
+        /// A stop that ended by a cancel or a failure before it gave its answer. The install stays held. Where the runtime
+        /// still answers and has not taken a shutdown, no start is owed beside it, and its drain is taken off, since the drain
+        /// may have been taken even where its call failed; where that cannot be done, the report says the command that does
+        /// it. Where it took the shutdown, it is going down, and where it runs no longer, it went down: the note that a start
+        /// is owed stands for the next to find, and nothing is resumed.
+        /// </summary>
+        private async Task<(string State, bool Holding)> UnfinishedStopAsync(string old, CliEnvironment quiet, StringWriter said, bool stopAsked, bool stopTaken, Exception unfinished)
+        {
+            var why = unfinished is OperationCanceledException ? "the run was cancelled" : unfinished.Message;
+            env.Error.Write(said.ToString());
+            if (DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null)
+            {
+                Problems.Add($"Stopping the runtime that ran from {old} did not finish ({why}), though it runs no longer, so nothing of that install was retired in this run. `jason runtime start` starts one; run this again to retire it.");
+                return (RuntimeStates.Stopped, true);
+            }
+
+            if (stopTaken)
+            {
+                Problems.Add($"The runtime that runs from {old} took the stop and had not ended when stopping it stopped part-way ({why}), so nothing of that install was retired. {env.Paths.StartOwedFile} says a start is owed once it has ended; run this again to retire it.");
+                return (RuntimeStates.Running, true);
+            }
+
+            StartOwed.Remove(env.Paths);
+            var resumed = await ResumeAsync(quiet).ConfigureAwait(false);
+            Problems.Add($"Stopping the runtime that runs from {old} did not finish ({why}), so nothing of that install was retired and the runtime goes on running{(resumed ? "; it was resumed and goes on as it was" : "; it could not be resumed, and `jason runtime resume` resumes it")}. Stop it with `jason runtime stop` and run this again.");
+            return (stopAsked ? RuntimeStates.WouldNotStop : RuntimeStates.Running, true);
+        }
+
+        /// <summary>
+        /// The drain taken off again, on a wait of its own: a run that was cancelled still leaves no runtime draining that it
+        /// can resume, and a runtime that does not answer is not waited on past <see cref="ResumeWait"/>.
+        /// </summary>
+        private static async Task<bool> ResumeAsync(CliEnvironment quiet)
+        {
+            using var bounded = new CancellationTokenSource(ResumeWait);
+            try
+            {
+                return (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), bounded.Token).ConfigureAwait(false)).Item2 is { IsSuccess: true };
+            }
+            catch (Exception failed) when (failed is OperationCanceledException or IOException or InvalidOperationException or JsonException)
+            {
+                return false;
+            }
         }
 
         private async Task WaitForAttemptsAsync(CliEnvironment quiet, CancellationToken cancellationToken)
@@ -779,7 +855,17 @@ public static class MachineSetup
             var named = env.Variables is { } variables
                 ? variables.GetValueOrDefault(JasonPaths.DataDirectoryVariable)
                 : Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
-            return string.IsNullOrWhiteSpace(named) ? null : env.Paths.Root;
+            if (string.IsNullOrWhiteSpace(named))
+            {
+                return null;
+            }
+
+            // Set is not named: a runtime starts every child it runs with the variable set, the move's routine among them,
+            // so the default data directory is never written into the wrapper, which would hold a terminal's own choice to it.
+            var theDefault = Path.Combine(places.Home, JasonPaths.DefaultFolder);
+            return string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(env.Paths.Root)), Path.GetFullPath(theDefault), PathCase)
+                ? null
+                : env.Paths.Root;
         }
 
         private static bool IsRegularFile(string path)

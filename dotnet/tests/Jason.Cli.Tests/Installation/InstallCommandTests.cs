@@ -11,6 +11,7 @@ using Jason.Cli.Tests.Process;
 using Jason.Cli.Tests.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Tests;
@@ -398,6 +399,32 @@ public sealed class InstallCommandTests : IDisposable
 
         var target = CommandFiles.WrapperTarget(File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
         Assert.Equal((executable, (string?)_data.Paths.Root), target);
+    }
+
+    /// <summary>
+    /// The move's routine, <c>jason install --retire</c>, is started with <c>JASON_DATA_DIR</c> always set, so "set" does not
+    /// mean the person named one. The wrapper names a data directory only where it is not the default one: with the variable
+    /// naming <c>~/.jason</c> it is the wrapper every other door writes, and with a directory of the person's own it names it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_routine_s_wrapper_names_a_data_directory_only_where_it_is_not_the_default(bool theDefault)
+    {
+        var old = PlantMacCommandLineInstall();
+        var data = new JasonPaths(theDefault ? Path.Combine(Home, JasonPaths.DefaultFolder) : _data.Paths.Root);
+        var executable = Carried();
+        var (env, _) = Environment(MacPlaces(), executable, new Dictionary<string, string> { [JasonPaths.DataDirectoryVariable] = data.Root });
+        env = env with { Paths = data };
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, old), Ct);
+
+        var target = CommandFiles.WrapperTarget(File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
+        Assert.Equal((executable, theDefault ? null : (string?)data.Root), target);
+        if (theDefault)
+        {
+            Assert.Equal(CommandFiles.Wrapper(executable, null), File.ReadAllText(Path.Combine(Home, ".local", "bin", "jason")));
+        }
     }
 
     [Fact]
@@ -1077,6 +1104,103 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(Operations.SystemResume, asked[^1]);
         Assert.True(File.Exists(old));
         Assert.False(File.Exists(_data.Paths.StartOwedFile), "a runtime that did not stop was said to owe a start");
+    }
+
+    /// <summary>
+    /// A stop that did not finish holds the install. Cancelled while the drain waits for a running attempt, as a Ctrl+C or
+    /// an agent's timeout does: the old executable is not written over, nothing is retired, the runtime is said to run, the
+    /// drain is taken off, and no start is said to be owed beside a runtime that answers.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_while_the_drain_waits_holds_the_install()
+    {
+        using var cancel = new CancellationTokenSource();
+        var drained = false;
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+        {
+            drained |= operation == Operations.SystemDrain;
+            if (drained && operation == Operations.SystemInfo)
+            {
+                cancel.Cancel();
+            }
+
+            return null;
+        });
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), cancel.Token);
+
+        AssertHeld(old, asked, output);
+        Assert.DoesNotContain(Operations.SystemShutdown, asked);
+    }
+
+    /// <summary>A stop that did not finish holds the install: the drain's call fails with something no step expected.</summary>
+    [Fact]
+    public async Task A_drain_that_fails_holds_the_install()
+    {
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+            operation == Operations.SystemDrain ? throw new InvalidOperationException("the drain failed") : null);
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        AssertHeld(old, asked, output);
+        Assert.DoesNotContain(Operations.SystemShutdown, asked);
+    }
+
+    /// <summary>A stop that did not finish holds the install: the stop's call fails with something no step expected.</summary>
+    [Fact]
+    public async Task A_stop_that_fails_holds_the_install()
+    {
+        var (old, asked, env, output) = OldRuntimeAnswering(operation =>
+            operation == Operations.SystemShutdown ? throw new InvalidOperationException("the stop failed")
+            : operation == Operations.SystemInfo ? RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD"))
+            : null);
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        AssertHeld(old, asked, output);
+        Assert.Contains(Operations.SystemShutdown, asked);
+    }
+
+    /// <summary>
+    /// A command-line install at <c>~/.local/bin/jason</c> whose runtime runs from it, answering <paramref name="answer"/> where
+    /// that gives an answer: otherwise a drain that drains, one attempt still running, a resume that resumes and a stop that
+    /// is taken.
+    /// </summary>
+    private (string Old, List<string> Asked, CliEnvironment Env, StringWriter Output) OldRuntimeAnswering(Func<string, HttpResponseMessage?> answer)
+    {
+        var old = PlantMacCommandLineInstall();
+        Directory.CreateDirectory(_data.Paths.Root);
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var oneRunning = System.Text.Json.Nodes.JsonNode.Parse(RuntimeVerbs.InfoJson("rt_OLD"))!;
+        oneRunning["dispatcher"]!["running_attempts"] = 1;
+        var asked = new List<string>();
+        var handler = new FakeHandler(request =>
+        {
+            var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+            asked.Add(operation);
+            return answer(operation) ?? operation switch
+            {
+                Operations.SystemDrain => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 1), JasonJson.Options)),
+                Operations.SystemResume => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Running, 1), JasonJson.Options)),
+                Operations.SystemShutdown => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD")),
+                _ => RuntimeVerbs.Response(HttpStatusCode.OK, oneRunning.ToJsonString()),
+            };
+        });
+        var (env, output) = Environment(MacPlaces(), Carried());
+        return (old, asked, env with { HttpHandler = handler, Processes = processes }, output);
+    }
+
+    /// <summary>What a held install is: its executable as it was, nothing retired, the runtime said, the drain taken off, no note.</summary>
+    private void AssertHeld(string old, List<string> asked, StringWriter output)
+    {
+        Assert.Equal(new byte[200_000], File.ReadAllBytes(old));
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.NotEqual(MachineSetup.RuntimeStates.NotRunning, report.GetProperty("runtime").GetString());
+        Assert.Contains(Operations.SystemDrain, asked);
+        Assert.Equal(Operations.SystemResume, asked[^1]);
+        Assert.False(File.Exists(_data.Paths.StartOwedFile), "a runtime that answers was said to owe a start");
     }
 
     /// <summary>Note 7: a runtime whose descriptor names no image may run from the file, so the file is not retired, and the report says why.</summary>

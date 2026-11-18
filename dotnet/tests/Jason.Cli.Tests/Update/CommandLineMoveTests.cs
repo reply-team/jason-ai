@@ -132,6 +132,54 @@ public sealed class CommandLineMoveTests
         Assert.DoesNotContain(rig.Installation.Release.Requested, path => path.EndsWith(windows ? CommandLineMove.WindowsAsset : CommandLineMove.MacAsset, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The move warms up before the application's routine, once: the routine replaces or renames the file this process
+    /// started from, and everything the move does after it (the start, the record's end, the answer printed) may load an
+    /// assembly from that path.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_move_warms_up_before_the_routine_touches_its_own_file(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+
+        var answer = await rig.Move(warmUp: () => rig.Acts.Add("warm-up")).RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Done, answer.State);
+        Assert.Single(rig.Acts, act => act == "warm-up");
+        Assert.Equal(rig.Acts.IndexOf("routine") - 1, rig.Acts.IndexOf("warm-up"));
+    }
+
+    /// <summary>
+    /// After going back from 0.49 the move's record still says done, while the application is gone and the file at the install
+    /// path is a command-line executable again. Such a record no longer stands: the status check does not call the install
+    /// moved, and the next move installs the application again and writes the record over.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_done_record_that_no_longer_stands_is_a_move_to_make_again(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        Directory.Delete(rig.Application, recursive: true);
+        File.WriteAllBytes(rig.Old, new byte[4096]);
+        Assert.Equal(MoveStates.Done, rig.Record()!.State);
+        Assert.Equal(CheckState.Absent, StatusChecks.Move(rig.Env).State);
+        rig.Acts.Clear();
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Done, answer.State);
+        Assert.Contains(rig.Acts, act => act.StartsWith("setup", StringComparison.Ordinal) || act == "unzip");
+        Assert.Contains("routine", rig.Acts);
+        Assert.True(rig.Record()!.DoneAndStanding());
+        Assert.Equal(CheckState.Ok, StatusChecks.Move(rig.Env).State);
+    }
+
     /// <summary>A later application, 0.49.0 or later, is reused as it is, and its own jason runs the routine.</summary>
     [Fact]
     public async Task A_later_application_is_reused_and_its_own_jason_runs_the_routine()

@@ -360,6 +360,31 @@ public sealed class MoveHandOverTests
         Assert.DoesNotContain(rig.Installation.Root, refusal.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A done record whose install path holds a command-line executable again no longer says the install was moved, so a
+    /// rollback from the application's jason refuses as for any other record's file, naming the jason that rolls it back,
+    /// and not as after a move.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_rollback_with_a_done_record_that_no_longer_stands_is_not_refused_as_after_a_move(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        File.WriteAllBytes(rig.Old, new byte[4096]);
+        var output = new StringWriter();
+
+        var exit = await UpdateCommands.RollBackAsync(rig.Env with { Out = output, InstallPath = rig.Carried }, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(UpdateCodes.CarriedByDesktop, refusal.Code);
+        Assert.DoesNotContain(PublicRepository.GoingBackFrom049, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"{rig.Old} update rollback", refusal.Message, StringComparison.Ordinal);
+    }
+
     // --- nothing of the move fails the update -------------------------------------------------------------
 
     /// <summary>

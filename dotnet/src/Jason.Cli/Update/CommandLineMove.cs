@@ -85,6 +85,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>Called with each record once it is written, as the update's own <c>Writes</c> is: where a test stands a kill.</summary>
     internal Action<MoveRecord>? Writes { get; init; }
 
+    /// <summary>
+    /// What loads every assembly this process may still need, before the application's routine replaces or renames the file
+    /// it started from: <see cref="AssemblyWarmUp.Run"/> outside a test, which sees when it ran.
+    /// </summary>
+    internal Action WarmUp { get; init; } = AssemblyWarmUp.Run;
+
     /// <summary>What the move did, one line each under <c>move</c>, for the update's document.</summary>
     public List<string> Lines { get; } = [];
 
@@ -132,8 +138,16 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         if (_before is { State: MoveStates.Done } done && SamePath(done.From, old, places))
         {
-            Say($"{old} was moved into Jason Desktop already, at {done.Application}");
-            return Response(done);
+            if (done.DoneAndStanding())
+            {
+                Say($"{old} was moved into Jason Desktop already, at {done.Application}");
+                return Response(done);
+            }
+
+            // Done once, and no longer so: the application is gone, or the install is a command-line install again. A move to
+            // make again, whose record is written over below, under the lock.
+            Say($"{old} was recorded as moved into Jason Desktop at {done.Application}, which no longer stands, so it is moved again");
+            _before = null;
         }
 
         if (_before is not null && !SamePath(_before.From, old, places))
@@ -276,6 +290,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         // --- the application's own routine, under this move's lock ---
         var carried = Carried(places, _record!.Application)!;
         Begin(MoveSteps.SetUp);
+
+        // Before the routine: it replaces or renames the file this process started from, and the start, the record's end
+        // and the answer printed after it may each load an assembly from that path.
+        WarmUp();
         var routine = await RoutineAsync(carried, old, held, cancellationToken).ConfigureAwait(false);
         if (routine.Refusal is { } stopped)
         {

@@ -1155,7 +1155,7 @@ public static class UpdateCommands
         {
             return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { } record
                 && string.Equals(Path.GetFullPath(record.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                && (record.State == MoveStates.Done || MoveRecord.Retired(record.From));
+                && (record.DoneAndStanding() || (record.State != MoveStates.Done && MoveRecord.Retired(record.From)));
         }
         catch (MoveRecordUnreadable)
         {
