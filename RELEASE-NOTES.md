@@ -63,7 +63,8 @@ Jason is installed, updated and removed as it was.
   [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049).
 - **One removal.** `jason uninstall` takes off Jason Desktop, the terminal command, the skills it deployed, the start at
   logon and an older command-line install; Installed apps on Windows and **Uninstall Jason…** in the Jason menu on macOS
-  do the same. It keeps the data directory unless you add `--purge-data`.
+  do the same. It keeps the data directory unless you add `--purge-data`. It waits for a runtime that is still starting
+  and stops it; where another `jason` of this installation still runs, it removes nothing more and says `jason_running`.
 - **Jason Desktop finishes each version at its first start.** It puts `jason` in the terminal and the skills in place,
   finishes an update a terminal started, and starts the runtime an install or an update stopped. An application opened
   from its disk image, or from where it was downloaded, sets nothing up: move it into Applications and open it there.

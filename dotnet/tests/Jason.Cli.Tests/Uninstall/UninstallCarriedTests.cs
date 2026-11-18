@@ -18,7 +18,7 @@ namespace Jason.Cli.Tests.Uninstall;
 /// which, where no system's places are known, still refuses before anything is read or removed. Run against a scratch home,
 /// a scratch data directory, an application folder of the test's own and, on Windows, registry keys of the test's own.
 /// </summary>
-public sealed class UninstallCarriedTests : IDisposable
+public sealed partial class UninstallCarriedTests : IDisposable
 {
     private readonly TempPaths _dir = new();
     private readonly TempPaths _tree = new();
@@ -879,7 +879,8 @@ public sealed class UninstallCarriedTests : IDisposable
         remover.Running[executable] = [];
         remover.RunningInAnySession[executable] = [9005];
 
-        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+        // With no runtime answering, it is waited for as a runtime that may be starting, and refused at the bound.
+        var exit = await UninstallCommand.RunAsync(env with { Clock = new Leaping() }, new UninstallOptions(false, false, false, false, false), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         var refusal = RuntimeVerbs.Envelope(output.ToString());

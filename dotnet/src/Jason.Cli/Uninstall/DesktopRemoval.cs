@@ -184,47 +184,7 @@ public static partial class DesktopRemoval
         ArgumentNullException.ThrowIfNull(carried);
         ArgumentNullException.ThrowIfNull(plan);
 
-        var processes = env.Processes ?? RuntimeProcessControl.Instance;
-        var stopped = new HashSet<int> { Environment.ProcessId };
-        foreach (var paths in plan.Demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths))
-        {
-            if (DescriptorProcess.Live(paths, processes) is { } runtime)
-            {
-                stopped.Add(runtime.Pid);
-            }
-        }
-
-        var removes = env.Removes!;
-        return [.. removes.RunningFromInAnySession(carried.Executable).Where(pid => !stopped.Contains(pid) && !Descends(removes, pid, stopped)).Order()];
-    }
-
-    /// <summary>The deepest a chain of processes is followed up to one this uninstall stops.</summary>
-    private const int DeepestChain = 64;
-
-    /// <summary>
-    /// Whether <paramref name="pid"/> was started, through any number of processes, by one of <paramref name="ancestors"/>.
-    /// A parent that cannot be told ends the chain, and the process is counted.
-    /// </summary>
-    private static bool Descends(IInstallationRemover removes, int pid, HashSet<int> ancestors)
-    {
-        var seen = new HashSet<int> { pid };
-        var current = pid;
-        for (var step = 0; step < DeepestChain; step++)
-        {
-            if (removes.ParentOf(current) is not { } parent || !seen.Add(parent))
-            {
-                return false;
-            }
-
-            if (ancestors.Contains(parent))
-            {
-                return true;
-            }
-
-            current = parent;
-        }
-
-        return false;
+        return StartInFlight.Others(env, carried.Executable, plan.Demo);
     }
 
     /// <summary>The application's own executable inside its folder.</summary>

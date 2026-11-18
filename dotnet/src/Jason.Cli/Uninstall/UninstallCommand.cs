@@ -44,7 +44,10 @@ public static class UninstallCommand
              account's, on Windows including the task an earlier version registered as Jason. On macOS it
              comes just after step 2: taking the job out of launchd ends the runtime launchd started, with
              no drain, and the job starts no runtime that stopped
-          2. the runtime — and if it will not stop, nothing further is removed
+          2. the runtime — and if it will not stop, nothing further is removed. Before anything is read, a
+             runtime that is still starting is waited for, up to {StartInFlight.Seconds(StartInFlight.Bound)}, and then stopped; where another jason of this
+             installation still runs (jason_running) — one that never came up, or after the stop — nothing is
+             removed
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
              two entries Windows made for it, and the jason: link registration where its command names this
              executable
@@ -104,10 +107,10 @@ public static class UninstallCommand
           - refused before anything is removed while Jason Desktop is open (desktop_running): quit it
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
-            jason, in any session (jason_running): a runtime of another data directory, a journal watch, a
-            call of an agent host opened by hand. The application's uninstaller removes nothing while one
-            does. The runtime this stops, and every process it started (its plugin hosts, its agents' calls),
-            are not counted.
+            jason, in any session (jason_running), once the wait for a runtime still starting is over: a
+            runtime of another data directory, a journal watch, a call of an agent host opened by hand. The
+            application's uninstaller removes nothing while one does. The runtime this stops, and every
+            process it started (its plugin hosts, its agents' calls), are not counted.
           - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
             where it starts this application. On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
             may be that job's own window: the output says the job stays loaded until the next login.
@@ -280,6 +283,7 @@ public static class UninstallCommand
         }
 
         DesktopPlan? desktop = null;
+        StartWait startWait;
         if (carried is not null && env.Setup is { } places)
         {
             // The plan is read after the application that asked has quit, so it is the machine as the uninstall finds it.
@@ -290,12 +294,29 @@ public static class UninstallCommand
                 return Refuse(env, options.Human, CliErrors.DesktopRunning, open);
             }
 
+            // A refusal that needs no waiting is said first; then the wait for a runtime still starting; then the look the
+            // application's uninstaller makes, at what the wait left.
+            (startWait, var starting) = await StartWaitAsync(env, options, desktop.Demo, cancellationToken).ConfigureAwait(false);
+            if (starting is not null)
+            {
+                return Refuse(env, options.Human, CliErrors.JasonRunning, starting);
+            }
+
             if (OthersRunning(env, carried, desktop, options) is { } others)
             {
                 return Refuse(env, options.Human, CliErrors.JasonRunning, others);
             }
         }
+        else
+        {
+            (startWait, var starting) = await StartWaitAsync(env, options, [], cancellationToken).ConfigureAwait(false);
+            if (starting is not null)
+            {
+                return Refuse(env, options.Human, CliErrors.JasonRunning, starting);
+            }
+        }
 
+        // Read after the wait, so a runtime that was starting and has come up is the plan's runtime, stopped as any is.
         var plan = UninstallReader.Read(env, options.PurgeData, desktop);
 
         // A person is shown the plan before a byte of it is acted on, because a plan nobody saw is one
@@ -318,7 +339,8 @@ public static class UninstallCommand
                     plan,
                     options,
                     cancellationToken,
-                    beforeTheImageGoes: soFar => Report(env with { Out = TextWriter.Null, Error = TextWriter.Null }, soFar, options))
+                    beforeTheImageGoes: soFar => Report(env with { Out = TextWriter.Null, Error = TextWriter.Null }, soFar, options),
+                    startWait: startWait)
                 .ConfigureAwait(false);
 
         return Reported(env, report, options) && report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
@@ -629,12 +651,39 @@ public static class UninstallCommand
         var others = DesktopRemoval.OthersRunningTheCarriedJason(env, carried, desktop);
         return others.Count == 0
             ? null
-            : $"Another jason runs from the application's folder (process {string.Join(", ", others.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), "
-              + "and the application's uninstaller removes nothing while one does, so nothing was removed. It is neither the runtime "
-              + $"of {env.Paths.Root}, which this would stop, nor anything that runtime started. It may be a runtime of another data "
-              + $"directory, which `\"{carried.Executable}\" runtime stop` with JASON_DATA_DIR set to that directory stops, a "
-              + "`jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; in another session "
-              + "of this account, it may be a task that runs whether you are signed in or not. Once none runs, run this again.";
+            : StartInFlight.JasonRunning(
+                env,
+                carried.Executable,
+                $"Another jason runs from the application's folder ({StartInFlight.Processes(others)}), and the application's uninstaller "
+                + "removes nothing while one does, so nothing was removed.",
+                ", which this would stop");
+    }
+
+    /// <summary>
+    /// The wait for a runtime of this installation that is still starting (<see cref="StartInFlight"/>), and the refusal it
+    /// ends with where one runs on at its bound, before anything is removed, the logon registration included. A dry run
+    /// removes nothing and never waits; nor does the Windows uninstaller's own call, which looks at the folder itself first.
+    /// </summary>
+    private static async Task<(StartWait Outcome, string? Refusal)> StartWaitAsync(
+        CliEnvironment env,
+        UninstallOptions options,
+        IReadOnlyList<string> demo,
+        CancellationToken cancellationToken)
+    {
+        if (options.DryRun || options.KeepApplication || StartInFlight.Image(env) is not { } image)
+        {
+            return (StartWait.None, null);
+        }
+
+        var (outcome, left) = await StartInFlight.WaitAsync(env, image, demo, cancellationToken).ConfigureAwait(false);
+        return outcome is StartWait.Refused
+            ? (outcome, StartInFlight.JasonRunning(
+                env,
+                image,
+                $"Another jason runs from this installation ({StartInFlight.Processes(left)}), and no runtime of {env.Paths.Root} "
+                + $"answered within {StartInFlight.Seconds(StartInFlight.Bound)}, so nothing was removed.",
+                ", which this would stop"))
+            : (outcome, null);
     }
 
     /// <summary>

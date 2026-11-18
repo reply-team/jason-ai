@@ -58,12 +58,17 @@ public static class UninstallRunner
     /// assembly it has not loaded yet — see <see cref="IInstallationRemover.RemoveExecutable"/> — and the
     /// report is the one thing still to be written.
     /// </param>
+    /// <param name="startWait">
+    /// What the wait for a runtime still starting, made before the plan was read, ended with: said in <c>done</c> where it
+    /// waited.
+    /// </param>
     public static async Task<UninstallReport> RunAsync(
         CliEnvironment env,
         UninstallPlan plan,
         UninstallOptions options,
         CancellationToken cancellationToken,
-        Action<UninstallReport>? beforeTheImageGoes = null)
+        Action<UninstallReport>? beforeTheImageGoes = null,
+        StartWait startWait = StartWait.None)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
@@ -97,6 +102,11 @@ public static class UninstallRunner
 
         try
         {
+            if (startWait is StartWait.Ended)
+            {
+                done.Add("A jason of this installation was running when this began, with no runtime answering; it ended by itself before anything was removed.");
+            }
+
             // 1. The registration, first — except on macOS, where it comes after the stop. There the registration is a
             // job loaded in launchd, and taking it out (`launchctl unload`, `launchctl remove`) ends the process launchd
             // started at login: the runtime itself, with no drain. The job has RunAtLoad and no KeepAlive, so launchd
@@ -112,9 +122,16 @@ public static class UninstallRunner
             var places = env.Setup;
 
             // 2. The runtime, and only then.
-            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, startWait, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
+            }
+
+            // And nothing else of this installation's jason still running, now that the runtime has stopped: what this removes
+            // next is what such a process runs from.
+            if (await Step2OthersEndedAsync(env, plan, options, registrationAfterTheStop, cancellationToken).ConfigureAwait(false) is { } refusedAfter2)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAfter2.Code, refusedAfter2.Message);
             }
 
             // On macOS the registration now, with the runtime stopped: its file is unloaded before it goes.
@@ -1013,6 +1030,7 @@ public static class UninstallRunner
         UninstallPlan plan,
         UninstallOptions options,
         bool registrationAfterTheStop,
+        StartWait startWait,
         List<string> done,
         List<string> kept,
         CancellationToken cancellationToken)
@@ -1030,7 +1048,7 @@ public static class UninstallRunner
 
         if (exit == ExitCodes.Success)
         {
-            done.Add("Stopped the runtime.");
+            done.Add(startWait is StartWait.Answered ? "A runtime was starting when this began; it answered, and it was stopped." : "Stopped the runtime.");
             return null;
         }
 
@@ -1066,6 +1084,41 @@ public static class UninstallRunner
                 : "Stop the runtime with 'jason runtime stop' and run this again. ")
             + (left.Note is { } note ? note + " " : string.Empty)
             + $"It said: {said.ToString().Trim()}");
+    }
+
+    /// <summary>
+    /// After the runtime: the other processes of this installation's <c>jason</c>, given <see cref="StartInFlight.Settle"/>
+    /// to end. One still running then — a runtime that never came up, a runtime of another data directory, a journal watch —
+    /// runs from what the next steps remove, so it refuses with <c>jason_running</c>, nothing further removed. The Windows
+    /// uninstaller's own call (<c>--keep-application</c>) leaves the folder and looks at it itself.
+    /// </summary>
+    private static async Task<RemovalRefused?> Step2OthersEndedAsync(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        bool registrationAfterTheStop,
+        CancellationToken cancellationToken)
+    {
+        if (options.KeepApplication || StartInFlight.Image(env) is not { } image)
+        {
+            return null;
+        }
+
+        var left = await StartInFlight.SettleAsync(env, image, plan.Desktop?.Demo ?? [], cancellationToken).ConfigureAwait(false);
+        return left.Count == 0
+            ? null
+            : new RemovalRefused(
+                CliErrors.JasonRunning,
+                StartInFlight.JasonRunning(
+                    env,
+                    image,
+                    $"Another jason still runs from this installation ({StartInFlight.Processes(left)}) with its runtime stopped, so nothing "
+                    + "further was removed and this installation is as it was"
+                    + (registrationAfterTheStop
+                        ? ", its logon registration included."
+                        : " — except the logon registration, which had already been taken away and which "
+                          + "'jason runtime autostart enable' puts back."),
+                    string.Empty));
     }
 
     /// <summary>

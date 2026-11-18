@@ -1685,7 +1685,7 @@ The order is the order that makes a half-finished run safe:
 | Step | Why here |
 |---|---|
 | this account's logon registration, on Windows including the task `\Jason` an earlier version registered for it | first, so a logon part-way through cannot start what is going. On macOS just after the runtime instead: taking the job out of launchd ends the process launchd started at login — the runtime, with no drain — and the job (`RunAtLoad`, no `KeepAlive`) starts no runtime that stopped, so nothing starts one between the two; a runtime that will not stop leaves the registration in place |
-| the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
+| the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed**. A runtime that is still starting, which runs this installation's `jason` and has not yet published its descriptor, is waited for before anything is read, up to 60 seconds, said once on stderr, and then stopped as any runtime is; where another `jason` of this installation still runs — one that never came up at that bound, or one still running ten seconds after the stop — the verb refuses with `jason_running`, naming each process, and removes nothing further |
 | on Windows, the notification registration | after the runtime, so its next toast cannot write it back: the AppUserModelID key the toast was shown under, the two entries Windows made for it at the first toast, and the `jason:` link where its command names this executable — one whose command is other than this installation's is kept, since it may be another installation's or a spelling of this one, and another program's never touched. All are this account's, under `HKEY_CURRENT_USER` |
 | every recorded skill | by the paths its root's record names, digest by digest |
 | the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it. A PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile, and in `~/.bashrc` or `~/.zshrc` beside it; on Windows, whose Path carries no marker, the entry in this account's Path |
@@ -1708,7 +1708,8 @@ terminal on both systems, from Installed apps on Windows, whose uninstaller runs
 Jason menu on macOS; the data directory is kept unless `--purge-data` says otherwise, and the harness root is never
 touched. While Jason Desktop is open it refuses with `desktop_running` before anything is removed, a dry run aside;
 `--wait-for <pid>` first waits up to two minutes for that process to end, and only then reads what it will take off,
-which is how the menu item starts it before it quits. On Windows, run from a terminal, it also refuses with
+which is how the menu item starts it before it quits. On Windows, run from a terminal, once the wait for a runtime still
+starting is over, it also refuses with
 `jason_running`, naming each, while another process runs the carried `jason` in any session of this account — a runtime
 of another data directory, a `jason journal watch`, a call of an agent host opened by hand, a task that runs whether the
 person is signed in or not — because the application's uninstaller, which looks in every session by the image's path,
