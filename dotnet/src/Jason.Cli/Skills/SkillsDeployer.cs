@@ -5,10 +5,35 @@ using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Skills;
 
+/// <summary>
+/// A skill folder a deployment met in a root under the name Jason ships it by, which the root's record does not name: where,
+/// in which pack, by which name, and whether the root is the roles home, which the runtime teaches roles from.
+/// </summary>
+public sealed record UnrecordedSkill(string Root, string Pack, string Name, bool RolesHome = false)
+{
+    /// <summary>The folder itself.</summary>
+    public string Folder => Path.Combine(Root, Name);
+}
+
+/// <summary>
+/// What the one rule made of a plan before anything is written: the plan without the skills it leaves alone, those skills,
+/// and the ones it adopts (<see cref="SkillsDeployer.Judge"/>).
+/// </summary>
+public sealed record SkillsJudgement(SkillsPlan Plan, IReadOnlyList<UnrecordedSkill> LeftAlone, IReadOnlyList<UnrecordedSkill> Adopted)
+{
+    /// <summary>
+    /// What is said of each, in every answer that names them: a skill left alone as the person's, and one adopted as Jason's.
+    /// The same sentence at every door, so an install, an update and the set-up never say one thing two ways.
+    /// </summary>
+    public IEnumerable<string> Sentences =>
+        Adopted.Select(SkillsDeployer.AdoptedSentence).Concat(LeftAlone.Select(SkillsDeployer.LeftAloneSentence));
+}
+
 /// <summary>What a deployment did, so the verb can report it rather than claim it.</summary>
 /// <param name="Notes">
-/// Things worth telling the operator that are not failures — a root whose record never landed, which this run
-/// is completing. A root that silently repaired itself would hide that something went wrong once.
+/// Things worth telling the operator that are not failures: a skill adopted as Jason's, and one left alone as the person's
+/// (<see cref="SkillsJudgement.Sentences"/>). Said each time, never only the first: a person who missed it once meets it
+/// again at the next deployment, for as long as the folder stands there.
 /// </param>
 public sealed record DeploymentReport(
     int Written,
@@ -24,11 +49,133 @@ public sealed record DeploymentReport(
     /// says which run completes it: an update moves recorded packs only, so it is not one.
     /// </summary>
     public IReadOnlyList<(string Pack, string Root)> Unrecorded { get; init; } = [];
+
+    /// <summary>The skills this run left alone as the person's: nothing of them written, nothing recorded.</summary>
+    public IReadOnlyList<UnrecordedSkill> LeftAlone { get; init; } = [];
+
+    /// <summary>The skills this run adopted: byte for byte the ones Jason ships, recorded now, nothing written.</summary>
+    public IReadOnlyList<UnrecordedSkill> Adopted { get; init; } = [];
 }
 
 /// <summary>Writes a plan, one whole skill at a time where no file of the person's is in it, and writes the record last.</summary>
 public static class SkillsDeployer
 {
+    /// <summary>
+    /// The one rule every door is held to, applied here and nowhere else: a skill of the plan whose folder is already in its
+    /// root, under the name Jason ships it by, and which that root's record does not name, is the person's unless it is
+    /// byte for byte the one Jason ships. The second is <em>adopted</em>: recorded, nothing written. The first is <em>left
+    /// alone</em>: taken out of the plan, so nothing of it is written or recorded and no flag reaches it, and named in the
+    /// answer every time.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every door deploys through <see cref="Apply"/>, which judges first: <c>jason install</c>, its role skills, the
+    /// finishing step and an update's skills step, <c>jason skills install</c> and <c>jason skills update</c>, into a harness
+    /// root or the role skills root alike. There is no exception by root and no flag that marks one as Jason's own, since
+    /// such a flag would be a way to write over anyone's folder.
+    /// </para>
+    /// <para>
+    /// Whether a name is recorded is asked of the whole root, every pack in its record: a skill one pack recorded is Jason's
+    /// whichever pack now ships it. A link stands where a folder would and is never adopted, since what it names is not in
+    /// the root: removing it by receipt later would reach outside. A crash's remnant — a skill an earlier deployment moved
+    /// into place before its record was written — is adopted where it is this release's, and otherwise left alone and
+    /// named, never completed in silence: from the disk alone it is the person's folder, and nothing can tell it apart.
+    /// </para>
+    /// </remarks>
+    public static SkillsJudgement Judge(SkillsPlan plan, string? rolesHome = null)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var records = new Dictionary<string, SkillsRecord>(StringComparer.Ordinal);
+        foreach (var root in plan.Roots)
+        {
+            try
+            {
+                records[root] = SkillsRecord.Read(root) ?? new SkillsRecord(SkillsRecord.CurrentVersion, []);
+            }
+            catch (SkillsRecordUnreadable)
+            {
+                // Judged by the deployment, which refuses the root before anything is written: a dry run leaves it to say so.
+                records[root] = new SkillsRecord(SkillsRecord.CurrentVersion, []);
+            }
+        }
+
+        return Judge(plan, records, rolesHome);
+    }
+
+    private static SkillsJudgement Judge(SkillsPlan plan, Dictionary<string, SkillsRecord> records, string? rolesHome)
+    {
+        var leftAlone = new List<UnrecordedSkill>();
+        var adopted = new List<UnrecordedSkill>();
+        var packs = new List<PlannedPack>();
+        foreach (var pack in plan.Packs)
+        {
+            var named = records.TryGetValue(pack.Root, out var record)
+                ? record.Packs.SelectMany(deployment => deployment.Files).Select(file => file.Path.Split('/')[0]).ToHashSet(StringComparer.Ordinal)
+                : [];
+            var roles = rolesHome is not null && HarnessLocators.SamePath.Equals(pack.Root, rolesHome);
+            var units = new List<PlannedUnit>();
+            foreach (var unit in pack.Units)
+            {
+                if (named.Contains(unit.Name) || !Occupied(unit.Unit))
+                {
+                    units.Add(unit);
+                    continue;
+                }
+
+                if (!IsLink(unit.Unit) && Current(unit))
+                {
+                    adopted.Add(new UnrecordedSkill(pack.Root, pack.Pack, unit.Name, roles));
+                    units.Add(unit);
+                    continue;
+                }
+
+                leftAlone.Add(new UnrecordedSkill(pack.Root, pack.Pack, unit.Name, roles));
+            }
+
+            packs.Add(pack with { Units = units });
+        }
+
+        return new SkillsJudgement(plan with { Packs = packs }, leftAlone, adopted);
+    }
+
+    /// <summary>What deploys an agent host's folder again: the recorded deployments, from the source each was made from.</summary>
+    public const string RedeployHost = "jason skills update";
+
+    /// <summary>What deploys the roles home again: the role skills, as `jason status` names their repair.</summary>
+    public const string RedeployRoles = "jason skills install --roles-only";
+
+    /// <summary>
+    /// What is said of a skill left alone as the person's, the same at every door: whose Jason takes it for, what it means
+    /// for the host or the role, and, last, the one way to have Jason's instead. "Takes it for" and not "is": a remnant of an
+    /// older Jason with no record reads the same on disk, and the sentence stays true of it.
+    /// </summary>
+    public static string LeftAloneSentence(UnrecordedSkill skill)
+    {
+        ArgumentNullException.ThrowIfNull(skill);
+        return skill.RolesHome
+            ? $"{skill.Folder} is a role skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
+                + $"left as it is, nothing written or recorded, and no flag writes over it; the runtime teaches the role '{skill.Name}' from that folder. "
+                + $"To have the one Jason ships, move or remove that folder, then run `{RedeployRoles}`."
+            : $"{skill.Folder} is a skill under a name Jason ships that no record of Jason's names there, so Jason takes it for yours: "
+                + $"left as it is, nothing written or recorded, and no flag writes over it; Jason's '{skill.Name}' is not installed there, "
+                + $"and an agent reading {skill.Root} that is asked to use '{skill.Name}' reads that folder. "
+                + $"To have the one Jason ships, move or remove that folder, then run `{RedeployHost}`.";
+    }
+
+    /// <summary>What is said of a skill adopted as Jason's.</summary>
+    public static string AdoptedSentence(UnrecordedSkill skill)
+    {
+        ArgumentNullException.ThrowIfNull(skill);
+        return $"{skill.Folder} is byte for byte the skill Jason ships, and no record of Jason's named it: recorded as Jason's now, nothing written.";
+    }
+
+    /// <summary>Whether anything stands at a path: a file, a folder, or a link, a dangling one included.</summary>
+    private static bool Occupied(string path) =>
+        File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null;
+
+    /// <summary>Whether a path is a link, a junction included, rather than a folder of its own.</summary>
+    private static bool IsLink(string path) => new FileInfo(path).LinkTarget is not null;
+
     /// <summary>
     /// Applies the plan. Each skill is assembled beside its destination and moved into place, so a launch
     /// reading a role's tree sees the tree that was there or the tree that arrived and never a blend of the
@@ -60,30 +207,18 @@ public static class SkillsDeployer
             }
 
             records[root] = record;
-
-            // A root holding skills that no record accounts for is a deployment whose record never landed --
-            // it is written last, so a crash half-way through reads exactly like this. Such a root is
-            // completed rather than trusted, and said out loud: one that silently repaired itself would hide
-            // that something went wrong once.
-            // Only where skills this plan owns are already on disk with no record of them. Firing on any
-            // non-empty root meant firing on the first install on every machine that has an agent host, which
-            // is how a real incomplete-deployment warning gets trained out of an operator.
-            var unrecorded = record.Packs.Count == 0
-                && plan.Packs
-                    .Where(pack => string.Equals(pack.Root, root, StringComparison.Ordinal))
-                    .SelectMany(pack => pack.Units)
-                    .Any(unit => Directory.Exists(unit.Unit));
-
-            if (unrecorded)
-            {
-                notes.Add($"'{root}' holds skills and there is no record of what is there, so this deployment is being completed rather than trusted.");
-            }
         }
 
         if (problems.Count > 0)
         {
             return new DeploymentReport(0, 0, [], problems, notes);
         }
+
+        // The one rule, before anything else is judged: what it leaves alone is out of the plan from here on, so nothing
+        // below, --force included, can reach it, and what it adopts is current and recorded as it is.
+        var judgement = Judge(plan, records, paths.RoleSkillsDirectory);
+        plan = judgement.Plan;
+        notes.AddRange(judgement.Sentences);
 
         // Everything is judged before anything is written, for the same reason the plan itself is: what is kept is
         // decided once, and the report names exactly that.
@@ -166,7 +301,8 @@ public static class SkillsDeployer
                 // With no record of the pack there is no old deployment to keep, and a record at the new ref with a refused
                 // skill's files left out would be a lie: the pack read as current, `jason status` named no repair, and
                 // the next update found nothing to move. So the pack stays unrecorded. The skills that did land are on disk
-                // without a record, as after a crash, and the next install completes the pack and writes the record.
+                // without a record, as after a crash, each byte for byte this release's, and the next install adopts them
+                // and writes the record.
                 if (kept && recorded is null)
                 {
                     leftUnrecorded.Add((pack.Pack, root));
@@ -177,8 +313,14 @@ public static class SkillsDeployer
                 // the old deployment's, so its source, ref and commit stay where they were, beside the files as they
                 // now are on disk: recorded at the new ref, the pack read as current, `jason status` named no repair,
                 // and the next update found nothing to move.
+                // The skills of this pack the rule left alone in this root are named with it, for `jason status` to say.
+                var alone = judgement.LeftAlone
+                    .Where(skill => string.Equals(skill.Root, root, StringComparison.Ordinal) && string.Equals(skill.Pack, pack.Pack, StringComparison.Ordinal))
+                    .Select(skill => skill.Name)
+                    .Order(StringComparer.Ordinal)
+                    .ToList();
                 var next = kept && recorded is not null
-                    ? recorded with { Files = mine }
+                    ? recorded with { Files = mine, LeftAlone = alone }
                     : new SkillsDeployment(
                         pack.Pack,
                         plan.Source.Source,
@@ -186,7 +328,8 @@ public static class SkillsDeployer
                         plan.Source.RefOverridden,
                         plan.Source.Commit,
                         clock.GetUtcNow(),
-                        mine);
+                        mine)
+                    { LeftAlone = alone };
 
                 // A run that changed nothing rewrites nothing, not even the time it ran. "It wrote nothing"
                 // has to mean the bytes under this root are the bytes that were there, and a record whose
@@ -224,7 +367,7 @@ public static class SkillsDeployer
             SkillsSwap.Tidy(directory);
         }
 
-        return new DeploymentReport(written, unchanged, edited, problems, notes) { Unrecorded = leftUnrecorded };
+        return new DeploymentReport(written, unchanged, edited, problems, notes) { Unrecorded = leftUnrecorded, LeftAlone = judgement.LeftAlone, Adopted = judgement.Adopted };
     }
 
     /// <summary>
@@ -232,8 +375,9 @@ public static class SkillsDeployer
     /// aside. Every field but that one is about what is on disk; that one is about when somebody typed.
     /// </summary>
     private static bool Same(SkillsDeployment recorded, SkillsDeployment next) =>
-        (recorded with { InstalledAt = default, Files = [] }) == (next with { InstalledAt = default, Files = [] })
-        && recorded.Files.SequenceEqual(next.Files);
+        (recorded with { InstalledAt = default, Files = [], LeftAlone = [] }) == (next with { InstalledAt = default, Files = [], LeftAlone = [] })
+        && recorded.Files.SequenceEqual(next.Files)
+        && recorded.LeftAlone.SequenceEqual(next.LeftAlone, StringComparer.Ordinal);
 
     /// <summary>
     /// Whether what is on disk is already exactly this skill: the same files, each with the same digest, and

@@ -9,8 +9,8 @@ namespace Jason.Cli.Tests.Documentation;
 /// tells a person or an agent to run <c>jason …</c> is the way on at the moment it is needed; one the CLI does not
 /// understand teaches that the tool is broken. The pages' commands and the skills' are typed by their own guards
 /// (<see cref="DocumentedPageCommandsTests"/>, <c>DocumentedSkillCommandsTests</c>), and the repairs <c>jason status</c>
-/// prints by <c>StatusDisciplineTests</c>; this one reads the sentences of the update, the machine setup and the
-/// elevation and lock refusals, and the rows of the release page's two tables of how a carried update ends and what a
+/// prints by <c>StatusDisciplineTests</c>; this one reads the sentences of the update, the machine setup, the
+/// deployer's sentence about a skill it leaves alone, and the elevation and lock refusals, and the rows of the release page's two tables of how a carried update ends and what a
 /// kill leaves, which name a command in the middle of a sentence where the page guard, which reads lines, does not look.
 /// </summary>
 /// <remarks>
@@ -31,6 +31,7 @@ public partial class CliSentenceCommandsTests
         "Uninstall",
         Path.Combine("Commands", "UpdateCommands.cs"),
         Path.Combine("Commands", "Runtime*"),
+        Path.Combine("Skills", "SkillsDeployer.cs"),
     ];
 
     public static TheoryData<string, string> Named()

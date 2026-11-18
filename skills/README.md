@@ -122,9 +122,18 @@ These are the rules both verbs keep:
   both stay. A recorded file whose bytes are no longer the bytes the record names is your edit, and it is
   reported and kept unless `--force`; the record stays with it, because a receipt removed while the file
   it names is still there leaves a file nothing can account for again.
-- **A deployment whose record never landed is completed rather than trusted**, and says so. The record is
-  written last, so a crash half-way through reads as incomplete next time; a root that silently repaired
-  itself would hide that something went wrong once.
+- **A skill of your own under a name Jason ships is left alone**, whoever put it there and whenever. A folder
+  under a shipped name that no record of Jason's in that root names is taken for yours: every deployment —
+  `jason install`, the Desktop's first start and the finishing step after an update, `jason update apply`,
+  `jason skills install` and `jason skills update`, into an agent host's folder and into the roles home alike
+  — writes nothing of it, records nothing of it, and names it in its answer every time; Jason's skill of that
+  name is then not installed there, an agent asked to use it reads your folder, and the runtime teaches a role
+  of that name from yours. `--force` does not reach it. To have the one Jason ships, move or remove the folder,
+  then run `jason skills update` for an agent host's folder or `jason skills install --roles-only` for the
+  roles home. `jason status` names it too. The one exception is a folder byte for byte the skill Jason ships,
+  which is what a deployment writes before its record lands: that is adopted — recorded as Jason's, nothing
+  written — and said. A skill whose record never landed cannot be told from yours by what is on disk, and is
+  left alone and named in the same words.
 
 ### What a pack has to look like
 
@@ -144,7 +153,9 @@ These are the rules both verbs keep:
 Copying still works, and is what somebody without this build does: put a skill's directory wherever
 your agent host looks for skills — for Claude Code, `~/.claude/skills/<name>/` for yourself or
 `.claude/skills/<name>/` inside a project; the [host matrix](../docs/execution-profiles.md#12-the-hosts) lists the
-others. Nothing records that you did, so `jason status` will not report it and no uninstall will remove it.
+others. Nothing records that you did, so `jason status` will not report it and no uninstall will remove it;
+and a deployment that later ships a skill of the same name leaves your copy where it is and names it, unless
+it is byte for byte the one it ships.
 
 This repository also offers both packs through the **skills marketplace** at
 [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json), by relative path, so a clone

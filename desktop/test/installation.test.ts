@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
+import { AgentFolderUnowned, ownAgentFolder } from '../src/chat-agent-folder.ts';
 import { DataNewerRefused, dataNewerRefusalIn, LayoutRefused, layoutRefusalIn, loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import type { DesktopSettings } from '../src/settings.ts';
@@ -395,6 +395,35 @@ test('a recorded skill whose bytes changed is gone at the next start and deploye
     const quiet = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
     assert.equal(quiet.verbs.slice(again.verbs.length).some((args) => args[0] === 'skills'), false, 'with nothing changed the next start deploys nothing');
 });
+
+for (const recorded of [false, true]) {
+    test(`a skill nobody recorded in the chat folder is cleared before the desktop's own deploy into it, ${recorded ? 'with' : 'with no'} record kept`, async (t) => {
+        const b = bench(t);
+        runtimeAlreadyUp(b);
+        if (recorded) await start(b);
+        const planted = [join(b.paths.chat, '.claude', 'skills', 'quick-start'), join(b.paths.chat, '.agents', 'skills', 'quick-start')];
+        for (const folder of planted) {
+            mkdirSync(folder, { recursive: true });
+            writeFileSync(join(folder, 'SKILL.md'), '---\nname: quick-start\ndescription: mine\n---\n');
+        }
+        const order: string[] = [];
+        const pass = (chat: string, records: string) => {
+            order.push('pass');
+            return ownAgentFolder(chat, records);
+        };
+        const watching = (cli: Bench['cli']): Bench['cli'] => ({
+            async run(args, options) {
+                if (args[0] === 'skills' && args.includes('--root')) {
+                    order.push(`deploy ${args[args.indexOf('--host') + 1]}`);
+                    for (const folder of planted) assert.equal(existsSync(folder), false, `${folder} stood there when the CLI was asked to deploy`);
+                }
+                return cli.run(args, options);
+            },
+        });
+        await start(b, { feed: null, skillsDeployedFor: null, theme: null }, { ownChatFolder: pass, cli: watching });
+        assert.deepEqual(order, ['pass', 'deploy claude_code', 'deploy codex']);
+    });
+}
 
 test('a start holds the skills gate from the pass over the chat folder to the last deploy, and lets it go however the start ends', async (t) => {
     const b = bench(t);

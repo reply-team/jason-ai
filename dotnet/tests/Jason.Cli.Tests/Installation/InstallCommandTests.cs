@@ -723,6 +723,57 @@ public sealed class InstallCommandTests : IDisposable
         Assert.DoesNotContain(recorded, path => path.StartsWith("operating/", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The set-up's deployment is a door of the one rule like every other, into a host's skills and into the roles home: a
+    /// folder of the person's under a name this release ships is left alone and named, whether a record of an earlier
+    /// release is there or none is, and the uninstall after it keeps that folder and takes Jason's.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [Critical(Family.I3, "the set-up leaves a person's own skill alone with a record there and without, and the uninstall keeps it")]
+    public async Task A_folder_of_your_own_under_a_name_the_release_ships_is_left_alone_by_the_setup_and_kept_by_the_uninstall(bool recorded, bool roles)
+    {
+        PlantHosts(claude: true, codex: false);
+        var executable = Carried();
+        var bundle = Path.GetDirectoryName(executable)!;
+        var root = roles ? _data.Paths.RoleSkillsDirectory : Path.Combine(Home, ".claude", "skills");
+        var name = roles ? "planner" : "quick-start";
+        if (recorded)
+        {
+            // An earlier release, which did not ship the name, deployed here first.
+            var (first, _) = Environment(MacPlaces(), executable);
+            Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(first, new InstallOptions(false, roles, null), Ct));
+            Assert.NotNull(SkillsRecord.Read(root));
+        }
+
+        SkillsLeftAloneTests.Skill(Path.Combine(bundle, "skills", "runtime", roles ? Path.Combine("roles", name) : name), name, "Jason's");
+        var own = SkillsLeftAloneTests.Plant(root, name);
+        var before = SkillsLeftAloneTests.Snapshot(own);
+        var (env, output) = Environment(MacPlaces(), executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, roles, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(before, SkillsLeftAloneTests.Snapshot(own));
+        var report = Report(output);
+        var sentence = SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(root, SkillPacks.Runtime, name, RolesHome: roles));
+        Assert.Contains(report.GetProperty("left").EnumerateArray(), line => line.GetString() == sentence);
+        var outcome = roles ? report.GetProperty("roles") : Assert.Single(report.GetProperty("skills").EnumerateArray());
+        Assert.Equal([name], outcome.GetProperty("left_alone").EnumerateArray().Select(left => left.GetString()));
+        var record = SkillsRecord.Read(root)!;
+        Assert.DoesNotContain(record.Packs.SelectMany(pack => pack.Files), file => file.Path.StartsWith(name + "/", StringComparison.Ordinal));
+        var jasons = Path.Combine(root, roles ? "researcher" : "operating", "SKILL.md");
+        Assert.True(File.Exists(jasons));
+
+        var (removed, _) = await SkillsLeftAloneTests.UninstallAsync(_data.Paths, HarnessLocators.ForHome(Home), Path.Combine(_tree.Paths.Root, "bin", "jason"));
+        Assert.Equal(ExitCodes.Success, removed);
+        Assert.Equal(before, SkillsLeftAloneTests.Snapshot(own));
+        Assert.False(File.Exists(jasons), "a skill Jason deployed survived the uninstall");
+    }
+
     [Fact]
     public async Task With_roles_the_role_skills_go_into_the_data_directory()
     {

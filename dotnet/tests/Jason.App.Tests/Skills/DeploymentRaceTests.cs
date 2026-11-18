@@ -38,6 +38,7 @@ public class DeploymentRaceTests
 
         var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
         Compose(live, files: 80, marker: "OLD");
+        Recorded(live, SkillPacks.Runtime);
         var before = RoleSkillRules.Read(live, Role, int.MaxValue).Bytes;
 
         var source = Path.Combine(tree.Root, "source");
@@ -153,6 +154,7 @@ public class DeploymentRaceTests
 
         var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
         Compose(live, files: 2, marker: "OLD");
+        Recorded(live, SkillPacks.Runtime);
         var before = RoleSkillRules.Read(live, Role, int.MaxValue).Bytes;
 
         var source = Path.Combine(tree.Root, "source");
@@ -188,6 +190,11 @@ public class DeploymentRaceTests
     /// record there is no old deployment to keep, so the honest record is none, and the run that finds the skill free
     /// completes the pack and records it.
     /// </summary>
+    /// <remarks>
+    /// The role's folder is Jason's by the root's record, under the entry of another pack (<see cref="EarlierPack"/>): a
+    /// folder no record names is the person's, which no deployment writes, so only a recorded one can be refused, and the
+    /// pack being deployed must still have no record of its own.
+    /// </remarks>
     [Fact]
     public async Task A_skill_refused_in_a_pack_with_no_record_leaves_the_pack_unrecorded_until_a_run_completes_it()
     {
@@ -198,6 +205,7 @@ public class DeploymentRaceTests
 
         var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
         Compose(live, files: 1, marker: "OLD");
+        Recorded(live, EarlierPack);
 
         var source = Path.Combine(tree.Root, "source");
         Compose(Path.Combine(source, "skills", "runtime", "roles", Role), files: 1, marker: "NEW");
@@ -215,10 +223,10 @@ public class DeploymentRaceTests
         }
 
         Assert.True(refusedExit == ExitCodes.ApiError, $"The install with a role held open exited {refusedExit}: {error}");
-        var recorded = SkillsRecord.Read(data.Paths.RoleSkillsDirectory)?.Packs ?? [];
+        var recorded = (SkillsRecord.Read(data.Paths.RoleSkillsDirectory)?.Packs ?? []).Where(pack => pack.Pack == SkillPacks.Runtime).ToList();
         Assert.True(
             recorded.Count == 0,
-            $"The role root records {string.Join(", ", recorded.Select(pack => $"{pack.Pack} with {pack.Files.Count} files"))} after '{Role}' was refused and no record had existed.");
+            $"The role root records {string.Join(", ", recorded.Select(pack => $"{pack.Pack} with {pack.Files.Count} files"))} after '{Role}' was refused and no record of the pack had existed.");
         AssertRepairNamed(error, data, "jason skills install");
 
         var retry = new StringWriter();
@@ -251,6 +259,7 @@ public class DeploymentRaceTests
 
         var live = Path.Combine(data.Paths.RoleSkillsDirectory, Role);
         Compose(live, files: 1, marker: "OLD");
+        Recorded(live, EarlierPack);
 
         var source = Path.Combine(tree.Root, "source");
         Compose(Path.Combine(source, "skills", "runtime", "roles", Role), files: 1, marker: "NEW");
@@ -279,6 +288,20 @@ public class DeploymentRaceTests
         Assert.True(
             error.ToString().Split(Environment.NewLine).Contains(expected, StringComparer.Ordinal),
             $"The install said:{Environment.NewLine}{error}{Environment.NewLine}and not the line: {expected}");
+    }
+
+    /// <summary>A pack no release ships, whose record names the role: Jason's folder, for a pack that has no record of its own.</summary>
+    private const string EarlierPack = "an-earlier-pack";
+
+    /// <summary>The root's record naming every file of a skill folder as it stands, under a pack: an earlier deployment of Jason's.</summary>
+    private static void Recorded(string skill, string pack)
+    {
+        var root = Path.GetDirectoryName(skill)!;
+        var files = Directory.GetFiles(skill)
+            .Order(StringComparer.Ordinal)
+            .Select(file => new DeployedFile($"{Path.GetFileName(skill)}/{Path.GetFileName(file)}", SkillsRecord.Digest(file)))
+            .ToList();
+        SkillsRecord.Write(root, new SkillsRecord(SkillsRecord.CurrentVersion, [new SkillsDeployment(pack, "an earlier source", "v0.1.0", false, null, DateTimeOffset.UnixEpoch, files)]));
     }
 
     private static CliEnvironment Machine(TempDataDir data, string harness) =>
