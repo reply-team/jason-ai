@@ -361,6 +361,60 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// On macOS and Windows the install script's set-up teaches the role skills from the folder beside the jason the
+    /// application carries, with no network, as the routine reads them; §1 of the install page says so, and keeps the fetch of
+    /// the release's package for Linux and for a later <c>jason skills install</c>.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_role_skills_come_with_the_application_on_macOS_and_Windows()
+    {
+        var setup = Page("dotnet", "src", "Jason.Cli", "Installation", "MachineSetup.cs");
+        Assert.Contains("// The folder beside this jason, read where it stands: no download, nothing written under the data directory.", setup, StringComparison.Ordinal);
+        Assert.Contains("SkillsSource.StageAsync(env with { Out = TextWriter.Null }, Bundle, null, null, cancellationToken)", setup, StringComparison.Ordinal);
+
+        var need = Flat(Section(Page("docs", "INSTALL.md"), "## 1. What you need"));
+        Assert.Contains("On macOS and Windows they come with Jason Desktop: the set-up reads them from the folder beside the `jason` it carries, with no network.", need, StringComparison.Ordinal);
+        Assert.Contains("On Linux teaching it is a fetch of its own, and so is a later `jason skills install` on any system: a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.", need, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The install line runs as the person on macOS and Windows: install.sh stops as root in its macOS block alone, and
+    /// install.ps1 in an elevated PowerShell, both before the feed; on Linux root installs. §2 of the install page says so.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_line_runs_as_you_on_macOS_and_Windows()
+    {
+        var sh = Page("install", "install.sh");
+        var macOnly = sh.IndexOf("if [ \"$RID\" = macos ]; then\n    [ -z \"$INSTALL_DIR_GIVEN\" ]", StringComparison.Ordinal);
+        var root = sh.IndexOf("[ \"$(id -u)\" != 0 ] || fail \"this script runs as root", StringComparison.Ordinal);
+        Assert.True(macOnly > 0 && root > macOnly && root < sh.IndexOf("\nfi\n", macOnly, StringComparison.Ordinal), "install.sh refuses root outside its macOS block.");
+        Assert.Equal(1, sh.Split("id -u").Length - 1);
+
+        var ps1 = Page("install", "install.ps1");
+        var elevated = ps1.IndexOf("    if (Test-Elevated) {", StringComparison.Ordinal);
+        Assert.True(elevated > 0 && elevated < ps1.IndexOf("# --- the feed ---", StringComparison.Ordinal), "install.ps1 does not refuse an elevated PowerShell before the feed.");
+
+        var install = Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release"));
+        Assert.Contains("On macOS and Windows the line runs as you. Jason Desktop and everything it sets up are your account's own, so `install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another account's than the one signed in — stop before anything is downloaded, and say to run the line again as yourself. On Linux a run as root installs as any run does, where it is told to.", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Restoring a database by hand starts the version the backup was written by. A command-line install's update kept that
+    /// version under <c>update/previous</c>; where Jason Desktop carries jason, the copy of the application the Desktop kept
+    /// is that version, as the rollback's own line says, and <c>update/previous</c> there holds what a move retired.
+    /// </summary>
+    [Fact]
+    public void Restoring_a_database_by_hand_names_the_version_before_for_each_kind_of_install()
+    {
+        Assert.Contains("the copy Jason Desktop kept under its rollback folder", Page("dotnet", "src", "Jason.Cli", "Update", "UpdateRollback.cs"), StringComparison.Ordinal);
+
+        var restoring = Flat(Section(Page("docs", "release-and-update.md"), "### Restoring a database by hand"));
+        Assert.Contains("for a backup taken before a migration is the version you were on before the update; a command-line # install's update kept it here: ~/.jason/update/previous/jason runtime start", restoring, StringComparison.Ordinal);
+        Assert.Contains("Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/` (`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder, then run `jason runtime start`.", restoring, StringComparison.Ordinal);
+        Assert.Contains("`~/.jason/update/previous/jason` is not that version there: after a move into Jason Desktop it is the command-line executable the move's update replaced, a release before 0.49.", restoring, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The application goes to <c>/Applications</c> where this account may write there, and an application there is one for
     /// every account of the Mac: §9 says, in the row that deletes it, that taking it off takes it from all of them.
     /// </summary>

@@ -13,9 +13,11 @@ the terminal command, the skills and Jason's data are your account's own.
 
 Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
 Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
-script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
-the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
-without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
+script ends by teaching it its role skills (§4). On macOS and Windows they come with Jason Desktop: the set-up reads them
+from the folder beside the `jason` it carries, with no network. On Linux teaching it is a fetch of its own, and so is a
+later `jason skills install` on any system: a release takes its skills from the package of them it published,
+`jason-skills.zip`, over the network, at the tag it was published as. A machine without the network teaches it from a
+checkout instead, with `--source`, which also takes a git repository at a ref;
 only that needs `git`.
 
 You also need a directory you can write to, and — if you want an agent harness taught — that
@@ -248,6 +250,11 @@ to the folder it starts in — read the root's and the project's with a campaign
 | `/Applications/Jason.app`, or `~/Applications/Jason.app`; `jason` at `~/.local/bin/jason` | macOS |
 | `%LOCALAPPDATA%\Programs\jason-desktop\`; `jason.exe` in its `resources\bundle` | Windows |
 | `~/.local/bin/jason` | Linux |
+
+On macOS and Windows the line runs as you. Jason Desktop and everything it sets up are your account's own, so
+`install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another
+account's than the one signed in — stop before anything is downloaded, and say to run the line again as yourself.
+On Linux a run as root installs as any run does, where it is told to.
 
 Three flags matter on Linux — spelled `--version`, `--install-dir` and `--no-modify-path`. On macOS and Windows
 `--version` (`-Version` for `install.ps1`) is the one taken, from 0.49.0: `--install-dir` and `--no-modify-path`
@@ -583,6 +590,13 @@ One installation `path` fails with no line at all: a `jason` in a directory whos
 shell finds that `jason` by name and the agents Jason starts are not given it first on their PATH, whatever else
 answers to `jason`; a line would only write the same split entry again. The check says which character, and the way
 on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
+
+On macOS and Windows, where a machine holds one installation, `path` fails, naming both files, where `jason` by name is
+another file than the `jason` answering — Jason Desktop's own wrapper at `~/.local/bin/jason` counts as the `jason` it
+runs. Typed by name, `jason` runs that other file, so you and every agent use it and not this one, and `ready` is false
+until that file is removed or its folder taken off the PATH. That is also what a published build of this repository
+says, run by its full path while a release answers by name. On Linux the check passes there and says that two
+installations are on this machine.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
 `runtime`, `runtime_version`, `dispatcher`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with

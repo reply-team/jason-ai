@@ -6,7 +6,7 @@
 # beside its place, its signature verified as a Developer ID signature of the team that signs Jason, and moved into place
 # by one rename - /Applications where this account may write there, else ~/Applications. Nothing is opened, and no
 # password is asked. An Intel Mac is refused before anything is downloaded: this script installs Jason Desktop on Apple
-# silicon only.
+# silicon only. So is a run as root, with sudo: the application and what it sets up are the account's own.
 # A Jason.app already in either folder is never renamed, replaced or deleted: one of 0.49.0 or later is kept as it is,
 # once its signature verifies the same way, and an earlier one is left for its own Check for Updates, and the script ends
 # non-zero saying so. Then the jason the application carries sets the machine up, `jason install --roles`:
@@ -103,6 +103,10 @@ esac
 if [ "$RID" = macos ]; then
     [ -z "$INSTALL_DIR_GIVEN" ] || fail "--install-dir is not taken on macOS: Jason Desktop goes to /Applications or ~/Applications, and the jason it carries is the one the terminal runs. Nothing was installed: run this again without it."
     [ "$MODIFY_PATH" -eq 1 ] || fail "--no-modify-path is not taken on macOS: every install puts jason in the terminal. Nothing was installed: run this again without it."
+    # Root - the line piped into `sudo sh` - would place Jason.app owned by root, which its own updater then cannot replace
+    # without a password, and through a home sudo keeps, a data directory, a wrapper and skills the account's own runtime
+    # cannot write. So it stops before anything is downloaded.
+    [ "$(id -u)" != 0 ] || fail "this script runs as root, and Jason Desktop and everything it sets up are your account's own, so nothing was downloaded or installed: run the install line again as yourself, without sudo."
 fi
 
 # --- the install directory ----------------------------------------------------------------------------------
@@ -372,7 +376,7 @@ install_desktop() {
         # only then. An earlier one cannot be set up from a terminal at all.
         PLACED_VERSION="$(app_version "$DEST")"
         if [ -n "$PLACED_VERSION" ] && from_minor 49 "$PLACED_VERSION" && [ -f "$CARRIED" ]; then
-            signed_as_jason "$DEST" || fail "the Jason.app at $DEST does not verify as signed by $APP_TEAM, the team that signs Jason (said above), so its jason was not run; nothing was changed"
+            signed_as_jason "$DEST" || fail "the Jason.app at $DEST does not verify as signed by $APP_TEAM, the team that signs Jason (said above), so its jason was not run; nothing was changed. Move $DEST to the Trash, then run the install line again: it downloads Jason Desktop and puts it there."
             KEPT=1
             if [ "$PLACED_VERSION" = "$LATEST" ]; then
                 echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
@@ -441,6 +445,15 @@ install_desktop() {
     esac
     OPEN_SHELL="$(printf '%s' "$REPORT" | sed -n 's/.*"open_shell":"\([^"\\]*\)".*/\1/p' | head -n 1)"
     [ -n "$OPEN_SHELL" ] || OPEN_SHELL="$HOME/.local/bin/jason"
+    # Whether a terminal opened from now on runs this jason for the name, as jason install decided it once everything was
+    # placed (finds_this), and the file it finds (finds): another file earlier on the PATH is named in the report's problems
+    # with what removes it. No path is compared here. A report without the member is one from before it was read, and
+    # says nothing either way.
+    case "$REPORT" in
+        *'"finds_this":false'*)
+            FINDS="$(printf '%s' "$REPORT" | sed -n 's/.*"finds":"\([^"\\]*\)".*/\1/p' | head -n 1)"
+            fail "jason install put jason in the terminal, but a terminal opened from now on finds ${FINDS:-no jason} first by that name; its problems above say what to do. Jason Desktop is installed at $DEST" ;;
+    esac
 
     # Where the files will be, the licence, what to run next, and the path to run it by: the last lines of a successful
     # run, and never a question. A shell that was already open reads no profile again: this one, and an agent's session

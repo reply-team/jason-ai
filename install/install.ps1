@@ -9,8 +9,9 @@ waiting for its exit code. The installer puts the application in %LOCALAPPDATA%\
 machine up through the jason it carries. This script then runs that jason's `jason install --roles` once more and reads
 its report: it puts the application's resources\bundle folder on this account's Path, deploys the skills for Claude Code
 and Codex where each is found, retires an older command-line install of Jason, and deploys the role skills into
-Jason's data directory. It opens no window. Where a runtime answered before the install and none answers after it, or
-the report says it stopped one, a runtime is started again from the application's jason. Run again over the version
+Jason's data directory. It opens no window. In an elevated PowerShell - an administrator's, or another account's than
+the one signed in to the session - it stops before it downloads anything: what it sets up is the account's own. Where a
+runtime answered before the install and none answers after it, or the report says it stopped one, a runtime is started again from the application's jason. Run again over the version
 already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in
 place. A later version already installed is kept as it is; an earlier one is installed over, as its own update does,
 but not while Jason Desktop is running, in its window or in the tray: then it says to quit it and run the line again, and installs nothing. It says where Jason will keep what it learns about your business - Jason in your home directory, unless
@@ -104,6 +105,70 @@ function Install-Jason {
     }
     if ($NoModifyPath) {
         throw "-NoModifyPath is not taken: every install puts jason in the terminal, on this account's Path. Nothing was installed: run this again without it."
+    }
+
+    # Whether this PowerShell runs above what its account ordinarily has, by the rule `jason install` and an update refuse
+    # by: the full half of a split token, which an administrator's elevated terminal holds with User Account Control on, or
+    # an account other than the one signed in to this session. An administrator whose Windows has no split token - User
+    # Account Control off, as on a hosted build machine - runs with the account's one token and is not refused, and nor is
+    # a session with no account to compare with, a service's. Where the token's kind cannot be read, being in the
+    # Administrators role decides. Its members are compiled once per session and run nothing else.
+    function Test-Elevated {
+        if (-not ('JasonInstall.Elevation' -as [type])) {
+            Add-Type -Namespace JasonInstall -Name Elevation -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+[DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
+[DllImport("advapi32.dll")] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+[DllImport("advapi32.dll")] public static extern bool GetTokenInformation(IntPtr token, int informationClass, out int information, int length, out int returned);
+[DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "WTSQuerySessionInformationW")] public static extern bool WTSQuerySessionInformation(IntPtr server, int session, int what, out IntPtr buffer, out int bytes);
+[DllImport("wtsapi32.dll")] public static extern void WTSFreeMemory(IntPtr memory);
+
+// TOKEN_ELEVATION_TYPE: 1 no split token, 2 the full half of one, 3 the limited half; 0 where it cannot be read.
+public static int TokenKind() {
+    IntPtr token;
+    if (!OpenProcessToken(GetCurrentProcess(), 0x0008, out token)) { return 0; }
+    try {
+        int kind, returned;
+        return GetTokenInformation(token, 18, out kind, 4, out returned) && kind >= 1 && kind <= 3 ? kind : 0;
+    } finally {
+        CloseHandle(token);
+    }
+}
+
+// The user (5) or domain (7) name of the account signed in to this session; null where there is none to read.
+public static string Session(int what) {
+    IntPtr buffer;
+    int bytes;
+    try {
+        if (!WTSQuerySessionInformation(IntPtr.Zero, -1, what, out buffer, out bytes)) { return null; }
+    } catch (DllNotFoundException) {
+        return null;
+    } catch (EntryPointNotFoundException) {
+        return null;
+    }
+    try { return Marshal.PtrToStringUni(buffer); } finally { WTSFreeMemory(buffer); }
+}
+'@
+        }
+
+        $kind = [JasonInstall.Elevation]::TokenKind()
+        if ($kind -eq 0) {
+            $principal = New-Object Security.Principal.WindowsPrincipal ([Security.Principal.WindowsIdentity]::GetCurrent())
+            return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        }
+        if ($kind -eq 2) { return $true }
+
+        $sessionUser = [JasonInstall.Elevation]::Session(5)
+        $sessionDomain = [JasonInstall.Elevation]::Session(7)
+        $user = [Environment]::UserName
+        $domain = [Environment]::UserDomainName
+        if (-not $sessionUser -or -not $user) { return $false }
+        if ($sessionUser -ne $user) { return $true }
+        return [bool] ($sessionDomain -and $domain -and $sessionDomain -ne $domain)
+    }
+
+    if (Test-Elevated) {
+        throw "This PowerShell runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session, and Jason Desktop, jason in the terminal and the skills would be set up the same way or in another account's profile, so nothing was downloaded or installed: run the install line again from an ordinary PowerShell of the account signed in here, not run as an administrator."
     }
 
     # --- the feed ---------------------------------------------------------------------------------------------
@@ -319,6 +384,16 @@ function Install-Jason {
         $command = if ($members -contains 'command') { $report.command } else { $null }
         if (-not $command -or -not (@($command.PSObject.Properties.Name) -contains 'placed') -or -not $command.placed) {
             throw "``jason install`` did not put jason in the terminal; its problems above say why. Jason Desktop is installed at $app."
+        }
+        # Whether a terminal opened from now on runs this jason for the name, as jason install decided it once everything
+        # was placed (finds_this), and the file it finds (finds): another file earlier on the Path is named in the report's
+        # problems with what removes it. No path is compared here. A report without the member is one from before it was
+        # read, and says nothing either way.
+        if (@($command.PSObject.Properties.Name) -contains 'finds_this') {
+            if (-not $command.finds_this) {
+                $first = if ([string]$command.finds) { [string]$command.finds } else { 'no jason' }
+                throw "``jason install`` put jason on this account's Path, but a terminal opened from now on finds $first first by that name; its problems above say what to do. Jason Desktop is installed at $app."
+            }
         }
         if (-not (($members -contains 'completed') -and $report.completed)) {
             Write-Host 'Jason is installed and in the terminal; `jason install` named above what else it did not get done, and `jason status` names it too.'

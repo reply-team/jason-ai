@@ -70,6 +70,13 @@ public static class CliErrors
     public const string InstallInProgress = "install_in_progress";
 
     /// <summary>
+    /// <c>jason install</c> run elevated - on Windows as an administrator above the account's ordinary rights, or as another
+    /// account than the session's; on macOS as root - which would set the terminal command, the skills and a logon
+    /// registration up as that account: nothing was read or written.
+    /// </summary>
+    public const string InstallElevated = "install_elevated";
+
+    /// <summary>
     /// <c>jason install</c> run by a jason the application carries from a place that goes away: a mounted disk image, or a
     /// copy macOS runs translocated. Nothing was placed, retired or stopped; the sentence says to move Jason to Applications
     /// first. Not retryable: the same place answers the same.
