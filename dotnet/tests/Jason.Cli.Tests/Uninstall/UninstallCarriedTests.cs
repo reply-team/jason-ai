@@ -679,21 +679,26 @@ public sealed class UninstallCarriedTests : IDisposable
         var real = Path.Combine(_tree.Paths.Root, "Real");
         var folder = Path.Combine(real, "Jason.app", "Contents", "MacOS");
         Directory.CreateDirectory(folder);
-        File.Copy("/bin/sleep", Path.Combine(folder, "Jason"));
+        // A program that runs under any name stands in for the application: macOS's sleep, and on Linux perl, since a coreutils
+        // built as one program for every tool picks the tool by its own file's name and knows no Jason.
+        File.Copy(OperatingSystem.IsMacOS() ? "/bin/sleep" : "/usr/bin/perl", Path.Combine(folder, "Jason"));
         var linked = Path.Combine(_tree.Paths.Root, "Linked");
         Directory.CreateSymbolicLink(linked, real);
         var image = Path.Combine(linked, "Jason.app", "Contents", "MacOS", "Jason");
 
-        // Perl becomes the image, through the link, under the name sleep: a coreutils that is one program for every tool
-        // picks the tool by that name, and the system names the process by its file, Jason.
-        var start = new System.Diagnostics.ProcessStartInfo("/usr/bin/perl")
+        // Started by the path through the link.
+        var start = new System.Diagnostics.ProcessStartInfo(image)
         {
-            ArgumentList = { "-e", "exec { $ARGV[0] } 'sleep', '120' or die", image },
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        foreach (var argument in OperatingSystem.IsMacOS() ? ["120"] : new[] { "-e", "sleep 120" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
         using var child = System.Diagnostics.Process.Start(start)!;
         try
         {
