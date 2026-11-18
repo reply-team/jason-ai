@@ -962,7 +962,7 @@ public sealed class CommandLineMoveTests
     /// nothing else, so no build relaxes them without saying it is a test build.
     /// </summary>
     [Fact]
-    [Critical(Family.B7, "a released build that is a test build takes its signer from the environment and relaxes the move's checks")]
+    [Critical(Family.I1, "a released build that is a test build takes its signer from the environment and relaxes the move's checks")]
     public void No_released_build_is_a_test_build()
     {
         Assert.False(Jason.Contracts.JasonVersion.TestBuild);

@@ -13,16 +13,32 @@ public partial class ReleaseWorkflowTests
     private static readonly string[] ReleaseProofJobs = ["proof-windows", "proof-macos", "proof-macos-intel"];
 
     /// <summary>
-    /// The release job needs every proof job, so nothing is published that one of them did not install and uninstall.
+    /// The release job needs every proof job and runs only when every job it needs succeeded, so nothing is published that
+    /// one of them did not install and uninstall. A leg runs unless the job was cancelled, so that a failed leg stops no leg
+    /// after it; that changes nothing the release waits for: a failed step fails its job, no proof job or step may continue
+    /// on an error, and the held step fails the job for every leg that failed or was not run. Every proof job, and CI's
+    /// union jobs, run on a GitHub-hosted runner, the one place the scripts' guards let them change a machine.
     /// </summary>
     [Fact]
-    [Critical(Family.B7, "a release job that does not need a proof job publishes what that job never installed")]
+    [Critical(Family.B7, "a release job that does not need a proof job, or runs where one failed, publishes what that job never proved")]
     public void The_release_is_published_only_after_its_three_proof_jobs()
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var needs = Node(Mapping(jobs, "release"), "needs");
         var needed = ((YamlSequenceNode)needs!).Children.Select(node => node.ToString()).ToList();
         Assert.All(ReleaseProofJobs, job => Assert.Contains(job, needed));
+        Assert.Null(Node(Mapping(jobs, "release"), "if"));
+        Assert.Null(Node(Mapping(jobs, "release"), "continue-on-error"));
+
+        var ci = Mapping(Parse(Read(Ci)), "jobs");
+        foreach (var (job, name) in ReleaseProofJobs.Select(name => (Mapping(jobs, name), name)).Concat(ProofJobs.Select(name => (Mapping(ci, name), name))))
+        {
+            Assert.Null(Node(job, "continue-on-error"));
+            Assert.All(JobSteps(job), step => Assert.Null(Node(step, "continue-on-error")));
+            Assert.Contains(Scalar(job, "runs-on"), new[] { "windows-latest", "macos-latest", "macos-26-intel" });
+            var held = Assert.Single(JobSteps(job), step => Scalar(step, "name") == "The machine after every uninstall is the machine before");
+            Assert.EndsWith(name.EndsWith("-windows", StringComparison.Ordinal) ? "-Step Held -Out $env:OUT" : "test-installation-macos.sh held", Scalar(held, "run"), StringComparison.Ordinal);
+        }
 
         Assert.Equal(["version", "windows", "skills"], ((YamlSequenceNode)Node(Mapping(jobs, "proof-windows"), "needs")!).Children.Select(node => node.ToString()));
         Assert.Equal(["version", "macos", "skills"], ((YamlSequenceNode)Node(Mapping(jobs, "proof-macos"), "needs")!).Children.Select(node => node.ToString()));
@@ -36,7 +52,7 @@ public partial class ReleaseWorkflowTests
     /// the release job's download takes; and it never builds, signs or copies anything.
     /// </summary>
     [Fact]
-    [Critical(Family.B7, "a proof job that holds a secret, builds or signs, or keeps a file under a name the release takes, can change what is published")]
+    [Critical(Family.I1, "a proof job that holds a secret, builds or signs, or keeps a file under a name the release takes, can change what is published")]
     public void The_release_s_proof_jobs_hold_nothing_a_release_holds()
     {
         var release = Read(Release);
@@ -116,12 +132,13 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// The previous release every proof job updates from, named, in ci.yml's union jobs and the release's proof jobs alike.
-    /// It is a release of the line before 0.49, whose install puts a command-line Jason of its own where every leg that
-    /// starts from a previous release expects one: the previous release's own install, its own <c>jason update apply</c>
-    /// and the move into Jason Desktop. It is never "the latest published release": once 0.49.0 is published that is a
-    /// release that installs Jason Desktop alone, and every such leg would fail on it, so the first fix after 0.49 could not
-    /// be published, and CI's union jobs would fail on main and on the next release's pull request in the same way. When
-    /// these legs are given a 0.49 release to start from, this value and the legs change together.
+    /// These legs begin in the world before one installation, where a command-line Jason and Jason Desktop were installed
+    /// apart, and v0.48.5 is the last release of that world: its install puts a command-line Jason of its own where every
+    /// leg that starts from a previous release expects one, then its own <c>jason update apply</c> and the move into Jason
+    /// Desktop. It is never "the latest published release": once 0.49.0 is published that is a release of one
+    /// installation, which installs Jason Desktop alone, and every such leg would fail on it, so the first fix after 0.49
+    /// could not be published, and CI's union jobs would fail on main and on the next release's pull request in the same
+    /// way. When these legs are given a 0.49 release to start from, this value and the legs change together.
     /// </summary>
     private const string PreviousRelease = "v0.48.5";
 
@@ -248,7 +265,14 @@ public partial class ReleaseWorkflowTests
 
                 return Shape(step, name, releaseOnlyVerbs);
             });
-            Assert.Equal(expected.ToList(), actual.ToList());
+            var want = expected.ToList();
+            var got = actual.ToList();
+            for (var at = 0; at < Math.Max(want.Count, got.Count); at++)
+            {
+                var wanted = at < want.Count ? want[at] : "(no step)";
+                var found = at < got.Count ? got[at] : "(no step)";
+                Assert.True(wanted == found, $"step {at + 1} past the named differences: {union} has\n  {wanted}\nand {proof} has\n  {found}");
+            }
 
             foreach (var name in FramingRunAlike.Where(name => unionSteps.Any(step => StepName(step) == name)))
             {
@@ -269,8 +293,8 @@ public partial class ReleaseWorkflowTests
             var windows = name.EndsWith("-windows", StringComparison.Ordinal);
             if (windows)
             {
-                Assert.Equal("actions/checkout@v7", Scalar(steps[0], "uses"));
-                Assert.Equal("Give the job's steps the temporary folder a new shell of this account has", Scalar(steps[1], "name"));
+                Assert.True(Scalar(steps[0], "uses") == "actions/checkout@v7", $"{name} does not begin with the checkout");
+                Assert.True(Scalar(steps[1], "name") == "Give the job's steps the temporary folder a new shell of this account has", $"{name} does not give its steps the one temporary folder first, after the checkout");
             }
 
             var before = Assert.Single(steps, step => Scalar(step, "name") == "The machine before anything is installed");
@@ -291,17 +315,17 @@ public partial class ReleaseWorkflowTests
                 Assert.True(steps.IndexOf(leg) < held, $"{legName} runs after the held step");
                 var lines = Lines(leg);
                 Assert.True(lines.Count >= 3, $"{legName} is not framed");
-                Assert.StartsWith(windows ? "./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG" : "bash .github/scripts/test-installation-macos.sh begin \"$LEG\"", lines[0], StringComparison.Ordinal);
-                Assert.Equal(windows ? "if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }" : "[ ! -e \"$OUT/skip\" ] || exit 0", lines[1]);
-                Assert.Equal(windows ? "./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG" : "bash .github/scripts/test-installation-macos.sh end \"$LEG\"", lines[^1]);
+                Assert.True(lines[0].StartsWith(windows ? "./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG" : "bash .github/scripts/test-installation-macos.sh begin \"$LEG\"", StringComparison.Ordinal), $"{name}: the leg '{legName}' does not start with its begin");
+                Assert.True(lines[1] == (windows ? "if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }" : "[ ! -e \"$OUT/skip\" ] || exit 0"), $"{name}: the leg '{legName}' does not leave where its begin says it was not run");
+                Assert.True(lines[^1] == (windows ? "./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG" : "bash .github/scripts/test-installation-macos.sh end \"$LEG\""), $"{name}: the leg '{legName}' does not end with its end");
             });
         }
     }
 
     /// <summary>
     /// Every job that updates from a previous release fetches the one <see cref="PreviousRelease"/> names, given to its
-    /// fetch by name, and never reads which release is the latest published one; a release of the line before 0.49, as the
-    /// constant's own summary says why.
+    /// fetch by name, and never reads which release is the latest published one: these legs begin in the world before one
+    /// installation, and v0.48.5 is the last release of that world.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a proof job that updates from the latest published release fails every previous-release leg once 0.49.0 is published, and blocks the first fix after it")]
