@@ -622,12 +622,16 @@ public static partial class ProgramLookup
         }
     }
 
+    /// <summary>
+    /// The entries of the search path that are full paths, in order. An empty entry, <c>.</c> and every other relative
+    /// entry name the working folder or a folder under it, wherever the process stands, and are skipped.
+    /// </summary>
     private static IEnumerable<string> Directories(ProgramSearchPath searchPath)
     {
         foreach (var entry in (searchPath.Path ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var directory = entry.Trim('"');
-            if (directory.Length == 0)
+            if (directory.Length == 0 || !Path.IsPathFullyQualified(directory))
             {
                 continue;
             }

@@ -74,4 +74,85 @@ public class ProgramLookupTests : IDisposable
             File.Delete(stray);
         }
     }
+
+    /// <summary>
+    /// Only an entry of the search path that is a full path is looked in. An empty entry, <c>.</c> and a relative entry
+    /// each name the working folder, or a folder under it, wherever the process happens to stand; a program standing
+    /// there is not found through them, though the same file is found by its folder's full path.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("relative")]
+    public void An_entry_of_the_search_path_that_is_not_a_full_path_is_not_looked_in(string entry)
+    {
+        var current = Directory.GetCurrentDirectory();
+        var folder = entry == "relative" ? Path.Combine(current, "lookup-" + Guid.NewGuid().ToString("N")) : current;
+        var written = entry == "relative" ? Path.GetFileName(folder) : entry;
+        var name = "tool-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(folder);
+        var decoy = Program(folder, name);
+        try
+        {
+            var walked = new ProgramSearchPath(string.Join(Path.PathSeparator, written, _directory), PathExt);
+            var found = ProgramLookup.Find(name, walked, walked);
+
+            Assert.Equal(ProgramLookupOutcome.NotFound, found.Outcome);
+            Assert.Null(found.Path);
+
+            var byFullPath = new ProgramSearchPath(folder, PathExt);
+            Assert.Equal(decoy, ProgramLookup.Find(name, byFullPath, byFullPath).Path, ignoreCase: OperatingSystem.IsWindows());
+        }
+        finally
+        {
+            File.Delete(decoy);
+            if (folder != current)
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A name is found in the entries of the search path alone, in their order: a program of the same name in the working
+    /// folder, or in the folder of the program that looks, is never taken first.
+    /// </summary>
+    [Fact]
+    public void A_program_in_the_working_folder_or_the_applications_folder_is_never_taken_before_the_search_path()
+    {
+        var name = "tool-" + Guid.NewGuid().ToString("N");
+        var real = Program(_directory, name);
+        var decoys = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory }
+            .Select(Path.GetFullPath)
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Select(folder => Program(folder, name))
+            .ToList();
+        try
+        {
+            var onPath = new ProgramSearchPath(_directory, PathExt);
+            Assert.Equal(real, ProgramLookup.Find(name, onPath, onPath).Path, ignoreCase: OperatingSystem.IsWindows());
+
+            var elsewhere = new ProgramSearchPath(Path.Combine(_directory, "empty"), PathExt);
+            Assert.Equal(ProgramLookupOutcome.NotFound, ProgramLookup.Find(name, elsewhere, elsewhere).Outcome);
+        }
+        finally
+        {
+            decoys.ForEach(File.Delete);
+        }
+    }
+
+    private static string? PathExt => OperatingSystem.IsWindows() ? ".COM;.EXE;.BAT;.CMD" : null;
+
+    /// <summary>A file the lookup takes for a program, in <paramref name="folder"/>; it is never started.</summary>
+    private static string Program(string folder, string name)
+    {
+        var file = Path.Combine(folder, OperatingSystem.IsWindows() ? name + ".exe" : name);
+        File.WriteAllText(file, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return file;
+    }
 }

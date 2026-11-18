@@ -28,7 +28,7 @@ public class AutostartArtifactsTests
 
     private const string Launchctl = "/bin/launchctl";
 
-    private const string Systemctl = "/usr/bin/systemctl";
+    private static readonly string Systemctl = AutostartArtifacts.Systemctl;
 
     /// <summary>
     /// Every command a registration holds, on each of the three systems, names its program by the full path the system
@@ -57,6 +57,7 @@ public class AutostartArtifactsTests
         Assert.All(windows, command => Assert.Equal(Schtasks, command[0]));
         Assert.All(mac, command => Assert.Equal(Launchctl, command[0]));
         Assert.All(linux, command => Assert.Equal(Systemctl, command[0]));
+        Assert.Contains(Systemctl, new[] { "/usr/bin/systemctl", "/bin/systemctl" });
         if (OperatingSystem.IsWindows())
         {
             Assert.True(Path.IsPathFullyQualified(Schtasks), Schtasks);
@@ -113,6 +114,29 @@ public class AutostartArtifactsTests
     /// autostart, and out of <c>jason uninstall</c>. The SID in the name is how other programs on the same machine
     /// avoid it: <c>OneDrive Reporting Task-&lt;SID&gt;</c>, <c>ZoomUpdateTaskUser-&lt;SID&gt;</c>.
     /// </summary>
+    /// <summary>
+    /// systemctl is the first of its two places that exists: <c>/usr/bin</c>, and <c>/bin</c> where a system keeps it
+    /// there alone. Where neither does, <c>/usr/bin</c> is named, and running it is refused as a tool that is not there.
+    /// </summary>
+    [Fact]
+    public void Systemctl_is_the_first_of_its_two_places_that_exists()
+    {
+        Assert.Equal("/usr/bin/systemctl", AutostartArtifacts.SystemctlOf(_ => true));
+        Assert.Equal("/bin/systemctl", AutostartArtifacts.SystemctlOf(path => path == "/bin/systemctl"));
+        Assert.Equal("/usr/bin/systemctl", AutostartArtifacts.SystemctlOf(_ => false));
+    }
+
+    /// <summary>A tool that is not where it is named is refused as the registrar's own refusal, never thrown past it.</summary>
+    [Fact]
+    public void A_tool_that_is_not_where_it_is_named_is_refused()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "jason-no-such-tool-" + Guid.NewGuid().ToString("N"), "systemctl");
+
+        var refused = Assert.Throws<AutostartException>(() => AutostartRegistrars.Run([missing, "--user", "is-enabled", "jason.service"]));
+
+        Assert.Equal(AutostartCodes.Refused, refused.Code);
+    }
+
     [Fact]
     public void Each_account_s_task_carries_its_own_name()
     {

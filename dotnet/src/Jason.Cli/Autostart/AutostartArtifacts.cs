@@ -54,8 +54,20 @@ public static class AutostartArtifacts
     /// <summary>schtasks, by its path in Windows' system directory: a system tool is started by its full path.</summary>
     public static string Schtasks => Path.Combine(Environment.SystemDirectory, "schtasks.exe");
 
-    /// <summary>systemctl, by the path the systemd distributions keep it at.</summary>
-    public const string Systemctl = "/usr/bin/systemctl";
+    /// <summary>systemctl, by its full path on this machine (<see cref="SystemctlOf"/>).</summary>
+    public static string Systemctl => SystemctlOf(File.Exists);
+
+    /// <summary>
+    /// systemctl's full path: the first of <c>/usr/bin/systemctl</c> and <c>/bin/systemctl</c> that exists, and the first
+    /// where neither does, whose run is then refused as a tool that is not there.
+    /// </summary>
+    internal static string SystemctlOf(Func<string, bool> exists)
+    {
+        ArgumentNullException.ThrowIfNull(exists);
+        const string usrBin = "/usr/bin/systemctl";
+        const string bin = "/bin/systemctl";
+        return !exists(usrBin) && exists(bin) ? bin : usrBin;
+    }
 
     /// <summary>The query for one task by its name, asking for a code rather than a sentence (see <see cref="QueryFor"/>).</summary>
     public static IReadOnlyList<string> TaskQuery(string name) => [Schtasks, "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
