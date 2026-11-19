@@ -668,14 +668,16 @@ public sealed partial class UninstallCarriedTests : IDisposable
     }
 
     /// <summary>
-    /// On Linux apt replaces the deb's files under a running Jason Desktop (Ubuntu's automatic updates, Software Updater):
-    /// dpkg renames the new file over the old one, and the system then reports the running process's image as
-    /// "<path> (deleted)". The application is still open from that installation, and removing it from under itself is what
-    /// the look is for, so it is found before the replacement and after. Catches a look that compares that report with the
-    /// path as it is and lets an uninstall go on under an open window.
+    /// On Linux, Jason Desktop as the system shows it: a name longer than the fifteen characters the system keeps of it, a
+    /// title Chromium rewrites into one string with its switches ("/opt/Jason/jason-desktop-app --"), from which .NET reads
+    /// the rest of a long name; and, once apt replaced the deb's files under the running window (dpkg renames the new file
+    /// over the old one), an image reported as "<path> (deleted)". The application is open from that installation either
+    /// way, and removing it from under itself is what the look is for, so it is found before the replacement and after.
+    /// Catches a look by the name .NET reads, which never finds the window on Linux, and one that compares the replaced
+    /// image's report with the path as it is; either lets an uninstall go on under an open window.
     /// </summary>
     [Fact]
-    public void On_linux_the_application_whose_file_the_system_replaced_under_it_is_found()
+    public void On_linux_the_application_is_found_under_its_rewritten_title_and_after_its_file_was_replaced()
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "The '(deleted)' report is Linux's; the rows beside this one hold the other systems' looks.");
 
@@ -692,7 +694,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        foreach (var argument in new[] { "-e", "sleep 120" })
+        // As the system shows Jason Desktop: the title one string, the program and its switch (perl's $0), and the name the
+        // system keeps the program's own first fifteen characters, which perl's $0 would set from the title instead.
+        foreach (var argument in new[] { "-e", $"$0 = '{image} --'; open(my $c, '>', '/proc/self/comm'); print $c 'jason-desktop-app'; close $c; sleep 120" })
         {
             start.ArgumentList.Add(argument);
         }
