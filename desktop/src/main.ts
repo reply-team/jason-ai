@@ -36,7 +36,7 @@ import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
+import { debFile, previousRelease, restartForPackage, updateKeyWords, Updater } from './updates.ts';
 import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
 import { carriedRuntimeStart, refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
@@ -400,6 +400,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const rollback = paths.rollback;
     // What an update keeps aside to go back to: the AppImage file on Linux, nothing for the deb.
     const aside = keptAsideOf(process.platform, form, process.execPath);
+    // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
+    const stopCarriedRuntime = () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }));
     const updates = app.isPackaged && offers.updates
         ? new Updater({
               updater: updaterOf(form, autoUpdater),
@@ -407,8 +409,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               application: aside,
               rollback,
               log,
-              // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
-              stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
+              stopRuntime: stopCarriedRuntime,
               refused: (why) => dialog.showErrorBox(windowTitle, why),
               async beforeInstall() {
                   quitting = true;
@@ -493,8 +494,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
           }
         : null;
     // The deb: apt replaces the package under a running window (Ubuntu's automatic updates, Software Updater). Its
-    // version.json is looked at once a minute; once it names another version, the update item says to restart, and one
-    // notice says so too, whose click restarts. The next start finishes the update (`machine-setup.ts`).
+    // version.json is looked at once a minute; once it names another version, the update item offers the restart, and one
+    // notice says so too, whose click restarts: the old build's runtime stopped, then Jason started again, whose start
+    // finishes the update (`machine-setup.ts`).
+    const packageRestart = { stopRuntime: stopCarriedRuntime, relaunch: () => modeDeps.relaunch(), refused: (why: string) => dialog.showErrorBox(windowTitle, why) };
     const packageMoved = (): string | null => {
         if (form?.form !== 'deb' || version === null) return null;
         const now = bundleVersion(packaged);
@@ -509,8 +512,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             desk.renderMenu();
             toPage('updates.changed');
             if (Notification.isSupported()) {
-                const notice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason to finish the update.` });
-                notice.on('click', () => modeDeps.relaunch());
+                const notice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
+                notice.on('click', () => void restartForPackage(packageRestart));
                 notice.show();
             }
         });
@@ -525,7 +528,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         autostart,
         updates,
         packageMoved,
-        restart: () => modeDeps.relaunch(),
+        restart: () => void restartForPackage(packageRestart),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),

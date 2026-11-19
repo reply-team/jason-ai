@@ -818,8 +818,9 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   taken by an AppImage alone (`requestSupport` in `src/update-request.ts`). The deb's electron-updater is turned off
   (`updaterOf`): the system updates the package from Jason's apt repository, so the update item says "Updates Come
   Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
-  running, "Restart Jason to Finish the Update to <version>", with one notice whose click relaunches (`menuItemOf` in
-  `src/updates.ts`); the next start's machine set-up finishes that update. If a version the deb's updater recorded does
+  running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
+  (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
+  it, then a relaunch, whose machine set-up finishes that update. If a version the deb's updater recorded does
   not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. An AppImage
   replacing itself is built so and not yet seen on a real machine. The updater's cache is
   `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.

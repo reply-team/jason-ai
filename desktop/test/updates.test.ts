@@ -27,7 +27,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -550,9 +550,37 @@ test('the menu offers one step at a time, and in a build that is not installed n
 
 test('where the package updates itself, the item says so, and once the system installed a new version under the running window it offers the restart', () => {
     assert.deepEqual(menuItemOf({ step: 'idle' }, true, false), { label: 'Updates Come Through the Package', enabled: false, act: null });
-    // Pressable: an item that names the restart and does nothing leaves the person to find Quit and the menu themselves.
-    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false, '0.49.2'), { label: 'Restart Jason to Finish the Update to 0.49.2', enabled: true, act: 'restart' });
+    // Pressable: an item that names the restart and does nothing leaves the person to find Quit and the menu themselves. It
+    // names the runtime, which it stops, as the install's item does.
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false, '0.49.2'), { label: 'Restart Jason and Its Runtime to Finish the Update to 0.49.2', enabled: true, act: 'restart' });
     assert.deepEqual(menuItemOf({ step: 'idle' }, true, true, '0.49.2'), { label: 'Check for Updates…', enabled: true, act: 'check' }, 'electron-updater’s own steps stand where it installs');
+});
+
+test('the deb’s restart stops the runtime the old build runs before Jason starts again, and leaves Jason as it is when that runtime does not stop', async () => {
+    // Without the stop the new start finds the old build's runtime up and uses it, and the installation stays a version
+    // behind its own package until a person restarts the runtime by hand.
+    const run = async (outcome: StopOutcome) => {
+        const calls: string[] = [];
+        await restartForPackage({
+            stopRuntime: async () => {
+                calls.push('stop');
+                return outcome;
+            },
+            relaunch: () => calls.push('relaunch'),
+            refused: (why) => calls.push(`refused: ${why}`),
+        });
+        return calls;
+    };
+    assert.deepEqual(await run({ kind: 'stopped' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'none' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'another' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'failed', exit: 1 }), [
+        'stop',
+        'refused: Jason was not restarted, because the runtime this application carries did not stop (jason runtime stop exited 1). Jason was left as it was. Stop the runtime with jason runtime stop. Then choose Restart Jason and Its Runtime to Finish the Update again.',
+    ]);
+    const unanswered = await run({ kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' });
+    assert.equal(unanswered.length, 2);
+    assert.match(unanswered[1]!, /^refused: Jason was not restarted, because .+\. Jason was left as it was\. .+ Then choose Restart Jason and Its Runtime to Finish the Update again\.$/);
 });
 
 test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {

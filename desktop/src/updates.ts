@@ -94,12 +94,12 @@ export interface MenuItem {
  * The one menu item the updater shows: the next step the person can take, or what is under way; in a build that is not
  * installed none, and where electron-updater is not active (`FeedUpdater.isUpdaterActive`) none either: the package's
  * updates come with the system's. Where the system installed a new version under the running window (`moved`, the
- * version the package's version.json names now), the item offers the restart, the desktop's own and not the updater's,
- * which finishes that update at the next start.
+ * version the package's version.json names now), the item offers the restart, the desktop's own and not the updater's:
+ * the runtime the old build runs stopped and Jason started again, whose start finishes that update (`restartForPackage`).
  */
 export function menuItemOf(state: UpdateState, installed: boolean, active: boolean, moved: string | null = null): MenuItem {
     if (!installed) return { label: 'Updates Come to an Installed Build', enabled: false, act: null };
-    if (!active && moved !== null) return { label: `Restart Jason to Finish the Update to ${moved}`, enabled: true, act: 'restart' };
+    if (!active && moved !== null) return { label: `Restart Jason and Its Runtime to Finish the Update to ${moved}`, enabled: true, act: 'restart' };
     if (!active) return { label: 'Updates Come Through the Package', enabled: false, act: null };
     switch (state.step) {
         case 'idle':
@@ -171,6 +171,32 @@ export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: t
     }
     const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;
     return `The update was not installed, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop. ${again}`;
+}
+
+/**
+ * The deb's restart, once the system updated the package under the running window: the runtime the old build runs is
+ * stopped first, as an update's install stops it, so the next start finds none and starts the new build's, then Jason
+ * starts again. A runtime that does not stop, or does not answer, leaves Jason as it is and says so.
+ */
+export async function restartForPackage(deps: { stopRuntime(): Promise<StopOutcome>; relaunch(): void; refused(why: string): void }): Promise<void> {
+    const stopped = await deps.stopRuntime().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
+    if (stopped.kind === 'failed' || stopped.kind === 'unanswered') {
+        deps.refused(packageRestartRefusal(stopped));
+        return;
+    }
+    deps.relaunch();
+}
+
+/** What the person is told when the runtime did not stop, or did not answer, so the deb's restart did not happen. */
+export function packageRestartRefusal(outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered): string {
+    const again = 'Then choose Restart Jason and Its Runtime to Finish the Update again.';
+    if (outcome.demo) return `Jason was not restarted, because ${demoRuntimeWords}. Jason was left as it was. ${demoRuntimeNext} ${again}`;
+    if (outcome.kind === 'unanswered') {
+        const { why, next } = unansweredWords(outcome);
+        return `Jason was not restarted, because ${why}. Jason was left as it was. ${next} ${again}`;
+    }
+    const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;
+    return `Jason was not restarted, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop. ${again}`;
 }
 
 /**

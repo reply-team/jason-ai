@@ -292,8 +292,9 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     // updater's: the same press, behind the same guard, and the same relaunch the notice's click asks for.
     const restart = "if (act === 'restart') {\n            this.deps.restart?.();\n            return;\n        }";
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
-    assert.ok(main.includes('        restart: () => modeDeps.relaunch(),\n'));
-    assert.ok(main.includes("notice.on('click', () => modeDeps.relaunch());"));
+    assert.ok(main.includes('        restart: () => void restartForPackage(packageRestart),\n'));
+    assert.ok(main.includes("notice.on('click', () => void restartForPackage(packageRestart));"));
+    assert.ok(main.includes('const packageRestart = { stopRuntime: stopCarriedRuntime, relaunch: () => modeDeps.relaunch(), refused: (why: string) => dialog.showErrorBox(windowTitle, why) };'));
     // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
     // none in a demo run.
     const item = body('updateItem');

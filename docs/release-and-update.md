@@ -621,8 +621,9 @@ first and started after; for a rollback, the previous release's deb installed ag
 jason-desktop`, since apt keeps no previous version, and `sudo apt-mark unhold jason-desktop` takes updates again. `jason
 update apply --finish` still runs, as the application's start runs it once apt has installed a new version; `jason update
 check` names `sudo apt update && sudo apt upgrade`. Where the system installed a new version under a running window,
-which looks at the package's `version.json` once a minute, the update item reads **Restart Jason to Finish the Update to
-<version>** and one notice says so, whose click restarts Jason; otherwise the item reads **Updates Come Through the
+which looks at the package's `version.json` once a minute, the update item reads **Restart Jason and Its Runtime to
+Finish the Update to <version>** and one notice says so; the item, or a click on the notice, stops the runtime the old
+version runs and starts Jason again, whose start finishes the update. Otherwise the item reads **Updates Come Through the
 Package**. `jason status`'s optional `update` check says when updates cannot arrive — Jason's apt source gone or turned
 off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
 Software — and when the package is a version this installation was not set up for yet, with `jason update apply

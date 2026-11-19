@@ -1068,8 +1068,9 @@ where it is, so its folder must be writable; `jason update apply` from a termina
 refused, since the application it starts needs one. The deb's updates come with the system's, from Jason's apt
 repository, which the package adds: Ubuntu's automatic updates install a new version, and Software Updater, or `sudo apt
 update && sudo apt upgrade`, install it at once. There the item says "Updates Come Through the Package"; where the system
-installed a new version under the running window, it says "Restart Jason to Finish the Update to `<version>`" and one
-notice says so, whose click restarts Jason, and the next start finishes the update. `sudo apt-mark hold jason-desktop`
+installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
+`<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
+ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. `sudo apt-mark hold jason-desktop`
 stops its updates. `jason status` says when Jason's apt source is gone or turned off, as a release upgrade of Ubuntu turns
 it off: turn it on again in Software & Updates, Other Software.
 
