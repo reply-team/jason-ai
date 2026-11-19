@@ -323,9 +323,9 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
     return $process.ExitCode
 }
 
-# The previous release's runtime started by its own jason. 0.48.5's start gives up after 30 s while the runtime it started
+# The previous release's runtime started by its own jason. Its start gives up after 30 s while the runtime it started
 # still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
-# v0.48.5: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
+# v0.48.6: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
 # answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
 # start failed otherwise.
 function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
@@ -1586,30 +1586,31 @@ switch ($Step) {
         $previousVersion = Read-Version $carried
         Say "the previous release's Jason Desktop $previousVersion installed by its own setup /S"
 
-        # Open, as a person leaves it. A fresh 0.48.2 opens on the Demo, which starts no runtime; a person who works in it
-        # has one running from the carried jason, which the updater then stops, so one is started from it here.
+        # Open, as a person leaves it. The previous release, installed fresh, opens on the Demo, which starts no runtime
+        # (desktop/src/mode.ts opensOnDemo(), at v0.48.6); a person who works in it has one running from the carried jason,
+        # which the updater then stops, so one is started from it here.
         $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
             if (-not (Start-PreviousRuntime $carried)) { Fail "the previous release's carried jason could not start a runtime" }
         }
         Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
-        # What 0.48.2's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.2): it stops the
-        # runtime the application carries through jason runtime stop, keeps the application aside, and electron-updater
-        # 6.8.11's quitAndInstall() starts the installer with --updated --force-run - not silent, so autoRunAppAfterInstall
-        # decides the force-run - and quits the application at once. The copy kept aside is the Desktop's own, and is not
-        # made here; the quit is the window's processes ended as the installer starts.
+        # What the previous release's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.6):
+        # it stops the runtime the application carries through jason runtime stop, keeps the application aside, and
+        # electron-updater 6.8.11's quitAndInstall() starts the installer with --updated --force-run - not silent, so
+        # autoRunAppAfterInstall decides the force-run - and quits the application at once. The copy kept aside is the
+        # Desktop's own, and is not made here; the quit is the window's processes ended as the installer starts.
         $stopped = Invoke-Program $carried @('runtime', 'stop')
         if ($stopped.Exit -ne 0) { Fail "the previous release's jason runtime stop exited with $($stopped.Exit): $($stopped.Said)" }
         $installer = Start-Process -FilePath (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') -ArgumentList '--updated', '--force-run' -PassThru
         $null = $installer.Handle
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        $new = Wait-Started $installer "this build's setup --updated --force-run, as 0.48.2's updater starts it"
-        if ($new -ne 0) { Fail "this build's setup run as 0.48.2's updater runs it exited with $new" }
+        $new = Wait-Started $installer "this build's setup --updated --force-run, as $previousVersion's updater starts it"
+        if ($new -ne 0) { Fail "this build's setup run as $previousVersion's updater runs it exited with $new" }
         if ((Read-Version $carried) -ne $Version) { Fail "after the update the application is $(Read-Version $carried), not $Version" }
         $stillOpen = @($opened | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
         if ($stillOpen.Count -ne 0) { Fail "the previous window's processes $($stillOpen -join ', ') outlived the update's installer" }
-        Say "this build's setup, started as 0.48.2's updater starts it (runtime stopped, --updated --force-run, the window quitting), put $Version in place"
+        Say "this build's setup, started as $previousVersion's updater starts it (runtime stopped, --updated --force-run, the window quitting), put $Version in place"
 
         # Its own machine set-up ran: the Path names the bundle folder and a new shell finds this version.
         if ((Count-Entry $bundle) -ne 1) { Fail "after the update the user Path holds $bundle $(Count-Entry $bundle) time(s)" }
@@ -1625,9 +1626,9 @@ switch ($Step) {
     }
 
     'InstallOverOpenWindow' {
-        # A shape 0.48.2's updater never makes: this build's setup run by hand, silently, as an update, over an open window,
-        # the Demo a fresh 0.48.2 opens on. The previous release is installed again for it, and taken off after by Installed
-        # apps.
+        # A shape the previous release's updater never makes (desktop/src/updates.ts install(), at v0.48.6): this build's
+        # setup run by hand, silently, as an update, over an open window, the Demo the previous release opens on when
+        # installed fresh. The previous release is installed again for it, and taken off after by Installed apps.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $installed = Wait-Program (Join-Path $Previous 'jason-desktop-windows-x64-setup.exe') @('/S')
         if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
@@ -1654,7 +1655,7 @@ switch ($Step) {
                 Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window''s processes ending'
             }
             $ended = Get-Date
-            Say "the 0.48.2 window ended at $($ended.ToUniversalTime().ToString('HH:mm:ss.fff'))Z: $how"
+            Say "the previous release's window ended at $($ended.ToUniversalTime().ToString('HH:mm:ss.fff'))Z: $how"
             if ($installer.WaitForExit(300000)) {
                 Say "the setup ended $([int]((Get-Date) - $ended).TotalSeconds) s after the window ended, exit $($installer.ExitCode)"
             } else {
@@ -2491,10 +2492,10 @@ switch ($Step) {
         if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
         # Side by side as that release leaves them: the command-line folder's own entry on the Path, and nothing of the
-        # Desktop's there. Its setup runs no step of its own at install (v0.48.5's desktop/installer holds only uninstall.nsh,
+        # Desktop's there. Its setup runs no step of its own at install (v0.48.6's desktop/installer holds only uninstall.nsh,
         # with no customInstall), and its application places its command, jason.cmd and a Git Bash wrapper in WindowsApps,
-        # only on the person's word and never as a Path entry (v0.48.5's desktop/src/path-command.ts). Held, so that what
-        # this build's setup puts there after is its own doing.
+        # only on the person's word and never as a Path entry (desktop/src/path-command.ts, at the same tag). Held, so that
+        # what this build's setup puts there after is its own doing.
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         $commandFiles = @(Get-WindowsAppsCommandFiles)
         if ((Count-Entry $bundle) -ne 0) { Fail "the previous release's Jason Desktop is named on the user Path ($bundle), which its setup never writes" }
