@@ -11,11 +11,10 @@
 #                its file name, and its size, MD5 and SHA-256 computed again from the deb
 #   Release      the origin Jason, which the deb's rule for automatic updates names, and Packages' size, MD5 and
 #                SHA-256 computed again
-#   the key      check-apt-key.sh, first: every key in the keyring and every subkey that signs unrevoked and more
-#                than 90 days from its expiry, read from the key itself
 #   signatures   InRelease and Release.gpg, each one good signature by a key in the keyring, read from gpgv's status
 #                lines and never from its exit code alone, which is 0 for a key that has expired or been revoked; and
-#                InRelease signs the text Release holds, byte for byte
+#                InRelease signs the text Release holds, byte for byte. How long the key has left is not this check's:
+#                check-apt-key.sh holds it before the index is signed, in the release's job alone
 #   apt          apt-get update, as the account this runs as, with a configuration, lists and cache of this run's own
 #                and nothing of the machine's, reads a copy of the files by a file: source signed-by the keyring,
 #                through InRelease, then again through Release and Release.gpg alone, and says no warning, error or
@@ -40,7 +39,6 @@ for file in "$name" Packages Release InRelease Release.gpg; do
   [ -f "$folder/$file" ] || problem "$folder/$file is not there: a release carries Packages, Release, InRelease and Release.gpg beside its deb."
 done
 settled
-bash "$(dirname "${BASH_SOURCE[0]}")/check-apt-key.sh" "$keyring" || exit 1
 
 home=$(mktemp -d)
 trap 'gpgconf --homedir "$home" --kill all > /dev/null 2>&1 || true; rm -rf "$home"' EXIT

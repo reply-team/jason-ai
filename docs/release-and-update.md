@@ -192,16 +192,16 @@ Linux job built, signing with that subkey, which the `signing` environment holds
 then reads them back as a machine's apt reads them, against that public key: gpgv's verdict on both signatures,
 `InRelease` signing the very text of `Release`, the deb's size and hashes against `Packages`, the hashes of `Packages`
 against `Release`, `apt-get update` reading a copy of the files with no warning, through `InRelease` and again through
-`Release` and `Release.gpg`, and every key in that file and every subkey that signs unrevoked and more than 90 days from
-its expiry, read from the key itself.
-Any of these failing stops the release before anything is published, the last one naming the date: an expired key
-makes apt refuse the index, and every machine that reads the repository then takes no update until a deb is installed
-by hand, so the key is extended or replaced, and the new public key shipped in a deb, before then. The job may write
+`Release` and `Release.gpg`. Before it signs, in the same step, every key in that file and every subkey that signs must be
+unrevoked and more than 90 days from its expiry, read from the key itself, or the index is not signed, and the failure names
+the date: an expired key makes apt refuse the index, and every machine that reads the repository then takes no update
+until a deb is installed by hand, so the key is extended or replaced, and the new public key shipped in a deb, before
+then. That check runs in this job alone, the tag's run and the dispatch dry run's, so it stops the assets that are
+signed and never a pull request. Any of these failing stops the release before anything is published. The job may write
 nothing; the release job needs it and attaches the four files, which `checksums.txt` lists after the desktop's. A pull
 request has no signing environment, so CI's desktop job writes and reads back the same files from its own deb with a
-key the run makes, and says so; before that it holds the repository's own key to the same 90 days, so a key near its
-expiry turns every pull request red, a hotfix's among them. `.github/scripts/write-apt-index.sh`, `check-apt-index.sh`
-and `check-apt-key.sh` say each step.
+key the run makes, and says so. `.github/scripts/write-apt-index.sh`, `check-apt-index.sh` and `check-apt-key.sh` say
+each step.
 
 ## 3. The manifest
 

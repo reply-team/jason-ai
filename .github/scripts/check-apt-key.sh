@@ -1,6 +1,8 @@
 #!/bin/bash
-# Holds the apt repository's public key to its expiry, run by check-apt-index.sh on the key an index is checked against,
-# and by CI's desktop job on the repository's own key, install/jason-desktop-archive-keyring.gpg, on every pull request.
+# Holds the apt repository's public key to its expiry, run on the repository's own key,
+# install/jason-desktop-archive-keyring.gpg, by the release's apt-index job in the step that signs the index, right before
+# it signs: no index is signed with a key that has 90 days or less left. It runs there and nowhere else, so it stops the
+# assets that are signed and no pull request.
 #
 #   check-apt-key.sh <keyring>
 #

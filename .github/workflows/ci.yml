@@ -3087,15 +3087,13 @@ jobs:
       # by the release's own two scripts, as release.yml's apt-index job runs them. That job signs with the repository's
       # signing subkey and checks against the repository's public key; a pull request has no signing environment, so this
       # step makes a key of the run's own in the same shape, an Ed25519 key that certifies with a signing subkey, hands
-      # the writer that subkey alone, checks against that key's public half, and says so. Nothing is uploaded. First, the
-      # repository's own key is held to its expiry, as the release's check holds it: from 90 days before it expires, every
-      # pull request is red until the key is extended or replaced, a hotfix's among them, which has no dry run before its
-      # tag.
+      # the writer that subkey alone, checks against that key's public half, and says so. Nothing is uploaded. The
+      # repository's own key is not held to its expiry here: that check runs where the index is signed, in the release's
+      # job, so it stops what would be signed and nothing else.
       - name: Write and read back the apt repository's index as a release does, signed with a key this run makes
         shell: bash
         working-directory: .
         run: |
-          bash .github/scripts/check-apt-key.sh install/jason-desktop-archive-keyring.gpg
           export GNUPGHOME="$RUNNER_TEMP/apt-run-key"
           rm -rf "$GNUPGHOME" && mkdir -m 700 "$GNUPGHOME"
           gpg --batch --passphrase '' --quick-generate-key 'Jason apt index, this run alone' ed25519 cert 3y

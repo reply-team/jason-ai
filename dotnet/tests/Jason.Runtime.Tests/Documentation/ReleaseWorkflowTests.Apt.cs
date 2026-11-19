@@ -33,9 +33,10 @@ public partial class ReleaseWorkflowTests
     /// The release publishes the index only as its own job wrote and checked it: the release job needs that job, so a
     /// release whose deb has no index, or whose index a machine's apt would refuse, publishes nothing, as a missing
     /// platform publishes nothing. The job holds the signing subkey and nothing that writes: the signing environment,
-    /// read access alone, the deb the Linux leg built, the writer with the secret and the check with the repository's own
-    /// public key after it, and an upload of the four files under a name the release's download collects. The manifest's
-    /// line lists them in checksums.txt, and the release attaches them.
+    /// read access alone, the deb the Linux leg built, the writer with the secret, the repository's key held to its expiry
+    /// in the same step right before it signs, the check with the repository's own public key after it, and an upload of
+    /// the four files under a name the release's download collects. The manifest's line lists them in checksums.txt, and
+    /// the release attaches them.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "a release that publishes a deb without its checked index makes every Ubuntu machine's apt update fail")]
@@ -63,7 +64,9 @@ public partial class ReleaseWorkflowTests
         var download = Mapping(steps[1], "with");
         Assert.Equal(["name=jason-desktop-linux-x64", "path=artifacts/apt"], download.Children.Select(pair => $"{pair.Key}={pair.Value}"));
 
-        Assert.Equal("bash .github/scripts/write-apt-index.sh artifacts/apt", Scalar(steps[2], "run"));
+        Assert.Equal(
+            [$"bash .github/scripts/check-apt-key.sh {string.Join('/', AptKeyring)}", "bash .github/scripts/write-apt-index.sh artifacts/apt"],
+            (Scalar(steps[2], "run") ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries));
         Assert.Equal([$"{AptSecret}=${{{{ secrets.{AptSecret} }}}}"], Mapping(steps[2], "env").Children.Select(pair => $"{pair.Key}={pair.Value}"));
         Assert.Equal($"bash .github/scripts/check-apt-index.sh artifacts/apt {string.Join('/', AptKeyring)}", Scalar(steps[3], "run"));
         Assert.Null(Node(steps[3], "env"));
@@ -134,9 +137,8 @@ public partial class ReleaseWorkflowTests
     /// two lines, the writer and then the check, in one step right after the package call: there is no signing secret
     /// there, so the step makes a key of the run's own, shaped as the release's (an Ed25519 key that certifies, with a
     /// signing subkey, three years), hands the writer that subkey alone, checks against that key's public half, and says
-    /// in a notice that this index is signed with a key the run made. Before all of it the step holds the repository's
-    /// own key to its expiry, so a key within 90 days of it turns every pull request red, a hotfix's among them, which
-    /// has no dry run before its tag.
+    /// in a notice that this index is signed with a key the run made. It never holds the repository's key to its expiry:
+    /// that check stops what the release signs, and no pull request.
     /// </summary>
     [Fact]
     public void Ci_s_desktop_job_writes_and_reads_back_the_index_as_a_release_does()
@@ -154,7 +156,7 @@ public partial class ReleaseWorkflowTests
         var run = Scalar(step, "run") ?? "";
         var lines = run.Split('\n').Select(line => line.Trim()).ToList();
         Assert.DoesNotContain("secrets", run, StringComparison.Ordinal);
-        Assert.Equal($"bash .github/scripts/check-apt-key.sh {string.Join('/', AptKeyring)}", lines[0]);
+        Assert.DoesNotContain(lines, line => line.Contains("check-apt-key.sh", StringComparison.Ordinal));
         Assert.Contains("gpg --batch --passphrase '' --quick-generate-key 'Jason apt index, this run alone' ed25519 cert 3y", lines);
         Assert.Contains("gpg --batch --passphrase '' --quick-add-key \"$fpr\" ed25519 sign 3y", lines);
         Assert.Contains("APT_SIGNING_KEY=\"$(gpg --armor --export-secret-subkeys \"$fpr\")\" bash .github/scripts/write-apt-index.sh desktop/dist", lines);
@@ -329,8 +331,8 @@ public partial class ReleaseWorkflowTests
     /// The check passes the index as written and refuses each copy a machine's apt would not take, or would take with
     /// a complaint, in the words of the check that caught it: a deb changed after its index was written, a Packages
     /// changed after Release was, a Release changed after it was signed, a missing signature, a signature by a key that
-    /// is not the one given, a signature by a key revoked since, which gpgv also exits 0 for, and a signature gpgv takes
-    /// and apt refuses, a SHA-1 digest. The last is read by apt alone: gpgv says the signature is good.
+    /// is not the one given, a signature by a key revoked since or one that has expired, which gpgv exits 0 for, and a
+    /// signature gpgv takes and apt refuses, a SHA-1 digest. The last is read by apt alone: gpgv says the signature is good.
     /// </summary>
     [Theory]
     [InlineData("as written", null)]
@@ -340,7 +342,8 @@ public partial class ReleaseWorkflowTests
     [InlineData("Release changed after it was signed", "InRelease does not sign the text of Release")]
     [InlineData("no Release.gpg", "Release.gpg is not there")]
     [InlineData("signed by another key", "InRelease is not signed by a key in ")]
-    [InlineData("signed by a key since revoked", "is revoked: apt refuses an index it signs")]
+    [InlineData("signed by a key since revoked", "InRelease's signature is not good")]
+    [InlineData("signed by a key since expired", "InRelease's signature is not good")]
     [InlineData("a digest apt refuses", "apt-get update did not read the index without a word")]
     public void The_check_refuses_an_index_a_machine_s_apt_would_not_take(string copy, string? refusal)
     {
@@ -383,6 +386,16 @@ public partial class ReleaseWorkflowTests
                 Tool("gpgconf", Home(key.Home), "--kill", "all");
                 Assert.Contains("[GNUPG:] REVKEYSIG ", Gpgv(tree, keyring, Path.Combine(directory, "InRelease")).Said, StringComparison.Ordinal);
                 break;
+            case "signed by a key since expired":
+                // Made four days ago with two days to live, and signing the index as it stood then.
+                var then = DateTimeOffset.UtcNow.AddDays(-4).ToUnixTimeSeconds();
+                var expired = ThrowawayKey(tree, "2d", "2d", then);
+                keyring = expired.Public;
+                SignAt(expired, directory, then + 60);
+                var verdict = Gpgv(tree, keyring, Path.Combine(directory, "InRelease"));
+                Assert.Contains("[GNUPG:] EXPKEYSIG ", verdict.Said, StringComparison.Ordinal);
+                Assert.Equal(0, verdict.Exit);
+                break;
             case "a digest apt refuses":
                 foreach (var how in (string[][])[["--clearsign", "--output", Path.Combine(directory, "InRelease")], ["--armor", "--detach-sign", "--output", Path.Combine(directory, "Release.gpg")]])
                 {
@@ -412,89 +425,65 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The check fails when the key that signed, or its signing subkey, expires within 90 days, naming that date, read
-    /// from the key itself, and saying that it must be extended or replaced and shipped in a deb before then: apt refuses
-    /// an index signed by an expired key, and every machine then stops taking updates until it installs a deb by hand. A
-    /// key that has expired already is refused the same way, though gpgv calls its signature good; a key past the 90 days
-    /// passes.
+    /// The key check, as the release's apt-index job runs it on the repository's key right before it signs: a key whose
+    /// primary and signing subkey are each more than 90 days from their expiry passes and says when each expires; a
+    /// primary or a signing subkey within those 90 days, one already expired, and one revoked each fail, naming the key,
+    /// and the date where there is one, with no index and no signature to read.
     /// </summary>
     [Theory]
-    [InlineData("91d", "91d", null)]
-    [InlineData("89d", "3y", "primary")]
-    [InlineData("3y", "89d", "subkey")]
-    [InlineData("2d", "2d", "expired")]
-    public void The_check_fails_within_90_days_of_the_key_s_expiry(string primary, string subkey, string? named)
+    [InlineData("passes", "3y", "3y")]
+    [InlineData("primary", "89d", "3y")]
+    [InlineData("subkey", "3y", "89d")]
+    [InlineData("expired", "2d", "2d")]
+    [InlineData("revoked", "3y", "3y")]
+    public void The_key_check_holds_a_keyring_to_its_expiry(string kind, string primary, string subkey)
     {
         RequireAptTools();
         using var tree = new TempTree();
-        var (deb, _) = SmallDeb(tree, "1.2.3");
-        var directory = Path.GetDirectoryName(deb)!;
-        var valid = ThrowawayKey(tree, "3y", "3y");
-        var written = WriteAptIndex(tree, directory, valid.Secret);
-        Assert.True(written.Exit == 0, written.Said);
-
-        AptKey key;
-        if (named == "expired")
+        var key = ThrowawayKey(tree, primary, subkey, kind == "expired" ? DateTimeOffset.UtcNow.AddDays(-4).ToUnixTimeSeconds() : null);
+        if (kind == "revoked")
         {
-            // Made four days ago with two days to live, and signing the index as it stood then.
-            var then = DateTimeOffset.UtcNow.AddDays(-4).ToUnixTimeSeconds();
-            key = ThrowawayKey(tree, primary, subkey, then);
-            foreach (var how in (string[][])[["--clearsign", "--output", Path.Combine(directory, "InRelease")], ["--armor", "--detach-sign", "--output", Path.Combine(directory, "Release.gpg")]])
-            {
-                var signed = Tool("gpg", Home(key.Home), ["--batch", "--yes", "--faked-system-time", $"{then + 60}!", "--local-user", key.Subkey + "!", .. how, Path.Combine(directory, "Release")]);
-                Assert.True(signed.Exit == 0, signed.Stderr);
-            }
-
-            Assert.Contains("[GNUPG:] EXPKEYSIG ", Gpgv(tree, key.Public, Path.Combine(directory, "InRelease")).Said, StringComparison.Ordinal);
-            Assert.Equal(0, Gpgv(tree, key.Public, Path.Combine(directory, "InRelease")).Exit);
+            var certificate = File.ReadAllText(Path.Combine(key.Home, "openpgp-revocs.d", key.Primary + ".rev")).Replace(":-----BEGIN", "-----BEGIN", StringComparison.Ordinal);
+            var revocation = Path.Combine(tree.Root, "revocation.asc");
+            File.WriteAllText(revocation, certificate);
+            Assert.Equal(0, Tool("gpg", Home(key.Home), "--batch", "--import", revocation).Exit);
+            Assert.Equal(0, Tool("gpg", Home(key.Home), "--batch", "--yes", "--output", key.Public, "--export", key.Primary).Exit);
+            Tool("gpgconf", Home(key.Home), "--kill", "all");
         }
-        else
-        {
-            key = ThrowawayKey(tree, primary, subkey);
-            foreach (var file in ReleaseAssets.AptIndex)
-            {
-                File.Delete(Path.Combine(directory, file));
-            }
-
-            var rewritten = WriteAptIndex(tree, directory, key.Secret);
-            Assert.True(rewritten.Exit == 0, rewritten.Said);
-        }
-
-        var (exit, said) = CheckAptIndex(tree, directory, key.Public);
-        if (named is null)
-        {
-            Assert.True(exit == 0, said);
-            return;
-        }
-
-        Assert.True(exit != 0, $"A key that expires {Expiry(tree, key, named == "primary" ? key.Primary : key.Subkey)} passed the check.\n{said}");
-        var date = Expiry(tree, key, named == "primary" ? key.Primary : key.Subkey);
-        var which = named == "primary" ? $"The apt repository's key {key.Primary}" : $"The apt repository's signing subkey {key.Subkey}";
-        Assert.Contains($"{which} {(named == "expired" ? "expired on" : "expires on")} {date}", said, StringComparison.Ordinal);
-        Assert.Contains("must be extended or replaced, and the new public key shipped in a release's deb, before then", said, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The key check on its own, as CI's desktop job runs it on the repository's own key on every pull request: a key whose
-    /// signing subkey is past the 90 days passes and says when each key expires, and one within them fails, naming the
-    /// date, with no index and no signature to read.
-    /// </summary>
-    [Theory]
-    [InlineData("3y", false)]
-    [InlineData("89d", true)]
-    public void The_key_check_alone_holds_a_keyring_to_its_expiry(string subkey, bool refused)
-    {
-        RequireAptTools();
-        using var tree = new TempTree();
-        var key = ThrowawayKey(tree, "3y", subkey);
 
         var (exit, stdout, stderr) = Tool("bash", Scratch(tree), Path.Combine([RepositoryRoot(), .. AptKeyCheck]), key.Public);
         var said = stdout + stderr;
-        var expires = $"The apt repository's signing subkey {key.Subkey} expires on {Expiry(tree, key, key.Subkey)}";
-        Assert.True(refused == (exit != 0), said);
-        Assert.Contains(refused ? expires + ", within 90 days" : expires, said, StringComparison.Ordinal);
-        Assert.Contains(refused ? "must be extended or replaced" : "more than 90 days from this run", said, StringComparison.Ordinal);
+        var which = kind == "primary" ? $"The apt repository's key {key.Primary}" : $"The apt repository's signing subkey {key.Subkey}";
+        switch (kind)
+        {
+            case "passes":
+                Assert.True(exit == 0, said);
+                Assert.Contains($"{which} expires on {Expiry(tree, key, key.Subkey)}", said, StringComparison.Ordinal);
+                Assert.Contains("more than 90 days from this run", said, StringComparison.Ordinal);
+                break;
+            case "revoked":
+                Assert.True(exit != 0, said);
+                Assert.Contains($"The apt repository's key {key.Primary} is revoked: apt refuses an index it signs", said, StringComparison.Ordinal);
+                break;
+            default:
+                Assert.True(exit != 0, said);
+                var verb = kind == "expired" ? "expired on" : "expires on";
+                Assert.Contains($"{which} {verb} {Expiry(tree, key, kind == "primary" ? key.Primary : key.Subkey)}, within 90 days", said, StringComparison.Ordinal);
+                Assert.Contains("must be extended or replaced, and the new public key shipped in a release's deb, before then", said, StringComparison.Ordinal);
+                break;
+        }
+
         Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(tree.Root, "t")));
+    }
+
+    /// <summary>InRelease and Release.gpg signed again by <paramref name="key"/>'s subkey as the clock stood at <paramref name="at"/>.</summary>
+    private static void SignAt(AptKey key, string directory, long at)
+    {
+        foreach (var how in (string[][])[["--clearsign", "--output", Path.Combine(directory, "InRelease")], ["--armor", "--detach-sign", "--output", Path.Combine(directory, "Release.gpg")]])
+        {
+            var signed = Tool("gpg", Home(key.Home), ["--batch", "--yes", "--faked-system-time", $"{at}!", "--local-user", key.Subkey + "!", .. how, Path.Combine(directory, "Release")]);
+            Assert.True(signed.Exit == 0, signed.Stderr);
+        }
     }
 
     /// <summary>The key's secret subkeys once a second signing subkey stands beside the first.</summary>

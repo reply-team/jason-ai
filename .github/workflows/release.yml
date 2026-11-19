@@ -819,10 +819,13 @@ jobs:
   # all four, written here from the deb the Linux leg built and signed with the repository's signing subkey, then read
   # back as a machine's apt reads them, against the repository's own public key, install/jason-desktop-archive-keyring.gpg:
   # gpgv's verdict on both signatures, the deb's size and hashes against Packages, Packages' against Release, apt-get
-  # update from a copy of the files with no complaint, and the key and its subkey unrevoked and more than 90 days from
-  # their expiry. The scripts say each check. The release job needs this job, so a release whose deb has no index, or one a
-  # machine's apt would refuse, publishes nothing, as a missing platform publishes nothing: from the first release whose
-  # deb adds the repository, a release without its index leaves every such machine's apt update with an error.
+  # update from a copy of the files with no complaint. The scripts say each check. Before the writer signs, in the same
+  # step, the key and its signing subkey are held to their expiry: each unrevoked and more than 90 days from it, or the
+  # index is not signed, since an index signed by a key that expires leaves every machine that reads it without updates
+  # from that day on. This job is the one place that check runs: it blocks the assets that are signed, and nothing else. The release
+  # job needs this job, so a release whose deb has no index, or one a machine's apt would refuse, publishes nothing, as a
+  # missing platform publishes nothing: from the first release whose deb adds the repository, a release without its index
+  # leaves every such machine's apt update with an error.
   #
   # The subkey is APT_SIGNING_KEY, in the signing environment, which only release tags and release branches may run in,
   # and only the writer's step is handed it. The key that certifies it is kept offline. The job may write nothing: its
@@ -847,7 +850,9 @@ jobs:
       - name: Write the apt repository's index, signed with the release's key
         env:
           APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
-        run: bash .github/scripts/write-apt-index.sh artifacts/apt
+        run: |
+          bash .github/scripts/check-apt-key.sh install/jason-desktop-archive-keyring.gpg
+          bash .github/scripts/write-apt-index.sh artifacts/apt
 
       - name: Read the index back as a machine's apt does
         run: bash .github/scripts/check-apt-index.sh artifacts/apt install/jason-desktop-archive-keyring.gpg
