@@ -80,6 +80,7 @@ import {
 import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
+import { atFoot, followedTop } from './follow';
 import { html, type Html } from './html';
 import { copied, markdownView } from './markdown-view';
 import { barMarks, svg } from './icons';
@@ -333,6 +334,7 @@ export function makeUnmade(id: string): Promise<string | null> {
             if (now) changeChat(id, (each) => told(everyWordBack(each), why));
             return null;
         }
+        madeAtSend.add(real);
         retire(id, real);
         return real;
     })();
@@ -366,6 +368,12 @@ function retire(id: string, real: string): void {
     for (const hook of madeHooks) hook(id, real);
     if (typing) whenDrawn(real, (panel) => panel.querySelector<HTMLTextAreaElement>(composerBox)?.focus());
 }
+
+/**
+ * The conversations made here for an unmade chat, at a send or another first act, whose panel, drawn anew for them, has
+ * not yet taken them to the foot: the message that made one goes to the foot as any message sent does.
+ */
+const madeAtSend = new Set<string>();
 
 /** The composer's box in a chat's panel. */
 const composerBox = 'textarea[aria-label="Your message"]';
@@ -1228,8 +1236,9 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
 }
 
 /**
- * The moves that bring a thread to its foot: each message the person sent (named by its words and how many times they
- * were said before it) and each permission card still asking. A key a thread had not before is a new move.
+ * The moves that bring a thread to its foot wherever the person reads it: each message they sent, named by its words and
+ * how many times they were said before it, and each permission card still asking, which is the turn waiting for them. A
+ * key a thread had not before is a new move.
  */
 function movesOf(entries: Chat['entries']): string[] {
     const said = new Map<string, number>();
@@ -1242,6 +1251,25 @@ function movesOf(entries: Chat['entries']): string[] {
         } else if (entry.kind === 'permission' && entry.answer === null) keys.push(`p:${entry.request}`);
     }
     return keys;
+}
+
+/**
+ * The place a chat's scrolling box is followed to (`followedTop`): the end of its conversation, the bottom of the thread
+ * and of the line queued under it, measured from the parts themselves; the cards that wait under the conversation are
+ * not its end, so the conversation's last half view stays in view above them.
+ */
+function followedOf(box: HTMLElement): number {
+    const content = box.getBoundingClientRect().top + box.clientTop - box.scrollTop;
+    let foot = 0;
+    for (const part of Array.from(box.children))
+        if (part.classList.contains('thread') || part.classList.contains('chat-queued'))
+            foot = Math.max(foot, part.getBoundingClientRect().bottom - content);
+    return followedTop({
+        scrollHeight: box.scrollHeight,
+        clientHeight: box.clientHeight,
+        foot,
+        keep: box.clientHeight / 2,
+    });
 }
 
 /**
@@ -1607,21 +1635,64 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),
         [api, chatId, asked?.campaignId, asked?.at],
     );
-    // A message the person sends, and a card that asks them something, are brought into view at the foot of the
-    // conversation, above the composer; a thread merely opened, or growing with the AI's words, keeps its place.
+    // While the person is at the foot of the conversation (`atFoot`) it follows whatever is added there: their message,
+    // the AI's words as they come, a card. Scrolled further up, it keeps their place until they come back to the foot or
+    // send: a message they send, and a permission card that asks them something, always go to the foot, the first
+    // message of a conversation made at that send included. The foot is the conversation's (`followedOf`), not the
+    // box's: the cards waiting under it stay under it, so following only ever moves the view down to that place, a
+    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. Opening a
+    // chat moves nothing. Where the person stands is noted as the box scrolls. The Demo's thread shares the measure.
     const scroller = useRef<HTMLDivElement>(null);
-    const seenMoves = useRef<{ chat: string; keys: ReadonlySet<string> } | null>(null);
+    const follow = useRef<{ chat: string; sent: ReadonlySet<string>; atFoot: boolean } | null>(null);
+    const grown = useRef<MutationObserver | null>(null);
+    const shownChat = useRef(chatId);
+    shownChat.current = chatId;
+    const drawn = Boolean(chat);
     const waiting = record?.waiting ?? null;
     const moves = waiting === null ? movesOf(entries ?? []) : [...movesOf(entries ?? []), `q:${waiting}`];
     const movesKey = moves.join('|');
     useEffect(() => {
-        const before = seenMoves.current;
-        seenMoves.current = { chat: chatId, keys: new Set(moves) };
         const box = scroller.current;
-        // Only a move this chat did not have before counts: switching to another chat, or opening one, moves nothing.
-        if (before?.chat === chatId && moves.some((key) => !before.keys.has(key)) && box !== null)
-            box.scrollTop = box.scrollHeight;
-    }, [chatId, movesKey]);
+        if (box === null) return;
+        const noted = () => {
+            if (follow.current) follow.current.atFoot = atFoot(box.scrollTop, followedOf(box));
+        };
+        // What is added under the thread, the painter's words and React's cards alike, is followed while the person is
+        // at the foot of the chat shown; a chat being given to the panel is not followed until it is opened.
+        const observer = new MutationObserver(() => {
+            const now = follow.current;
+            if (now === null || now.chat !== shownChat.current || !now.atFoot) return;
+            const followed = followedOf(box);
+            if (box.scrollTop < followed) box.scrollTop = followed;
+        });
+        observer.observe(box, { childList: true, subtree: true, characterData: true });
+        grown.current = observer;
+        box.addEventListener('scroll', noted, { passive: true });
+        return () => {
+            observer.disconnect();
+            box.removeEventListener('scroll', noted);
+            grown.current = null;
+        };
+    }, [drawn]);
+    useEffect(() => {
+        const box = scroller.current;
+        const before = follow.current;
+        const made = madeAtSend.delete(chatId);
+        if (box === null) {
+            follow.current = null;
+            return;
+        }
+        const sent = new Set(moves);
+        if (before?.chat !== chatId && !made) {
+            // Opened, or given another chat: its place is left alone, and decides whether what comes is followed.
+            grown.current?.takeRecords();
+            follow.current = { chat: chatId, sent, atFoot: atFoot(box.scrollTop, followedOf(box)) };
+            return;
+        }
+        const moved = made || moves.some((key) => !before!.sent.has(key));
+        follow.current = { chat: chatId, sent, atFoot: moved || before!.atFoot };
+        if (moved) box.scrollTop = followedOf(box);
+    }, [chatId, movesKey, drawn]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
