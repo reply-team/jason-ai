@@ -286,13 +286,24 @@ test('the chat keeps the end of its conversation in view above the cards that wa
     await page.mouse.wheel(0, 400);
     await expect.poll(async () => (await layout()).cardsTop).toBeLessThan(0);
     await frames();
-    const read = scroller.locator('.waiting-card').nth(1);
-    const before = await read.evaluate((each) => each.getBoundingClientRect().top);
+    // The first card the reader has in view: its top, against the box's view.
+    const reading = () =>
+        scroller.evaluate((box) => {
+            const view = box.getBoundingClientRect();
+            const cards = Array.from(box.querySelectorAll('.waiting-card'), (each) => each.getBoundingClientRect());
+            const index = cards.findIndex((each) => each.bottom > view.top);
+            return { index, top: cards[index]!.top - view.top };
+        });
+    const before = await reading();
     await say({ kind: 'text', text: part(5) });
     await expect(scroller).toContainText('Part 5.');
     await frames();
-    const after = await read.evaluate((each) => each.getBoundingClientRect().top);
-    expect(Math.abs(after - before), 'the place is kept').toBeLessThanOrEqual(1);
+    // The view did not move up to the conversation, and the card the reader had in view is still in view where it was:
+    // the engine keeps it in place while the answer grows above it.
+    expect((await layout()).cardsTop, 'the view stays in the cards').toBeLessThan(0);
+    const after = await reading();
+    expect(after.index, 'the same card is first in view').toBe(before.index);
+    expect(Math.abs(after.top - before.top), 'the place is kept').toBeLessThanOrEqual(1);
 
     // The turn ends and they send again from the cards: the view returns to the conversation's end.
     await say({ kind: 'done', error: null });
