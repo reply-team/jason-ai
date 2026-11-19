@@ -1296,7 +1296,7 @@ public partial class InstallScriptTests
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
         Assert.Contains("install/install.ps1", ci, StringComparison.Ordinal);
         Assert.Contains("JASON_INSTALL_FEED", ci, StringComparison.Ordinal);
-        Assert.Contains("bash .github/scripts/test-apt-route.sh apt apt/apt-run-key.gpg", ci, StringComparison.Ordinal);
+        Assert.Contains("bash .github/scripts/test-apt-route.sh apt\n", ci, StringComparison.Ordinal);
         Assert.Contains("\"$repository/install/install.sh\"", File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-apt-route.sh")), StringComparison.Ordinal);
     }
 

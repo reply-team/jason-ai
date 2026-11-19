@@ -20,7 +20,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// a row gives it on stderr and exits as the real one does. The AppImage is a shell script that answers
 /// --appimage-extract as the AppImage runtime does, with the files the real one holds at those paths. The carried jason
 /// is the macOS rows' stand-in: it logs each call and prints a row's report. A terminal (/dev/tty) is never there under
-/// the test runner, so sudo's half of the apt route is the VM run's and CI's apt-route leg's, which gives it one.
+/// the test runner, so sudo's half of the apt route is CI's apt-route leg's, which gives it one.
 /// </remarks>
 public sealed partial class InstallDesktopScriptTests
 {
@@ -61,6 +61,8 @@ public sealed partial class InstallDesktopScriptTests
     [InlineData("Error executing command as another user: Request dismissed", 126, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.")]
     [InlineData("Error executing command as another user: Not authorized", 127, "user", "This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you.")]
     [InlineData("Error executing command as another user: No authentication agent found.", 127, "user sudo", "this session has no way to ask for it: run the line in a terminal of your desktop")]
+    [InlineData("Error getting authority: Error initializing authority: Could not connect: No such file or directory", 127, "user sudo", "this session has no way to ask for it: run the line in a terminal of your desktop")]
+    [InlineData("sudo-rs: Maximum 3 incorrect authentication attempts", 1, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed.")]
     [InlineData("GDBus.Error:org.freedesktop.DBus.Error.NoReply: Message recipient disconnected from message bus without replying", 127, "user sudo", "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again.")]
     [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 100, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
     [InlineData("E: Sub-process /usr/bin/dpkg returned an error code (1)", 100, "user sudo", "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off.")]
@@ -82,6 +84,25 @@ public sealed partial class InstallDesktopScriptTests
         Assert.Contains(refusal, run.Stderr, StringComparison.Ordinal);
         Assert.DoesNotContain(linux.Calls(), call => call.StartsWith("install", StringComparison.Ordinal));
         Assert.False(File.Exists(linux.DebCarried));
+    }
+
+    /// <summary>
+    /// The bound on the system's dialog ends the wait, not apt, which runs as root once the password is given: where apt
+    /// installed the package all the same, the line says so and sets the machine up rather than report that nothing was
+    /// installed. Catches a late answer to the dialog, or apt waiting on the package lock, read as no password given.
+    /// </summary>
+    [Fact]
+    [UnsupportedOSPlatform("windows")]
+    public void Linux_with_apt_a_bound_that_ran_out_after_apt_installed_goes_on_to_the_set_up()
+    {
+        var linux = Linux.Start(_tree, apt: true, pkexec: true);
+        linux.Variables["STUB_PKEXEC_AFTER"] = "the bound ran out";
+
+        var run = linux.Run(linux.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.True(File.Exists(linux.DebCarried), run.Stdout + run.Stderr);
+        Assert.Equal($"install --roles|{linux.Data}", linux.Calls()[^1]);
     }
 
     /// <summary>
@@ -271,7 +292,7 @@ public sealed partial class InstallDesktopScriptTests
 
             if (pkexec)
             {
-                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
+                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
             }
 
             File.WriteAllText(Path.Combine(DebPlace, "..", "jason"), StandInJason);

@@ -456,11 +456,14 @@ apt_install() {
     APT_GET="$(command -v apt-get)"
     : > "$TMP/apt.err"
     STATUS=0
+    ROUTE=none
     if (: < /dev/tty) 2>/dev/null && command -v sudo >/dev/null 2>&1; then
+        ROUTE=sudo
         echo "Installing Jason Desktop's package with apt; sudo asks for your password."
         # shellcheck disable=SC2086
         sudo "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
     elif command -v pkexec >/dev/null 2>&1; then
+        ROUTE=pkexec
         echo "Installing Jason Desktop's package with apt; your desktop asks for your password in its own window."
         if command -v timeout >/dev/null 2>&1; then
             # shellcheck disable=SC2086
@@ -474,16 +477,30 @@ apt_install() {
     fi
     [ "$STATUS" -eq 0 ] && return 0
     cat "$TMP/apt.err" >&2
+    # The bound on the dialog ends the wait, not apt, which runs as root once the password is given: a late answer, or apt
+    # waiting on the package lock, may still install the package. Where it did, it is installed.
+    case "$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)" in
+        ii*"|$WANTED")
+            echo "apt went on after the wait ended and installed the package."
+            return 0
+            ;;
+    esac
     NOT_ADMIN=""
-    administrator || NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
-    if [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|a password is required|is not in the sudoers file|may not run sudo' "$TMP/apt.err"; then
+    if ! administrator; then
+        if [ "$ROUTE" = sudo ]; then
+            NOT_ADMIN=" This account is not an administrator: an administrator of this computer can install the package for you."
+        else
+            NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
+        fi
+    fi
+    if grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
+        fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
+    elif [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
-    elif grep -qE 'No authentication agent found' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
+    elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
     elif grep -qE 'Message recipient disconnected|No session for cookie' "$TMP/apt.err"; then
         fail "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again."
-    elif grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
-        fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
     fi
     fail "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off."
 }

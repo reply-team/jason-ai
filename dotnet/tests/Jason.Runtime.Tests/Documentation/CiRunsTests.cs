@@ -1896,10 +1896,12 @@ public class CiRunsTests
         var steps = Steps(job);
         Assert.All(steps, step => Assert.Null(Node(step, "if")));
         Assert.All(steps, step => Assert.Null(Node(step, "continue-on-error")));
+        // The deb alone: the leg makes its own key and both releases, so nothing else of the desktop job's is read, and it
+        // is called with the one folder it takes (a second argument ends it with its usage line).
         Assert.Equal(
-            ["ci-desktop-linux-x64-desktop", "ci-apt-index"],
+            ["ci-desktop-linux-x64-desktop"],
             steps.Where(step => Scalar(step, "uses") == "actions/download-artifact@v7").Select(step => Scalar(Mapping(step, "with"), "name")));
-        Assert.EndsWith("bash .github/scripts/test-apt-route.sh apt apt/apt-run-key.gpg", (Scalar(steps[^1], "run") ?? "").Trim(), StringComparison.Ordinal);
+        Assert.EndsWith("bash .github/scripts/test-apt-route.sh apt", (Scalar(steps[^1], "run") ?? "").Trim(), StringComparison.Ordinal);
     }
 
     /// <summary>

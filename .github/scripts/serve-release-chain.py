@@ -18,7 +18,7 @@ So apt and the install script read the address the package and the script name, 
 release through redirects whose last hop names no file, as GitHub's asset addresses do. apt asks for <path>/./<file> on
 a flat repository; the first hop resolves the dot, as the address's redirect does. A file the release does not hold is
 404 at GitHub's hop. Connections are HTTP/1.1 and kept alive, which apt 3.2 relies on. Each request is one JSON line in
-the log: the host, the path, the status, and the file it was served from.
+the log: the host, the path, the status, the program that asked (its User-Agent), and the file it was served from.
 """
 
 import argparse
@@ -65,7 +65,7 @@ def main():
 
         def said(self, status, served=None):
             with lock, open(arguments.log, "a", encoding="utf-8") as log:
-                log.write(json.dumps({"host": self.host(), "path": self.path, "status": status, "served": served}) + "\n")
+                log.write(json.dumps({"host": self.host(), "path": self.path, "status": status, "agent": self.headers.get("User-Agent", ""), "served": served}) + "\n")
 
         def host(self):
             return (self.headers.get("Host") or "").split(":")[0].lower()

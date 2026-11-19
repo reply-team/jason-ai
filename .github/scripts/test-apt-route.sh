@@ -70,17 +70,28 @@ trap cleanup EXIT
 
 # Every place the package, its scripts and apt write for it, and the account's own (its home, which holds its
 # configuration, data and cache folders and its systemd user units, and Jason's data directory), as one sorted listing of
-# kind and path, and dpkg's word on the package.
+# kind and path, and dpkg's word on the package. apt's cache and lists are read for Jason's own files: the install line's
+# apt also brings the package's dependencies from Ubuntu's archive where the machine lacks them, and keeps their debs,
+# which are the system's and stay.
 mkdir -p "$work/home"
 places=(/opt /usr/bin /usr/share/applications /usr/share/icons /etc/apt/sources.list.d /etc/apt/apt.conf.d /etc/default
-  /usr/share/keyrings /etc/alternatives /var/lib/dpkg/alternatives /var/cache/apt/archives /var/lib/apt/lists
-  /etc/apparmor.d /var/cache/apparmor "$work/home" "$work/data")
+  /usr/share/keyrings /etc/alternatives /var/lib/dpkg/alternatives /etc/apparmor.d /var/cache/apparmor "$work/home"
+  "$work/data")
 listing() {
-  for place in "${places[@]}"; do
-    if [ -e "$place" ]; then $SUDO find "$place" -printf '%y %p\n'; fi
-  done | sort
+  {
+    for place in "${places[@]}"; do
+      if [ -e "$place" ]; then $SUDO find "$place" -printf '%y %p\n'; fi
+    done
+    $SUDO find /var/cache/apt/archives /var/lib/apt/lists -iname '*jason*' -printf '%y %p\n' 2> /dev/null || true
+  } | sort
   echo "dpkg: $(dpkg-query -W -f='${db:Status-Abbrev}' jason-desktop 2> /dev/null || echo 'not known')"
 }
+
+# Ubuntu's automatic updates, which step 4 runs, are installed by default on Ubuntu and not on every CI runner: put here
+# where they are missing, before the listing, so they are part of the machine as it was.
+dpkg-query -W -f='${db:Status-Abbrev}' unattended-upgrades 2> /dev/null | grep -q '^ii' \
+  || $SUDO apt-get install -y -q --no-install-recommends unattended-upgrades > "$work/unattended-upgrades.log" 2>&1 \
+  || { cat "$work/unattended-upgrades.log"; fail "unattended-upgrades could not be installed for step 4."; }
 
 # 1. Before.
 dpkg-query -W jason-desktop > /dev/null 2>&1 && fail "jason-desktop is known to dpkg before the leg starts; the listing would not be the machine's before."
@@ -185,9 +196,12 @@ update_jason
 candidate=$(apt-cache policy jason-desktop | awk '$1 == "Candidate:" { print $2 }')
 [ "$candidate" = "$version" ] || fail "apt offers jason-desktop '$candidate' from the repository, and the release is $version."
 apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { apt-cache policy jason-desktop; fail "apt does not name the address's repository for jason-desktop."; }
+# Only what apt asks from here on counts: the install line fetched the same deb through the same hops above.
+asked=$(wc -l < "$work/served.log")
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
-grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"served\": \"v$release/jason-desktop-linux-x64.deb\"" "$work/served.log" \
-  || { cat "$work/served.log"; fail "The deb did not come through the chain from the release's asset address."; }
+tail -n "+$((asked + 1))" "$work/served.log" \
+  | grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"agent\": \"Debian APT[^\"]*\", \"served\": \"v$release/jason-desktop-linux-x64.deb\"" \
+  || { cat "$work/served.log"; fail "apt's own download of the deb did not come through the chain from the release's asset address."; }
 trust_the_leg
 echo "apt read Jason's repository through the address and the chain, offered $version, and installed it from there."
 

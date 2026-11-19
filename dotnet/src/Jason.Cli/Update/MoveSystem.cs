@@ -131,12 +131,20 @@ public sealed record PackageRun(bool Asked, int ExitCode, string Said)
         get
         {
             bool Says(params string[] words) => words.Any(word => Said.Contains(word, StringComparison.Ordinal));
-            if (ExitCode == TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "a password is required", "is not in the sudoers file", "may not run sudo"))
+            // The lock first: apt waited on it and timed out with the password given.
+            if (Says("Could not get lock", "Unable to acquire the dpkg frontend lock"))
+            {
+                return AptRefusal.LockHeld;
+            }
+
+            // sudo's and sudo-rs's words (Ubuntu 26.04 ships sudo-rs) alike.
+            if (ExitCode == TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "incorrect authentication attempt", "Authentication failed", "a password is required", "is not in the sudoers file", "may not run sudo", "afraid I can't do that"))
             {
                 return AptRefusal.NoPassword;
             }
 
-            if (!Asked || Says("No authentication agent found"))
+            // No agent in this session, or no polkit daemon to reach at all.
+            if (!Asked || Says("No authentication agent found", "Error getting authority"))
             {
                 return AptRefusal.NoSession;
             }
@@ -146,7 +154,7 @@ public sealed record PackageRun(bool Asked, int ExitCode, string Said)
                 return AptRefusal.DialogFailed;
             }
 
-            return Says("Could not get lock", "Unable to acquire the dpkg frontend lock") ? AptRefusal.LockHeld : AptRefusal.Apt;
+            return AptRefusal.Apt;
         }
     }
 
@@ -376,13 +384,13 @@ public sealed class MoveSystem : IMoveSystem
 
     public bool RunsNamed(string name)
     {
-        foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
+        foreach (var process in Process.ProcessImages.Named(name))
         {
             using (process)
             {
                 try
                 {
-                    if (string.Equals(Path.GetFileName(process.MainModule?.FileName), name, StringComparison.Ordinal))
+                    if (process.MainModule?.FileName is { } image && string.Equals(Path.GetFileName(Process.ProcessImages.AtItsPath(image)), name, StringComparison.Ordinal))
                     {
                         return true;
                     }

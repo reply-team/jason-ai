@@ -1669,10 +1669,8 @@ jobs:
         run: |
           if ($env:server) { Stop-Process -Id $env:server -Force -ErrorAction SilentlyContinue }
 
-  # The install scripts, run against the archives this run packaged, served from a local directory that holds
-  # what a release would — assembled by the same script that assembles a release — with no network. Each job
-  # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
-  # and the "already installed" no-op are exercised and not only described.
+  # The install line on Ubuntu, against the deb the desktop job built: the apt route's leg, from the install through
+  # Jason's repository and Ubuntu's automatic updates to the purge (.github/scripts/test-apt-route.sh).
   install-sh:
     name: install.sh on ubuntu
     needs: [version, desktop]
@@ -1684,15 +1682,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The deb the desktop job built, and the index it wrote and read back beside it, with the public half of the key
-      # that run made to sign it.
+      # The deb the desktop job built. The leg makes its own key, signs both releases' indexes with it, and makes the
+      # next release by repacking this deb.
       - uses: actions/download-artifact@v7
         with:
           name: ci-desktop-linux-x64-desktop
-          path: apt
-      - uses: actions/download-artifact@v7
-        with:
-          name: ci-apt-index
           path: apt
 
       # The install line on Ubuntu, which has apt: install.sh against the product's address, served on this runner by a
@@ -1705,7 +1699,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get -o Acquire::Retries=5 update -qq
-          bash .github/scripts/test-apt-route.sh apt apt/apt-run-key.gpg
+          bash .github/scripts/test-apt-route.sh apt
 
   # Jason as one installation on Windows, proven on a build of this tree wherever every check runs (the release's pull
   # request, a push to main that runs every check, and a run started by hand): this tree's jason packaged as a release
@@ -2931,22 +2925,7 @@ jobs:
           echo "::notice title=apt index::This run signs its apt index with a key this run made ($fpr), not the release's: a pull request has no signing environment."
           APT_SIGNING_KEY="$(gpg --armor --export-secret-subkeys "$fpr")" bash .github/scripts/write-apt-index.sh desktop/dist
           bash .github/scripts/check-apt-index.sh desktop/dist "$keyring"
-          cp "$keyring" desktop/dist/apt-run-key.gpg
           gpgconf --kill all
-
-      # The index and the public half of the key that signed it, for the install line's job, which serves them beside the
-      # deb this job uploaded.
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ci-apt-index
-          path: |
-            desktop/dist/Packages
-            desktop/dist/Release
-            desktop/dist/InRelease
-            desktop/dist/Release.gpg
-            desktop/dist/apt-run-key.gpg
-          if-no-files-found: error
-          retention-days: 3
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
