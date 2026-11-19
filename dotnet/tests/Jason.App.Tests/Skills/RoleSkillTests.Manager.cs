@@ -534,4 +534,18 @@ public partial class RoleSkillTests
             < skill.IndexOf("**No responder names the line.**", StringComparison.Ordinal),
             "The answer's queueing must point to a section further down.");
     }
+
+    /// <summary>
+    /// A run's start is refused, so a campaign the manager paused is started again by the person: the example question
+    /// offers only what can be carried out, and the skill says what the manager's line says where an answer is to resume.
+    /// </summary>
+    [Fact]
+    public void The_manager_leaves_starting_a_campaign_it_paused_to_the_person()
+    {
+        var skill = Flattened("manager");
+
+        Assert.DoesNotContain("--option \"resume", skill, StringComparison.Ordinal);
+        Assert.Contains("--option \"keep it paused\" --option \"start it again myself at half volume\"", skill, StringComparison.Ordinal);
+        Assert.Contains("A campaign you paused is started again by the person, never by you", skill, StringComparison.Ordinal);
+    }
 }

@@ -122,9 +122,11 @@ public class StartSummonsManagerTests
 
     /// <summary>
     /// A start a check-in's own attempt wrote is the check-in's own line, so it summons no successor, as a report or a
-    /// failure of a check-in's does not. No run Jason launches can write one: a start sent from inside a run is refused
-    /// before its actor is read (CampaignStartInsideARunTests, which carries the critical mark). What is left is a program
-    /// that dropped the run's header and still named its attempt, written here at the service, below that refusal.
+    /// failure of a check-in's does not. No run can write one through the CLI it is launched with: a start sent from
+    /// inside a run is refused before its actor is read (CampaignStartInsideARunTests, which carries the critical mark).
+    /// That refusal reads the Jason-Attempt header, a higher bar and not a boundary: a run that clears JASON_ATTEMPT_ID,
+    /// or sends a request without the header, is not told apart. What is left is such a program that still named its
+    /// attempt, written here at the service, below that refusal.
     /// </summary>
     [Fact]
     public async Task A_start_written_by_a_check_ins_own_attempt_summons_nothing()
