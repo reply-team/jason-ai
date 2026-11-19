@@ -3106,6 +3106,15 @@ jobs:
           bash .github/scripts/check-apt-index.sh desktop/dist "$keyring"
           gpgconf --kill all
 
+      # Jason Desktop's apt route on this runner, which has apt as Ubuntu has: the deb installed, what its scripts placed
+      # for the system read back, the repository read through the product's address and a stand-in of GitHub's chain on
+      # this machine, the package installed from it, then purged and every place it and apt write listed as before.
+      # .github/scripts/test-apt-route.sh says each step, and what it changes on the runner for the run.
+      - name: The deb's apt route, from the install through the repository to the purge
+        shell: bash
+        working-directory: .
+        run: bash .github/scripts/test-apt-route.sh desktop/dist "$RUNNER_TEMP/apt-run-key.gpg"
+
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
   # the release's, and on a push to the release's pull request that changes documentation only; win-x64, osx-arm64 and

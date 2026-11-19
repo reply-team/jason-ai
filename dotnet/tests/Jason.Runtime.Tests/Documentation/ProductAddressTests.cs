@@ -38,7 +38,9 @@ public sealed partial class ProductAddressTests : IDisposable
     /// path under <c>/releases/</c> that names nothing further, and it is written with its slash: without it the
     /// address is not under <c>/releases/</c>, the redirect does not take it, and nothing behind it answers. A short path
     /// is the address's own, answered by <c>get/</c>: the install page, and a desktop download by system, with or without
-    /// the source a link names; the files those redirect to are held by <c>DownloadPathsTests</c>.
+    /// the source a link names; the files those redirect to are held by <c>DownloadPathsTests</c>. The apt repository is
+    /// the path <c>/apt/</c>, which the address redirects, file by file, to the latest release's downloads: the source
+    /// the deb writes names it with its slash, and a file under it is a release's asset.
     /// </summary>
     internal static readonly IReadOnlyList<(string Shape, Regex Pattern)> Shapes =
     [
@@ -48,6 +50,7 @@ public sealed partial class ProductAddressTests : IDisposable
         ("a release's page", ReleasePage()),
         ("the releases index", ReleasesIndex()),
         ("a short path", ShortPath()),
+        ("the apt repository", AptRepository()),
     ];
 
     /// <summary>
@@ -218,6 +221,11 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("https://get.jasonharness.ai/install?ref=Bad_Ref", null)]
     [InlineData("https://get.jasonharness.ai/install?from=readme", null)]
     [InlineData("https://get.jasonharness.ai/stats", null)]
+    [InlineData("URIs: https://get.jasonharness.ai/apt/", "the apt repository")]
+    [InlineData("curl -sI https://get.jasonharness.ai/apt/InRelease", "the apt repository")]
+    [InlineData("https://get.jasonharness.ai/apt", null)]
+    [InlineData("https://get.jasonharness.ai/apt/dists/stable/InRelease", null)]
+    [InlineData("https://get.jasonharness.ai/apt/jason-desktop.deb", null)]
     public void The_address_detector_reads_the_shape_a_line_names(string line, string? shape)
     {
         var address = Assert.Single(Address().Matches(line)).Value.TrimEnd('.', ',', ';', ':', '!', '?');
@@ -475,6 +483,9 @@ public sealed partial class ProductAddressTests : IDisposable
 
     [GeneratedRegex(@"^https://get\.jasonharness\.ai/(?:install|desktop/(?:windows|mac|mac-intel|linux-deb|linux-appimage))(?:\?ref=[a-z0-9-]{1,40})?$")]
     private static partial Regex ShortPath();
+
+    [GeneratedRegex(@"^https://get\.jasonharness\.ai/apt/(?<asset>[^/?#]+)?$")]
+    private static partial Regex AptRepository();
 
     private sealed record Finding(string File, int Line, string What)
     {

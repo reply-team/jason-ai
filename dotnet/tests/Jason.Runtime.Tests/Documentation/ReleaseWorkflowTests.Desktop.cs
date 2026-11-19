@@ -430,7 +430,8 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// The deb is read for its control fields (the package jason-desktop, the release's version as dpkg spells it, amd64),
-    /// unpacked, and its /opt/Jason held by check-package to the configuration as a deb, which must carry package-type;
+    /// unpacked with its control files, and held by check-package to the configuration as a deb, which must carry
+    /// package-type, the tree's maintainer scripts, its key and its rule for automatic updates as a configuration file;
     /// the AppImage's runtime is refused when it names a shared library or an interpreter, which is how it needs no
     /// libfuse2, and its contents, extracted by that runtime, are held as an AppImage, which must carry none. Each carries
     /// the executable this call published, byte for byte and runnable, with its notices and version.json, and the deb's menu
@@ -447,10 +448,8 @@ public partial class ReleaseWorkflowTests
             "[ \"$(dpkg-deb --field \"$deb\" Architecture)\" = amd64 ] || { echo \"::error title=Desktop::The deb is not for amd64.\"; exit 1; }",
             "dpkg-deb --field \"$deb\" Recommends | grep -q 'libicu74 | libicu72' || { echo \"::error title=Desktop::The deb does not recommend the ICU library its jason needs.\"; exit 1; }",
             "if dpkg-deb --field \"$deb\" Depends | grep -q libicu; then echo \"::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives.\"; exit 1; fi",
-            "dpkg-deb --extract \"$deb\" \"$opened\"",
-            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile.\"; exit 1; }",
-            "dpkg-deb --control \"$deb\" \"$control\"",
-            "grep -q 'apparmor_parser --replace' \"$control/postinst\" || { echo \"::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox.\"; exit 1; }",
+            "dpkg-deb --raw-extract \"$deb\" \"$opened\"",
+            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key or its rule for automatic updates.\"; exit 1; }",
             "carries \"$opened/opt/Jason\" deb",
             "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
             "readelf -lW -d \"$appimage\" | grep -E '\\(NEEDED\\)|^ *INTERP ' && { echo \"::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe.\"; exit 1; }",
@@ -506,7 +505,7 @@ public partial class ReleaseWorkflowTests
             "sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
             "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
             "started deb \"$RUNNER_TEMP/jason-desktop-deb-data\" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app",
-            "sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop",
+            "sudo apt-get -o Acquire::Retries=5 purge -y jason-desktop",
             "if ! unshare -Ur true 2> /dev/null; then",
             "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0",
             "unshare -Ur true || { echo \"::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off.\"; exit 1; }",
@@ -562,8 +561,11 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep, AptRouteStep],
             names);
+        // The apt route's leg reads the deb and the index the step before it wrote, against that run's own key.
+        Assert.Equal("bash .github/scripts/test-apt-route.sh desktop/dist \"$RUNNER_TEMP/apt-run-key.gpg\"", Scalar(steps[11], "run"));
+        Assert.Contains("keyring=\"$RUNNER_TEMP/apt-run-key.gpg\"", Scalar(steps[10], "run"), StringComparison.Ordinal);
         // zsh, the Mac's own shell, before the node tests: its real login shell row fails under CI without it.
         Assert.Contains("install -y --no-install-recommends zsh", Scalar(steps[4], "run"), StringComparison.Ordinal);
         Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[8], "with"), "sdk-version"));
