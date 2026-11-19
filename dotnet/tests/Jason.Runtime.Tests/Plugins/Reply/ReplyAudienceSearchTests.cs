@@ -428,6 +428,9 @@ public class ReplyAudienceSearchTests
         {
             var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
             settings["Dispatcher"] = JsonNode.Parse("""{"TickSeconds":3600}""");
+
+            // A start summons nothing here: the review it would summon is the campaign's claim the search's reads wait behind.
+            StartlessTriggers.Narrow(settings);
             File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
             TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId));
         }
