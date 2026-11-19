@@ -119,15 +119,18 @@ export function withoutLines(text: string, folder: string): string {
     // `\n` alone, each line keeping its own `\r`, walked from the end. A block is the marker and the line under it, read
     // past a `\r` or a space at their ends, with the blank line above them where there is one: an empty line, or a lone
     // `\r` where the block itself was later turned to CRLF, its marker line ending in `\r` too, and nothing else, so a
-    // line of spaces, or a lone `\r` over a block that was not turned, is the person's own. With no
-    // blank line above, the `\n` the block began with ended the person's last line, which had none: where the block is
-    // the last thing in the file it goes too, and the file ends as it began; where anything follows, it stays, because
-    // it now separates the person's lines.
-    // The two things not promised, as in C#: in a file that ended without a newline and holds blocks for two folders,
-    // one under the other, taking the upper block out first keeps the newline it began with, since the lower block
-    // follows it, and the file can then no longer be told from one that ended in a newline, so taking the lower block
-    // out after it leaves that newline. And a file that ended without a newline and was later turned whole to CRLF
-    // comes back ending in a carriage return: it is no longer the file the installer wrote into.
+    // line of spaces, or a lone `\r` over a block that was not turned, is the person's own. With no blank line above,
+    // the `\n` the block began with ended the person's last line, which had none: where the block is the last thing in
+    // the file it goes too, and the file ends as it began; where anything follows, it stays, because it now separates
+    // the person's lines.
+    // What is promised, and what is not, as in C#. A profile the installer wrote into comes back byte for byte, the
+    // person's own lines above and below its blocks included. Three cases are not promised, and in each only white
+    // space may differ, never a visible character of the person's: in a file that ended without a newline and holds
+    // blocks for two folders, one under the other, taking the upper block out first keeps the newline it began with,
+    // since the lower block still follows it, and the lower block's removal then leaves that newline; a file turned
+    // whole to CRLF after the installer wrote into it is no longer that file, and is not promised back byte for byte:
+    // what can differ is a line ending at its very end; and where an editor later put spaces on the installer's own
+    // blank line, that line stays, and the file ends without its final newline.
     const line = asBytes(exportLine(folder));
     if (!text.includes(line)) return text;
     const lines = text.split('\n');
