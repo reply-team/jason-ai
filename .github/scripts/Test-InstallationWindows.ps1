@@ -487,8 +487,9 @@ function Write-FeedServerState([System.Diagnostics.Process] $server, [int] $port
 }
 
 # A folder served on 127.0.0.1 at the port by the proof's one feed server (serve-feed.py, which looks no name up between
-# bind and listen), and waited for up to 30 s until its manifest answers 200; the process is returned for the caller to
-# stop. One that never answers is described first, then fails the step.
+# bind and listen), and waited for up to 90 s until its manifest answers 200; the process is returned for the caller to
+# stop. One that never answers is described first, then fails the step. The bound is the proof's own, for its own test
+# server, which a runner's image can start slowly.
 function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     # Each argument quoted, as Start-Process joins them with spaces alone. The server writes every line to the log itself,
     # and to stderr only a usage line.
@@ -497,7 +498,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     $server = Start-Process python -ArgumentList $arguments -PassThru -NoNewWindow -RedirectStandardError "$log.err"
     Register-Scratch "the feed server for 127.0.0.1:$port" $server
     $null = $server.Handle
-    $until = [DateTime]::UtcNow.AddSeconds(30)
+    $until = [DateTime]::UtcNow.AddSeconds(90)
     # An answer counts only once this server says it listens, which on Windows it can only do on a port no other socket
     # holds: before that, or from a server that has ended, the answer came from whatever else holds the port.
     # The log is appended to, so only what this server wrote after the bytes already there counts.
@@ -516,7 +517,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     if ($answered -and -not $server.HasExited) { return $server }
     Write-FeedServerState $server $port $log
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    Fail $(if ($server.HasExited) { "the feed server for 127.0.0.1:$port ended, with $($server.ExitCode), before it answered: its log above says why" } else { "the feed on 127.0.0.1:$port answering did not happen within 30 s" })
+    Fail $(if ($server.HasExited) { "the feed server for 127.0.0.1:$port ended, with $($server.ExitCode), before it answered: its log above says why" } else { "the feed on 127.0.0.1:$port answering did not happen within 90 s" })
 }
 
 function Get-OwnProcesses([string] $folder) {
@@ -540,8 +541,45 @@ function Get-QuietUninstall($entry) {
     return ''
 }
 
+# Jason's Installed apps entries. A key listed and gone before it is read, removed in between by an uninstaller still at
+# work, is no entry; a key still there that cannot be read fails the step. A defence under Wait-UninstallerEnded, not a
+# replacement for it: every reading after an uninstall waits for its uninstaller to end first.
 function Get-JasonUninstallEntries {
-    @(Get-ChildItem -LiteralPath $uninstallKeys -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { ($_.PSObject.Properties.Name -contains 'DisplayName') -and $_.DisplayName -like 'Jason*' })
+    @(Get-ChildItem -LiteralPath $uninstallKeys -ErrorAction SilentlyContinue | ForEach-Object { $key = $_.PSPath; try { Get-ItemProperty -LiteralPath $key -ErrorAction Stop } catch { if (Test-Path -LiteralPath $key) { throw } } } | Where-Object { ($_.PSObject.Properties.Name -contains 'DisplayName') -and $_.DisplayName -like 'Jason*' })
+}
+
+# The uninstaller an uninstall ran, waited for to its end once the application's folder has gone and before anything of the
+# machine is read: the uninstaller removes the folder before it has finished - its Installed apps entry goes after - so a
+# reading taken when the folder goes races it. Waited for: the runs the caller watched, as processes whose handles it took
+# while they ran, and every uninstaller running now - one named Uninstall Jason*.exe, or the copy of itself NSIS runs on
+# from a ~nsu*.tmp folder of the temporary directory once the program started from the application's folder has returned
+# (an uninstaller given no _?=). Each one by its handle, within 150 s of the call, the bound of the folder's own watch and
+# the proof's own, never one the product promises; its exit code is said. One still running at the bound fails the step
+# by its own sentence. $since says what the wait follows.
+function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the application folder went') {
+    $seconds = 150
+    $runs = [ordered]@{}
+    foreach ($process in @($watched | Where-Object { $_ })) { $runs[[int] $process.Id] = $process }
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[0-9A-Fa-f]+\.tmp\\Un[^\\]*\.exe$' })) {
+        $id = [int] $running.ProcessId
+        if ($runs.Contains($id)) { continue }
+        # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.
+        $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+        if (-not $process) { continue }
+        try { $null = $process.Handle; $runs[$id] = $process } catch { Say "the uninstaller run $id ended before its handle could be taken: $($running.CommandLine)" }
+    }
+    if ($runs.Count -eq 0) { Say "no uninstaller runs once $since"; return }
+    $from = Get-Date
+    $until = [DateTime]::UtcNow.AddSeconds($seconds)
+    foreach ($id in @($runs.Keys)) {
+        $process = $runs[$id]
+        $left = [int][Math]::Max(0, ($until - [DateTime]::UtcNow).TotalMilliseconds)
+        if (-not $process.WaitForExit($left)) {
+            Write-JasonProcesses
+            Fail "the uninstaller, process $id, still runs $seconds s after $since"
+        }
+        Say "the uninstaller, process ${id}, ended $([Math]::Round(((Get-Date) - $from).TotalSeconds, 1)) s into the wait that began once $since, exit $($process.ExitCode)"
+    }
 }
 
 # --- the listing --------------------------------------------------------------------------------------------------
@@ -1201,8 +1239,12 @@ switch ($Step) {
                                     $ended = (-not $process) -or $process.WaitForExit($left)
                                     Add-Content -LiteralPath $resets -Value "  the waiter $waiter the removal named $(if ($ended) { 'has ended' } else { 'had not ended within 300 s' })"
                                 }
+                                # Either way, where the folder went, an uninstaller still at work is waited for before Installed
+                                # apps' door reads the entries.
+                                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
                             } else {
                                 while ([DateTime]::UtcNow -lt $deadline -and ((Test-Path -LiteralPath $app) -or @(Get-JasonUninstallEntries).Count -gt 0)) { Start-Sleep -Seconds 2 }
+                                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
                                 Add-Content -LiteralPath $resets -Value "  the removal named no waiter; the application's folder $(if (Test-Path -LiteralPath $app) { 'still stands' } else { 'is gone' }) and its Installed apps entries number $(@(Get-JasonUninstallEntries).Count), after waiting for both to go"
                             }
                         }
@@ -1543,8 +1585,7 @@ switch ($Step) {
         }
         foreach ($id in $runs.Keys) {
             $run = $runs[$id]
-            $exit = if ($run.Process -and $run.Process.HasExited) { $run.Process.ExitCode } else { 'still running' }
-            Say "an uninstaller run after jason uninstall, $(if ($run.Silent) { 'with /S' } else { 'without /S' }): exit $exit, visible windows: $(if ($run.Windows.Count) { $run.Windows -join '; ' } else { 'none' })"
+            Say "an uninstaller run after jason uninstall, process $id, $(if ($run.Silent) { 'with /S' } else { 'without /S' }): visible windows: $(if ($run.Windows.Count) { $run.Windows -join '; ' } else { 'none' })"
         }
         if ($asked) {
             Write-JasonProcesses
@@ -1554,18 +1595,23 @@ switch ($Step) {
             Stop-Process -Id $asked.Id -Force -ErrorAction SilentlyContinue
             Wait-Until { -not (Get-Process -Id $asked.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
             Say 'that run was ended unanswered; the application stays installed, and Installed apps takes it off in the next leg'
+        } elseif (Test-Path -LiteralPath $app) {
+            Write-JasonProcesses
+            Fail "the application's folder had not gone 150 s after jason uninstall ended"
+        }
+        # Every run watched, ended before anything of the machine is read, each with its exit code: the folder goes before
+        # the uninstaller has finished.
+        Wait-UninstallerEnded @($runs.Values | ForEach-Object { $_.Process }) $(if ($asked) { 'the asking run was ended' } else { 'the application folder went' })
+        if ($asked) {
             $entry = @(Get-JasonUninstallEntries)
             if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                 $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
                 Say "the quiet uninstall Installed apps runs ended $quiet"
                 if ($quiet -ne 0) { Fail-Held "the quiet uninstall Installed apps runs ended $quiet with nothing of Jason running" }
                 Wait-Until { -not (Test-Path -LiteralPath $app) -or $quiet -ne 0 } 120 "the application's folder going after the quiet uninstall"
+                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
             }
             return
-        }
-        if (Test-Path -LiteralPath $app) {
-            Write-JasonProcesses
-            Fail "the application's folder had not gone 150 s after jason uninstall ended"
         }
         Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 "the Installed apps entry going"
         Start-Sleep -Seconds 5
@@ -1705,6 +1751,7 @@ switch ($Step) {
                 if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                     $null = Wait-Program $Matches['file'] @($Matches['arguments'])
                     Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
+                    Wait-UninstallerEnded @()
                 }
             }
             $installed = Wait-Program $old @('/S')
@@ -2005,6 +2052,7 @@ switch ($Step) {
         $removed = Invoke-Program $carried @('uninstall', '--purge-data', '--yes')
         if ($removed.Exit -ne 0) { Fail "jason uninstall after the update exited with $($removed.Exit): $($removed.Said)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        Wait-UninstallerEnded @()
         if ($failure) { Fail $failure }
     }
 
@@ -2016,6 +2064,7 @@ switch ($Step) {
         $removal = Wait-Program $Matches['file'] @($Matches['arguments'])
         if ($removal -ne 0) { Fail "the uninstall Installed apps runs exited with $removal" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 60 "the application's folder going"
+        Wait-UninstallerEnded @()
         Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 'the Installed apps entry going after the folder'
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left: the uninstaller did not run jason uninstall --keep-application' }
         foreach ($root in @('.claude\skills', '.agents\skills')) { if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE "$root\.jason-skills.json")) { Fail "the skills record in $root is left" } }
@@ -2198,6 +2247,7 @@ switch ($Step) {
         $removed = Invoke-Program $carried @('uninstall') $quiet 300
         if ($removed.Exit -ne 0) { Fail "jason uninstall with no --purge-data exited with $($removed.Exit): $($removed.Said)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        Wait-UninstallerEnded @()
         if (-not (Test-Path -LiteralPath $data)) { Fail "jason uninstall with no --purge-data took the data directory $data" }
         if (-not (Test-Path -LiteralPath $harnessRoot)) { Fail "jason uninstall with no --purge-data took the harness root $harnessRoot" }
         Say "jason uninstall with no --purge-data took the application off and kept the data directory and the harness root"
@@ -2300,6 +2350,7 @@ switch ($Step) {
             $ran = Invoke-Program $carried @('uninstall', '--purge-data', '--yes') $quiet 300
             if ($ran.Exit -ne 0) { Fail "jason uninstall --purge-data --yes after moving again exited with $($ran.Exit): $($ran.Said)" }
             Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+            Wait-UninstallerEnded @()
             $remover = "the moved install's own uninstall"
             Say "$Version's own uninstall --purge-data --yes, after moving again, ended 0 and the application's folder went"
 

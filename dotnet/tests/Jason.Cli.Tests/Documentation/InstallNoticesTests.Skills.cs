@@ -202,6 +202,9 @@ public sealed partial class InstallNoticesTests
         // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
         Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        // Its answer waited for up to 90 s: the server is the proof's own, and a runner's image can start it slowly.
+        Assert.Contains("    $until = [DateTime]::UtcNow.AddSeconds(90)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\"the feed on 127.0.0.1:$port answering did not happen within 90 s\"", script, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
     }
 
