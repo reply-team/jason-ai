@@ -1288,7 +1288,9 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// The real proof: CI runs each script against what the same run packaged: install.ps1 from a local directory, and
-    /// install.sh on Ubuntu through the apt route's leg, against the product's address as the leg serves it.
+    /// install.sh on Ubuntu through the apt route's leg, against the product's address as the leg serves it. The leg
+    /// moves a build older than install.sh's floor for Linux up to it, reading the floor from the one line that refuses
+    /// below it: a rewrite of that line would otherwise fail only the leg, late in the run.
     /// </summary>
     [Fact]
     public void Ci_runs_both_scripts_against_what_it_built()
@@ -1297,7 +1299,11 @@ public partial class InstallScriptTests
         Assert.Contains("install/install.ps1", ci, StringComparison.Ordinal);
         Assert.Contains("JASON_INSTALL_FEED", ci, StringComparison.Ordinal);
         Assert.Contains("bash .github/scripts/test-apt-route.sh apt\n", ci, StringComparison.Ordinal);
-        Assert.Contains("\"$repository/install/install.sh\"", File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-apt-route.sh")), StringComparison.Ordinal);
+        var leg = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-apt-route.sh"));
+        Assert.Contains("\"$repository/install/install.sh\"", leg, StringComparison.Ordinal);
+        Assert.Contains("floor=$(sed -n 's/^ *if older_than \"\\$LATEST\" \\([0-9.]*\\) .*/\\1/p' \"$repository/install/install.sh\")", leg, StringComparison.Ordinal);
+        var floor = Assert.Single(Script("install.sh").Split('\n'), line => Regex.IsMatch(line, @"^ *if older_than ""\$LATEST"" [0-9.]+ "));
+        Assert.Contains("if older_than \"$LATEST\" 0.49.1 ", floor, StringComparison.Ordinal);
     }
 
     // --- install.ps1, run rather than read ----------------------------------------------------------------

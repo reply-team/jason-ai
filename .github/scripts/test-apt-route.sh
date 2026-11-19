@@ -5,9 +5,9 @@
 #
 #   test-apt-route.sh <folder>
 #
-# <folder> holds the deb, jason-desktop-linux-x64.deb. The leg makes two releases of it: this one, and the next patch,
-# the same package with its version moved on (in its control file and its version.json), which is what an update
-# changes for apt. Each gets the index a release attaches, written by write-apt-index.sh and signed with a key the leg
+# <folder> holds the deb, jason-desktop-linux-x64.deb. The leg makes two releases of it: this one (moved up to the
+# install line's floor for Linux where it is older), and the next patch, the same package with its version moved on (in
+# its control file and its version.json), which is what an update changes for apt. Each gets the index a release attaches, written by write-apt-index.sh and signed with a key the leg
 # makes, since a pull request holds no signing key. Nothing in the product carries a switch for this: the machine is
 # made to answer for the address instead. Its host name and two stand-ins for GitHub's are mapped to this machine in
 # /etc/hosts, and a certificate of the leg's own, which the machine trusts for the run, is served by
@@ -98,11 +98,29 @@ dpkg-query -W jason-desktop > /dev/null 2>&1 && fail "jason-desktop is known to 
 listing > "$work/before"
 
 # The two releases, this one and the next patch, each with the index a release attaches, signed by the leg's key: an
-# Ed25519 key that certifies with a signing subkey, as the repository's is.
-version=$(dpkg-deb --field "$deb" Version)
-release=${version//\~/-}
+# Ed25519 key that certifies with a signing subkey, as the repository's is. A release branch builds the number of its
+# last tag until its last unit sets the release's own, so this run's deb can be older than the first release the install
+# line takes on Linux, the floor it refuses below. The first release is then this deb moved to the floor, its
+# pre-release part kept, as the next one is moved on.
+built=$(dpkg-deb --field "$deb" Version)
+built=${built//\~/-}
+floor=$(sed -n 's/^ *if older_than "\$LATEST" \([0-9.]*\) .*/\1/p' "$repository/install/install.sh")
+[ -n "$floor" ] || fail "install.sh names no floor for Linux in the line that refuses an older release."
+release=$built
+if dpkg --compare-versions "${built%%[-+]*}" lt "$floor"; then release="$floor${built#"${built%%[-+]*}"}"; fi
 core=${release%%[-+]*}
 next="${core%.*}.$((${core##*.} + 1))"
+mkdir "$work/repack"
+repack() {
+  local to=$1 root="$work/repack/$1"
+  dpkg-deb -R "$deb" "$root"
+  sed -i "s/^Version: .*/Version: ${to//-/\~}/" "$root/DEBIAN/control"
+  printf '{\n  "version": "%s"\n}\n' "$to" > "$root/opt/Jason/resources/bundle/version.json"
+  dpkg-deb --root-owner-group -Zgzip -b "$root" "$work/repack/$to.deb" > /dev/null
+}
+first=$deb
+if [ "$release" != "$built" ]; then repack "$release"; first="$work/repack/$release.deb"; fi
+version=$(dpkg-deb --field "$first" Version)
 mkdir -m 700 "$work/gpg"
 export GNUPGHOME="$work/gpg"
 gpg --batch --passphrase '' --quick-generate-key 'Jason apt index, this leg alone' ed25519 cert 1d 2> /dev/null
@@ -118,16 +136,12 @@ publish() {
   printf '{\n  "schema": 1,\n  "version": "%s"\n}\n' "$tag" > "$work/releases/v$tag/manifest.json"
   (cd "$work/releases/v$tag" && sha256sum jason-desktop-linux-x64.deb > checksums.txt)
 }
-publish "$release" "$deb"
-mkdir "$work/repack"
-dpkg-deb -R "$deb" "$work/repack/root"
-sed -i "s/^Version: .*/Version: $next/" "$work/repack/root/DEBIAN/control"
-printf '{\n  "version": "%s"\n}\n' "$next" > "$work/repack/root/opt/Jason/resources/bundle/version.json"
-dpkg-deb --root-owner-group -Zgzip -b "$work/repack/root" "$work/repack/next.deb" > /dev/null
-publish "$next" "$work/repack/next.deb"
+publish "$release" "$first"
+repack "$next"
+publish "$next" "$work/repack/$next.deb"
 unset GNUPGHOME
 echo "$release" > "$work/releases/latest"
-echo "Two releases made of this run's deb, $release and $next, each with its index signed by the leg's key ($fpr)."
+echo "Two releases made of this run's deb, $built: $release and $next, each with its index signed by the leg's key ($fpr)."
 
 # The chain, for the address and GitHub's hosts.
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=test-apt-route CA" -keyout "$work/ca.key" -out "$work/ca.crt" \
@@ -178,7 +192,7 @@ apt-config dump | grep -qF 'Unattended-Upgrade::Origins-Pattern:: "origin=Jason,
   || fail "apt does not read the rule that lets the automatic updates take Jason's."
 [ "$(readlink /usr/bin/jason)" = /opt/Jason/resources/bundle/jason ] || fail "/usr/bin/jason is not the jason the package carries."
 said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -l -c 'jason --version')
-[ "${said%%+*}" = "$release" ] || fail "A new login shell's jason says '$said', and the package is $version."
+[ "${said%%+*}" = "$built" ] || fail "A new login shell's jason says '$said', and this run's build is $built."
 echo "The deb placed Jason's source, its key, the rule for automatic updates and /usr/bin/jason; a new login shell runs jason $said."
 
 # The repository's key, which the package placed, stands for the leg's from here on.
