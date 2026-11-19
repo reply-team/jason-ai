@@ -14,7 +14,10 @@ import { senderReads, type SenderReads } from './senders';
 import { clock, here } from './state';
 import {
     approvalGate,
+    APPROVED_LINE_LEAVES_MS,
     approvedSentence,
+    endedWell,
+    linesStaying,
     readingSentence,
     toApprovalCard,
     toQuestionCard,
@@ -382,6 +385,28 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const questions = store.questions.value;
     const refused = waiting.refused.value;
     const approved = waiting.approved.value;
+    // A line that ended well leaves five seconds after it first showed that: the clock starts when it is drawn so, and
+    // the timers end with this drawing.
+    const shownFinal = useRef(new Map<string, number>());
+    const leaving = useRef(new Set<ReturnType<typeof setTimeout>>());
+    useEffect(() => {
+        for (const each of approved) {
+            if (!endedWell(each) || shownFinal.current.has(each.approvalId)) continue;
+            shownFinal.current.set(each.approvalId, Date.now());
+            const timer = setTimeout(() => {
+                leaving.current.delete(timer);
+                waiting.approved.value = linesStaying(waiting.approved.value, shownFinal.current, Date.now());
+            }, APPROVED_LINE_LEAVES_MS);
+            leaving.current.add(timer);
+        }
+    }, [approved, waiting]);
+    useEffect(
+        () => () => {
+            for (const timer of leaving.current) clearTimeout(timer);
+            leaving.current.clear();
+        },
+        [],
+    );
     // What the runtime refused, with its code: an act's refusal stays until the next act; a read that failed, until the
     // next read.
     const failure = store.failure.value;
