@@ -193,7 +193,9 @@ rather than trusting the brief to name one.
 **`escalation` is the verb to raise a question with**, in a key of its own beside a list that also
 holds it. A role should not have to pick the one verb that changes what happens next out of a list.
 
-**`allowed_operations` is guidance and not a permission.** Nothing in the runtime consults it. The
+**`allowed_operations` is guidance and not a permission.** Nothing in the runtime consults it. One
+thing beside it is enforced, by refusal: `campaign.start` sent from inside a run is refused `decided_inside_a_run`,
+whatever actor it names, so a review may pause its campaign and leaves starting or resuming it to a person. The
 answer to a call outside that list is the answer anybody gets: deterministic guardrails still apply,
 approvals still park what needs a person, and being the manager grants no authority at all. A second
 permission system would be a second place for authority to be wrong. The list names Runtime API verbs, so its

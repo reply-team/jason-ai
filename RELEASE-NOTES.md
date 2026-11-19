@@ -24,7 +24,8 @@ replaces the title and the body together.
 ## What is new since 0.48.5
 
 - **A campaign's manager looks at it when it starts.** When you start a campaign, or start it again after a pause, its
-  manager looks at it at once instead of at its first scheduled review, five hours later by default.
+  manager looks at it at once instead of at its first scheduled review, five hours later by default. A role can pause a
+  campaign and cannot start or resume one: that is yours, or your own session's on your word.
 - **The desktop chat follows the answer.** While you are at the end of the conversation, it follows what is added
   there: your message, the AI's words as they come, a card. Scroll up and it keeps your place until you come back to
   the end or send something; a message you send, and a card that asks for your permission, always bring you back,

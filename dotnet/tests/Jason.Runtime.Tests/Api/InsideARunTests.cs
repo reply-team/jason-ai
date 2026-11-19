@@ -14,8 +14,8 @@ namespace Jason.Runtime.Tests.Api;
 /// <summary>
 /// A person's word given from inside a run. The CLI says where it runs with one header, <c>Jason-Attempt</c>, whenever its
 /// environment names the attempt it was launched for; the verbs that are a person's own word — the two decisions on an
-/// approval, a standing approval set or taken back, an answer, a preference set or taken back, and a campaign's send mode
-/// — refuse any request
+/// approval, a standing approval set or taken back, an answer, a preference set or taken back, a campaign's send mode
+/// and its start — refuse any request
 /// that carries it, whatever actor the body claims, and record nothing. Every other verb reads past the header: the fenced
 /// ones keep their attempt in the body, and the header is never their fence.
 /// </summary>
@@ -43,6 +43,7 @@ public class InsideARunTests
         Operations.PreferenceSet,
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
+        Operations.CampaignStart,
     ];
 
     /// <summary>
@@ -65,7 +66,9 @@ public class InsideARunTests
         Assert.Equal("decided_inside_a_run", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
+            operation == Operations.CampaignStart
+                ? $"This request comes from inside attempt `{HeaderAttempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision."
+                : $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
             error.Message);
         Assert.Equal(before, await StateAsync(api));
 
@@ -113,7 +116,9 @@ public class InsideARunTests
 
     /// <summary>
     /// These and no more. A campaign's send mode is among them, since the claim releases sends in the name of the person
-    /// who set it. A preference is among them for every key, not for the keys that steer sends alone: a preference
+    /// who set it. A campaign's start is among them: a role may pause a campaign and only a person starts or resumes one,
+    /// and a check-in that could start its own campaign under another actor would summon its own successor. A preference
+    /// is among them for every key, not for the keys that steer sends alone: a preference
     /// is what a named person states, and in a dispatched run no person is there, so a run that names a person on any key
     /// is what the refusal exists for. The gate is by operation and never reads the body, so it holds a key nobody has
     /// written yet; refusing some keys in the service instead would be a second mechanism the next sensitive key had to
@@ -218,6 +223,9 @@ public class InsideARunTests
 
             case Operations.CampaignSetSendMode:
                 return new { campaign_id = await CampaignAsync(api), cold = "automatic", actor = Ada };
+
+            case Operations.CampaignStart:
+                return new { campaign_id = await CampaignAsync(api), actor = Ada };
 
             case Operations.PreferenceUnset:
                 await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "tone_of_voice", value = new { summary = "Plain." }, actor = Ada }, Ct);
