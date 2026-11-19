@@ -1697,9 +1697,16 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
     private string XdgCache => Path.Combine(_tree.Paths.Root, "xdg", "cache");
 
-    [Fact]
+    /// <summary>
+    /// With <c>--purge-data</c> as without it: an AppImage's jason runs as a copy under the data directory's
+    /// <c>desktop/bundle</c>, which is the data directory's own and goes with it, so that copy is not an installation the
+    /// data directory holds and the purge is not refused for it. Catches the purge refused on every AppImage machine.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
-    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last()
+    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge)
     {
         var places = LinuxPlaces();
         var (copy, file) = AppImage();
@@ -1723,7 +1730,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var harnessRoot = Plant(Path.Combine(Home, "Jason"));
         var (env, output, remover) = Environment(places, copy);
 
-        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, purge, false), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
         var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
@@ -1741,10 +1748,11 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.Equal("alias ll='ls -l'\n", File.ReadAllText(bashrc));
         Assert.True(File.Exists(anotherIcon), "another application's icon went");
-        Assert.True(File.Exists(settings), "the data directory's own files went without the word");
+        Assert.Equal(!purge, File.Exists(settings));
         Assert.True(Directory.Exists(harnessRoot), "the harness root went");
 
-        // The file is the last thing removed: everything above ran from the copy of the jason it carries.
+        // The file is the last thing removed, after the data directory where it is purged: everything above ran from the
+        // copy of the jason it carries.
         Assert.Equal($"file.remove {file}", remover.Calls[^1]);
     }
 

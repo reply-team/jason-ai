@@ -290,13 +290,18 @@ public static class UninstallCommand
         }
 
         // And a data directory that is not one is refused before anything is read. JASON_DATA_DIR may name any
-        // directory at all, and the purge used to delete the one it named, recursively, whatever it was.
+        // directory at all, and the purge used to delete the one it named, recursively, whatever it was. An AppImage's jason
+        // runs as a copy under this data directory's desktop/bundle, which is the data directory's own and goes with it, so
+        // that copy is no installation the data directory holds.
+        var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        var ownCopy = running is not null && env.Setup is { Platform: SetupSystem.Linux } && !SetupPlaces.CarriedByDeb(running)
+            && string.Equals(Path.GetFullPath(Update.AppImageCopy.BundlesOf(running)), Path.GetFullPath(Update.AppImageCopy.BundlesUnder(env.Paths.Root)), StringComparison.Ordinal);
         if (options.PurgeData
             && DataDirectoryBelt.Refusal(
                 env.Paths.Root,
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 Path.GetTempPath(),
-                Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty)) is { } refusal)
+                ownCopy ? null : Path.GetDirectoryName(running ?? string.Empty)) is { } refusal)
         {
             return Refuse(
                 env,
