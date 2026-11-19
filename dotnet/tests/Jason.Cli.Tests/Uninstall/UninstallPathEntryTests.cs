@@ -334,6 +334,41 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// A last line of spaces, with no newline after it, is the person's own and not the blank line the installer writes:
+    /// it stays, and the file ends as it began.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\n   ")]
+    [InlineData("# mine\n\t ")]
+    [InlineData("   ")]
+    public void A_last_line_of_spaces_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// The blank line the installer wrote, turned to a lone <c>\r</c> when the whole file was later turned to CRLF, is
+    /// still the installer's blank line, and goes with the block.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("")]
+    public void A_blank_line_turned_to_crlf_is_still_the_installers_blank(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+        File.WriteAllText(profile, File.ReadAllText(profile).Replace("\n", "\r\n", StringComparison.Ordinal));
+
+        Assert.Equal(Bytes(original.Replace("\n", "\r\n", StringComparison.Ordinal)), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
     /// Two blocks: the same block twice, as a repair appended it before it looked for the line first, both go; and a
     /// second folder's block above which the first stands comes off in its turn. Either way the file ends as it began.
     /// </summary>
@@ -394,7 +429,7 @@ public class UninstallPathEntryTests
             "", "\n", "\n\n\n", "\r\n", "x", "x\n", "x\r", "x\r\n", "a\nb", "a\nb\n", "a\n\nb", "a\n\nb\n\n",
             "a\r\nb\r\nc", "a\r\nb\r\nc\r\n", "mixed\r\nends\nhere", "\ttabbed\n\tlines", "# é, ü and ß\nexport X=1",
             "# added by jason install", "# added by jason install\n", $"# {PathEntry.ExportLine(Directory)}",
-            $"x\n{PathEntry.ExportLine("/opt/other/bin")}", "alias ll='ls -l'",
+            $"x\n{PathEntry.ExportLine("/opt/other/bin")}", "alias ll='ls -l'", "   ", "a\n \t", "a\n   \n",
         ];
 
         using var tree = new TempTree();

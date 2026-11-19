@@ -577,11 +577,14 @@ public static class PathEntry
     /// </para>
     /// <para>
     /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
-    /// which is what both the installer and the repair append. Appended to a file whose last line had no newline, the
-    /// newline the block begins with ended that line instead of making a blank one: where such a block is the last
-    /// thing in the file, that newline goes with it, and the file ends as it began; where anything follows, it stays. A line nobody marked is somebody's own, written
-    /// by hand, and stays: this verb removes only what this installer wrote, on this platform as on the other,
-    /// where an entry the installer did not write is left on the Path too.
+    /// which is what both the installer and the repair append. That blank line is empty, or a lone <c>\r</c> where the
+    /// file was later turned to CRLF, and nothing else: a line of spaces is the person's own. Appended to a file whose
+    /// last line had no newline, the newline the block begins with ended that line instead of making a blank one: where
+    /// such a block is the last thing in the file, that newline goes with it, and the file ends as it began; where
+    /// anything follows, it stays. A line nobody marked is somebody's own, written by hand, and stays: this verb
+    /// removes only what this installer wrote, on this platform as on the other, where an entry the installer did not
+    /// write is left on the Path too. The desktop's own removal (<c>desktop/src/path-profile.ts</c>) is the same rule
+    /// and is held to the same cases.
     /// </para>
     /// <para>
     /// <b>Every other byte stays as it was.</b> The text is split on <c>\n</c> alone and each line keeps its own
@@ -615,7 +618,9 @@ public static class PathEntry
 
             // Exactly what the script appended, and in that order: a blank line, the marker, the line.
             var first = index - 1;
-            var blankAbove = first > 0 && lines[first - 1].Trim().Length == 0;
+            // The installer's blank line is empty, or a lone \r where the file was later turned to CRLF. A line of
+            // spaces is the person's own.
+            var blankAbove = first > 0 && (lines[first - 1] is "" or "\r");
             if (blankAbove)
             {
                 first--;

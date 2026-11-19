@@ -115,28 +115,44 @@ export function carriesLine(text: string, folder: string): boolean {
  * the blank line above them where there is one — or the same string when it carries none. Every other byte stays.
  */
 export function withoutLines(text: string, folder: string): string {
-    // Exactly what the append wrote, `\n<marker>\n<line>\n`, ending the file or a line of it, walked from the end as the
-    // uninstall walks it. Where a newline stands before it, its first `\n` made the blank line and goes with it. Where
-    // none does, the profile's last line had no newline and that `\n` ended it: it goes too where nothing follows the
-    // block, so the file ends as it began, and stays where something does, because it now separates the person's lines.
-    const block = `\n${profileMarker}\n${asBytes(exportLine(folder))}`;
-    let out = text;
-    let from = out.length;
-    while (from >= 0) {
-        const at = out.lastIndexOf(block, from);
-        if (at < 0) break;
-        const end = at + block.length;
-        const after = end === out.length ? end : out[end] === '\n' ? end + 1 : -1;
-        if (after < 0) {
-            from = at - 1;
-            continue;
-        }
-        const blankAbove = at === 0 || out[at - 1] === '\n';
-        out = out.slice(0, blankAbove || after === out.length ? at : at + 1) + out.slice(after);
-        from = at;
+    // The uninstall's rule (`PathEntry.WithoutEntry` in C#), line for line, and held to the same cases: the text split on
+    // `\n` alone, each line keeping its own `\r`, walked from the end. A block is the marker and the line under it, read
+    // past a `\r` or a space at their ends, with the blank line above them where there is one: an empty line, or a lone
+    // `\r` where the file was later turned to CRLF, and nothing else, so a line of spaces is the person's own. With no
+    // blank line above, the `\n` the block began with ended the person's last line, which had none: where the block is
+    // the last thing in the file it goes too, and the file ends as it began; where anything follows, it stays, because
+    // it now separates the person's lines.
+    const line = asBytes(exportLine(folder));
+    if (!text.includes(line)) return text;
+    const lines = text.split('\n');
+    let removed = false;
+    for (let index = lines.length - 1; index >= 0; index--) {
+        if (trimmedEnd(lines[index]) !== line || index === 0 || trimmedEnd(trimmedStart(lines[index - 1])) !== profileMarker) continue;
+        let first = index - 1;
+        const blankAbove = first > 0 && (lines[first - 1] === '' || lines[first - 1] === '\r');
+        if (blankAbove) first--;
+        let last = index;
+        if (!blankAbove && first > 0 && index === lines.length - 2 && lines[lines.length - 1] === '') last++;
+        lines.splice(first, last - first + 1);
+        removed = true;
+        // And on above what was just taken out.
+        index = first;
     }
-    return out === text ? text : out;
+    return removed ? lines.join('\n') : text;
 }
+
+/** What .NET's `TrimStart` and `TrimEnd` take off a profile's line read one character a byte: the white space among the first 256. */
+const whiteSpace = '\t\n\v\f\r \u0085 ';
+const trimmedStart = (text: string | undefined = '') => {
+    let from = 0;
+    while (from < text.length && whiteSpace.includes(text.charAt(from))) from++;
+    return text.slice(from);
+};
+const trimmedEnd = (text: string | undefined = '') => {
+    let to = text.length;
+    while (to > 0 && whiteSpace.includes(text.charAt(to - 1))) to--;
+    return text.slice(0, to);
+};
 
 /**
  * Whether the folder holds a character the shell reads inside the line's double quotes — `"`, `$`, a backtick or a
