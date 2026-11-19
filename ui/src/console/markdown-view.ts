@@ -2,6 +2,7 @@ import { signal } from '@preact/signals-react';
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { html, type Html } from './html';
+import { svg } from './icons';
 import { markdown, type Block, type Inline } from './markdown';
 
 // The agent's words drawn from the Markdown subset's tree. Every word is text the html tag escapes; the elements are
@@ -82,14 +83,23 @@ function blockView(block: Block): Html {
         case 'code': {
             const key = `${place}:${counter++}`;
             const said = copied.value?.key === key ? copied.value.outcome : null;
-            const label =
+            // An icon, named by the words it stands for, which a pointer that rests on it shows too.
+            const [label, mark] =
                 said === 'copied'
-                    ? t('chat.code.copied')
+                    ? [t('chat.code.copied'), 'copied' as const]
                     : said === 'refused'
-                      ? t('chat.code.notCopied')
-                      : t('chat.code.copy');
+                      ? [t('chat.code.notCopied'), 'notCopied' as const]
+                      : [t('chat.code.copy'), 'copy' as const];
             return html`<div class="chat-md-code">
-                <button type="button" class="chat-md-copy" ${act('chat.copyCode', key)}>${label}</button>
+                <button
+                    type="button"
+                    class="chat-md-copy"
+                    aria-label="${label}"
+                    title="${label}"
+                    ${act('chat.copyCode', key)}
+                >
+                    ${svg(mark, 16)}
+                </button>
                 <pre><code>${block.text}</code></pre>
             </div>`;
         }

@@ -762,28 +762,46 @@
     padding: 0;
     background: none;
 }
-/* A code block's Copy code button sits at its top right, over the block, and is read from its own corner. */
+/* A code block's Copy code button is an icon at its top right, over the block, read from its own corner. Its offset
+   centres it on a block of one line, and a taller block keeps it at the same place, its top right
+   (`tests/e2e/code-copy.spec.ts`): the button takes the block's font size, so its line is the block's line, and a block
+   of one line is that line and 18px of padding and border, against the button's 24px, so half the line less 3px. The
+   `lh` unit is drawn by the Chromium Jason Desktop carries, and by current Chrome, Edge, Firefox and Safari alike.
+   Once copied its check is green, and when the copy failed its cross is red. */
 .jc-console .chat-md-code {
     position: relative;
 }
 .jc-console .chat-md-code pre {
-    padding-right: 84px;
+    padding-right: 40px;
 }
 .jc-console .chat-md-copy {
     position: absolute;
-    top: 12px;
+    top: calc(0.5lh - 3px);
     right: 6px;
-    padding: 2px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    padding: 0;
     border: 1px solid var(--line2);
     border-radius: 6px;
     background: var(--panel);
-    color: inherit;
-    font: inherit;
-    font-size: 11.5px;
+    color: var(--mute);
+    font-size: 12.5px;
+    line-height: inherit;
     cursor: pointer;
 }
 .jc-console .chat-md-copy:hover {
     background: var(--panel-2);
+    color: var(--ink);
+}
+.jc-console .chat-md-copy .chat-md-tick {
+    stroke: var(--green);
+}
+.jc-console .chat-md-copy .chat-md-cross {
+    stroke: var(--red);
 }
 .jc-console .chat-md-table {
     margin: 6px 0 10px;
