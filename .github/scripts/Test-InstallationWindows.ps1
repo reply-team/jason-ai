@@ -553,14 +553,17 @@ function Get-JasonUninstallEntries {
 # reading taken when the folder goes races it. Waited for: the runs the caller watched, as processes whose handles it took
 # while they ran, and every uninstaller running now - one named Uninstall Jason*.exe, or the copy of itself NSIS runs on
 # from a ~nsu*.tmp folder of the temporary directory once the program started from the application's folder has returned
-# (an uninstaller given no _?=). Each one by its handle, within 150 s of the call, the bound of the folder's own watch and
+# (an uninstaller given no _?=). That copy is matched as any program in any folder named ~nsu*.tmp, wide on purpose: NSIS
+# has named the copy Au_.exe, Un_A.exe and Un.exe, and the folder ~nsu.tmp or ~nsu<hex>.tmp with the number counting on
+# where a folder is held, and none of this proof's listings has shown one; a narrower pattern could miss a run and say
+# none runs. Each one by its handle, within 150 s of the call, the bound of the folder's own watch and
 # the proof's own, never one the product promises; its exit code is said. One still running at the bound fails the step
 # by its own sentence. $since says what the wait follows.
 function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the application folder went') {
     $seconds = 150
     $runs = [ordered]@{}
     foreach ($process in @($watched | Where-Object { $_ })) { $runs[[int] $process.Id] = $process }
-    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[0-9A-Fa-f]+\.tmp\\Un[^\\]*\.exe$' })) {
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' })) {
         $id = [int] $running.ProcessId
         if ($runs.Contains($id)) { continue }
         # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.

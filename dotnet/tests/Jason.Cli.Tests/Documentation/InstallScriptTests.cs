@@ -798,10 +798,21 @@ public partial class InstallScriptTests
         Assert.True(helperAt >= 0, "Test-InstallationWindows.ps1 has no Wait-UninstallerEnded, the one wait for an uninstaller's end before the machine is read");
         var helper = code[helperAt..];
         helper = helper[..helper.IndexOf("\n}\n", StringComparison.Ordinal)];
+        // The copy NSIS runs on is matched by any program in any ~nsu*.tmp folder, whatever NSIS names the folder or the
+        // copy: a narrower pattern can miss a run and say none runs. PowerShell's -match is .NET's, ignoring case.
+        var copy = Regex.Match(helper, @"""\$\(\$_\.ExecutablePath\)"" -match '(?<pattern>[^']+)'");
+        Assert.True(copy.Success, "Wait-UninstallerEnded no longer matches the copy NSIS runs on by its path");
+        var temporary = @"C:\Users\runneradmin\AppData\Local\Temp\2\";
+        foreach (var path in new[] { "~nsu.tmp\\Au_.exe", "~nsuA.tmp\\Un_A.exe", "~nsu1.tmp\\Un.exe", "~nsuG.tmp\\Un_A.exe", "~NSU1F.TMP\\Un.EXE", "~nsu12.tmp\\other.exe" })
+        {
+            Assert.True(Regex.IsMatch(temporary + path, copy.Groups["pattern"].Value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+                $"Wait-UninstallerEnded's pattern '{copy.Groups["pattern"].Value}' misses an NSIS copy at {temporary}{path}");
+        }
+
         foreach (var said in new[]
         {
             "$seconds = 150",
-            "$_.Name -like 'Uninstall Jason*.exe' -or \"$($_.ExecutablePath)\" -match '\\\\~nsu[0-9A-Fa-f]+\\.tmp\\\\Un[^\\\\]*\\.exe$'",
+            "$_.Name -like 'Uninstall Jason*.exe' -or \"$($_.ExecutablePath)\" -match '\\\\~nsu[^\\\\]*\\.tmp\\\\[^\\\\]+\\.exe$'",
             "$null = $process.Handle",
             "if (-not $process.WaitForExit($left)) {",
             "Fail \"the uninstaller, process $id, still runs $seconds s after $since\"",
