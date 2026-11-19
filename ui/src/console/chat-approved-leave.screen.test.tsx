@@ -103,4 +103,15 @@ describe('the lines of what a chat approved', () => {
         expect(line(/It was sent\./)).toBeNull();
         expect(line(/Jason is sending it\./)).not.toBeNull();
     });
+
+    it('still takes a line away when the clock reads no later than it did at the drawing', async () => {
+        draw('cmp_leave_clock', [{ ...message, state: 'done' }]);
+        await tick(0);
+        expect(line(/It was sent\./)).not.toBeNull();
+        const shown = Date.now();
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(shown - 3000);
+        await tick(APPROVED_LINE_LEAVES_MS);
+        clock.mockRestore();
+        expect(line(/It was sent\./)).toBeNull();
+    });
 });

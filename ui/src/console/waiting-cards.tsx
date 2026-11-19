@@ -392,10 +392,15 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     useEffect(() => {
         for (const each of approved) {
             if (!endedWell(each) || shownFinal.current.has(each.approvalId)) continue;
-            shownFinal.current.set(each.approvalId, Date.now());
+            const at = Date.now();
+            shownFinal.current.set(each.approvalId, at);
             const timer = setTimeout(() => {
                 leaving.current.delete(timer);
-                waiting.approved.value = linesStaying(waiting.approved.value, shownFinal.current, Date.now());
+                waiting.approved.value = linesStaying(
+                    waiting.approved.value,
+                    shownFinal.current,
+                    Math.max(Date.now(), at + APPROVED_LINE_LEAVES_MS),
+                );
             }, APPROVED_LINE_LEAVES_MS);
             leaving.current.add(timer);
         }
