@@ -27,7 +27,6 @@ public partial class ReleaseWorkflowTests
     private const string AptWriteStep = "Write the apt repository's index, signed with the release's key";
     private const string AptCheckStep = "Read the index back as a machine's apt does";
     private const string AptCiStep = "Write and read back the apt repository's index as a release does, signed with a key this run makes";
-    private const string AptRouteStep = "The deb's apt route, from the install through the repository to the purge";
     private const string Deb = "jason-desktop-linux-x64.deb";
 
     /// <summary>

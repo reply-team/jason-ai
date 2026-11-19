@@ -1,7 +1,7 @@
 #!/bin/bash
 # Jason Desktop's apt route on a machine with apt, proven end to end against this run's own deb and index, served the way
-# the product's address and GitHub serve a release: run by CI's desktop job on ubuntu-latest, and on any Ubuntu where it
-# may use sudo, or runs as root.
+# the product's address and GitHub serve a release: run by CI on ubuntu-latest, and on any Ubuntu, by an account that may
+# use sudo without a password (install.sh refuses root).
 #
 #   test-apt-route.sh <folder> <keyring>
 #
@@ -15,7 +15,10 @@
 #
 # What it proves, in order, each check failing the leg with one ::error line:
 #   1. the listing of every place the package and apt write, taken before anything is installed;
-#   2. the deb installed by apt from the file: the source naming the address's /apt/ path signed by
+#   2. the install line, install.sh, run as the published line runs, against the address: with no terminal and no
+#      desktop session to ask a password in, it refuses in its own words and installs nothing; with a terminal it
+#      installs the deb by sudo and apt, and the jason the package carries sets the account up, its last line naming
+#      /usr/bin/jason. What the package placed: the source naming the address's /apt/ path signed by
 #      /usr/share/keyrings/jason-desktop.gpg, that key the repository's, the rule for automatic updates a configuration
 #      file apt reads, and /usr/bin/jason the jason the package carries, found by name in a new login shell;
 #   3. apt reading the repository through the chain, offering the deb's version from it, and installing the package from
@@ -33,10 +36,11 @@ here=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
 repository=$(realpath "$here/../..")
 deb="$folder/jason-desktop-linux-x64.deb"
 version=$(dpkg-deb --field "$deb" Version)
-SUDO=""
-[ "$(id -u)" -eq 0 ] || SUDO=sudo
+release=${version//\~/-}
+SUDO=sudo
 
 fail() { echo "::error title=apt route::$1"; exit 1; }
+[ "$(id -u)" -ne 0 ] || fail "Run the leg as an account that may use sudo, not as root: the install line refuses root."
 
 work=$(mktemp -d)
 hosts_line="127.0.0.1 get.jasonharness.ai github.example.test assets.example.test # test-apt-route.sh"
@@ -70,10 +74,12 @@ listing() {
 dpkg-query -W jason-desktop > /dev/null 2>&1 && fail "jason-desktop is known to dpkg before the leg starts; the listing would not be the machine's before."
 listing > "$work/before"
 
-# The chain: one release, this run's, the latest.
-mkdir -p "$work/releases/v$version"
-cp "$deb" "$folder/Packages" "$folder/Release" "$folder/InRelease" "$folder/Release.gpg" "$work/releases/v$version/"
-echo "$version" > "$work/releases/latest"
+# The chain: one release, this run's, the latest, with the manifest and checksums the install line reads.
+mkdir -p "$work/releases/v$release"
+cp "$deb" "$folder/Packages" "$folder/Release" "$folder/InRelease" "$folder/Release.gpg" "$work/releases/v$release/"
+printf '{\n  "schema": 1,\n  "version": "%s"\n}\n' "$release" > "$work/releases/v$release/manifest.json"
+(cd "$work/releases/v$release" && sha256sum jason-desktop-linux-x64.deb > checksums.txt)
+echo "$release" > "$work/releases/latest"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=test-apt-route CA" -keyout "$work/ca.key" -out "$work/ca.crt" \
   -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign > /dev/null 2>&1
 openssl req -newkey rsa:2048 -nodes -subj "/CN=get.jasonharness.ai" -keyout "$work/server.key" -out "$work/server.csr" > /dev/null 2>&1
@@ -92,8 +98,26 @@ for _ in $(seq 1 50); do
 done
 curl -fsS -o /dev/null "https://get.jasonharness.ai/apt/Release" || fail "The stand-in for the address never answered https://get.jasonharness.ai/apt/Release."
 
-# 2. The deb from the file, and what it placed for the system.
-$SUDO apt-get install -y -q "$deb" > "$work/install.log" 2>&1 || { cat "$work/install.log"; fail "apt-get did not install $deb."; }
+# 2. The install line, as the published one runs it, against the address, as an account of its own: a home, a data
+# directory and a harness root of the leg's, and the account's own folders under that home. First with no terminal
+# (setsid leaves it none) and no desktop session: refused, nothing installed. Then in a terminal (script gives it one),
+# where sudo asks for the password, which this account does not need.
+mkdir -p "$work/home"
+person=(env HOME="$work/home" XDG_DATA_HOME="$work/home/.local/share" XDG_CONFIG_HOME="$work/home/.config"
+  JASON_DATA_DIR="$work/data" JASON_Harness__Root="$work/harness" JASON_Update__CheckEnabled=false)
+status=0
+"${person[@]}" setsid -w sh "$repository/install/install.sh" < /dev/null > "$work/refused.out" 2>&1 || status=$?
+cat "$work/refused.out"
+[ "$status" -ne 0 ] || fail "With no terminal and no desktop session the install line ended 0."
+grep -qF "this session has no way to ask for it: run the line in a terminal of your desktop" "$work/refused.out" \
+  || fail "With no terminal and no desktop session the install line did not refuse in its own words."
+dpkg-query -W jason-desktop > /dev/null 2>&1 && fail "The refused install line left jason-desktop known to dpkg."
+echo "With no terminal and no desktop session the install line refused, saying why, and installed nothing."
+"${person[@]}" script -qec "sh '$repository/install/install.sh'" /dev/null < /dev/null > "$work/install.out" 2>&1 \
+  || { cat "$work/install.out"; fail "The install line ended non-zero in a terminal."; }
+cat "$work/install.out"
+tail -n 1 "$work/install.out" | tr -d '\r' | grep -q 'call it by its full path: /usr/bin/jason$' \
+  || fail "The install line's last line does not name /usr/bin/jason."
 source=/etc/apt/sources.list.d/jason-desktop.sources
 printf 'Types: deb\nURIs: https://get.jasonharness.ai/apt/\nSuites: ./\nSigned-By: /usr/share/keyrings/jason-desktop.gpg\n' | cmp -s - "$source" \
   || { cat "$source" || true; fail "$source is not the source of Jason's repository through the address, signed by the package's key."; }
@@ -104,8 +128,8 @@ dpkg-query -W -f='${Conffiles}\n' jason-desktop | grep -q '^ /etc/apt/apt.conf.d
 apt-config dump | grep -qF 'Unattended-Upgrade::Origins-Pattern:: "origin=Jason,site=get.jasonharness.ai";' \
   || fail "apt does not read the rule that lets the automatic updates take Jason's."
 [ "$(readlink /usr/bin/jason)" = /opt/Jason/resources/bundle/jason ] || fail "/usr/bin/jason is not the jason the package carries."
-said=$(env -i HOME="$work" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -l -c 'jason --version')
-[ "${said%%+*}" = "${version//\~/-}" ] || fail "A new login shell's jason says '$said', and the package is $version."
+said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -l -c 'jason --version')
+[ "${said%%+*}" = "$release" ] || fail "A new login shell's jason says '$said', and the package is $version."
 echo "The deb placed Jason's source, its key, the rule for automatic updates and /usr/bin/jason; a new login shell runs jason $said."
 
 # The repository's key, which the package placed, stands for the key this run signed with.
@@ -122,7 +146,7 @@ candidate=$(apt-cache policy jason-desktop | awk '$1 == "Candidate:" { print $2 
 [ "$candidate" = "$version" ] || fail "apt offers jason-desktop '$candidate' from the repository, and the release is $version."
 apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { apt-cache policy jason-desktop; fail "apt does not name the address's repository for jason-desktop."; }
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
-grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"served\": \"v$version/jason-desktop-linux-x64.deb\"" "$work/served.log" \
+grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"served\": \"v$release/jason-desktop-linux-x64.deb\"" "$work/served.log" \
   || { cat "$work/served.log"; fail "The deb did not come through the chain from the release's asset address."; }
 echo "apt read Jason's repository through the address and the chain, offered $version, and installed it from there."
 

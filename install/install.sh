@@ -16,10 +16,19 @@
 # non-zero, saying which act failed, when jason was not put in the terminal; on success its last line is the full path
 # of jason, for the shell it ran in and an agent's session already running, which read no profile again.
 #
-# On Linux: the archive for this machine, checked against checksums.txt before it is unpacked; the executable put in
-# ~/.local/bin, with the licence and the third-party notices beside it as jason-LICENSE and jason-THIRD-PARTY-NOTICES;
-# and that directory added to the PATH behind a marker line unless --no-modify-path says otherwise. Running it again over
-# the same version downloads nothing and says so, unless a licence file is missing beside it, which it then writes.
+# On Linux it installs Jason Desktop as each system's users install comparable applications, and opens nothing. The
+# package manager the system has decides. Where there is apt (Ubuntu, Debian, Mint): the release's deb, checked against
+# checksums.txt and installed by apt, with the one password a system package needs - asked by sudo where this line has a
+# terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most ten minutes - and refused
+# in its own words where none can be asked or given; the package adds Jason's apt repository, its key and /usr/bin/jason,
+# and every later update comes with the system's. Anywhere else (Arch, Fedora and the rest): the AppImage, per account,
+# with no password, placed at ~/Applications/jason-desktop-linux-x64.AppImage by one rename, its menu entry and icons
+# written under ~/.local/share, and the jason it carries copied under the data directory; refused before anything is
+# downloaded where the system does not let it run its sandbox (no unprivileged user namespaces) or open (no setuid
+# fusermount). An AppImage already in that place stays the installation, and so does a package already installed at
+# this version or a later one. Inside an agent's sandbox (NoNewPrivs), run as root, or while Jason Desktop runs and
+# would be changed, it refuses before anything is changed. Then the jason the application carries sets the machine up,
+# as on macOS, and the last line is the full path of jason.
 #
 # Either way it says where Jason will keep what it learns about your business — Jason in your home directory, unless
 # Harness:Root in the settings names another folder — and makes no folder for it.
@@ -39,7 +48,6 @@ RELEASES_URL="https://get.jasonharness.ai/releases"
 # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a base
 # of its own, so that the downloads can move without the licence page moving with them.
 LICENCE_BASE="https://github.com/reply-team/jason-ai/blob"
-MARKER="# added by jason install"
 INSTALL_DIR="$HOME/.local/bin"
 FEED="${JASON_INSTALL_FEED:-}"
 VERSION=""
@@ -48,12 +56,10 @@ INSTALL_DIR_GIVEN=""
 
 usage() {
     cat <<EOF
-Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL] [--install-dir DIRECTORY] [--no-modify-path]
+Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL]
 
-  --version X.Y.Z        install that release rather than the latest (on macOS, 0.49.0 or later)
+  --version X.Y.Z        install that release rather than the latest (on macOS, 0.49.0 or later; on Linux, 0.49.1 or later)
   --feed DIRECTORY|URL   read the release's files from there instead of the published releases (also JASON_INSTALL_FEED)
-  --install-dir DIR      Linux: put the executable there instead of ~/.local/bin; not taken on macOS
-  --no-modify-path       Linux: do not add the install directory to the PATH in your profile; not taken on macOS
 
 On macOS it installs Jason Desktop into /Applications, or ~/Applications where this account may not write to
 /Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
@@ -61,6 +67,10 @@ already in either folder is kept as it is, never replaced; one before 0.49.0 is 
 This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.
 On a Mac this script is the way to install Jason; Homebrew's formula is the command line
 alone, without Jason Desktop.
+
+On Linux it installs Jason Desktop and opens nothing: with apt, the release's deb, installed by apt with your password
+(sudo in a terminal, your desktop's own dialog otherwise), which adds Jason's apt repository so updates come with the
+system's; without apt, the AppImage in ~/Applications, for your account alone, with no password.
 EOF
 }
 
@@ -92,49 +102,26 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) fail "this is a Windows shell; run install.ps1 in PowerShell instead, which installs Jason Desktop for Windows" ;;
 esac
 
-# A Mac installs Jason Desktop, whose architecture is read further down; Linux the archive.
+# Both install Jason Desktop: a Mac's architecture is read further down, and Linux is x64 alone.
 case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64) RID="linux-x64"; ASSET="jason-linux-x64.tar.gz" ;;
+    Linux-x86_64) RID="linux-x64"; ASSET="" ;;
     Darwin-*) RID="macos"; ASSET="" ;;
     *) fail "no release is built for $(uname -s) on $(uname -m); the releases are linux-x64, osx-arm64 and win-x64, and Jason Desktop for macOS" ;;
 esac
 
-# Refused on macOS before anything is read or written: neither can be done the way they ask any more.
+# Refused before anything is read or written: neither can be done the way they ask any more.
 if [ "$RID" = macos ]; then
     [ -z "$INSTALL_DIR_GIVEN" ] || fail "--install-dir is not taken on macOS: Jason Desktop goes to /Applications or ~/Applications, and the jason it carries is the one the terminal runs. Nothing was installed: run this again without it."
     [ "$MODIFY_PATH" -eq 1 ] || fail "--no-modify-path is not taken on macOS: every install puts jason in the terminal. Nothing was installed: run this again without it."
-    # Root - the line piped into `sudo sh` - would place Jason.app owned by root, which its own updater then cannot replace
-    # without a password, and through a home sudo keeps, a data directory, a wrapper and skills the account's own runtime
-    # cannot write. So it stops before anything is downloaded.
-    [ "$(id -u)" != 0 ] || fail "this script runs as root, and Jason Desktop and everything it sets up are your account's own, so nothing was downloaded or installed: run the install line again as yourself, without sudo."
+else
+    [ -z "$INSTALL_DIR_GIVEN" ] || fail "--install-dir is not taken on Linux: Jason Desktop is installed as the system installs applications, and the jason it carries is the one the terminal runs. Nothing was installed: run this again without it."
+    [ "$MODIFY_PATH" -eq 1 ] || fail "--no-modify-path is not taken on Linux: every install puts jason in the terminal. Nothing was installed: run this again without it."
 fi
-
-# --- the install directory ----------------------------------------------------------------------------------
-
-# Refused before anything is written. The entries of PATH are separated by ':', with no escape, so a directory whose name
-# holds one is two entries to every reader, neither of them the directory: it can be on no PATH at all, and is refused
-# under --no-modify-path too. On macOS the application's own jason install writes the terminal command, and says what it
-# could not write. The other characters are this script's own limit: the line it writes into a profile reads
-# the directory inside double quotes, where '"', '$', '`' and '\' are not read as themselves, and a line break ends that
-# line. Under --no-modify-path no line is written, and a person may put the directory on PATH their own way.
-if [ "$RID" != macos ]; then
-case "$INSTALL_DIR" in
-    *:*) fail "the install directory $INSTALL_DIR holds ':', which separates the entries of PATH, so no PATH entry can name it; nothing was installed: choose a folder whose name does not hold it with --install-dir" ;;
-esac
-if [ "$MODIFY_PATH" -eq 1 ]; then
-    LINE_BREAK='
-'
-    UNWRITTEN=""
-    case "$INSTALL_DIR" in
-        *"$LINE_BREAK"*) UNWRITTEN="it holds a line break, which would end the line it writes in your profile" ;;
-        *'"'*) UNWRITTEN="it holds '\"', which the line it writes in your profile reads inside double quotes as something else" ;;
-        *'$'*) UNWRITTEN="it holds '\$', which the line it writes in your profile reads inside double quotes as something else" ;;
-        *'`'*) UNWRITTEN="it holds '\`', which the line it writes in your profile reads inside double quotes as something else" ;;
-        *'\'*) UNWRITTEN="it holds '\\', which the line it writes in your profile reads inside double quotes as something else" ;;
-    esac
-    [ -z "$UNWRITTEN" ] || fail "this installer cannot write $INSTALL_DIR into your PATH: $UNWRITTEN. Nothing was installed: choose another --install-dir, or install with --no-modify-path and add the directory to your PATH yourself"
-fi
-fi
+# Root - the line piped into `sudo sh` - would place the application owned by root, which its own updater then cannot
+# replace without a password, and through a home sudo keeps, a data directory, a wrapper and skills the account's own
+# runtime cannot write. So it stops before anything is downloaded; on Linux it asks for the password itself where the
+# package needs one.
+[ "$(id -u)" != 0 ] || fail "this script runs as root, and Jason Desktop and everything it sets up are your account's own, so nothing was downloaded or installed: run the install line again as yourself, without sudo."
 
 # --- the feed -----------------------------------------------------------------------------------------------
 
@@ -188,58 +175,6 @@ download_archive() {
     [ "$ACTUAL" = "$EXPECTED" ] || fail "$ASSET does not match checksums.txt (sha256 $ACTUAL, expected $EXPECTED); nothing was installed"
 }
 
-# The two notices an archive carries beside the executable. Beside the installed executable each is jason-<name>.
-NOTICES="LICENSE THIRD-PARTY-NOTICES"
-
-# Each notice the archive holds as a regular file whose entry is exactly its name at the archive's top level, into
-# $TMP/notices; anything else under that name — a path, a directory, a link — is not the release's notice. A name the
-# archive lists more than once is not taken at all: GNU tar extracts the last of them and bsdtar the first, so the only
-# rule that is the same on Linux and macOS is that neither is this release's file.
-take_notices() {
-    mkdir -p "$TMP/notices"
-    tar -tzf "$TMP/$ASSET" > "$TMP/listing"
-    for N in $NOTICES; do
-        [ "$(grep -cxE "(\./)?$N" "$TMP/listing" || true)" -eq 1 ] || continue
-        [ "$(grep -cxF "$N" "$TMP/listing" || true)" -eq 1 ] || continue
-        mkdir -p "$TMP/notice-$N"
-        tar -xzf "$TMP/$ASSET" -C "$TMP/notice-$N" "$N" 2>/dev/null || true
-        if [ -f "$TMP/notice-$N/$N" ] && [ ! -L "$TMP/notice-$N/$N" ]; then
-            mv "$TMP/notice-$N/$N" "$TMP/notices/$N"
-        fi
-    done
-}
-
-# Each notice beside the executable, by one rule per name: jason-<name> is written from the archive's file of that name
-# when the archive has it, and removed when it does not. Each is copied beside its final name and renamed onto it, after
-# the executable is in place. A failure leaves its reason in REASON.
-write_notices() {
-    for N in $NOTICES; do
-        DESTINATION="$INSTALL_DIR/jason-$N"
-        if [ -L "$DESTINATION" ]; then
-            REASON="$(rm -f "$DESTINATION" 2>&1)" || return 1
-        elif [ -d "$DESTINATION" ]; then
-            REASON="$DESTINATION is a directory"
-            return 1
-        fi
-        if [ -f "$TMP/notices/$N" ]; then
-            REASON="$(cp "$TMP/notices/$N" "$DESTINATION.installing.$$" 2>&1 && mv -f "$DESTINATION.installing.$$" "$DESTINATION" 2>&1)" || {
-                rm -f "$DESTINATION.installing.$$"
-                return 1
-            }
-        else
-            REASON="$(rm -f "$DESTINATION" 2>&1)" || return 1
-        fi
-    done
-}
-
-# True when a notice is not beside the executable as a file.
-missing_notice() {
-    for N in $NOTICES; do
-        [ -f "$INSTALL_DIR/jason-$N" ] || return 0
-    done
-    return 1
-}
-
 # True when the version in $2 is 0.$1.0 or later, its pre-release part ignored. Field by field, since sort -V is not on
 # macOS; a field that is not a number is no such version.
 from_minor() {
@@ -252,18 +187,6 @@ from_minor() {
         esac
     done
     [ "$MAJOR" -gt 0 ] || [ "$MINOR" -ge "$1" ]
-}
-
-# True when a version is 0.6.0 or later: its archive carries the licence and the notices, and its tag a licence file.
-# An earlier release carried a notice of its own, which is neither.
-licensed() {
-    from_minor 6 "$1"
-}
-
-# True when a version is 0.24.0 or later, published under the MIT licence. From 0.6.0 to 0.23.x a release was
-# published under the Jason Runtime Licence, LICENSE-RUNTIME.md, which those tags keep.
-mit() {
-    from_minor 24 "$1"
 }
 
 # --- macOS: Jason Desktop -----------------------------------------------------------------------------------------
@@ -424,6 +347,12 @@ install_desktop() {
         echo "Installed Jason Desktop $LATEST to $DEST"
     fi
 
+    set_up_and_end
+}
+
+# The machine set up by the jason the placed application carries, $CARRIED, and the last lines: the same on macOS and
+# Linux. $DEST is where the application is, for the sentences; $INSTALLED, $LATEST and $BEHIND what was placed or kept.
+set_up_and_end() {
     # The machine set up: the application's own jason, with the role skills, and its one report read. What it says on
     # stderr goes straight through; its report is shown as it came.
     REPORT="$("$CARRIED" install --roles)" || true
@@ -480,93 +409,248 @@ if [ "$RID" = macos ]; then
     exit 0
 fi
 
-# --- the version, and whether it is already here ------------------------------------------------------------
+# --- Linux: Jason Desktop -----------------------------------------------------------------------------------------
 
-fetch manifest.json "$TMP/manifest.json"
-# The manifest is machine-written, one field per line; this is the value on its "version" line.
-LATEST="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$TMP/manifest.json" | head -n 1)"
-[ -n "$LATEST" ] || fail "$BASE/manifest.json does not name a version"
+# The deb and the AppImage a release publishes, and where an AppImage goes: ~/Applications, where AppImage tools look.
+DEB_ASSET="jason-desktop-linux-x64.deb"
+# Where the deb puts the application, and so the jason it carries.
+DEB_PLACE="/opt/Jason"
+APPIMAGE_ASSET="jason-desktop-linux-x64.AppImage"
+APPIMAGE_PLACE="$HOME/Applications"
+# How long the system's password dialog is given, as the Windows move gives its installer, and apt the package lock.
+ASK_SECONDS=600
 
-# --version names a release, and the manifest that came back has to be that release's. A feed that answered with
-# another version — a stale mirror, a directory holding the wrong release, a download URL that resolved to
-# something else — would otherwise be installed anyway, under the version that was asked for.
-if [ -n "$VERSION" ] && [ "$LATEST" != "$VERSION" ]; then
-    fail "--version asked for $VERSION and $BASE/manifest.json names $LATEST; nothing was installed"
-fi
+# Whether Jason Desktop runs under this account: a process whose program, the first word of its command line, is
+# jason-desktop-app, the deb's or an AppImage's mount's. Where pgrep is not there, nothing is known to run.
+desktop_running() {
+    command -v pgrep >/dev/null 2>&1 && pgrep -u "$(id -u)" -f '^[^ ]*/jason-desktop-app( |$)' >/dev/null 2>&1
+}
 
-TARGET="$INSTALL_DIR/jason"
-INSTALLED=""
-if [ -x "$TARGET" ]; then
-    # What it prints carries build metadata (+<commit>), which a version comparison ignores.
-    INSTALLED="$("$TARGET" --version 2>/dev/null | head -n 1 | cut -d+ -f1 || true)"
-fi
-
-if [ "$INSTALLED" = "$LATEST" ]; then
-    # The right version, without its notices: an installation an older jason updated, or one whose notices were
-    # removed. A release before 0.6.0 never had THIRD-PARTY-NOTICES, so it has nothing to repair. The archive is
-    # checked as an install's is; the notices are taken out of it, and the executable is not touched.
-    if licensed "$LATEST" && missing_notice; then
-        download_archive
-        take_notices
-        write_notices || fail "Jason $LATEST is installed at $TARGET, and its licence files could not be written beside it: $REASON. Run this script again."
-        echo "Jason $LATEST is already installed at $TARGET; its licence files were missing and are written beside it now."
-    else
-        echo "Jason $LATEST is already installed at $TARGET; nothing to download."
+# Nothing that would change the application is done while it runs: a person's application is never closed from here.
+refuse_while_running() {
+    if desktop_running; then
+        fail "Jason Desktop is running, in its window or in the tray, so nothing was installed: quit it - Quit in its tray menu - and run this line again."
     fi
-else
-    # --- download, and check before unpacking ---------------------------------------------------------------
+}
 
-    download_archive
+# The apt options every install of the package takes: the package lock waited for, a configuration file the person
+# changed kept, and the person's proxy, which sudo and pkexec both drop.
+apt_options() {
+    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$ASK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+    [ -z "${http_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::http::Proxy=$http_proxy"
+    [ -z "${https_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::https::Proxy=$https_proxy"
+}
 
-    # The executable is taken out of the archive first and alone; the notices are read out of it after.
-    mkdir -p "$TMP/unpacked"
-    tar -xzf "$TMP/$ASSET" -C "$TMP/unpacked" jason
-    take_notices
+# Whether this account is one the system's dialog asks its own password of: an administrator, by Ubuntu's rule.
+administrator() {
+    id -nG 2>/dev/null | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'
+}
 
-    # --- start it once, then install ------------------------------------------------------------------------
+# The package installed by apt from the checked file, with the one password an install of a system package needs, asked
+# the way the moment allows: by sudo where this line has a terminal (a person typed it; `curl | sh` gives sh a pipe, so the
+# test is whether /dev/tty opens), else by the desktop's own dialog through pkexec (an agent runs it in the person's
+# session). Which refusal it is is read from their own words, never from an exit code alone.
+apt_install() {
+    FILE="$1"
+    apt_options
+    APT_GET="$(command -v apt-get)"
+    : > "$TMP/apt.err"
+    STATUS=0
+    if (: < /dev/tty) 2>/dev/null && command -v sudo >/dev/null 2>&1; then
+        echo "Installing Jason Desktop's package with apt; sudo asks for your password."
+        # shellcheck disable=SC2086
+        sudo "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
+    elif command -v pkexec >/dev/null 2>&1; then
+        echo "Installing Jason Desktop's package with apt; your desktop asks for your password in its own window."
+        if command -v timeout >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            timeout "$ASK_SECONDS" pkexec "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
+        else
+            # shellcheck disable=SC2086
+            pkexec "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
+        fi
+    else
+        STATUS=127
+        echo "No authentication agent found" > "$TMP/apt.err"
+    fi
+    [ "$STATUS" -eq 0 ] && return 0
+    cat "$TMP/apt.err" >&2
+    NOT_ADMIN=""
+    administrator || NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
+    if [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|a password is required|is not in the sudoers file|may not run sudo' "$TMP/apt.err"; then
+        fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
+    elif grep -qE 'No authentication agent found' "$TMP/apt.err"; then
+        fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
+    elif grep -qE 'Message recipient disconnected|No session for cookie' "$TMP/apt.err"; then
+        fail "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again."
+    elif grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
+        fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
+    fi
+    fail "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off."
+}
 
-    # The checked, unpacked executable is asked for its version before it goes anywhere near the install
-    # directory: a program that does not start here — a Linux without the ICU library, say — is not installed
-    # over one that did, and its own words on stderr say why. What it prints must be the manifest's version.
-    chmod 755 "$TMP/unpacked/jason"
-    STARTED="$("$TMP/unpacked/jason" --version | head -n 1 | cut -d+ -f1)"
-    [ -n "$STARTED" ] || fail "the downloaded jason does not start on this machine (see above); nothing was installed"
-    [ "$STARTED" = "$LATEST" ] || fail "the downloaded jason says it is $STARTED and the manifest says $LATEST; nothing was installed"
+# The deb: installed by apt, then set up by the jason the package carries, /opt/Jason/resources/bundle/jason. The package
+# adds Jason's apt repository and its key, and /usr/bin/jason; every later update comes with the system's.
+install_deb() {
+    DEST="$DEB_PLACE"
+    CARRIED="$DEST/resources/bundle/jason"
+    INSTALLED="$LATEST"
+    WANTED="$(printf '%s' "$LATEST" | tr '-' '~')"
+    PLACED_STATE="$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)"
+    PLACED_VERSION=""
+    case "$PLACED_STATE" in
+        ii*'|'*) PLACED_VERSION="${PLACED_STATE#*|}" ;;
+    esac
+    if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
+    if [ "$PLACED_VERSION" = "$WANTED" ]; then
+        echo "Jason Desktop $LATEST is already installed; nothing to download."
+    elif [ -n "$PLACED_VERSION" ] && dpkg --compare-versions "$PLACED_VERSION" gt "$WANTED"; then
+        INSTALLED="$(printf '%s' "$PLACED_VERSION" | tr '~' '-')"
+        echo "Jason Desktop $INSTALLED is already installed; it is kept as it is, and nothing is downloaded."
+    else
+        refuse_while_running
+        ASSET="$DEB_ASSET"
+        RID="Linux (the deb)"
+        download_archive
+        apt_install "$TMP/$ASSET"
+        echo "Installed Jason Desktop $LATEST from its package"
+    fi
+    [ -f "$CARRIED" ] || fail "the package jason-desktop is installed, and $CARRIED is not there, so jason was not put in the terminal: sudo apt install --reinstall jason-desktop puts it back."
+    set_up_and_end
+}
 
-    mkdir -p "$INSTALL_DIR"
-    # Copied beside its destination first, then one rename onto it: the temporary directory may be on another
-    # file system, and there must be no moment at which a half-written jason is on the PATH.
-    cp "$TMP/unpacked/jason" "$INSTALL_DIR/jason.installing.$$"
-    mv -f "$INSTALL_DIR/jason.installing.$$" "$TARGET"
+# The version an AppImage carries, read from the version.json of its bundle; nothing where it is not one of Jason's.
+appimage_version() {
+    READ="$(mktemp -d "$TMP/read.XXXXXX")"
+    (cd "$READ" && "$1" --appimage-extract 'resources/bundle/version.json' >/dev/null 2>&1) || true
+    sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$READ/squashfs-root/resources/bundle/version.json" 2>/dev/null | head -n 1
+}
 
-    # The notices go beside it once it is in place. One that cannot be written leaves Jason installed without it, and
-    # the run says so; run again, it takes the path above and writes them.
-    write_notices || fail "Jason $STARTED is installed at $TARGET, and its licence files could not be written beside it: $REASON. Run this script again."
-    echo "Installed Jason $STARTED to $TARGET"
-fi
+# The AppImage: one file per account, which updates itself, with no root at any step. Refused before anything is
+# downloaded where it could not run its sandbox (user namespaces refused, as on linux-hardened) or open at all (no
+# setuid fusermount, which mounts it). Placed in ~/Applications by one rename, its menu entry and icons written under the
+# account's data folder, and the jason it carries copied under the data directory as each start of it copies it, so the
+# copy's own `jason install` runs before the application has ever started.
+install_appimage() {
+    if command -v unshare >/dev/null 2>&1 && ! unshare -Ur true >/dev/null 2>&1; then
+        fail "This system does not let an application make the user namespaces Chromium's sandbox needs, and Jason never runs without its sandbox, so nothing was installed. On Arch this is the linux-hardened kernel or a sysctl that turns them off."
+    fi
+    FUSE=""
+    for TOOL in fusermount3 fusermount; do
+        FOUND="$(command -v "$TOOL" 2>/dev/null || true)"
+        if [ -n "$FOUND" ] && [ -u "$FOUND" ]; then FUSE=1; fi
+    done
+    [ -n "$FUSE" ] || fail "Jason Desktop is an AppImage here, which needs FUSE 3 to open: install the fuse3 package (sudo pacman -S fuse3 on Arch), then run the line again. Nothing was installed."
 
-# --- where the files will be ---------------------------------------------------------------------------------
+    DEST="$APPIMAGE_PLACE/$APPIMAGE_ASSET"
+    DATA="${JASON_DATA_DIR:-$HOME/.jason}"
+    INSTALLED="$LATEST"
+    KEPT=""
+    if [ -e "$DEST" ]; then
+        PLACED_VERSION="$(appimage_version "$DEST")"
+        [ -n "$PLACED_VERSION" ] || fail "A file of that name that is not Jason Desktop is in $APPIMAGE_PLACE ($DEST); it is left as it is, and nothing was installed."
+        KEPT=1
+        INSTALLED="$PLACED_VERSION"
+        if [ "$PLACED_VERSION" = "$LATEST" ]; then
+            echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
+        else
+            echo "Jason Desktop $PLACED_VERSION is already installed at $DEST; it is kept as it is, and its own update moves it."
+            if older_than "$PLACED_VERSION" "$LATEST"; then BEHIND=1; fi
+        fi
+    fi
+    CARRIED="$DATA/desktop/bundle/$INSTALLED/jason"
+    if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
 
-# What Jason learns about the person's business is kept in plain files under the harness root, which the runtime makes
-# at the first project or campaign it creates; this script makes no folder there. The folder is said as the default,
-# made as the runtime makes it, Jason in the home: Harness:Root in the settings can name another, and only the runtime
-# reads its settings, so the root in force is for `jason status` to say rather than for a second reader of them here.
-# Each text is in single quotes, so its backticks are text and not a command to substitute. The home loses every
-# separator at its end, as the runtime reads it: `/home/marta//` is `/home/marta`, and a home of `/` gives `/Jason`.
-ROOT_HOME="$HOME"
-while [ "${ROOT_HOME%/}" != "$ROOT_HOME" ]; do
-    ROOT_HOME="${ROOT_HOME%/}"
-done
-printf 'Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and campaign, in `%s` by default; to keep them somewhere else, set `Harness:Root` in the settings before your first campaign.\n' "$ROOT_HOME/Jason"
-printf '%s\n' 'Campaigns you create without naming a project go to the project `Default`; rename it, or make one project per product.'
+    if [ -z "$KEPT" ]; then
+        refuse_while_running
+        ASSET="$APPIMAGE_ASSET"
+        RID="Linux (the AppImage)"
+        download_archive
+        mkdir -p "$APPIMAGE_PLACE" || fail "$APPIMAGE_PLACE could not be made; nothing was installed"
+        STAGE="$(mktemp "$APPIMAGE_PLACE/.jason-install.XXXXXX")" || fail "no file could be made in $APPIMAGE_PLACE; nothing was installed"
+        trap 'rm -rf "$TMP" "$STAGE"' EXIT
+        cp "$TMP/$ASSET" "$STAGE" && chmod 755 "$STAGE" || fail "$ASSET could not be put in $APPIMAGE_PLACE; nothing was installed"
+        [ "$(appimage_version "$STAGE")" = "$LATEST" ] || fail "the AppImage in the release is not Jason Desktop $LATEST; nothing was installed"
+        [ ! -e "$DEST" ] || fail "$DEST appeared while this ran; nothing was installed"
+        mv "$STAGE" "$DEST" || fail "$DEST could not be put in place; nothing was installed"
+        echo "Installed Jason Desktop $LATEST to $DEST"
+    fi
 
-# --- the PATH ------------------------------------------------------------------------------------------------
+    # What the application carries, read out of it once: the bundle the copy is made of, its menu entry and its icons.
+    OPENED="$(mktemp -d "$TMP/opened.XXXXXX")"
+    (cd "$OPENED" && "$DEST" --appimage-extract >/dev/null 2>&1) || fail "$DEST could not be read, so jason was not put in the terminal. Jason Desktop is installed at $DEST"
+    ROOT="$OPENED/squashfs-root"
 
-# The line goes behind a marker, and the profile is searched before the line is written, so a second run adds
-# nothing. Into the one file a login shell of this account reads: zsh reads ~/.zprofile; bash reads the first of
+    # The copy under the version, made whole beside its place and renamed into it, as the application's own start makes it;
+    # one already there is the application's, which its start checks.
+    BUNDLES="$DATA/desktop/bundle"
+    if [ ! -d "$BUNDLES/$INSTALLED" ]; then
+        mkdir -p "$BUNDLES" || fail "$BUNDLES could not be made, so jason was not put in the terminal. Jason Desktop is installed at $DEST"
+        COPY="$BUNDLES/.$INSTALLED.tmp-$$"
+        cp -R "$ROOT/resources/bundle" "$COPY" && mv "$COPY" "$BUNDLES/$INSTALLED" || fail "the jason Jason Desktop carries could not be copied to $BUNDLES/$INSTALLED, so jason was not put in the terminal. Jason Desktop is installed at $DEST"
+    fi
+
+    # The menu entry and the icons, in the account's own data folder, where desktops and launchers read them. The entry
+    # starts the file where it is, and is hidden once that file is gone (TryExec).
+    SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
+    mkdir -p "$SHARE/applications"
+    awk -v exec="$DEST" '
+        /^Exec=/ { print "Exec=\"" exec "\" %U"; next }
+        /^TryExec=/ { next }
+        { print }
+        /^\[Desktop Entry\]$/ { print "TryExec=" exec }
+    ' "$ROOT/jason-desktop-app.desktop" > "$SHARE/applications/jason-desktop.desktop" || fail "the menu entry could not be written to $SHARE/applications. Jason Desktop is installed at $DEST"
+    for ICON in "$ROOT"/usr/share/icons/hicolor/*/apps/jason-desktop-app.png; do
+        [ -f "$ICON" ] || continue
+        SIZE="$(basename "$(dirname "$(dirname "$ICON")")")"
+        mkdir -p "$SHARE/icons/hicolor/$SIZE/apps" && cp "$ICON" "$SHARE/icons/hicolor/$SIZE/apps/jason-desktop-app.png"
+    done
+    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$SHARE/applications" >/dev/null 2>&1 || true; fi
+    set_up_and_end
+}
+
+install_linux() {
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # An agent's own sandbox (bubblewrap or landlock style) sets NoNewPrivs: sudo, pkexec and a setuid fusermount cannot
+    # raise privileges inside it, so nothing it could start would install.
+    if grep -qE '^NoNewPrivs:[[:space:]]*1' /proc/self/status 2>/dev/null; then
+        fail "This command runs inside a sandbox that cannot install software: run the line in your own terminal, or let your agent run it outside its sandbox. Nothing was installed."
+    fi
+    ANSWERED=""
+    CARRIED=""
+    BEHIND=""
+    COMMAND_LINE=""
+    if [ -f "$HOME/.local/bin/jason" ] && { [ -f "$HOME/.local/bin/jason-LICENSE" ] || [ -f "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]; }; then
+        COMMAND_LINE="$HOME/.local/bin/jason"
+    fi
+    fetch manifest.json "$TMP/manifest.json"
+    LATEST="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$TMP/manifest.json" | head -n 1)"
+    [ -n "$LATEST" ] || fail "$BASE/manifest.json does not name a version"
+    if [ -n "$VERSION" ] && [ "$LATEST" != "$VERSION" ]; then
+        fail "--version asked for $VERSION and $BASE/manifest.json names $LATEST; nothing was installed"
+    fi
+    # A release before 0.49.1 installs the command line alone on Linux, by its own release's script.
+    if older_than "$LATEST" 0.49.1 || ! from_minor 49 "$LATEST"; then
+        fail "Jason $LATEST is installed on Linux by its own release's script, not this one, which installs Jason Desktop 0.49.1 and later; nothing was installed"
+    fi
+    # The package manager the system has decides: apt's package where there is apt, else the AppImage. An AppImage already
+    # in its place stays the installation, apt or not, and no deb is installed beside it.
+    if [ ! -e "$APPIMAGE_PLACE/$APPIMAGE_ASSET" ] && command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+        install_deb
+    else
+        install_appimage
+    fi
+}
+
+# --- the profiles ----------------------------------------------------------------------------------------------
+
+# The rule the PATH lines follow, which the application's `jason install` writes by on macOS and for an AppImage on Linux,
+# and which `jason status`, its repair and `jason uninstall` hold to these two functions word for word. Into the one file
+# a login shell of this account reads: zsh reads ~/.zprofile; bash reads the first of
 # ~/.bash_profile, ~/.bash_login and ~/.profile that exists, and never ~/.profile when one of the others does;
-# everything else reads ~/.profile, as does an account with no SHELL at all. The same rule is `jason status`'s and
-# its repair's, which spell it in C# and hold this function to it word for word.
+# everything else reads ~/.profile, as does an account with no SHELL at all.
 login_profile() {
     case "${SHELL:-}" in
         zsh|*/zsh) echo "$HOME/.zprofile" ;;
@@ -593,66 +677,6 @@ interactive_profile() {
         *) ;;
     esac
 }
-LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
-# What is searched for is the whole line this script wrote, not the marker above it: the marker is an English
-# sentence a person's own profile could carry, and keying the decision on it also meant that a run with a
-# different --install-dir found "the mark", wrote nothing, and left the directory it had just installed into off
-# the PATH. The line names that directory, so the line is the thing to match — whole (-x) and fixed (-F).
-ADDED=""
-add_to_profile() {
-    if [ -f "$1" ] && grep -qxF "$LINE" "$1"; then
-        return 0
-    fi
-    printf '\n%s\n%s\n' "$MARKER" "$LINE" >> "$1"
-    ADDED="${ADDED:+$ADDED and }$1"
-}
 
-if [ "$MODIFY_PATH" -eq 1 ]; then
-    case ":$PATH:" in
-        *":$INSTALL_DIR:"*) ;;
-        *)
-            add_to_profile "$(login_profile)"
-            INTERACTIVE="$(interactive_profile)"
-            if [ -n "$INTERACTIVE" ]; then
-                add_to_profile "$INTERACTIVE"
-            fi
-            if [ -n "$ADDED" ] && [ -n "$INTERACTIVE" ]; then
-                echo "Added $INSTALL_DIR to the PATH in $ADDED; open a new terminal, or run: $LINE"
-            elif [ -n "$ADDED" ]; then
-                echo "Added $INSTALL_DIR to the PATH in $ADDED; sign out and back in for a new terminal to find it, or run: $LINE"
-            fi ;;
-    esac
-fi
-
-# --- the role skills ----------------------------------------------------------------------------------------
-
-# The installed jason deploys the role skills, the half of the skills a runtime cannot work without, from the
-# release it is: by default from the public repository's releases, from a feed this script was pointed at when that
-# feed is an address. A feed in a directory is not one the skills verb reads, so nothing is sent anywhere this script
-# did not read itself, and the one line says what to run. What the verb prints is shown; a deployment that fails
-# leaves Jason installed, says so in one line after the verb's own, and `jason status` names it as well. JASON_DATA_DIR
-# reaches the verb as it reached this script.
-deploy_role_skills() {
-    if "$TARGET" skills install --roles-only "$@"; then
-        :
-    else
-        echo 'The role skills were not deployed; the lines above say why. Run `jason skills install --roles-only` once that is dealt with; `jason status` names it as well.'
-    fi
-}
-case "$FEED" in
-    '') deploy_role_skills ;;
-    http://*|https://*) deploy_role_skills --feed "${FEED%/}/manifest.json" ;;
-    *) echo 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.' ;;
-esac
-
-# --- the licence, and what to run next -----------------------------------------------------------------------
-
-# The last two lines of a successful run, and never a question: what is installed and the terms it is installed
-# under, then the one command that says what this installation still needs. Each text is in single quotes where it
-# carries backticks, so they are text and not a command to substitute.
-if mit "$LATEST"; then
-    echo "Jason $LATEST is licensed under the MIT licence: $LICENCE_BASE/v$LATEST/LICENSE"
-elif licensed "$LATEST"; then
-    echo "Jason $LATEST was published under the Jason Runtime Licence: $LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md"
-fi
-echo 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
+install_linux
+exit 0

@@ -561,11 +561,11 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep, AptRouteStep],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep, "actions/upload-artifact@v7"],
             names);
-        // The apt route's leg reads the deb and the index the step before it wrote, against that run's own key.
-        Assert.Equal("bash .github/scripts/test-apt-route.sh desktop/dist \"$RUNNER_TEMP/apt-run-key.gpg\"", Scalar(steps[11], "run"));
-        Assert.Contains("keyring=\"$RUNNER_TEMP/apt-run-key.gpg\"", Scalar(steps[10], "run"), StringComparison.Ordinal);
+        // The index and the key that signed it go to the install line's job, which runs the apt route against them.
+        Assert.Equal("ci-apt-index", Scalar(Mapping(steps[11], "with"), "name"));
+        Assert.Contains("cp \"$keyring\" desktop/dist/apt-run-key.gpg", Scalar(steps[10], "run"), StringComparison.Ordinal);
         // zsh, the Mac's own shell, before the node tests: its real login shell row fails under CI without it.
         Assert.Contains("install -y --no-install-recommends zsh", Scalar(steps[4], "run"), StringComparison.Ordinal);
         Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[8], "with"), "sdk-version"));
