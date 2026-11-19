@@ -330,9 +330,9 @@ Instead of one AI doing everything, the work is split the way a good sales team 
 The roles run in the background on the host you chose, on your plan. When one can't safely decide something, it asks you,
 and the work waits for your answer in whichever session you give it.
 
-The Manager wakes on what happens: a failure, a rejected approval, a reply, an answered question, a provider event or
-block, or something you reported. If nothing happens, it looks in anyway, every five hours unless you set another pace
-for that campaign.
+The Manager wakes on what happens: a campaign's start, a failure, a rejected approval, a reply, an answered question, a
+provider event or block, or something you reported. If nothing happens, it looks in anyway, every five hours unless you
+set another pace for that campaign.
 
 ---
 

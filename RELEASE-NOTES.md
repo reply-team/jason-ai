@@ -23,6 +23,8 @@ replaces the title and the body together.
 
 ## What is new since 0.48.5
 
+- **A campaign's manager looks at it when it starts.** When you start a campaign, or start it again after a pause, its
+  manager looks at it at once instead of at its first scheduled review, five hours later by default.
 - **The desktop chat follows the answer.** While you are at the end of the conversation, it follows what is added
   there: your message, the AI's words as they come, a card. Scroll up and it keeps your place until you come back to
   the end or send something; a message you send, and a card that asks for your permission, always bring you back,
@@ -50,4 +52,7 @@ Nothing stops, no setting is renamed and no migration runs.
 - **The desktop:** from 0.48.5, Jason Desktop takes this release by its own update. A Jason Desktop of 0.48.4 or
   earlier on Windows and macOS installs this release from its installer once; on Linux its own update works.
 - **The executable:** `jason update`, as for every release.
+- **The manager's triggers:** an installation that wrote its own `Manager:Triggers` keeps its list; add
+  `campaign_started` to it to have a start summon the manager. Each start, a resume included, is one more review on
+  your agent host and your plan.
 - **From 0.48.4 or earlier,** the notes of each release in between apply as well.

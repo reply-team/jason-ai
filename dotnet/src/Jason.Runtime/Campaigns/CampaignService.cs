@@ -612,10 +612,10 @@ public sealed class CampaignService(
             campaign.ArchivedAt = campaign.UpdatedAt;
         }
 
-        // Going live summons a review of its own (its line is a default manager trigger), and it is also what the
-        // review cadence is measured from — the first time and every time. So a campaign paused for a week and
-        // started again is reviewed when it wakes, and its next scheduled review comes a full interval after the one
-        // the start summoned: the week it spent stopped is not a week nobody looked at it.
+        // Going live summons a review of its own while `Manager:Triggers` holds `campaign_started`, as it does by
+        // default, and it is also what the review cadence is measured from — the first time and every time. So a
+        // campaign paused for a week and started again is reviewed when it wakes, and its next scheduled review comes
+        // a full interval after the one the start summoned: the week it spent stopped is not a week nobody looked at it.
         if (target == CampaignStatus.Active)
         {
             campaign.ManagerReviewAnchor = campaign.UpdatedAt;
