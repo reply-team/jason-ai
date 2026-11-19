@@ -1811,6 +1811,114 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(ours ? 1 : 0, Report(output).GetProperty("command").GetProperty("taken_back").GetArrayLength());
     }
 
+    // --- Linux: the AppImage's copy, and the deb's /usr/bin/jason ---------------------------------------------
+
+    /// <summary>
+    /// From an AppImage's copy of the jason it carries, under the data directory, the routine does what it does on macOS:
+    /// the wrapper at ~/.local/bin/jason and install.sh's two lines, here bash's (the login profile and ~/.bashrc), each
+    /// profile it brings into being recorded in the application's own folder under ~/.local/share, so the uninstall takes
+    /// away only a file Jason made.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_an_appimage_s_copy_gets_the_wrapper_and_the_install_scripts_lines()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row: its terminal reads files by their mode, which CI's Linux leg runs.");
+        var executable = Carried(under: Path.Combine(_tree.Paths.Root, "data", "desktop", "bundle", "0.34.0"), linux: "appimage");
+        var (env, output) = Environment(LinuxPlaces(), executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: "/usr/bin:/bin"), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var wrapper = Path.Combine(Home, ".local", "bin", "jason");
+        Assert.Equal(CommandFiles.Wrapper(executable, null), File.ReadAllText(wrapper));
+        var line = $"export PATH=\"{Path.Combine(Home, ".local", "bin")}:$PATH\"";
+        foreach (var profile in new[] { ".profile", ".bashrc" })
+        {
+            Assert.Equal($"\n# added by jason install\n{line}\n", File.ReadAllText(Path.Combine(Home, profile)));
+        }
+
+        Assert.Equal(
+            [Path.Combine(Home, ".bashrc"), Path.Combine(Home, ".profile")],
+            CreatedProfiles.Read(LinuxPlaces()).Order(StringComparer.Ordinal));
+        Assert.Equal(Path.Combine(Home, ".local", "share", "ai.jasonharness.desktop", "created-profiles.json"), CreatedProfiles.RecordFile(LinuxPlaces()));
+        var command = Report(output).GetProperty("command");
+        Assert.Equal(wrapper, command.GetProperty("runs").GetString());
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        Assert.True(command.GetProperty("finds_this").GetBoolean());
+    }
+
+    /// <summary>
+    /// From the deb, whose package links /usr/bin/jason to the jason it carries for every account, the routine writes no
+    /// wrapper and no line: it reads that link back as the terminal command. What would answer before it in a new
+    /// terminal is taken away: the wrapper the 0.48 and 0.49.0 application wrote at ~/.local/bin/jason (or as
+    /// jason-desktop), which Ubuntu's profile puts first on the PATH, and a command-line install there, retired with its
+    /// notices. Another program's file there is left, and named as what a new terminal finds first.
+    /// </summary>
+    [Theory]
+    [InlineData("nothing")]
+    [InlineData("the application's wrapper")]
+    [InlineData("a command-line install")]
+    [InlineData("another program")]
+    public async Task On_linux_the_deb_s_usr_bin_jason_is_the_terminal_command_and_what_answers_before_it_goes(string before)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The deb's /usr/bin/jason is a link and its files are executable by their mode: a Linux row, which CI's Linux leg runs.");
+        var executable = Carried(under: Path.Combine(_tree.Paths.Root, "opt", "Jason", "resources"), linux: "deb");
+        var system = Path.Combine(_tree.Paths.Root, "usr", "bin");
+        Directory.CreateDirectory(system);
+        File.CreateSymbolicLink(Path.Combine(system, "jason"), executable);
+        var bin = Path.Combine(Home, ".local", "bin");
+        Directory.CreateDirectory(bin);
+        var local = Path.Combine(bin, "jason");
+        switch (before)
+        {
+            case "the application's wrapper":
+                File.WriteAllText(local, CommandFiles.Wrapper(executable, null));
+                File.WriteAllText(Path.Combine(bin, "jason-desktop"), CommandFiles.Wrapper(executable, null));
+                break;
+            case "a command-line install":
+                PlantMacCommandLineInstall();
+                break;
+            case "another program":
+                File.WriteAllText(local, "#!/bin/sh\necho mine\n");
+                if (!OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(local, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                }
+
+                break;
+        }
+
+        var places = LinuxPlaces() with { SystemCommand = Path.Combine(system, "jason") };
+        var (env, output) = Environment(places, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: $"{bin}:{system}:/bin"), Ct);
+
+        var report = Report(output);
+        var command = report.GetProperty("command");
+        Assert.Equal(Path.Combine(system, "jason"), command.GetProperty("runs").GetString());
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        Assert.False(command.GetProperty("changed").GetBoolean());
+        Assert.Equal(0, command.GetProperty("profiles").GetArrayLength());
+        Assert.False(File.Exists(Path.Combine(Home, ".profile")) || File.Exists(Path.Combine(Home, ".bashrc")), "the deb's route wrote a profile line");
+        if (before == "another program")
+        {
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.True(File.Exists(local));
+            Assert.Equal(local, command.GetProperty("finds").GetString());
+            Assert.False(command.GetProperty("finds_this").GetBoolean());
+            return;
+        }
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(command.GetProperty("finds_this").GetBoolean());
+        Assert.Equal(Path.Combine(system, "jason"), command.GetProperty("finds").GetString());
+        Assert.False(File.Exists(local), $"{local} would answer before /usr/bin/jason");
+        Assert.False(File.Exists(Path.Combine(bin, "jason-desktop")));
+        Assert.False(File.Exists(Path.Combine(bin, "jason-LICENSE")));
+        Assert.Equal(before == "the application's wrapper" ? 2 : 0, command.GetProperty("taken_back").GetArrayLength());
+        Assert.Equal(before == "a command-line install" ? JsonValueKind.Object : JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+    }
+
     /// <summary>Note 11: a profile that is a link to a regular file is appended through; a link to anything else is refused with the hand line.</summary>
     [Fact]
     public async Task A_profile_link_is_followed_only_to_a_regular_file()
@@ -1888,12 +1996,28 @@ public sealed class InstallCommandTests : IDisposable
     // --- the fixture ---------------------------------------------------------------------------------------
 
     /// <summary>A carried folder of the test's own: the executable, its version.json, and the skills beside it.</summary>
-    private string Carried(string name = "jason", string? under = null)
+    private string Carried(string name = "jason", string? under = null, string? linux = null)
     {
-        var bundle = Path.Combine(under ?? _tree.Paths.Root, "Jason.app", "Contents", "Resources", "bundle");
+        // Linux: the deb's /opt/Jason/resources/bundle, beside package-type saying deb; an AppImage's copy, the folder itself.
+        var bundle = linux switch
+        {
+            "deb" => Path.Combine(under!, "bundle"),
+            "appimage" => under!,
+            _ => Path.Combine(under ?? _tree.Paths.Root, "Jason.app", "Contents", "Resources", "bundle"),
+        };
         Directory.CreateDirectory(bundle);
+        if (linux == "deb")
+        {
+            File.WriteAllText(Path.Combine(under!, "package-type"), "deb\n");
+        }
+
         var executable = Path.GetFullPath(Path.Combine(bundle, name));
         File.WriteAllText(executable, "jason 0.34.0");
+        if (linux is not null && !OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.OtherExecute);
+        }
+
         CarriedRecord.Beside(executable);
         foreach (var (file, text) in SkillsPackage.Files("v0.34.0").Where(entry => entry.Name.StartsWith("skills/", StringComparison.Ordinal)))
         {
@@ -1960,6 +2084,13 @@ public sealed class InstallCommandTests : IDisposable
 
     private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root };
 
+    /// <summary>Linux places with bash, whose /usr/bin/jason, the deb's, is a path no row names unless it plants one.</summary>
+    private SetupPlaces LinuxPlaces() => new(SetupSystem.Linux, Home, null, UserPathValue.EnvironmentKey, "/bin/bash")
+    {
+        Temporary = _tree.Paths.Root,
+        SystemCommand = Path.Combine(_tree.Paths.Root, "no-usr-bin", "jason"),
+    };
+
     /// <summary>A key no row makes: places given an account Path of their own in memory name it, and nothing opens it.</summary>
     private const string NoKey = @"Software\Jason.Tests\never-opened";
 
@@ -1975,7 +2106,7 @@ public sealed class InstallCommandTests : IDisposable
             HttpHandler: RuntimeVerbs.NeverCalled(),
             Processes: new FakeProcessControl(),
             InstallPath: executable,
-            Autostart: new RecordingRegistrar(places?.Platform is SetupSystem.Windows ? AutostartPlatform.Windows : AutostartPlatform.MacOs),
+            Autostart: new RecordingRegistrar(places?.Platform switch { SetupSystem.Windows => AutostartPlatform.Windows, SetupSystem.Linux => AutostartPlatform.Linux, _ => AutostartPlatform.MacOs }),
             Harnesses: HarnessLocators.ForHome(Home),
             Variables: variables ?? new Dictionary<string, string>(),
             SearchPath: "/usr/bin:/bin",

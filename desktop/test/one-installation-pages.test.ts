@@ -1,6 +1,6 @@
 // The pages say what the Command Line item is on each system, and what a start does when an update holds the lock, in
-// the terms the desktop's own code decides them by: on macOS and Windows the item is the machine set-up's status
-// (`commandIsSetup`), with its Put Back act; on Linux it is the PATH command; and `install_in_progress` and
+// the terms the desktop's own code decides them by: on macOS, Windows and Linux the item is the machine set-up's status
+// (`commandIsSetup`), with its Put Back act; and `install_in_progress` and
 // `update_in_progress` leave the set-up for later (`laterCodes`), never a failure.
 
 import assert from 'node:assert/strict';
@@ -27,17 +27,15 @@ function bullet(start: string): string {
     return desktop.slice(from, to < 0 ? undefined : to);
 }
 
-test('the item is the set-up on macOS and Windows and the PATH command on Linux', () => {
+test('the item is the set-up on macOS, Windows and Linux', () => {
     assert.equal(commandIsSetup('darwin'), true);
     assert.equal(commandIsSetup('win32'), true);
-    assert.equal(commandIsSetup('linux'), false);
+    assert.equal(commandIsSetup('linux'), true);
 
-    const setup = bullet('- **Command Line**, on macOS and Windows,');
+    const setup = bullet('- **Command Line**, on macOS, Windows and Linux,');
     assert.ok(setup.includes('shows what the machine set-up placed'), setup);
     assert.ok(setup.includes(putBackLabel.replace('…', '')), setup);
-    const path = bullet('- **Command Line**, on Linux,');
-    assert.ok(path.includes('places a `jason` that your terminal finds'), path);
-    assert.ok(!path.includes(putBackLabel.replace('…', '')), path);
+    assert.ok(!desktop.includes('- **Command Line**, on Linux,'), 'the page still has a Linux Command Line item of its own');
 });
 
 test('the README and the desktop page say the first start sets the machine up on macOS and Windows', () => {

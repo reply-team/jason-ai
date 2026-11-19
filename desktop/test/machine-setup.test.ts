@@ -106,13 +106,14 @@ function setupOn(data: string, cli: Cli, over: Partial<ConstructorParameters<typ
     return { setup, log };
 }
 
-test('the routine is the Command Line item on macOS and Windows alone; Linux keeps its PATH command, and a development build runs nothing', () => {
+test('the routine is the Command Line item on macOS, Windows and Linux, and a development build runs nothing', () => {
     assert.equal(commandIsSetup('darwin'), true);
     assert.equal(commandIsSetup('win32'), true);
-    assert.equal(commandIsSetup('linux'), false, 'Linux keeps today’s Command Line item and path-profile.ts');
+    assert.equal(commandIsSetup('linux'), true);
     assert.equal(setupOffered('darwin', true), true);
     assert.equal(setupOffered('win32', true), true);
-    assert.equal(setupOffered('linux', true), false);
+    assert.equal(setupOffered('linux', true), true);
+    assert.equal(setupOffered('linux', false), false);
     assert.equal(setupOffered('darwin', false), false, 'a development build’s jason is the checkout’s');
     assert.equal(setupOffered('win32', false), false);
 });
@@ -122,6 +123,8 @@ test('on macOS the routine is told the login shell’s own PATH, or the empty va
     assert.deepEqual(setupArguments('darwin', null), ['install', '--terminal-path', '']);
     assert.deepEqual(setupArguments('win32', null), ['install']);
     assert.deepEqual(setupArguments('win32', 'C:\\anything'), ['install'], 'Windows reads no --terminal-path');
+    assert.deepEqual(setupArguments('linux', '/usr/bin:/bin'), ['install', '--terminal-path', '/usr/bin:/bin'], 'Linux is told the login shell’s PATH as macOS is');
+    assert.deepEqual(setupArguments('linux', null), ['install', '--terminal-path', '']);
 });
 
 test('a first start runs the routine once, with the shell’s PATH and no --roles, and its record leaves the data directory new for the Demo', async () => {

@@ -31,6 +31,7 @@ import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
+import { wrapperTarget } from './command-line.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
@@ -429,8 +430,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         account: { home, shellNamed: accountShell(process.env), terminalPath: () => terminalPath },
         log,
     };
-    // On Linux the Command Line item places the PATH command; on macOS and Windows it is the machine set-up's status
-    // (`machine-setup.ts`), which `jason install` places and the desktop's start runs.
+    // The Command Line item is the machine set-up's status (`machine-setup.ts`), which `jason install` places and the
+    // desktop's start runs; the PATH command remains only for a system the set-up does not cover.
     const command = offers.command && carried.outlives && !commandIsSetup(process.platform) ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
@@ -847,7 +848,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const named = async (): Promise<readonly string[] | null> => {
             const registration = autostart === null ? { registered: false, executable: null } : await autostart.registration();
             if (registration === null) return null;
-            return [...(registration.registered && registration.executable !== null ? [registration.executable] : []), ...(command?.named() ?? [])];
+            // On Linux the wrapper `jason install` writes for an AppImage names a copy as well.
+            const wrapped = process.platform === 'linux' ? wrapperTarget(readText(join(home, '.local', 'bin', 'jason')) ?? '')?.executable : undefined;
+            return [...(registration.registered && registration.executable !== null ? [registration.executable] : []), ...(command?.named() ?? []), ...(wrapped === undefined ? [] : [wrapped])];
         };
         void repointed
             .then(() =>
@@ -1009,12 +1012,16 @@ async function linuxOwedStart(log: Logger): Promise<void> {
 }
 
 /**
- * The machine set-up a windowed start runs on macOS and Windows: the carried `jason install`, with the person's own
- * environment, its record in the person's directory; null on Linux, whose Command Line item is the PATH command.
+ * The machine set-up a windowed start runs: the carried `jason install`, with the person's own environment, its record in
+ * the person's directory. An AppImage runs it from its copy under the person's data directory (`bundle-copy.ts`), made
+ * here if this start has not made it yet, and runs none where there is no copy: its mount's jason ends with the run.
  */
 function makeMachineSetup(log: Logger): MachineSetup | null {
     if (!commandIsSetup(process.platform)) return null;
-    const bundle = bundleDirectory();
+    const packaged = bundleDirectory();
+    const carried = process.platform === 'linux' ? carriedOf({ form: linuxForm(), packaged, version: bundleVersion(packaged), bundles: desktopPaths(runOn.person).bundle }) : null;
+    if (carried !== null && !carried.outlives) return null;
+    const bundle = carried?.bundle ?? packaged;
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const cli = cliAt(executable, withPath(process.env, pathOf(process.env)));
     return new MachineSetup({

@@ -1003,9 +1003,10 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## The command line, and the login items
 
-- **Command Line**, on macOS and Windows, shows what the machine set-up placed, by its report: where a new terminal finds
-  `jason` (on macOS the wrapper `~/.local/bin/jason`, with the installer's two lines in your shell profiles where a new
-  terminal's PATH lacked that folder; on Windows the application's `resources\bundle` folder on your account's Path), the
+- **Command Line**, on macOS, Windows and Linux, shows what the machine set-up placed, by its report: where a new terminal
+  finds `jason` (on macOS, and for an AppImage on Linux, the wrapper `~/.local/bin/jason`, with the installer's two lines in
+  your shell profiles where a new terminal's PATH lacked that folder; on Linux from the deb, the package's own
+  `/usr/bin/jason`; on Windows the application's `resources\bundle` folder on your account's Path), the
   full path a terminal already open types instead, the folders Jason's skills were deployed to and for which programs, and
   what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. Where
   `jason install` read the command back as not in place (a profile it could not write, a Path entry not written), the item
@@ -1013,29 +1014,11 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   jason and the Skills…** runs `jason install` again on your word, after a confirmation that says what it writes, and then
   tells what it did in its own sentences. The application places no command of its own there any more; the `jason.cmd`
   shim and the Git Bash wrapper an earlier version put in `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the
-  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, are taken back by `jason install`. On macOS the update item also
+  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, and on Linux from the deb the `~/.local/bin/jason` or
+  `jason-desktop` wrapper an earlier version's Command Line item wrote, are taken back by `jason install`. On macOS the update item also
   says where the application is and whether its update can write there: where the application or the folder it is in is
   not writable by your account, an update asks for an administrator's password. The menu always shows the executable's
   full path.
-- **Command Line**, on Linux, places a `jason` that your terminal finds and that runs the executable the application
-  carries: a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
-  your login shell gave when the window started, or, where it gave none, taken as not holding it), the same act puts it
-  there by the installer's own rule: the line `# added by jason install` and under it
-  `export PATH="$HOME/.local/bin:$PATH"` (with your home spelled out) go into the file a login shell of your account
-  reads — `~/.zprofile` for zsh; for bash the first of `~/.bash_profile` and `~/.bash_login` that exists, else
-  `~/.profile`; `~/.profile` for any other shell — and, for zsh and bash, into `~/.zshrc` or `~/.bashrc` as well, each
-  only where that whole line is not there already. The confirmation names every file it writes and the two lines;
-  afterwards it says to open a new terminal, or, for a shell with no such second file, to sign out and back in. A
-  profile that is a link, a folder or cannot be written takes nothing, nor does any other: the item names the file and
-  the line to add by hand, and the wrapper is still placed. Removing the command, the one uninstall on macOS, or Remove
-What Jason Placed on Linux, takes
-  those two lines back out of the files that carry them, and never a line the marker does not head, only where
-  `~/.local/bin` then holds nothing but what Jason's installer or the application writes there (`jason`,
-  `jason-desktop`, `jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`), the rule `jason uninstall` keeps: that folder is shared,
-  and where the line puts it on the PATH, the other programs in it are found through it too. While it holds anything
-  else, or another `jason`, the lines stay, and the item says why. It is placed and removed on your word, read back
-  on every look, never rewritten silently, and never put in the place of a `jason` that is not ours: it is then named
-  `jason-desktop`. The menu always shows the executable's full path.
 - **Open Jason at Login** is a Windows login item, a macOS LaunchAgent (`~/Library/LaunchAgents/ai.jasonharness.desktop.plist`)
   or a Linux autostart entry (`~/.config/autostart/ai.jasonharness.desktop.desktop`), and opens the window only.
   **Start the Runtime at Logon** is `jason runtime autostart` for the `jason` the application carries.

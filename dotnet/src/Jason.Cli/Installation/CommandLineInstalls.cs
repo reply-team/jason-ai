@@ -297,7 +297,7 @@ internal sealed class CommandLineRemoval(SetupPlaces places, List<string> left, 
                 var without = PathEntry.WithoutEntry(bytes, directory);
                 if (!ReferenceEquals(without, bytes))
                 {
-                    removed.Add(CreatedProfiles.WriteBackOrRemove(places.Home, profile, without)
+                    removed.Add(CreatedProfiles.WriteBackOrRemove(places, profile, without)
                         ? $"the block for {directory} in {profile}, and {profile} itself, which jason install created and which held nothing else"
                         : $"the block for {directory} in {profile}");
                 }

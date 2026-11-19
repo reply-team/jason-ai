@@ -821,7 +821,7 @@ public static partial class DesktopRemoval
                 var without = PathEntry.WithoutEntry(bytes, folder);
                 if (!ReferenceEquals(without, bytes))
                 {
-                    done.Add(Installation.CreatedProfiles.WriteBackOrRemove(places.Home, profile, without)
+                    done.Add(Installation.CreatedProfiles.WriteBackOrRemove(places, profile, without)
                         ? $"Took the lines that put {folder} on the PATH out of {profile}, which jason install created, and removed it: nothing else was in it."
                         : $"Took the lines that put {folder} on the PATH out of {profile}.");
                 }

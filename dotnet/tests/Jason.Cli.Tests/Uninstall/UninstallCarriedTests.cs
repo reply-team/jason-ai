@@ -63,18 +63,18 @@ public sealed partial class UninstallCarriedTests : IDisposable
     }
 
     /// <summary>
-    /// The refusal above is reached only where no system's places are known, so the way it names is Linux's: on a real machine
-    /// the places are known on Windows and on macOS, where this verb is the application's one uninstall, and unknown elsewhere.
+    /// The refusal above is reached only where no system's places are known: on a real machine the places are known on
+    /// Windows, on macOS and on Linux, and unknown elsewhere.
     /// </summary>
     [Fact]
-    public void A_systems_places_are_known_on_Windows_and_macOS_and_nowhere_else()
+    public void A_systems_places_are_known_on_Windows_macOS_and_Linux_and_nowhere_else()
     {
         var places = SetupPlaces.ForThisMachine();
 
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
             Assert.NotNull(places);
-            Assert.Equal(OperatingSystem.IsWindows() ? SetupSystem.Windows : SetupSystem.MacOs, places.Platform);
+            Assert.Equal(OperatingSystem.IsWindows() ? SetupSystem.Windows : OperatingSystem.IsMacOS() ? SetupSystem.MacOs : SetupSystem.Linux, places.Platform);
         }
         else
         {
