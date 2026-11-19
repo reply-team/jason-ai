@@ -122,6 +122,10 @@ export function withoutLines(text: string, folder: string): string {
     // blank line above, the `\n` the block began with ended the person's last line, which had none: where the block is
     // the last thing in the file it goes too, and the file ends as it began; where anything follows, it stays, because
     // it now separates the person's lines.
+    // The one thing not promised, as in C#: in a file that ended without a newline and holds blocks for two folders, one
+    // under the other, taking the upper block out first keeps the newline it began with, since the lower block follows
+    // it, and the file can then no longer be told from one that ended in a newline, so taking the lower block out after
+    // it leaves that newline.
     const line = asBytes(exportLine(folder));
     if (!text.includes(line)) return text;
     const lines = text.split('\n');

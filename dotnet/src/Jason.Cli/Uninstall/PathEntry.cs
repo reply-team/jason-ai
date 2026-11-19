@@ -592,6 +592,12 @@ public static class PathEntry
     /// the end of every line a shell then reads. <see cref="WithoutEntry(byte[], string)"/> does this over the
     /// file's own bytes.
     /// </para>
+    /// <para>
+    /// <b>The one thing not promised:</b> in a file that ended without a newline and holds blocks for two folders, one
+    /// under the other, taking the upper block out first keeps the newline it began with, since the lower block follows
+    /// it, and the file can then no longer be told from one that ended in a newline, so taking the lower block out
+    /// after it leaves that newline.
+    /// </para>
     /// </remarks>
     public static string WithoutEntry(string profileText, string installDirectory)
     {
