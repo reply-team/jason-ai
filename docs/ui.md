@@ -39,7 +39,7 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
-`Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+`Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to no other.
 Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
 name serves nothing.
 
