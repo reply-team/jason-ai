@@ -3,6 +3,7 @@ using Jason.Cli.Commands;
 using Jason.Cli.Installation;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
+using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
@@ -129,10 +130,12 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
     /// runtime from and sets the machine up through; and any copy of the installation, the old one a terminal's wrapper still
     /// runs among them, carries the update on, while a copy under another data directory does not. Catches the new copy
     /// refusing the update as another jason's (update_in_progress, left at 'swapped'), and the finish starting the old copy's
-    /// runtime (update_not_healthy, left at 'healthy').
+    /// runtime (update_not_healthy, left at 'healthy'). And where the process carrying the update ends there, the way out of
+    /// the process that started it starts the runtime the update stopped from the new copy, never from the old one the
+    /// process itself is: catches the old version's runtime started beside the new application.
     /// </summary>
     [Fact]
-    public void On_linux_the_appimage_s_record_names_the_new_copy_at_the_swap_and_every_copy_carries_it_on()
+    public async Task On_linux_the_appimage_s_record_names_the_new_copy_at_the_swap_and_every_copy_carries_it_on()
     {
         var old = Copy("0.49.1");
         var next = Copy("0.49.2");
@@ -150,10 +153,14 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
         Assert.True(Handing(next).Carries(ledger), "the copy of the version the update goes to did not carry it on");
         Assert.True(Handing(old).Carries(ledger), "the copy that began the update did not carry it on");
         Assert.False(Handing(elsewhere).Carries(ledger), "another data directory's copy carried this installation's update on");
+
+        var processes = new FakeProcessControl();
+        await Handing(old, processes).RecoverAsync(wasLive: true, waits: false);
+        Assert.Equal([next], processes.Executables.Single());
     }
 
-    private CarriedUpdate Handing(string executable) =>
-        new(Environment(executable, display: true).Env, new UpdatePaths(_data.Paths), TimeProvider.System, CarriedExecutable.Of(executable)!, SetupSystem.Linux);
+    private CarriedUpdate Handing(string executable, FakeProcessControl? processes = null) =>
+        new(Environment(executable, display: true).Env with { Processes = processes }, new UpdatePaths(_data.Paths), TimeProvider.System, CarriedExecutable.Of(executable)!, SetupSystem.Linux);
 
     /// <summary>
     /// From a terminal with no display (an ssh session, a service), the AppImage's update is refused before anything is
