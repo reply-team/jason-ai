@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Jason.Cli.Commands;
 using Jason.Cli.Installation;
+using Jason.Cli.Process;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Process;
@@ -156,6 +157,65 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
 
         var processes = new FakeProcessControl();
         await Handing(old, processes).RecoverAsync(wasLive: true, waits: false);
+        Assert.Equal([next], processes.Executables.Single());
+    }
+
+    /// <summary>
+    /// The hand-over's own way out once an AppImage's update has landed, here the record at the swap failing to be written: the
+    /// runtime the update stopped is started from the new version's copy, never from the old copy this process is. Jason
+    /// Desktop is stood in: it stops the runtime, hands the update to its installer, and the file is then the new version.
+    /// Catches the old version's runtime started beside the new application on that way out.
+    /// </summary>
+    [Fact]
+    [UnsupportedOSPlatform("windows")]
+    public async Task On_linux_an_appimage_s_hand_over_that_fails_once_it_landed_starts_the_runtime_from_the_new_copy()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "An AppImage is a Linux program; CI's Linux leg runs this row.");
+        var old = Copy("0.49.1");
+        var next = AppImageCopy.CopyOf(AppImageCopy.BundlesOf(old), SemanticVersion.Parse("0.49.2"));
+        var file = Path.Combine(_tree.Paths.Root, "Jason.AppImage");
+        File.Copy(AppImage("0.49.1"), file);
+        File.WriteAllText(Path.Combine(_data.Paths.Root, "desktop", "appimage.json"), $"{{\"file\":\"{file}\"}}\n");
+        var update = new UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        processes.OnRun = (_, command, _, _) =>
+        {
+            var id = command[command.ToList().IndexOf("--request") + 1];
+            File.Delete(_data.Paths.DescriptorFile);
+            processes.RunningPids.Remove(RuntimeVerbs.Pid);
+            File.Copy(AppImage("0.49.2"), file, overwrite: true);
+            File.WriteAllText(
+                Path.Combine(update.Root, $"desktop-{id}.json"),
+                $$"""{"request":"{{id}}","state":"installing","from":"0.49.1","to":"0.49.2","reason":null,"message":null,"offered":null,"window":false,"runtime_stopped":true,"kept":null,"updated_at":"2026-11-19T12:00:00.000Z"}""");
+            return Task.FromResult(new FinishedCommand(0, string.Empty));
+        };
+        processes.OnLaunch = _ =>
+        {
+            _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_AGAIN", pid: 5151));
+            processes.RunningPids.Add(5151);
+            return new FakeProcessHandle(5151);
+        };
+        var handing = new CarriedUpdate(Environment(old, display: true).Env with { Processes = processes }, update, TimeProvider.System, CarriedExecutable.Of(old)!, SetupSystem.Linux)
+        {
+            Writes = ledger =>
+            {
+                if (ledger.Step == UpdateStep.Swapped)
+                {
+                    throw new IOException("There is not enough space on the disk.");
+                }
+
+                ledger.Write(update.Ledger);
+            },
+        };
+        var staged = new UpdateLedger(SemanticVersion.Parse("0.49.1"), SemanticVersion.Parse("0.49.2"), UpdateStep.Staged, DateTimeOffset.UtcNow, old, old, old);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => handing.InstallAsync(staged, new UpdateRequest(new Uri("https://example.test/manifest.json"), null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains("The application is 0.49.2", refused.Message, StringComparison.Ordinal);
         Assert.Equal([next], processes.Executables.Single());
     }
 

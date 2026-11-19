@@ -221,10 +221,15 @@ echo "apt read Jason's repository through the address and the chain, offered $ve
 # `sudo apt upgrade` does, for this one package.
 echo "$next" > "$work/releases/latest"
 update_jason
+automatic=$(apt-config dump | grep -E '^Unattended-Upgrade::' || true)
+if grep -qiE 'jason|get\.jasonharness\.ai' <<< "$automatic"; then
+  echo "$automatic"; fail "apt's configuration names Jason for the automatic updates."
+fi
 printf '#clear Unattended-Upgrade::Allowed-Origins;\nUnattended-Upgrade::Allowed-Origins {};\n' | $SUDO tee "$no_origins" > /dev/null
 $SUDO unattended-upgrade -v > "$work/automatic.log" 2>&1 || { cat "$work/automatic.log"; fail "unattended-upgrade failed."; }
 [ "$(installed)" = "$version" ] || { cat "$work/automatic.log"; fail "Ubuntu's automatic updates installed jason-desktop $(installed) on their own; Jason's updates are offered, and installed when the person says so."; }
-apt list --upgradable 2> /dev/null | grep -q "^jason-desktop/.* $next " || { apt list --upgradable; fail "apt does not offer jason-desktop $next as an upgrade."; }
+offered=$(apt list --upgradable 2> /dev/null || true)
+grep -q "^jason-desktop/.* $next " <<< "$offered" || { echo "$offered"; fail "apt does not offer jason-desktop $next as an upgrade."; }
 $SUDO apt-get install -y -q --only-upgrade jason-desktop > "$work/upgrade.log" 2>&1 || { cat "$work/upgrade.log"; fail "apt-get did not upgrade jason-desktop."; }
 [ "$(installed)" = "$next" ] || { cat "$work/upgrade.log"; fail "apt left jason-desktop at $(installed), and the repository offers $next."; }
 grep -q "\"version\": \"$next\"" /opt/Jason/resources/bundle/version.json || fail "The package's version.json does not name $next after the update."

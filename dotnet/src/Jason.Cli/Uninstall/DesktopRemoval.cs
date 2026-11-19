@@ -1325,7 +1325,6 @@ public static partial class DesktopRemoval
 
     private static async Task<(RemovalRefused Refusal, bool Unended)?> PurgeAsync(CliEnvironment env, DesktopPlan plan, bool registrationTaken, List<string> done, CancellationToken cancellationToken)
     {
-
         PackageRun run;
         try
         {
@@ -1352,8 +1351,8 @@ public static partial class DesktopRemoval
         {
             return (PackageStays(
                 registrationTaken,
-                string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {PurgeWait.TotalMinutes:F0} minutes: the password dialog was left unanswered, or apt was still waiting for another installation or still at work, and it may yet take Jason Desktop's package off, so the runtime this uninstall stopped was not started again from the files apt may be taking away."),
-                "Once apt has ended, run `jason uninstall` again; where the package stayed, Jason Desktop's next start or `jason runtime start` starts the runtime. Or an administrator takes the package off with `sudo apt purge jason-desktop`, which leaves this account's own files, as the system's removal of any application does."), true);
+                string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {PurgeWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet take Jason Desktop's package off, so the runtime this uninstall stopped was not started again from the files apt may be taking away."),
+                "Once apt has ended: where the package stayed, run `jason uninstall` again, or an administrator takes it off with `sudo apt purge jason-desktop`, and Jason Desktop's next start or `jason runtime start` starts the runtime meanwhile; where apt took it off, `jason` went with it, and what this account keeps, which the plan above lists, is deleted by hand, or by installing Jason again and running `jason uninstall`."), true);
         }
 
         return (run.Refusal switch

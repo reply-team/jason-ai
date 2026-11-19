@@ -19,7 +19,7 @@
 # On Linux it installs Jason Desktop as each system's users install comparable applications, and opens nothing. The
 # package manager the system has decides. Where there is apt (Ubuntu, Debian, Mint): the release's deb, checked against
 # checksums.txt and installed by apt, with the one password a system package needs - asked by sudo where this line has a
-# terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most ten minutes - and refused
+# terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most twenty minutes - and refused
 # in its own words where none can be asked or given; the package adds Jason's apt repository, its key and /usr/bin/jason,
 # and every later update comes with the system's. Anywhere else (Arch, Fedora and the rest): the AppImage, per account,
 # with no password, placed at ~/Applications/jason-desktop-linux-x64.AppImage by one rename, its menu entry and icons
@@ -497,12 +497,13 @@ apt_install() {
             NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
         fi
     fi
-    # A run still going at the bound first, whatever apt said so far: it may be waiting on the lock or at work, and may yet
-    # install the package.
-    if [ "$STATUS" -eq 124 ]; then
-        fail "apt had not ended after $((ASK_SECONDS / 60)) minutes: the password dialog was left unanswered, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. Run the line again once it has ended: it sets up the package where apt installed it, or asks again.$NOT_ADMIN"
-    elif grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
+    # apt's own last words first. pkexec becomes apt, as root, once the password is given, and timeout cannot end that, so
+    # it waits for apt: a run past the bound has ended by now, and said why. Then the bound alone: pkexec was ended while
+    # its dialog waited for an answer, and nothing ran.
+    if grep -qE '^E: (Could not get lock|Unable to acquire the dpkg frontend lock)' "$TMP/apt.err"; then
         fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
+    elif [ "$STATUS" -eq 124 ] && ! grep -q '^E:' "$TMP/apt.err"; then
+        fail "The password dialog was not answered within $((ASK_SECONDS / 60)) minutes, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then

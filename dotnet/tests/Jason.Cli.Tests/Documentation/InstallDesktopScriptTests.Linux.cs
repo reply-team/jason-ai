@@ -58,8 +58,9 @@ public sealed partial class InstallDesktopScriptTests
     /// Where the password could not be asked or was not given, the line refuses in the words of the case, read from pkexec's
     /// and apt's own words and never from an exit code alone: the dialog dismissed (and, for an account that is not an
     /// administrator, who can type a password there), no agent to ask in, the system's dialog failing, the package lock held
-    /// for ten minutes, a run still going at the line's bound (which apt may yet finish), no pkexec at all, and apt itself
-    /// failing. Nothing is set up after any of them.
+    /// for ten minutes (apt's own words, also where the line's bound passed while apt waited), the dialog left unanswered
+    /// until the line's bound ended it, no pkexec at all, and apt itself failing. Nothing is set up after any of them.
+    /// Catches apt's lock read as an unanswered dialog, and an unanswered dialog said as an apt that may yet install.
     /// </summary>
     [Theory]
     [InlineData("Error executing command as another user: Request dismissed", 126, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.")]
@@ -69,7 +70,8 @@ public sealed partial class InstallDesktopScriptTests
     [InlineData("sudo-rs: Maximum 3 incorrect authentication attempts", 1, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed.")]
     [InlineData("GDBus.Error:org.freedesktop.DBus.Error.NoReply: Message recipient disconnected from message bus without replying", 127, "user sudo", "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again.")]
     [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 100, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
-    [InlineData("Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)...", 124, "user sudo", "apt had not ended after 20 minutes")]
+    [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 124, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
+    [InlineData("", 124, "user sudo", "The password dialog was not answered within 20 minutes, so nothing was installed. Run the line again to be asked again.")]
     [InlineData("E: Sub-process /usr/bin/dpkg returned an error code (1)", 100, "user sudo", "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off.")]
     [InlineData(null, 0, "user sudo", "this session has no way to ask for it: run the line in a terminal of your desktop")]
     [UnsupportedOSPlatform("windows")]
@@ -160,8 +162,8 @@ public sealed partial class InstallDesktopScriptTests
     /// carries copied under the data directory as the application's own start copies it, whose `jason install` then runs.
     /// The entry spells the file's path as the Desktop Entry Specification reads it, whatever the home's name holds: TryExec
     /// with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a backslash and
-    /// a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file, or as a field
-    /// code.
+    /// a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file. A per-cent
+    /// is spelled as the specification asks, and GLib's launchers still list no such entry.
     /// </summary>
     [Theory]
     [InlineData("home", "home", "home")]
@@ -305,7 +307,8 @@ public sealed partial class InstallDesktopScriptTests
 
             if (pkexec)
             {
-                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
+                // A dialog nobody answers: timeout ends pkexec at the bound, and pkexec says nothing.
+                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ \"${{STUB_PKEXEC_EXIT:-}}\" = 124 ] && [ -z \"${{STUB_PKEXEC_SAYS:-}}\" ]; then exit 124; fi\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
             }
 
             File.WriteAllText(Path.Combine(DebPlace, "..", "jason"), StandInJason);

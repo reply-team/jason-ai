@@ -184,6 +184,14 @@ test('on Linux the Exec and TryExec lines spell the launcher as the Desktop Entr
     // TryExec is a string and is not quoted: only the string escape, a backslash doubled. Catches a session that reads a
     // backslash's escape and looks for another file, or drops the line as an unreadable value.
     assert.ok(autostartEntry('/home/a/R&D "x" `y` $z \\w/Jason.AppImage').includes('\nTryExec=/home/a/R&D "x" `y` $z \\\\w/Jason.AppImage\n'));
+    // The whole entry, as the uninstall's AppImage row (UninstallCarriedTests) plants it for a folder of the same name.
+    assert.equal(autostartEntry('/home/a/My "Apps" \\ $x/Jason.AppImage'), String.raw`[Desktop Entry]
+# Written by the Jason desktop application.
+Type=Application
+Name=Jason
+TryExec=/home/a/My "Apps" \\ $x/Jason.AppImage
+Exec="/home/a/My \\"Apps\\" \\\\ \\$x/Jason.AppImage" --opened-at-login
+`);
     assert.equal(autostartExec('/home/a/100%/Jason.AppImage'), null, 'a per-cent begins a field code');
     assert.equal(autostartExec('/home/a/new\nline/Jason.AppImage'), null);
     assert.equal(new LoginItem({ platform: 'linux', home: '/home/a', executable: '/home/a/100%/Jason.AppImage', electron: electronLogin(), pathRead, log: memoryLog(), env: {} }).supported, false);

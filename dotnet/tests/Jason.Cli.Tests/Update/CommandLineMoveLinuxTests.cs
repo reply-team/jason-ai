@@ -82,7 +82,7 @@ public sealed class CommandLineMoveLinuxTests
     /// routine and starts the runtime. The entry spells the file's path as the Desktop Entry Specification reads it, whatever
     /// the home's name holds: TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a
     /// backslash taking a backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher
-    /// reads as another file, or as a field code.
+    /// reads as another file. A per-cent is spelled as the specification asks, and GLib's launchers still list no such entry.
     /// </summary>
     [Theory]
     [InlineData("home", "home", "home")]

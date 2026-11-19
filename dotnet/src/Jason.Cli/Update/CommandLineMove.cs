@@ -454,7 +454,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     /// <summary>
     /// Linux, the deb: the verified package installed by apt with the one password a system package needs, asked as the
-    /// install line asks it, within the setup's bound. A refusal changes nothing and leaves the move pending, saying why and
+    /// install line asks it, within its own bound (AptWait). A refusal changes nothing and leaves the move pending, saying why and
     /// what carries it on; the package's own scripts write Jason's apt source, so later updates come with the system's.
     /// </summary>
     private async Task<UpdateMoveResponse?> PlaceDebAsync(SetupPlaces places, SemanticVersion version, string application, string package, CancellationToken cancellationToken)
@@ -509,7 +509,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             AptRefusal.NoSession => (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on."),
             AptRefusal.DialogFailed => (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on."),
             AptRefusal.LockHeld => (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on."),
-            AptRefusal.Unended => (MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {MoveSystem.AptWait.TotalMinutes:F0} minutes: the password dialog was left unanswered, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. The command line is unchanged; `jason update apply` carries the move on, into the package where apt installed it, or asks again.")),
+            AptRefusal.Unended => (MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {MoveSystem.AptWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. The command line is unchanged; `jason update apply` carries the move on, into the package where apt installed it, or asks again.")),
             _ => (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on.")),
         };
     }

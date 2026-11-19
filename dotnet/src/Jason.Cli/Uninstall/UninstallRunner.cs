@@ -143,8 +143,9 @@ public static class UninstallRunner
             }
 
             // On Linux from the deb, the package, while nothing of this account's is yet removed: a password not given then removes
-            // nothing, and the runtime stopped above starts again, unless apt may still be at work. The demo's runtime runs the jason apt deletes, so it is stopped
-            // first; and every assembly the steps after the purge need is loaded before it, since it deletes this process's file.
+            // nothing, and the runtime stopped above starts again, unless apt may still be at work. The demo's runtime runs the
+            // jason apt deletes, so it is stopped first; and every assembly the steps after the purge need is loaded before it,
+            // since it deletes this process's file.
             var demoStopped = false;
             if (purges)
             {

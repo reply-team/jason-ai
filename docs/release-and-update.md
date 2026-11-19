@@ -456,10 +456,10 @@ On Linux the script installs Jason Desktop as the system's users install compara
 SHA-256** against `checksums.txt` before anything of it runs, and opens nothing; the system decides the form. Where there
 is apt (Ubuntu, Debian, Mint), the release's deb is installed by apt, with the one administrator's password a system
 package needs, asked by `sudo` where the line has a terminal and otherwise by the desktop's own password dialog through
-`pkexec`, apt waiting up to ten minutes for the package system and the install given twenty; a password not given, no
-session to ask in, the dialog failing, the package system held by another install are each refused in their own words,
-with nothing installed; an install still going after twenty minutes is said to be one apt may yet finish; apt failing
-part-way says so, with the commands that finish the package or take it off. The deb's
+`pkexec`, apt waiting up to ten minutes for the package system and the install given twenty; a password not given, the
+dialog left unanswered for those twenty minutes, no session to ask in, the dialog failing, the package system held by
+another install are each refused in their own words, with nothing installed; apt failing part-way says so, with the
+commands that finish the package or take it off. The deb's
 own scripts add Jason's apt repository, `https://get.jasonharness.ai/apt/`, as
 `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key the package carries as
 `/usr/share/keyrings/jason-desktop.gpg`, and `/usr/bin/jason`, a link to the `jason` the package carries, for every
