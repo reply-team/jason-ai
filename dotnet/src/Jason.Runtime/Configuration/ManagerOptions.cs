@@ -77,6 +77,11 @@ public sealed class ManagerOptions
         // directly. Said once per hold. An installation that narrowed this list before the kind existed is not woken by it
         // until it adds it.
         JournalKinds.AudienceSearchHeld,
+
+        // The campaign went live, at its first start or after a pause: what it needs now is the manager's — work for its
+        // people, or a look at what changed while it stood — rather than a cadence later. One review at each going live.
+        // An installation that narrowed this list before the kind was in it is not woken by a start until it adds it.
+        JournalKinds.CampaignStarted,
     ];
 
     /// <summary>

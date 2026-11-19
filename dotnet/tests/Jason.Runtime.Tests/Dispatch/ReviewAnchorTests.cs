@@ -24,8 +24,9 @@ public class ReviewAnchorTests
 
     /// <summary>
     /// A campaign somebody stopped for a week and started again is not a campaign nobody looked at for a week.
-    /// Measuring from the start means the review falls a full interval after it wakes — and without an anchor
-    /// that moves on every start, a resumed campaign would be summoned on the very tick it came back.
+    /// Measuring from the start means the scheduled review falls a full interval after it wakes — and without an
+    /// anchor that moves on every start, a resumed campaign would be due by the cadence on the very tick it came
+    /// back. The start's own line summons a review of its own (StartSummonsManagerTests); that is not the cadence.
     /// </summary>
     [Fact]
     public async Task A_campaign_resumed_after_a_week_is_reviewed_an_interval_later_not_at_once()
