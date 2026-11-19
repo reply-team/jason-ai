@@ -77,11 +77,12 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns, reload as reloadCampaigns, summary } from './campaigns';
-import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
+import { campaigns, reload as reloadCampaigns } from './campaigns';
+import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
+import { atFoot, followedTop } from './follow';
 import { html, type Html } from './html';
-import { markdownView } from './markdown-view';
+import { copied, markdownView } from './markdown-view';
 import { barMarks, svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
@@ -333,6 +334,7 @@ export function makeUnmade(id: string): Promise<string | null> {
             if (now) changeChat(id, (each) => told(everyWordBack(each), why));
             return null;
         }
+        madeAtSend.add(real);
         retire(id, real);
         return real;
     })();
@@ -366,6 +368,12 @@ function retire(id: string, real: string): void {
     for (const hook of madeHooks) hook(id, real);
     if (typing) whenDrawn(real, (panel) => panel.querySelector<HTMLTextAreaElement>(composerBox)?.focus());
 }
+
+/**
+ * The conversations made here for an unmade chat, at a send or another first act, whose panel, drawn anew for them, has
+ * not yet taken them to the foot: the message that made one goes to the foot as any message sent does.
+ */
+const madeAtSend = new Set<string>();
 
 /** The composer's box in a chat's panel. */
 const composerBox = 'textarea[aria-label="Your message"]';
@@ -1180,7 +1188,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 named = true;
                 return html`<div class="m ai">
                         ${who}
-                        <div class="bub">${markdownView(words)}</div>
+                        <div class="bub">${markdownView(words, `${chat.id}:${index}`)}</div>
                     </div>
                     ${card}`;
             }
@@ -1224,12 +1232,13 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         chat.dropped > 0
             ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
             : null;
-    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? typing(chat) : null}`;
+    return html`${dropped}${parts}${chat.running ? typing(chat) : null}`;
 }
 
 /**
- * The moves that bring a thread to its foot: each message the person sent (named by its words and how many times they
- * were said before it) and each permission card still asking. A key a thread had not before is a new move.
+ * The moves that bring a thread to its foot wherever the person reads it: each message they sent, named by its words and
+ * how many times they were said before it, and each permission card still asking, which is the turn waiting for them. A
+ * key a thread had not before is a new move.
  */
 function movesOf(entries: Chat['entries']): string[] {
     const said = new Map<string, number>();
@@ -1245,6 +1254,25 @@ function movesOf(entries: Chat['entries']): string[] {
 }
 
 /**
+ * The place a chat's scrolling box is followed to (`followedTop`): the end of its conversation, the bottom of the thread
+ * and of the line queued under it, measured from the parts themselves; the cards that wait under the conversation are
+ * not its end, so the conversation's last half view stays in view above them.
+ */
+function followedOf(box: HTMLElement): number {
+    const content = box.getBoundingClientRect().top + box.clientTop - box.scrollTop;
+    let foot = 0;
+    for (const part of Array.from(box.children))
+        if (part.classList.contains('thread') || part.classList.contains('chat-queued'))
+            foot = Math.max(foot, part.getBoundingClientRect().bottom - content);
+    return followedTop({
+        scrollHeight: box.scrollHeight,
+        clientHeight: box.clientHeight,
+        foot,
+        keep: box.clientHeight / 2,
+    });
+}
+
+/**
  * What a running turn says under the thread: Thinking while the AI works, and, while a permission card of the turn waits
  * for the person's answer, that it is the person's move and where the card is; the AI is not working then.
  */
@@ -1256,30 +1284,12 @@ function typing(chat: Chat): Html {
     </div>`;
 }
 
-/** The agent of a chat as the console last read it, its state and its counts; none for a chat of no agent. */
-function agentOf(campaignId: string | null): Agent | undefined {
-    const status = campaigns.value.find((each) => each.id === campaignId)?.status;
-    const row = campaignId === null ? undefined : summary.value[campaignId];
-    return status === undefined || row === undefined ? undefined : { status, row };
-}
-
 /** Chips: each shows its words and sends its own as the person's next message, as a word typed would be. */
 const chipButtons = (chat: Chat, chips: readonly Chip[]): Html[] =>
     chips.map(
         (chip) =>
             html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`,
     );
-
-/**
- * The chips under the last answer (`chipsUnder`), where a message could be sent from here now: none without a host, in a
- * tab that may not send, or while the send waits for a model's name. An agent the console did not list, an archived one
- * among them, has none.
- */
-function chipsNext(chat: Chat, host: DesktopHost | null): Html | null {
-    if (host === null || (inTab() && !tabMaySend(chat.mode)) || sendHeld(onHost(chat, host.id), host)) return null;
-    const chips = chipsUnder(chat, agentOf(chat.campaignId));
-    return chips.length === 0 ? null : html`<div class="sugs next">${chipButtons(chat, chips)}</div>`;
-}
 
 /** What the plan card shows beyond the entries and the host: whether it is live, on another host, approving or approved. */
 function cardOf(chat: Chat, host: DesktopHost | null): string {
@@ -1298,13 +1308,12 @@ function threadOf(chatId: string) {
         host: DesktopHost | null;
         named: unknown;
         now: number;
-        counts: unknown;
-        held: string;
         card: string;
         asked: unknown;
         read: unknown;
         proposed: unknown;
         listed: unknown;
+        copying: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -1316,11 +1325,6 @@ function threadOf(chatId: string) {
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
-        // The chips under an agent's last answer are chosen from its state, read with `named`, and its counts as the
-        // console last read them; none stand while the send waits for a model's name, which the model chosen and whether
-        // one is being typed decide (`sendHeld`, asked only when the thread is drawn: it counts as a draw).
-        const counts = chat.campaignId === null ? undefined : summary.value[chat.campaignId];
-        const held = `${chat.typing === true} ${chat.model ?? ''}`;
         // A line's age is counted from the console's clock, which moves on every half minute.
         const now = clock.value;
         // The plan card is the one part of the thread drawn from the chat's mode, its waiting words and the person's
@@ -1334,13 +1338,13 @@ function threadOf(chatId: string) {
         const proposed = proposals.value[chatId];
         // A list card draws what its press did, and its rows shown whole.
         const listed = lists.value[chatId];
+        // A code block's Copy code button says Copied for a moment, which redraws the thread.
+        const copying = copied.value;
         const same =
             last !== null &&
             last.now === now &&
             last.host === host &&
             last.named === named &&
-            last.counts === counts &&
-            last.held === held &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.card === card &&
@@ -1348,6 +1352,7 @@ function threadOf(chatId: string) {
             last.read === read &&
             last.proposed === proposed &&
             last.listed === listed &&
+            last.copying === copying &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
@@ -1357,13 +1362,12 @@ function threadOf(chatId: string) {
                 host,
                 named,
                 now,
-                counts,
-                held,
                 card,
                 asked,
                 read,
                 proposed,
                 listed,
+                copying,
                 view: threadView(chat, host),
             };
         return last!.view;
@@ -1631,21 +1635,64 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),
         [api, chatId, asked?.campaignId, asked?.at],
     );
-    // A message the person sends, and a card that asks them something, are brought into view at the foot of the
-    // conversation, above the composer; a thread merely opened, or growing with the AI's words, keeps its place.
+    // While the person is at the foot of the conversation (`atFoot`) it follows whatever is added there: their message,
+    // the AI's words as they come, a card. Scrolled further up, it keeps their place until they come back to the foot or
+    // send: a message they send, and a permission card that asks them something, always go to the foot, the first
+    // message of a conversation made at that send included. The foot is the conversation's (`followedOf`), not the
+    // box's: the cards waiting under it stay under it, so following only ever moves the view down to that place, a
+    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. Opening a
+    // chat moves nothing. Where the person stands is noted as the box scrolls. The Demo's thread shares the measure.
     const scroller = useRef<HTMLDivElement>(null);
-    const seenMoves = useRef<{ chat: string; keys: ReadonlySet<string> } | null>(null);
+    const follow = useRef<{ chat: string; sent: ReadonlySet<string>; atFoot: boolean } | null>(null);
+    const grown = useRef<MutationObserver | null>(null);
+    const shownChat = useRef(chatId);
+    shownChat.current = chatId;
+    const drawn = Boolean(chat);
     const waiting = record?.waiting ?? null;
     const moves = waiting === null ? movesOf(entries ?? []) : [...movesOf(entries ?? []), `q:${waiting}`];
     const movesKey = moves.join('|');
     useEffect(() => {
-        const before = seenMoves.current;
-        seenMoves.current = { chat: chatId, keys: new Set(moves) };
         const box = scroller.current;
-        // Only a move this chat did not have before counts: switching to another chat, or opening one, moves nothing.
-        if (before?.chat === chatId && moves.some((key) => !before.keys.has(key)) && box !== null)
-            box.scrollTop = box.scrollHeight;
-    }, [chatId, movesKey]);
+        if (box === null) return;
+        const noted = () => {
+            if (follow.current) follow.current.atFoot = atFoot(box.scrollTop, followedOf(box));
+        };
+        // What is added under the thread, the painter's words and React's cards alike, is followed while the person is
+        // at the foot of the chat shown; a chat being given to the panel is not followed until it is opened.
+        const observer = new MutationObserver(() => {
+            const now = follow.current;
+            if (now === null || now.chat !== shownChat.current || !now.atFoot) return;
+            const followed = followedOf(box);
+            if (box.scrollTop < followed) box.scrollTop = followed;
+        });
+        observer.observe(box, { childList: true, subtree: true, characterData: true });
+        grown.current = observer;
+        box.addEventListener('scroll', noted, { passive: true });
+        return () => {
+            observer.disconnect();
+            box.removeEventListener('scroll', noted);
+            grown.current = null;
+        };
+    }, [drawn]);
+    useEffect(() => {
+        const box = scroller.current;
+        const before = follow.current;
+        const made = madeAtSend.delete(chatId);
+        if (box === null) {
+            follow.current = null;
+            return;
+        }
+        const sent = new Set(moves);
+        if (before?.chat !== chatId && !made) {
+            // Opened, or given another chat: its place is left alone, and decides whether what comes is followed.
+            grown.current?.takeRecords();
+            follow.current = { chat: chatId, sent, atFoot: atFoot(box.scrollTop, followedOf(box)) };
+            return;
+        }
+        const moved = made || moves.some((key) => !before!.sent.has(key));
+        follow.current = { chat: chatId, sent, atFoot: moved || before!.atFoot };
+        if (moved) box.scrollTop = followedOf(box);
+    }, [chatId, movesKey, drawn]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.

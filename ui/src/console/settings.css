@@ -24,6 +24,40 @@
     border-bottom: 1px solid var(--line);
 }
 
+/* The way out: Back at the left of the bar, a chevron turned to point left. It is in the markup before the title, holds
+   its place in the bar as the bar is held at the top, and takes no room of its own; the title makes room for it. */
+.jc-console .harness .settings > .settings-back {
+    position: sticky;
+    top: 22px;
+    z-index: 3;
+    height: 0;
+}
+.jc-console .harness .settings > .settings-back > button {
+    position: absolute;
+    left: 0;
+    top: -5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px 6px 8px;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+.jc-console .harness .settings > .settings-back > button:hover {
+    background: var(--hover);
+}
+.jc-console .harness .settings > .settings-back > button > svg {
+    transform: rotate(90deg);
+}
+.jc-console .harness .settings[data-chosen] > h1 {
+    padding-left: 116px;
+}
+
 /* Each section a card; the Runtime card is a card already, under its wrapper. */
 .jc-console .harness .settings > section,
 .jc-console .harness .settings > [data-section='runtime'] > .card {
@@ -413,6 +447,15 @@
     color: var(--mute);
     font-size: 12px;
 }
+/* What the person's last check for updates found, under the item, in the desktop's words. */
+.jc-console .harness .settings > .settings-list > .settings-update > .settings-said {
+    margin: 0;
+    max-width: 100%;
+    color: var(--mute);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
 /* A section other than the one shown holds an error: its name carries a dot, and the error is its description. */
 .jc-console .harness .settings > .settings-list > button[data-flagged] {
     background-image: radial-gradient(circle at calc(100% - 12px) 50%, var(--red) 4px, transparent 5px);
@@ -448,6 +491,15 @@
     .jc-console .harness .settings > h1 {
         margin: -16px -16px 16px;
         padding: 14px 16px;
+    }
+    .jc-console .harness .settings > .settings-back {
+        top: 16px;
+    }
+    .jc-console .harness .settings > .settings-back > button {
+        top: -6px;
+    }
+    .jc-console .harness .settings[data-chosen] > h1 {
+        padding-left: 104px;
     }
     .jc-console .harness .settings > .settings-list {
         float: none;

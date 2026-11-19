@@ -6,15 +6,23 @@
 
 import type { MenuItem } from './updates.ts';
 
-/** What the seam's `updates.item` answers: the desktop's version, and the update item as the menu shows it, or none. */
+/**
+ * What the seam's `updates.item` answers: the desktop's version, the update item as the menu shows it, or none, and what
+ * the person's last check found (`Updater.said`), or null. This desktop always sends `said`; it is optional because the
+ * type is held equal to the page's, which an earlier desktop answers without it.
+ */
 export interface UpdateItemAnswer {
     version: string;
     item: { label: string; enabled: boolean } | null;
+    said?: string | null;
 }
 
-/** The answer of `updates.item`: the item's label and whether it is enabled, never its act, which the press reads again. */
-export function updateAnswerOf(version: string, item: MenuItem | null): UpdateItemAnswer {
-    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled } };
+/**
+ * The answer of `updates.item`: the item's label and whether it is enabled, never its act, which the press reads again,
+ * and the sentence of the person's last check, wherever it was asked from.
+ */
+export function updateAnswerOf(version: string, item: MenuItem | null, said: string | null): UpdateItemAnswer {
+    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled }, said };
 }
 
 /**

@@ -44,12 +44,13 @@ public class ProviderBlockParkTests
         var command = string.Join(
             ",",
             new[] { "dotnet", Execution.FakeAgentHost.Dll, "manager" }.Select(part => JsonSerializer.Serialize(part)));
-        return string.Create(
+        // A start summons nothing here: the review the block summons is the one this test reads, not the start's before it.
+        return Dispatch.StartlessTriggers.Into(string.Create(
             CultureInfo.InvariantCulture,
             $"{{\"Dispatcher\":{{\"TickSeconds\":300,\"RetryDelaySeconds\":0,\"ExitGraceSeconds\":30,\"Blocks\":{{\"TrialSeconds\":900}},"
             + $"\"AiRole\":{{\"TimeoutSeconds\":60,\"HeartbeatSeconds\":10,\"MaxAttempts\":2}}}},"
             + $"\"Roles\":{{\"DefaultEntryCommand\":[{command}]}},"
-            + $"\"Manager\":{{\"ReviewSeconds\":86400,\"TimeoutSeconds\":60}}}}");
+            + $"\"Manager\":{{\"ReviewSeconds\":86400,\"TimeoutSeconds\":60}}}}"));
     }
 
     /// <summary>Nothing reaches a desktop here; a launch would be a toast shown by a test.</summary>

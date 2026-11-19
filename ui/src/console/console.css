@@ -762,6 +762,29 @@
     padding: 0;
     background: none;
 }
+/* A code block's Copy code button sits at its top right, over the block, and is read from its own corner. */
+.jc-console .chat-md-code {
+    position: relative;
+}
+.jc-console .chat-md-code pre {
+    padding-right: 84px;
+}
+.jc-console .chat-md-copy {
+    position: absolute;
+    top: 12px;
+    right: 6px;
+    padding: 2px 8px;
+    border: 1px solid var(--line2);
+    border-radius: 6px;
+    background: var(--panel);
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+}
+.jc-console .chat-md-copy:hover {
+    background: var(--panel-2);
+}
 .jc-console .chat-md-table {
     margin: 6px 0 10px;
     overflow-x: auto;

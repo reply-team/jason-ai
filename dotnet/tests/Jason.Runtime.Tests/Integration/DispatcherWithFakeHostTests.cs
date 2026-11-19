@@ -309,7 +309,8 @@ public class DispatcherWithFakeHostTests
     [Fact]
     public async Task A_role_nothing_can_start_fails_until_a_default_entry_command_is_configured()
     {
-        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        // A start summons nothing here: the review it would summon is the campaign's claim the researcher waits behind.
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings));
         var campaign = await host.CampaignAsync(Ct);
         await host.Fixture.PostOkAsync<RoleDto>(Operations.RoleAdd, new { name = "nocmd", entry_command = Array.Empty<string>() }, Ct);
         var orphan = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "nocmd" }, Ct);
@@ -324,9 +325,10 @@ public class DispatcherWithFakeHostTests
         var command = JsonSerializer.Serialize(Execution.FakeAgentHost.EntryCommand("succeed"), JasonJson.Options);
         await File.WriteAllTextAsync(
             host.Paths.UserSettingsFile,
-            """{"Dispatcher":{"TickSeconds":3600,"RetryDelaySeconds":0,"AiRole":{"TimeoutSeconds":60,"HeartbeatSeconds":10,"MaxAttempts":2}},"Roles":{"DefaultEntryCommand":"""
-                + command
-                + "}}",
+            Dispatch.StartlessTriggers.Into(
+                """{"Dispatcher":{"TickSeconds":3600,"RetryDelaySeconds":0,"AiRole":{"TimeoutSeconds":60,"HeartbeatSeconds":10,"MaxAttempts":2}},"Roles":{"DefaultEntryCommand":"""
+                    + command
+                    + "}}"),
             Ct);
         var roles = host.Fixture.Resolve<IOptionsMonitor<RolesOptions>>();
         Assert.True(

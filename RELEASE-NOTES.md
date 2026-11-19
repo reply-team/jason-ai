@@ -19,58 +19,41 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.48.5
+# Jason 0.48.6
 
-## What is new since 0.48.4
+## What is new since 0.48.5
 
-- **Settings shows Jason Desktop's version and its update.** The foot of Settings' list, in Jason Desktop's window,
-  shows the desktop's version and the same update item the tray's menu (on a Mac, the menu bar) shows: Check for
-  Updates…, Download, or Restart to Install. Pressing it does exactly what the menu's item does.
-- **Turn one notification channel on or off.** Settings › Notifications has a switch for each channel, and
-  `jason notification enable <channel>` and `jason notification disable <channel>` do the same from the command line,
-  for the system's own notifications (`toast`, on Windows, macOS and Linux) or a notification plugin. Whoever
-  switches a channel is named, and the change is recorded. This release publishes the journal forwarder 1.7.0, whose
-  manifest declares the kind a channel's switch writes (`notification_channel_updated`): a grant of every kind
-  forwards it from the first load, and a grant that names kinds does not until you add it, with
-  `jason plugin grant journal-forwarder --subscription notification_channel_updated`.
-- **A Full access card says why it asks.** In the desktop chat, a card titled "Full access asks about this one" now
-  says in one line why this request still asks, for example a command whose wildcard the shell expands only as it runs.
-- **Approvals in plain words.** An approval's detail says what the act does in words a person reads at a glance:
-  whether it contacts anyone, whether it can be undone, and what it costs. A message that was doubted is shown under
-  "Why this message was flagged". A reply in a conversation says it goes from the account the conversation is in.
-- **The chat queues what you send while it works.** While a turn runs, the round button sends your words when the
-  turn ends, and what you send waits below the conversation, where **Take back** returns it to the box. Messages sent
-  meanwhile go together as the next turn. Escape in the message box stops the turn.
-- **The chat reads the command line's own help.** The desktop chat may run `jason <noun> --help` for the nouns it
-  works with, instead of guessing at a verb or an option.
-- **Change Jason itself opens the program you use.** Open in › Change Jason itself opens the agent host your
-  preference names, else the one marked **In use** in Settings › Models, else Claude Code, as before.
-- **A wiring check for a direct send.** The golden path has a section that checks a single email sent outside any
-  provider campaign: one real send, to your own address, run only when you ask for it.
-- **The Live start page** says the interface is optional and links the open-source repository.
+- **A campaign's manager looks at it when it starts.** When you start a campaign, or start it again after a pause, its
+  manager looks at it at once instead of at its first scheduled review, five hours later by default. A role can pause a
+  campaign and cannot start or resume one: that is yours, or your own session's on your word.
+- **The desktop chat follows the answer.** While you are at the end of the conversation, it follows what is added
+  there: your message, the AI's words as they come, a card. Scroll up and it keeps your place until you come back to
+  the end or send something; a message you send, and a card that asks for your permission, always bring you back,
+  the first message of a new chat included. Approvals waiting under the conversation stay under it, and the end of
+  what was said stays in view above them.
+- **Approved lines leave once their work is done.** Under an agent's chat, a line that says "It was sent." or "It is
+  done." leaves five seconds after it says so. A line whose work is still on its way stays until it gets there, and
+  one that says the work was not sent or not done stays, since it is the sign that something failed.
+- **Copy code.** A code block in the desktop chat's answers has a **Copy code** button at its top right, which puts the
+  block's text on the clipboard exactly and says "Copied", or "Not copied" if the clipboard refused it.
+- **A way out of Settings.** **Back**, at the left of Settings' head, and the Escape key return to the place you
+  opened Settings from, or to Start.
+- **Check for Updates says what it found.** A check you ask for says, under the item in Settings, that Jason Desktop
+  is the latest version, that a newer version is available, that a newer version is out but not offered because you
+  went back from it, or why it could not check. Asked from the tray, the menu bar or the key, the same sentence comes
+  as a notification. The checks Jason makes by itself say nothing.
+- **Question chips only in an empty chat.** The desktop chat no longer offers suggested questions under an agent's
+  answer; an empty chat still opens with its three.
+- **Plain labels.** Settings › Your name and tone names the writer's grammar forms Female, Male and Neutral.
 
-## Fixed since 0.48.4
-
-- **Jason Desktop's update installs.** The update the desktop offers no longer stops with "a copy of this version
-  could not be kept aside to go back to". If keeping that copy ever fails, the message now says where to download the
-  new version to install it yourself. See **Known issues** for a desktop of 0.48.4 or earlier.
-- **The Demo | Live switch at start.** The Demo's page enters the window once its styles are in, so the switch no
-  longer answers as the window's drag area while the Demo starts.
-- **`jason status` and Windows' notification settings.** On Windows, `jason status` reads Windows' notification
-  switches as they stand when it runs: a switch that is off now is said so, whatever the last notification did, and
-  one switched back on is no longer reported as off. A failed notification is still reported first.
-
-## Upgrading from 0.48.4
+## Upgrading from 0.48.5
 
 Nothing stops, no setting is renamed and no migration runs.
 
-- **The desktop:** on Windows and macOS, install this release from its installer once (see **Known issues**). On
-  Linux, and from 0.48.5 on everywhere, the desktop's own update works.
+- **The desktop:** from 0.48.5, Jason Desktop takes this release by its own update. A Jason Desktop of 0.48.4 or
+  earlier on Windows and macOS installs this release from its installer once; on Linux its own update works.
 - **The executable:** `jason update`, as for every release.
-- **From 0.48.3 or earlier,** the notes of each release in between apply as well.
-
-## Known issues
-
-- **A Jason Desktop of 0.48.4 or earlier on Windows and macOS cannot take this release by its own update,** since
-  the code that fails is the installed one. Install 0.48.5 from its installer once; from 0.48.5 on, the
-  application's own update works.
+- **The manager's triggers:** an installation that wrote its own `Manager:Triggers` keeps its list; add
+  `campaign_started` to it to have a start summon the manager. Each start, a resume included, is one more review on
+  your agent host and your plan.
+- **From 0.48.4 or earlier,** the notes of each release in between apply as well.

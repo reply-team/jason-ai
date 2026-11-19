@@ -113,7 +113,8 @@ public class SkillSequenceTests
         it.Account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
             .WithContact(Person, Address, FirstName);
 
-        await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
+        // A start summons nothing here: the listings below are read while nothing moves, and the review a start summons does.
+        await GoldenPath.WriteSettingsAsync(it, new SettingsShape(StartSummons: false));
         await GoldenPath.StartAsync(it);
         GoldenPath.InstallReplyPackage(it);
         await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);

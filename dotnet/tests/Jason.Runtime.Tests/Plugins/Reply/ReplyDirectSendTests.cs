@@ -38,6 +38,9 @@ public class ReplyDirectSendTests
                 // The grant is in the settings file already: the dispatcher's section goes beside it, not over it.
                 var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
                 settings["Dispatcher"] = JsonNode.Parse(Idle);
+
+                // A start summons nothing here: the review it would summon is the campaign's claim the sends wait behind.
+                StartlessTriggers.Narrow(settings);
                 File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
                 TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId));
             });

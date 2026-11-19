@@ -371,7 +371,8 @@ public class DefaultProfileTests
     [Fact]
     public async Task A_role_resolves_to_the_default_named_through_the_runtime_with_no_restart()
     {
-        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        // A start summons nothing here: the review it would summon is the campaign's claim the next item waits behind.
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings));
         await host.Fixture.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
             new { name = "house", host = "claude_code", program = "a-host-nobody-installed", deny = new[] { "Write" }, host_version_verified = "0.0.0-stand-in" },
