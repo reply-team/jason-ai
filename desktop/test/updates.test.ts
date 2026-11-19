@@ -371,6 +371,28 @@ test('a failed check names one of four reasons by the kind of failure', () => {
     assert.equal(checkWords({ kind: 'held', version: '0.48.7' }), 'Version 0.48.7 is out. It is not offered here because you went back from it.');
 });
 
+// electron-updater 6.8.11 wraps the read of the latest tag twice, each time with the inner error's stack
+// (out/providers/GitHubProvider.js: getLatestTagName throws "Unable to find latest version on GitHub (${url}), please
+// ensure a production release exists: ${e.stack || e.message}" as ERR_UPDATER_LATEST_VERSION_NOT_FOUND, and
+// getLatestVersion catches that and throws "Cannot parse releases feed: ${e.stack || e.message},\nXML:\n${feedXml}" as
+// ERR_UPDATER_INVALID_RELEASE_FEED). The timeout is builder-util-runtime's out/httpExecutor.js `new Error("Request timed
+// out")`, an HttpError's message is `${statusCode} ${statusMessage}` and "\nHeaders: ...". The feed's XML, release
+// notes included, follows "\nXML:\n" and is never read for the kind of failure.
+test('a doubly wrapped failure is told by the words before the feed, never by the feed', () => {
+    const doubly = (inner: string) => Object.assign(
+        new Error(
+            'Cannot parse releases feed: Error: Unable to find latest version on GitHub (https://github.com/planted/planted/releases/latest), '
+                + `please ensure a production release exists: ${inner}\n    at ClientRequest.<anonymous> (planted.js:1:1)\n    at GitHubProvider.getLatestTagName (planted.js:2:2)`
+                + `\n    at GitHubProvider.getLatestVersion (planted.js:3:3),\nXML:\n<?xml version="1.0"?><feed><entry><content>`,
+        ),
+        { code: 'ERR_UPDATER_INVALID_RELEASE_FEED' },
+    );
+    const withNotes = (error: Error, notes: string) => Object.assign(error, { message: `${error.message}${notes}</content></entry></feed>` });
+    assert.equal(checkFailureOf(withNotes(doubly('Error: Request timed out'), 'planted')), 'offline', 'a wrapped timeout');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 429 Too Many Requests\nHeaders: {}'), 'Fixed a read ECONNRESET on a slow proxy.')), 'refused', 'a 429 under notes that name ECONNRESET');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 404 Not Found\nHeaders: {}'), 'Says net::ERR_TIMED_OUT in plain words.')), 'feed', 'a 404 under notes that name net::ERR_TIMED_OUT');
+});
+
 test('asked outside Settings, the sentence comes as a notification of its own', () => {
     assert.deepEqual(updateNotice('Version 0.48.7 is available.'), { title: 'Jason Desktop', body: 'Version 0.48.7 is available.' });
 });

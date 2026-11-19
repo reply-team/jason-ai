@@ -142,18 +142,19 @@ export type CheckFound =
 
 /** Electron's and Node's words for a connection that was not made, or not answered in time. */
 const noConnection =
-    /net::ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|CONNECTION_[A-Z_]+|TIMED_OUT|NETWORK_[A-Z_]+|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED)\b|\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN)\b|^Request timed out$/m;
+    /net::ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|CONNECTION_[A-Z_]+|TIMED_OUT|NETWORK_[A-Z_]+|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED)\b|\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN)\b|\bRequest timed out\b/;
 
 /**
  * Pure: the kind of a check's failure, read from what electron-updater threw: an Electron or Node connection error, also
  * inside electron-updater's own wrapping of a read; an HTTP 403 or 429 (`HttpError`, its `statusCode`, or the same inside
  * a wrapping), a server refusing for now; any other HTTP status or electron-updater's own `ERR_UPDATER_` codes, a list
- * of releases that could not be read; anything else.
+ * of releases that could not be read; anything else. Only the words before electron-updater's `\nXML:\n` are read:
+ * what follows is the feed itself, whose release notes may name any of these words.
  */
 export function checkFailureOf(error: unknown): CheckFailure {
     if (typeof error !== 'object' || error === null) return 'other';
     const { message, code, statusCode } = error as { message?: unknown; code?: unknown; statusCode?: unknown };
-    const words = typeof message === 'string' ? message : '';
+    const words = typeof message === 'string' ? (message.split('\nXML:\n', 1)[0] ?? '') : '';
     if (noConnection.test(words) || (typeof code === 'string' && noConnection.test(code))) return 'offline';
     if (statusCode === 403 || statusCode === 429 || /\bHttpError: (403|429)\b/.test(words)) return 'refused';
     if (typeof statusCode === 'number' || (typeof code === 'string' && code.startsWith('ERR_UPDATER_'))) return 'feed';
