@@ -270,7 +270,9 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>
     /// The application's executable from the carried jason's path: on Windows <c>Jason.exe</c>, two folders above
     /// <c>resources\bundle\jason.exe</c>; on macOS <c>Jason.app/Contents/MacOS/Jason</c>, beside
-    /// <c>Contents/Resources/bundle/jason</c>.
+    /// <c>Contents/Resources/bundle/jason</c>; on Linux, for an AppImage's copy under the data directory, the AppImage file
+    /// (<see cref="AppImageCopy.FileOf"/>), and for the deb <c>/opt/Jason/jason-desktop-app</c>, two folders above its
+    /// <c>resources/bundle/jason</c>.
     /// </summary>
     public static string ApplicationOf(string carriedExecutable, SetupSystem platform)
     {
@@ -278,9 +280,13 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         var bundle = Path.GetDirectoryName(Path.GetFullPath(carriedExecutable))!;
         var resources = Path.GetDirectoryName(bundle) ?? bundle;
         var above = Path.GetDirectoryName(resources) ?? resources;
-        return platform is SetupSystem.Windows
-            ? Path.Combine(above, "Jason.exe")
-            : Path.Combine(above, "MacOS", "Jason");
+        return platform switch
+        {
+            SetupSystem.Windows => Path.Combine(above, "Jason.exe"),
+            SetupSystem.Linux when SetupPlaces.CarriedByDeb(carriedExecutable) => Path.Combine(above, "jason-desktop-app"),
+            SetupSystem.Linux => AppImageCopy.FileOf(carriedExecutable, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+            _ => Path.Combine(above, "MacOS", "Jason"),
+        };
     }
 
     /// <summary>
@@ -289,7 +295,13 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// </summary>
     public static string ApplicationFolderOf(string carriedExecutable, SetupSystem platform)
     {
-        // Windows: the folder Jason.exe is in. macOS: Jason.app, two folders above Contents/MacOS/Jason.
+        // Windows: the folder Jason.exe is in. macOS: Jason.app, two folders above Contents/MacOS/Jason. Linux: the AppImage
+        // file itself, or the deb's folder.
+        if (platform is SetupSystem.Linux)
+        {
+            return SetupPlaces.CarriedByDeb(carriedExecutable) ? Path.GetDirectoryName(ApplicationOf(carriedExecutable, platform))! : ApplicationOf(carriedExecutable, platform);
+        }
+
         var folder = Path.GetDirectoryName(ApplicationOf(carriedExecutable, platform))!;
         return platform is SetupSystem.Windows ? folder : Path.GetDirectoryName(Path.GetDirectoryName(folder) ?? folder) ?? folder;
     }
@@ -316,8 +328,37 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     public string GoFile(string id) => Path.Combine(update.Root, $"desktop-{id}.go");
 
     /// <summary>Whether the application's <c>version.json</c> names <paramref name="version"/>.</summary>
-    public bool Names(SemanticVersion version) =>
-        CarriedExecutable.Of(carried.Executable) is { } now && SemanticVersion.TryParse(now.Version, out var named) && named == version;
+    public bool Names(SemanticVersion version)
+    {
+        if (AppImage)
+        {
+            // An AppImage's update replaces the file, and the copy of what the new file carries is made here, under its own
+            // version, once the file is that version; it is read from the file again only after the file changed.
+            var bundles = AppImageCopy.BundlesOf(carried.Executable);
+            if (!AppImageCopy.Holds(bundles, version) && Application is { } file && File.Exists(file) && File.GetLastWriteTimeUtc(file) != _readAt)
+            {
+                _readAt = File.GetLastWriteTimeUtc(file);
+                AppImageCopy.MakeAsync(file, bundles, version, CancellationToken.None).GetAwaiter().GetResult();
+            }
+
+            return AppImageCopy.Holds(bundles, version);
+        }
+
+        return CarriedExecutable.Of(carried.Executable) is { } now && SemanticVersion.TryParse(now.Version, out var named) && named == version;
+    }
+
+    /// <summary>Whether this carried jason is an AppImage's copy, which an update leaves where it is and copies anew.</summary>
+    private bool AppImage => platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable);
+
+    /// <summary>When the AppImage file was last read for its new copy.</summary>
+    private DateTime _readAt;
+
+    /// <summary>
+    /// The jason that finishes an update to <paramref name="version"/>: the carried one, which an installer replaced in place;
+    /// for an AppImage, the copy of the new file's under its version.
+    /// </summary>
+    public string FinisherOf(SemanticVersion version) =>
+        AppImage ? AppImageCopy.CopyOf(AppImageCopy.BundlesOf(carried.Executable), version) : carried.Executable;
 
     /// <summary>
     /// A new update of the carried jason: what the feed offers, held to what this installation is, and the ledger written at

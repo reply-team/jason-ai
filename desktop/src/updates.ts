@@ -92,10 +92,13 @@ export interface MenuItem {
 
 /**
  * The one menu item the updater shows: the next step the person can take, or what is under way; in a build that is not
- * installed none, and where electron-updater is not active (`FeedUpdater.isUpdaterActive`) none either.
+ * installed none, and where electron-updater is not active (`FeedUpdater.isUpdaterActive`) none either: the package's
+ * updates come with the system's. Where the system installed a new version under the running window (`moved`, the
+ * version the package's version.json names now), the item says to restart, which finishes that update at the next start.
  */
-export function menuItemOf(state: UpdateState, installed: boolean, active: boolean): MenuItem {
+export function menuItemOf(state: UpdateState, installed: boolean, active: boolean, moved: string | null = null): MenuItem {
     if (!installed) return { label: 'Updates Come to an Installed Build', enabled: false, act: null };
+    if (!active && moved !== null) return { label: `Restart Jason to Finish the Update to ${moved}`, enabled: false, act: null };
     if (!active) return { label: 'Updates Come Through the Package', enabled: false, act: null };
     switch (state.step) {
         case 'idle':

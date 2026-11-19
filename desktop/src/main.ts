@@ -5,12 +5,12 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, Notification, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, watchFile } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
@@ -29,7 +29,7 @@ import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './dee
 import { Desk } from './desk.ts';
 import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
-import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
+import { keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { wrapperTarget } from './command-line.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
@@ -226,7 +226,7 @@ function serveRequests(log: Logger, data: string, window: { menu: boolean; updat
             data,
             from: app.getVersion(),
             ...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),
-            unsupported: requestSupport(app.isPackaged, process.platform),
+            unsupported: requestSupport(app.isPackaged, process.platform, linuxForm()),
             windowOpen: windowOpenUpdate,
             log,
             startRuntime: carriedRuntimeStart(data, log),
@@ -293,6 +293,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason.
     const carried = carriedOf({ form, packaged, version, bundles: paths.bundle });
     if (carried.failure !== null) log.error('bundle_copy_failed', { Differs: carried.failure.differs });
+    // Where an AppImage's file is, for the jason its copy is (`recordAppImage`).
+    if (form?.form === 'appimage') {
+        try {
+            recordAppImage(dirname(paths.bundle), form.file);
+        } catch {
+            log.error('repoint_failed', { What: 'appimage_record', Exit: -1 });
+        }
+    }
     const { bundle, uncopied } = carried;
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
 
@@ -394,7 +402,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const aside = keptAsideOf(process.platform, form, process.execPath);
     const updates = app.isPackaged && offers.updates
         ? new Updater({
-              updater: autoUpdater,
+              updater: updaterOf(form, autoUpdater),
               version: app.getVersion(),
               application: aside,
               rollback,
@@ -483,6 +491,32 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               pid: process.pid,
           }
         : null;
+    // The deb: apt replaces the package under a running window (Ubuntu's automatic updates, Software Updater). Its
+    // version.json is looked at once a minute; once it names another version, the update item says to restart, and one
+    // notice says so too, whose click restarts. The next start finishes the update (`machine-setup.ts`).
+    const packageMoved = (): string | null => {
+        if (form?.form !== 'deb' || version === null) return null;
+        const now = bundleVersion(packaged);
+        return now !== null && now !== version ? now : null;
+    };
+    if (form?.form === 'deb') {
+        let told = false;
+        watchFile(join(packaged, 'version.json'), { interval: 60_000 }, () => {
+            const moved = packageMoved();
+            if (moved === null || told) return;
+            told = true;
+            desk.renderMenu();
+            toPage('updates.changed');
+            if (Notification.isSupported()) {
+                const notice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason to finish the update.` });
+                notice.on('click', () => {
+                    app.relaunch();
+                    app.quit();
+                });
+                notice.show();
+            }
+        });
+    }
     const desk = new Desk({
         window: () => current,
         origin,
@@ -492,6 +526,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         login,
         autostart,
         updates,
+        packageMoved,
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
@@ -515,6 +550,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // An update that installs the AppImage under a new file name moves Open Jason at Login to it.
     autoUpdater.on('appimage-filename-updated', (file) => {
         try {
+            recordAppImage(dirname(paths.bundle), file);
             login.relocate(file);
         } catch {
             log.error('repoint_failed', { What: 'login_item', Exit: -1 });

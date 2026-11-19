@@ -292,7 +292,7 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     // none in a demo run.
     const item = body('updateItem');
     assert.ok(item.includes('if (this.demo !== null) return null;'));
-    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);"));
+    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);"));
     assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.

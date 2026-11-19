@@ -34,6 +34,8 @@ export interface DeskDeps {
     autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
+    /** The deb: the version the system installed under this window, where its version.json names another than runs; else null. */
+    packageMoved?(): string | null;
     /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
@@ -235,7 +237,7 @@ export class Desk {
     updateItem(): MenuItem | null {
         if (this.demo !== null) return null;
         const { updates } = this.deps;
-        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);
         return { ...item, enabled: item.enabled && !this.removing() };
     }
 

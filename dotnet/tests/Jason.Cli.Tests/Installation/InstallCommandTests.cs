@@ -1919,6 +1919,37 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(before == "a command-line install" ? JsonValueKind.Object : JsonValueKind.Null, report.GetProperty("retired").ValueKind);
     }
 
+    /// <summary>
+    /// From an AppImage's new copy, as the finishing step of a terminal's update runs it before the application has started
+    /// at that version, a logon registration naming another version's copy under the same copies' folder and this data
+    /// directory is registered again naming this jason; one naming anything else is left.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task On_linux_an_appimage_s_new_copy_takes_over_the_logon_registration_of_another_copy(bool anotherCopy)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row, which CI's Linux leg runs.");
+        var bundles = Path.Combine(_tree.Paths.Root, "data", "desktop", "bundle");
+        var named = anotherCopy ? Carried(under: Path.Combine(bundles, "0.49.1"), linux: "appimage") : Path.Combine(_tree.Paths.Root, "elsewhere", "jason");
+        var executable = Carried(under: Path.Combine(bundles, "0.49.2"), linux: "appimage");
+        var registrar = new RecordingRegistrar(AutostartPlatform.Linux) { State = new AutostartState(true, [named, "runtime", "run"], null) };
+        var (env, _) = Environment(LinuxPlaces(), executable);
+        env = env with { Autostart = registrar };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: "/usr/bin:/bin"), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        if (anotherCopy)
+        {
+            Assert.Equal(executable, Assert.Single(registrar.Applied).Run[0]);
+        }
+        else
+        {
+            Assert.Empty(registrar.Applied);
+        }
+    }
+
     /// <summary>Note 11: a profile that is a link to a regular file is appended through; a link to anything else is refused with the hand line.</summary>
     [Fact]
     public async Task A_profile_link_is_followed_only_to_a_regular_file()

@@ -471,7 +471,6 @@ apt_install() {
         fi
     else
         STATUS=127
-        echo "No authentication agent found" > "$TMP/apt.err"
     fi
     [ "$STATUS" -eq 0 ] && return 0
     cat "$TMP/apt.err" >&2
@@ -479,7 +478,7 @@ apt_install() {
     administrator || NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
     if [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|a password is required|is not in the sudoers file|may not run sudo' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
-    elif grep -qE 'No authentication agent found' "$TMP/apt.err"; then
+    elif grep -qE 'No authentication agent found' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
     elif grep -qE 'Message recipient disconnected|No session for cookie' "$TMP/apt.err"; then
         fail "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again."

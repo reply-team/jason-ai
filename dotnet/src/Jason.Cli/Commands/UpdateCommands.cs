@@ -128,6 +128,11 @@ public static class UpdateCommands
         // on what it began; neither replaces a file of the application's itself.
         if (CarriedExecutable.Of(env) is { } carried)
         {
+            if (!finish && RefusedAsThePackages(env, carried, "apply"))
+            {
+                return ExitCodes.ApiError;
+            }
+
             return await CarriedApplyAsync(env, carried, continuing: false, feed, version, drainSeconds, human, finish, cancellationToken).ConfigureAwait(false);
         }
 
@@ -659,6 +664,17 @@ public static class UpdateCommands
             return ExitCodes.ApiError;
         }
 
+        // On Linux the Desktop is started to take the update, and Electron needs a display and the session's bus for that
+        // even with no window: a terminal outside the desktop session (ssh, a service) has neither, and nothing is begun.
+        if (env.Setup?.Platform is SetupSystem.Linux && inFlight is null && !continuing && !HasDisplay(env))
+        {
+            env.Out.WriteLine(CliErrors.Serialize(
+                UpdateCodes.CarriedByDesktop,
+                "No desktop session is running for this account to update Jason Desktop in: this terminal has no display. Use Jason Desktop's update item, or run `jason update apply` in a terminal of your desktop. Nothing was changed.",
+                retryable: false));
+            return ExitCodes.ApiError;
+        }
+
         if (unread is not null)
         {
             env.Out.WriteLine(unread is UpdateLedgerException invalid
@@ -783,7 +799,7 @@ public static class UpdateCommands
         HandOverAsync(
             env,
             handing.Steps,
-            [handing.Carried.Executable, "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
+            [handing.FinisherOf(swapped.ToVersion), "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
             human,
             (why, cause) => NotFinished(env, swapped, why, cause),
             async waits =>
@@ -1052,7 +1068,7 @@ public static class UpdateCommands
         string? application = null;
         if (CarriedExecutable.Of(env) is { } carried)
         {
-            if (RefusedAsAnotherRecord(env, carried))
+            if (RefusedAsAnotherRecord(env, carried) || RefusedAsThePackages(env, carried, "rollback"))
             {
                 return ExitCodes.ApiError;
             }
@@ -1206,6 +1222,52 @@ public static class UpdateCommands
             retryable: false));
         return true;
     }
+
+    /// <summary>
+    /// Linux, the deb: the application and the jason it carries are one package of the system's, updated by the system as
+    /// every package from an apt repository is (Ubuntu's automatic updates, Software Updater, or apt in a terminal), so
+    /// `jason update apply` and `rollback` replace nothing and say what to type; `--finish` still runs, as the application's
+    /// start runs it once apt has installed a new version.
+    /// </summary>
+    private static bool RefusedAsThePackages(CliEnvironment env, CarriedExecutable carried, string verb)
+    {
+        if (env.Setup?.Platform is not SetupSystem.Linux || !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            return false;
+        }
+
+        var lines = verb == "rollback"
+            ? new[]
+            {
+                "jason runtime stop",
+                "sudo apt install --allow-downgrades ./jason-desktop-linux-x64.deb   (the previous release's, from its release page)",
+                "sudo apt-mark hold jason-desktop   (or the next update installs the newer one again; unhold to take updates)",
+                "jason runtime start",
+            }
+            : new[] { "jason runtime stop", "sudo apt update && sudo apt upgrade", "jason runtime start" };
+        env.Out.WriteLine(CliErrors.Serialize(
+            UpdateCodes.ManagedByPackageManager,
+            $"This jason is the one Jason Desktop's package carries, at {carried.Executable}, and the package is the system's: Ubuntu's automatic updates install a new version, "
+            + $"and Software Updater, or apt in a terminal, install it at once, so `jason update {verb}` would replace a file the package owns. "
+            + (verb == "rollback" ? "apt keeps no previous version to go back to; the previous release's package is installed again by hand:\n" : "Its version is changed through apt, with the runtime stopped first and started after:\n")
+            + string.Join("\n", lines.Select(line => "  " + line)),
+            retryable: false));
+        return true;
+    }
+
+    /// <summary>The command that updates the deb's package at once, as `jason update check` names it there.</summary>
+    private const string AptUpgrade = "sudo apt update && sudo apt upgrade";
+
+    /// <summary>Whether this jason is the one Jason Desktop's deb carries, which the system updates.</summary>
+    private static bool CarriedByThePackage(CliEnvironment env) =>
+        env.Setup?.Platform is SetupSystem.Linux && CarriedExecutable.Of(env) is { } carried && SetupPlaces.CarriedByDeb(carried.Executable);
+
+    /// <summary>Whether this process has a display a Desktop it starts can use: Wayland's or X11's.</summary>
+    private static bool HasDisplay(CliEnvironment env) =>
+        !string.IsNullOrEmpty(Variable(env, "WAYLAND_DISPLAY")) || !string.IsNullOrEmpty(Variable(env, "DISPLAY"));
+
+    private static string? Variable(CliEnvironment env, string name) =>
+        env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
 
     /// <summary>
     /// Refuses, and says so, where a package manager installed this Jason. The manager keeps its own record of the
@@ -1363,7 +1425,7 @@ public static class UpdateCommands
             available,
             DateTimeOffset.UtcNow,
             manifest.ReleaseNotesUrl,
-            owner?.UpgradeCommand ?? (first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
+            owner?.UpgradeCommand ?? (CarriedByThePackage(env) ? AptUpgrade : first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
             first?.ToString(),
             PluginUpdates.Behind(manifest, available, env.Paths));
 

@@ -15,7 +15,8 @@
  * read as a folder.
  */
 
-import { isAbsolute, posix } from 'node:path';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, posix } from 'node:path';
 import { applicationFolder } from './rollback.ts';
 
 export type LinuxPackage = { form: 'deb' } | { form: 'appimage'; file: string } | { form: 'folder' };
@@ -26,6 +27,36 @@ export function linuxPackage(env: Readonly<Record<string, string | undefined>>, 
     const file = env['APPIMAGE'];
     if (file && isAbsolute(file) && !file.includes('\0')) return { form: 'appimage', file };
     return { form: 'folder' };
+}
+
+/**
+ * electron-updater as this form uses it: the deb's turned off, since the package is the system's and the system's updates
+ * install its new versions (Ubuntu's automatic updates, Software Updater, apt), so its item says updates come through the
+ * package (`updates.ts`, `menuItemOf`); every other form's as electron-updater makes it.
+ */
+export function updaterOf<T extends { isUpdaterActive(): boolean }>(form: LinuxPackage | null, updater: T): T {
+    if (form?.form !== 'deb') return updater;
+    return new Proxy(updater, { get: (target, key, receiver) => (key === 'isUpdaterActive' ? () => false : Reflect.get(target, key, receiver)) });
+}
+
+/**
+ * An AppImage's start records where its file is, `<data>/desktop/appimage.json`, `{"file":"<full path>"}`, beside the copies
+ * of what it carries, so the jason a copy is knows the application it belongs to wherever the person keeps it: the
+ * command line's update hands over to that file, its move reuses it, and its uninstall removes it. Written whole, beside
+ * the record and renamed onto it, and only where it names another file.
+ */
+export function recordAppImage(desktop: string, file: string): void {
+    const record = join(desktop, 'appimage.json');
+    let held: unknown = null;
+    try {
+        held = JSON.parse(readFileSync(record, 'utf8'));
+    } catch {
+        held = null;
+    }
+    if (typeof held === 'object' && held !== null && (held as { file?: unknown }).file === file) return;
+    const written = `${record}.${process.pid}.tmp`;
+    writeFileSync(written, `${JSON.stringify({ file })}\n`);
+    renameSync(written, record);
 }
 
 /** What the session starts to open this application: the AppImage file itself, else the executable. */

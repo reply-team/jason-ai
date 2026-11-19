@@ -1,17 +1,19 @@
 #!/bin/bash
-# Jason Desktop's apt route on a machine with apt, proven end to end against this run's own deb and index, served the way
-# the product's address and GitHub serve a release: run by CI on ubuntu-latest, and on any Ubuntu, by an account that may
-# use sudo without a password (install.sh refuses root).
+# Jason Desktop's apt route on a machine with apt, proven end to end against a deb of this run's, served the way the
+# product's address and GitHub serve a release: run by CI's install.sh job on ubuntu-latest, and on any Ubuntu, by an
+# account that may use sudo without a password (the install line refuses root).
 #
-#   test-apt-route.sh <folder> <keyring>
+#   test-apt-route.sh <folder>
 #
-# <folder> holds the deb, jason-desktop-linux-x64.deb, and the index write-apt-index.sh wrote beside it, signed by a key
-# whose public half is <keyring>. Nothing in the product carries a switch for this: the machine is made to answer for the
-# address instead. Its host name and two stand-ins for GitHub's are mapped to this machine in /etc/hosts, and a
-# certificate of this run's own, which the machine trusts for the run, is served by serve-release-chain.py, which answers
-# each hop as the real chain does. The package then keeps the source it really writes. Its key, the repository's, is
-# replaced by this run's own public key once the package is installed, since a pull request signs with a key of its own;
-# that is the one thing the leg changes in what the package placed, and it says so.
+# <folder> holds the deb, jason-desktop-linux-x64.deb. The leg makes two releases of it: this one, and the next patch,
+# the same package with its version moved on (in its control file and its version.json), which is what an update
+# changes for apt. Each gets the index a release attaches, written by write-apt-index.sh and signed with a key the leg
+# makes, since a pull request holds no signing key. Nothing in the product carries a switch for this: the machine is
+# made to answer for the address instead. Its host name and two stand-ins for GitHub's are mapped to this machine in
+# /etc/hosts, and a certificate of the leg's own, which the machine trusts for the run, is served by
+# serve-release-chain.py, which answers each hop as the real chain does. The package keeps the source it really writes;
+# its key, the repository's, is replaced by the leg's public key once the package is installed, and that is the one
+# thing the leg changes in what the package placed, and it says so.
 #
 # What it proves, in order, each check failing the leg with one ::error line:
 #   1. the listing of every place the package and apt write, taken before anything is installed;
@@ -21,22 +23,24 @@
 #      /usr/bin/jason. What the package placed: the source naming the address's /apt/ path signed by
 #      /usr/share/keyrings/jason-desktop.gpg, that key the repository's, the rule for automatic updates a configuration
 #      file apt reads, and /usr/bin/jason the jason the package carries, found by name in a new login shell;
-#   3. apt reading the repository through the chain, offering the deb's version from it, and installing the package from
-#      it, the deb taken from the release's opaque asset address;
-#   4. the package purged, and the listing taken again: the same as before, but for /opt, which dpkg removes once it is
+#   3. apt reading the repository through the chain, offering the release's version from it, and installing the package
+#      from it, the deb taken from the release's opaque asset address;
+#   4. the next release published: Ubuntu's automatic updates (unattended-upgrade, the program the daily
+#      apt-daily-upgrade unit runs, with the package's rule) leave the package where `apt-mark hold` holds it, and
+#      install the next version once it is not held; `jason update apply` then refuses with
+#      update_managed_by_package_manager, naming apt;
+#   5. the package purged, and the listing taken again: the same as before, but for /opt, which dpkg removes once it is
 #      empty when no installed package lists it.
-# Everything it set up for the run (the server, the host names, the certificate) is taken back on its way out.
+# Everything it set up for the run (the server, the host names, the certificate, the rule that keeps the automatic
+# updates to Jason's origin for the run) is taken back on its way out.
 set -euo pipefail
 export LC_ALL=C DEBIAN_FRONTEND=noninteractive
 
-[ $# -eq 2 ] || { echo "usage: test-apt-route.sh <folder holding the deb and its index> <the public keyring that signs it>"; exit 2; }
+[ $# -eq 1 ] || { echo "usage: test-apt-route.sh <folder holding the deb>"; exit 2; }
 folder=$(realpath "$1")
-keyring=$(realpath "$2")
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
 repository=$(realpath "$here/../..")
 deb="$folder/jason-desktop-linux-x64.deb"
-version=$(dpkg-deb --field "$deb" Version)
-release=${version//\~/-}
 SUDO=sudo
 
 fail() { echo "::error title=apt route::$1"; exit 1; }
@@ -44,6 +48,7 @@ fail() { echo "::error title=apt route::$1"; exit 1; }
 
 work=$(mktemp -d)
 hosts_line="127.0.0.1 get.jasonharness.ai github.example.test assets.example.test # test-apt-route.sh"
+only_jason=/etc/apt/apt.conf.d/99zz-test-apt-route
 server=""
 cleanup() {
   [ -z "$server" ] || $SUDO kill "$server" 2> /dev/null || true
@@ -54,6 +59,8 @@ cleanup() {
     $SUDO rm -f /usr/local/share/ca-certificates/test-apt-route.crt
     $SUDO update-ca-certificates --fresh > /dev/null 2>&1 || true
   fi
+  $SUDO rm -f "$only_jason"
+  gpgconf --homedir "$work/gpg" --kill all > /dev/null 2>&1 || true
   $SUDO rm -rf "$work"
 }
 trap cleanup EXIT
@@ -74,19 +81,46 @@ listing() {
 dpkg-query -W jason-desktop > /dev/null 2>&1 && fail "jason-desktop is known to dpkg before the leg starts; the listing would not be the machine's before."
 listing > "$work/before"
 
-# The chain: one release, this run's, the latest, with the manifest and checksums the install line reads.
-mkdir -p "$work/releases/v$release"
-cp "$deb" "$folder/Packages" "$folder/Release" "$folder/InRelease" "$folder/Release.gpg" "$work/releases/v$release/"
-printf '{\n  "schema": 1,\n  "version": "%s"\n}\n' "$release" > "$work/releases/v$release/manifest.json"
-(cd "$work/releases/v$release" && sha256sum jason-desktop-linux-x64.deb > checksums.txt)
+# The two releases, this one and the next patch, each with the index a release attaches, signed by the leg's key: an
+# Ed25519 key that certifies with a signing subkey, as the repository's is.
+version=$(dpkg-deb --field "$deb" Version)
+release=${version//\~/-}
+core=${release%%[-+]*}
+next="${core%.*}.$((${core##*.} + 1))"
+mkdir -m 700 "$work/gpg"
+export GNUPGHOME="$work/gpg"
+gpg --batch --passphrase '' --quick-generate-key 'Jason apt index, this leg alone' ed25519 cert 1d 2> /dev/null
+fpr=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+gpg --batch --passphrase '' --quick-add-key "$fpr" ed25519 sign 1d 2> /dev/null
+gpg --batch --yes --output "$work/key.gpg" --export "$fpr"
+secret=$(gpg --armor --export-secret-subkeys "$fpr")
+publish() {
+  local tag=$1 file=$2
+  mkdir -p "$work/releases/v$tag"
+  cp "$file" "$work/releases/v$tag/jason-desktop-linux-x64.deb"
+  APT_SIGNING_KEY="$secret" bash "$here/write-apt-index.sh" "$work/releases/v$tag" > /dev/null
+  printf '{\n  "schema": 1,\n  "version": "%s"\n}\n' "$tag" > "$work/releases/v$tag/manifest.json"
+  (cd "$work/releases/v$tag" && sha256sum jason-desktop-linux-x64.deb > checksums.txt)
+}
+publish "$release" "$deb"
+mkdir "$work/repack"
+dpkg-deb -R "$deb" "$work/repack/root"
+sed -i "s/^Version: .*/Version: $next/" "$work/repack/root/DEBIAN/control"
+printf '{\n  "version": "%s"\n}\n' "$next" > "$work/repack/root/opt/Jason/resources/bundle/version.json"
+dpkg-deb --root-owner-group -Zgzip -b "$work/repack/root" "$work/repack/next.deb" > /dev/null
+publish "$next" "$work/repack/next.deb"
+unset GNUPGHOME
 echo "$release" > "$work/releases/latest"
+echo "Two releases made of this run's deb, $release and $next, each with its index signed by the leg's key ($fpr)."
+
+# The chain, for the address and GitHub's hosts.
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=test-apt-route CA" -keyout "$work/ca.key" -out "$work/ca.crt" \
   -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign > /dev/null 2>&1
 openssl req -newkey rsa:2048 -nodes -subj "/CN=get.jasonharness.ai" -keyout "$work/server.key" -out "$work/server.csr" > /dev/null 2>&1
 printf 'subjectAltName=DNS:get.jasonharness.ai,DNS:github.example.test,DNS:assets.example.test\n' > "$work/san"
 openssl x509 -req -in "$work/server.csr" -CA "$work/ca.crt" -CAkey "$work/ca.key" -CAcreateserial -days 1 -extfile "$work/san" -out "$work/server.crt" > /dev/null 2>&1
 $SUDO cp "$work/ca.crt" /usr/local/share/ca-certificates/test-apt-route.crt
-$SUDO update-ca-certificates > /dev/null
+$SUDO update-ca-certificates > /dev/null 2>&1
 echo "$hosts_line" | $SUDO tee -a /etc/hosts > /dev/null
 : > "$work/served.log"
 chmod 666 "$work/served.log"
@@ -132,15 +166,17 @@ said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/u
 [ "${said%%+*}" = "$release" ] || fail "A new login shell's jason says '$said', and the package is $version."
 echo "The deb placed Jason's source, its key, the rule for automatic updates and /usr/bin/jason; a new login shell runs jason $said."
 
-# The repository's key, which the package placed, stands for the key this run signed with.
-$SUDO cp "$keyring" /usr/share/keyrings/jason-desktop.gpg
-echo "::notice title=apt route::This run's index is signed by a key the run made, so /usr/share/keyrings/jason-desktop.gpg holds that key's public half for the rest of the leg."
+# The repository's key, which the package placed, stands for the leg's from here on.
+trust_the_leg() { $SUDO cp "$work/key.gpg" /usr/share/keyrings/jason-desktop.gpg; }
+trust_the_leg
+echo "::notice title=apt route::The leg's indexes are signed by a key it made, so /usr/share/keyrings/jason-desktop.gpg holds that key's public half for the rest of the leg."
 
 # 3. apt through the chain.
 update_jason() {
   $SUDO apt-get update -q -o Dir::Etc::SourceList="$source" -o Dir::Etc::SourceParts=- -o APT::Get::List-Cleanup=0 > "$work/update.log" 2>&1 \
     && ! grep -qE '^(W|E):' "$work/update.log" || { cat "$work/update.log"; fail "apt-get update did not read Jason's repository through the address without a word."; }
 }
+installed() { dpkg-query -W -f='${Version}' jason-desktop; }
 update_jason
 candidate=$(apt-cache policy jason-desktop | awk '$1 == "Candidate:" { print $2 }')
 [ "$candidate" = "$version" ] || fail "apt offers jason-desktop '$candidate' from the repository, and the release is $version."
@@ -148,9 +184,31 @@ apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { ap
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
 grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"served\": \"v$release/jason-desktop-linux-x64.deb\"" "$work/served.log" \
   || { cat "$work/served.log"; fail "The deb did not come through the chain from the release's asset address."; }
+trust_the_leg
 echo "apt read Jason's repository through the address and the chain, offered $version, and installed it from there."
 
-# 4. The purge, and the listing again.
+# 4. The next release, taken by Ubuntu's automatic updates as the daily run takes it: unattended-upgrade, with the
+# package's rule, and for this run nothing but Jason's origin, so the leg upgrades nothing else of the machine's.
+echo "$next" > "$work/releases/latest"
+update_jason
+printf '#clear Unattended-Upgrade::Allowed-Origins;\nUnattended-Upgrade::Allowed-Origins {};\n' | $SUDO tee "$only_jason" > /dev/null
+$SUDO apt-mark hold jason-desktop > /dev/null
+$SUDO unattended-upgrade -v > "$work/held.log" 2>&1 || { cat "$work/held.log"; fail "unattended-upgrade failed with the package held."; }
+[ "$(installed)" = "$version" ] || { cat "$work/held.log"; fail "The automatic updates moved a held jason-desktop to $(installed)."; }
+$SUDO apt-mark unhold jason-desktop > /dev/null
+$SUDO unattended-upgrade -v > "$work/upgrade.log" 2>&1 || { cat "$work/upgrade.log"; fail "unattended-upgrade failed."; }
+[ "$(installed)" = "$next" ] || { cat "$work/upgrade.log"; fail "The automatic updates left jason-desktop at $(installed), and the repository offers $next."; }
+grep -q "\"version\": \"$next\"" /opt/Jason/resources/bundle/version.json || fail "The package's version.json does not name $next after the update."
+echo "Ubuntu's automatic updates left the held package at $version, and once it was not held installed $next from the repository."
+status=0
+"${person[@]}" /usr/bin/jason update apply > "$work/apply.json" 2>&1 || status=$?
+cat "$work/apply.json"
+[ "$status" -eq 1 ] && grep -qF '"code":"update_managed_by_package_manager"' "$work/apply.json" && grep -qF 'sudo apt update' "$work/apply.json" \
+  || fail "jason update apply on the deb did not refuse with update_managed_by_package_manager, naming apt."
+echo "jason update apply on the deb refuses, naming apt."
+
+# 5. The purge, and the listing again.
+$SUDO rm -f "$only_jason"
 $SUDO apt-get purge -y -q jason-desktop > "$work/purge.log" 2>&1 || { cat "$work/purge.log"; fail "apt-get did not purge jason-desktop."; }
 listing > "$work/after"
 if ! diff "$work/before" "$work/after" > "$work/difference"; then

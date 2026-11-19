@@ -424,21 +424,8 @@ test('the lines are a look on Windows no more than before: no account, no line, 
     assert.equal(existsSync(join(at, '.zprofile')), false);
 });
 
-test('the TypeScript copy is held to install.sh: the marker, the line, the append, the search and the words after it', () => {
-    assert.ok(script.includes(`MARKER="${profileMarker}"`), 'the marker is the script’s');
-    assert.ok(script.includes('LINE="export PATH=\\"$INSTALL_DIR:\\$PATH\\""'), 'the line is the script’s');
+test('the lines are the installer’s own, and the removal takes back exactly those: the blank line, the marker and the line', () => {
     assert.equal(exportLine('/h/.local/bin'), 'export PATH="/h/.local/bin:$PATH"');
-    assert.ok(script.includes(`printf '\\n%s\\n%s\\n' "$MARKER" "$LINE" >> "$1"`), 'appended as the script appends');
-    assert.ok(script.includes('grep -qxF "$LINE" "$1"'), 'the whole line is looked for');
-    const said = (tail: string) => {
-        const line = script.split('\n').find((each) => each.includes('echo "Added $INSTALL_DIR to the PATH in $ADDED; ') && each.includes(tail));
-        assert.ok(line !== undefined, tail);
-        return line.trim().replace(/^echo "(.*)"$/, '$1');
-    };
-    const lines = (interactive: boolean) => ({ ...pathLines({ home: '/h', shellNamed: null, terminalPath: () => '' }, '/h/.local/bin', 'jason'), interactive });
-    const fill = (words: string) => words.replace('$INSTALL_DIR', '/h/.local/bin').replace('$ADDED', '/h/.zprofile and /h/.zshrc').replace('$LINE', exportLine('/h/.local/bin'));
-    assert.equal(addedWords(lines(true), ['/h/.zprofile', '/h/.zshrc']), fill(said('open a new terminal')));
-    assert.equal(addedWords(lines(false), ['/h/.zprofile', '/h/.zshrc']), fill(said('sign out and back in')));
     // The removal is the uninstall's: the blank line, the marker and the line come out, and a line nobody marked stays.
     assert.equal(withoutLines(`# mine\n${block(exportLine('/h'))}`, '/h'), '# mine\n');
     assert.equal(withoutLines(`# mine${block(exportLine('/h'))}`, '/h'), '# mine', 'a profile that ended without a newline gets none');

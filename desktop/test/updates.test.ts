@@ -548,6 +548,12 @@ test('the menu offers one step at a time, and in a build that is not installed n
     assert.deepEqual(menuItemOf({ step: 'idle' }, false, true), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
 });
 
+test('where the package updates itself, the item says so, and once the system installed a new version under the running window it says to restart', () => {
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false), { label: 'Updates Come Through the Package', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false, '0.49.2'), { label: 'Restart Jason to Finish the Update to 0.49.2', enabled: false, act: null });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, true, '0.49.2'), { label: 'Check for Updates…', enabled: true, act: 'check' }, 'electron-updater’s own steps stand where it installs');
+});
+
 test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {
     const asked: ReturnType<typeof installQuestion>[] = [];
     const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {

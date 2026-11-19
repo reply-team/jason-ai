@@ -204,6 +204,17 @@ public static class MachineSetup
             }).ConfigureAwait(false);
         }
 
+        // An AppImage's copy is per version: a logon start registered from another version's copy moves to this one, as the
+        // application's own start moves it, since a terminal's update finishes here before the application starts again.
+        if (places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            await run.Step("Taking the logon start over from another version's copy", () =>
+            {
+                run.RepointCopy();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
         // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
         // wrapper being there is not yet that terminal finding this jason, where another file comes first.
         if (command is { Placed: true } placed)
@@ -808,6 +819,42 @@ public static class MachineSetup
                 ? $"Retired the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}."
                 : $"Retired the command-line install at {old}.");
             return new InstallRetired(old, aside, removed, reregistered);
+        }
+
+        /// <summary>
+        /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
+        /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
+        /// </summary>
+        public void RepointCopy()
+        {
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            var bundles = Update.AppImageCopy.BundlesOf(carried.Executable);
+            if (!string.Equals(named, carried.Executable, StringComparison.Ordinal)
+                && string.Equals(Path.GetDirectoryName(Path.GetDirectoryName(named)), bundles, StringComparison.Ordinal))
+            {
+                Reregister(named);
+            }
         }
 
         /// <summary>

@@ -286,7 +286,7 @@ internal static partial class StatusChecks
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
-            checks.Add(UpdateInFlight(unfinished));
+            checks.Add(UpdateInFlight(env, unfinished));
             checks.Add(Move(env));
             checks.Add(Layout(env));
 
@@ -482,9 +482,9 @@ internal static partial class StatusChecks
             : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
     }
 
-    private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
+    private static StatusCheck UpdateInFlight(CliEnvironment env, Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
-        null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        null => PackageUpdates(env) ?? new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
         _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
@@ -500,6 +500,62 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// Linux, the deb, whose updates come with the system's: where they cannot arrive, because Jason's apt source is gone
+    /// or turned off (a release upgrade of Ubuntu turns third-party sources off, with <c>Enabled: no</c>), and where the
+    /// system installed a version this installation was not set up for yet (the version Jason Desktop's start last set the
+    /// machine up for, <c>&lt;data&gt;/desktop/machine-setup.json</c>, is not the package's). Null elsewhere, and where neither
+    /// stands.
+    /// </summary>
+    private static StatusCheck? PackageUpdates(CliEnvironment env)
+    {
+        if (env.Setup is not { Platform: SetupSystem.Linux } places || CarriedExecutable.Of(env) is not { } carried || !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            return null;
+        }
+
+        string? setUpFor = null;
+        try
+        {
+            using var record = JsonDocument.Parse(File.ReadAllText(System.IO.Path.Combine(env.Paths.Root, "desktop", "machine-setup.json")));
+            setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+        {
+        }
+
+        if (setUpFor is not null && !string.Equals(setUpFor, carried.Version, StringComparison.Ordinal))
+        {
+            return new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. `jason update apply --finish` finishes it, and so does opening Jason Desktop.",
+                "jason update apply --finish");
+        }
+
+        string? text = null;
+        try
+        {
+            text = File.Exists(places.AptSource) ? File.ReadAllText(places.AptSource) : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        var on = text is not null
+            && text.Split('\n').Any(line => line.TrimStart().StartsWith("Types:", StringComparison.Ordinal))
+            && !text.Split('\n').Any(line => line.Trim().Equals("Enabled: no", StringComparison.OrdinalIgnoreCase));
+        return on
+            ? null
+            : new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason's apt source, {places.AptSource}, is {(text is null ? "not there" : "turned off")}, so no update of Jason Desktop arrives with the system's updates; a release upgrade of Ubuntu turns such sources off. Turn it on in Software & Updates → Other Software.",
+                null);
+    }
 
     /// <summary>
     /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more

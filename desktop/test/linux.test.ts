@@ -2,10 +2,11 @@
 // behaves with no tray to fall back on.
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount } from '../src/linux-package.ts';
+import { keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount } from '../src/linux-package.ts';
 import { windowConduct } from '../src/login-item.ts';
 
 test('the package is read as electron-updater reads it: package-type deb first, then an absolute APPIMAGE, else a folder', () => {
@@ -41,6 +42,27 @@ test('no window shows a menu bar, Linux’s included: Live’s window and the De
         assert.equal(body.split('window.setMenuBarVisibility(false);').length - 1, 1, `${start} hides its menu bar`);
     }
     assert.doesNotMatch(main, /setMenuBarVisibility\((?!false\))|autoHideMenuBar|setAutoHideMenuBar/);
+});
+
+test('the deb’s updater is off, since the system’s updates install the package, and every other form’s is as electron-updater makes it', () => {
+    const updater = { isUpdaterActive: () => true, checked: 0 };
+    assert.equal(updaterOf({ form: 'deb' }, updater).isUpdaterActive(), false);
+    assert.equal(updaterOf({ form: 'appimage', file: '/home/a/Applications/Jason.AppImage' }, updater), updater);
+    assert.equal(updaterOf({ form: 'folder' }, updater), updater);
+    assert.equal(updaterOf(null, updater), updater);
+});
+
+test('an AppImage’s start records where its file is, beside the copies, for the command line, and writes it again only when it moved', (t) => {
+    const desktop = mkdtempSync(join(tmpdir(), 'jason-desktop-record-'));
+    t.after(() => rmSync(desktop, { recursive: true, force: true }));
+    const record = join(desktop, 'appimage.json');
+    recordAppImage(desktop, '/home/a/Applications/jason-desktop-linux-x64.AppImage');
+    assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')), { file: '/home/a/Applications/jason-desktop-linux-x64.AppImage' });
+    const written = statSync(record).mtimeMs;
+    recordAppImage(desktop, '/home/a/Applications/jason-desktop-linux-x64.AppImage');
+    assert.equal(statSync(record).mtimeMs, written, 'the same file was recorded again');
+    recordAppImage(desktop, '/home/a/Tools/Jason.AppImage');
+    assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')), { file: '/home/a/Tools/Jason.AppImage' });
 });
 
 test('what an update keeps aside: the AppImage file, nothing for the deb, the installed folder for any other form', () => {
