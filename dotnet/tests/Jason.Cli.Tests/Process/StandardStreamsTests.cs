@@ -15,6 +15,53 @@ public sealed class StandardStreamsTests
 {
     private static readonly IntPtr[] Standard = [new(0x10), new(0x14), new(0x18)];
 
+    /// <summary>
+    /// Linux: a descriptor this process holds open across exec, as Jason Desktop's Electron hands a jason its resource
+    /// files, reaches a child started after it until it is kept out, and no longer after; the process keeps it open itself.
+    /// Catches the runtime a Desktop's jason starts holding the Desktop's files, an AppImage's mount among them, for as long
+    /// as it runs.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_a_descriptor_held_open_across_exec_is_kept_out_of_the_children_started_after()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var fd = open(file, 0);
+        Assert.True(fd > 2, "the descriptor could not be opened");
+        try
+        {
+            Assert.Equal("held", ChildSees(fd));
+
+            StandardStreams.KeepOutOfChildren();
+
+            Assert.Equal("free", ChildSees(fd));
+            Assert.True(File.Exists($"/proc/self/fd/{fd}"), "this process lost the descriptor itself");
+        }
+        finally
+        {
+            _ = close(fd);
+            File.Delete(file);
+        }
+    }
+
+    private static string ChildSees(int fd)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"[ -e /proc/self/fd/{fd} ] && echo held || echo free");
+        using var child = System.Diagnostics.Process.Start(start)!;
+        var said = child.StandardOutput.ReadToEnd().Trim();
+        child.WaitForExit();
+        return said;
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int open([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string path, int flags);
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int close(int fd);
+
     [Fact]
     public void Where_the_list_cannot_be_had_the_three_standard_streams_are_kept_out_and_nothing_else()
     {

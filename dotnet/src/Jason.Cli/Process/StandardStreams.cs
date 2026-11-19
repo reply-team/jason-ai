@@ -59,11 +59,22 @@ public static class StandardStreams
     /// and starts on the same thread, and the CLI starts no process on another thread.
     /// </para>
     /// <para>
-    /// Unix needs none of this for the three streams: the child's descriptors 0, 1 and 2 are replaced outright.
+    /// Unix needs none of this for the three streams: the child's descriptors 0, 1 and 2 are replaced outright. Linux needs it
+    /// for the others: a descriptor this process was handed open across exec reaches every child. Jason Desktop's Electron
+    /// keeps its resource files so for its own helpers (the paks, icudtl.dat, app.asar, the V8 snapshot), so the runtime its
+    /// jason started held them as long as it ran: an AppImage's mount then outlived the window, an old version's outlived an
+    /// update, and the AppImage's own process stayed to be taken for an open window. Every such descriptor above 2 is marked
+    /// close-on-exec, read from <c>/proc/self/fd</c>: this process keeps it, and reads none of them.
     /// </para>
     /// </remarks>
     public static void KeepOutOfChildren()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            KeepDescriptorsOutOfChildren();
+            return;
+        }
+
         if (!OperatingSystem.IsWindows())
         {
             return;
@@ -71,6 +82,38 @@ public static class StandardStreams
 
         KeepOutOfChildren(InheritableHandles, StandardHandles, Clear);
     }
+
+    /// <summary>Linux: every descriptor above 2 this process holds open across exec, marked close-on-exec.</summary>
+    private static void KeepDescriptorsOutOfChildren()
+    {
+        List<int> descriptors;
+        try
+        {
+            descriptors = [.. Directory.EnumerateFileSystemEntries("/proc/self/fd")
+                .Select(entry => int.TryParse(Path.GetFileName(entry), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fd) ? fd : -1)
+                .Where(fd => fd > 2)];
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (var fd in descriptors)
+        {
+            var flags = Fcntl(fd, GetDescriptorFlags, 0);
+            if (flags >= 0 && (flags & CloseOnExec) == 0)
+            {
+                _ = Fcntl(fd, SetDescriptorFlags, flags | CloseOnExec);
+            }
+        }
+    }
+
+    private const int GetDescriptorFlags = 1;
+    private const int SetDescriptorFlags = 2;
+    private const int CloseOnExec = 1;
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int Fcntl(int fd, int command, int argument);
 
     /// <summary>
     /// The rule, with its three sources given: every handle <paramref name="inheritable"/> lists is cleared, or, where it
