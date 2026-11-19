@@ -118,7 +118,8 @@ export function withoutLines(text: string, folder: string): string {
     // The uninstall's rule (`PathEntry.WithoutEntry` in C#), line for line, and held to the same cases: the text split on
     // `\n` alone, each line keeping its own `\r`, walked from the end. A block is the marker and the line under it, read
     // past a `\r` or a space at their ends, with the blank line above them where there is one: an empty line, or a lone
-    // `\r` where the file was later turned to CRLF, and nothing else, so a line of spaces is the person's own. With no
+    // `\r` where the block itself was later turned to CRLF, its marker line ending in `\r` too, and nothing else, so a
+    // line of spaces, or a lone `\r` over a block that was not turned, is the person's own. With no
     // blank line above, the `\n` the block began with ended the person's last line, which had none: where the block is
     // the last thing in the file it goes too, and the file ends as it began; where anything follows, it stays, because
     // it now separates the person's lines.
@@ -134,7 +135,7 @@ export function withoutLines(text: string, folder: string): string {
     for (let index = lines.length - 1; index >= 0; index--) {
         if (trimmedEnd(lines[index]) !== line || index === 0 || trimmedEnd(trimmedStart(lines[index - 1])) !== profileMarker) continue;
         let first = index - 1;
-        const blankAbove = first > 0 && (lines[first - 1] === '' || lines[first - 1] === '\r');
+        const blankAbove = first > 0 && (lines[first - 1] === '' || (lines[first - 1] === '\r' && (lines[first] ?? '').endsWith('\r')));
         if (blankAbove) first--;
         let last = index;
         if (!blankAbove && first > 0 && index === lines.length - 2 && lines[lines.length - 1] === '') last++;
@@ -147,7 +148,7 @@ export function withoutLines(text: string, folder: string): string {
 }
 
 /** What .NET's `TrimStart` and `TrimEnd` take off a profile's line read one character a byte: the white space among the first 256. */
-const whiteSpace = '\t\n\v\f\r \u0085 ';
+const whiteSpace = '\t\n\v\f\r \u0085\u00a0';
 const trimmedStart = (text: string | undefined = '') => {
     let from = 0;
     while (from < text.length && whiteSpace.includes(text.charAt(from))) from++;

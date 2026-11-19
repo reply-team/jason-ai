@@ -319,6 +319,14 @@ test('A last line of spaces is the persons own and stays', (t) => {
     }
 });
 
+test('A last line of a lone carriage return is the persons own and stays', (t) => {
+    for (const original of ['\r', 'a\n\r', 'a\r\n\r']) {
+        const file = profileOf(t, original);
+        add(file);
+        assert.deepEqual(take(file), bytes(original), JSON.stringify(original));
+    }
+});
+
 test('A blank line turned to crlf is still the installers blank', (t) => {
     for (const original of ['# mine\nexport EDITOR=vim\n', '']) {
         const file = profileOf(t, original);

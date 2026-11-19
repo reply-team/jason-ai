@@ -352,6 +352,24 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// A last line that is a lone <c>\r</c>, with no newline after it, is the person's own: the block under it was not
+    /// turned to CRLF, so that <c>\r</c> is no blank line the installer wrote, and it stays.
+    /// </summary>
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("a\n\r")]
+    [InlineData("a\r\n\r")]
+    public void A_last_line_of_a_lone_carriage_return_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
     /// The blank line the installer wrote, turned to a lone <c>\r</c> when the whole file was later turned to CRLF, is
     /// still the installer's blank line, and goes with the block.
     /// </summary>

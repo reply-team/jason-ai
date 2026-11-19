@@ -578,7 +578,8 @@ public static class PathEntry
     /// <para>
     /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
     /// which is what both the installer and the repair append. That blank line is empty, or a lone <c>\r</c> where the
-    /// file was later turned to CRLF, and nothing else: a line of spaces is the person's own. Appended to a file whose
+    /// block itself was later turned to CRLF, its marker line ending in <c>\r</c> too, and nothing else: a line of
+    /// spaces, or a lone <c>\r</c> over a block that was not turned, is the person's own. Appended to a file whose
     /// last line had no newline, the newline the block begins with ended that line instead of making a blank one: where
     /// such a block is the last thing in the file, that newline goes with it, and the file ends as it began; where
     /// anything follows, it stays. A line nobody marked is somebody's own, written by hand, and stays: this verb
@@ -625,9 +626,10 @@ public static class PathEntry
 
             // Exactly what the script appended, and in that order: a blank line, the marker, the line.
             var first = index - 1;
-            // The installer's blank line is empty, or a lone \r where the file was later turned to CRLF. A line of
-            // spaces is the person's own.
-            var blankAbove = first > 0 && (lines[first - 1] is "" or "\r");
+            // The installer's blank line is empty, or a lone \r where the block itself was later turned to CRLF, its
+            // marker line ending in one too. A line of spaces, or a lone \r over a block that was not turned, is the
+            // person's own.
+            var blankAbove = first > 0 && (lines[first - 1].Length == 0 || (lines[first - 1] == "\r" && lines[first].EndsWith('\r')));
             if (blankAbove)
             {
                 first--;
