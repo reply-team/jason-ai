@@ -325,7 +325,7 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
 
 # The previous release's runtime started by its own jason. Its start gives up after 30 s while the runtime it started
 # still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
-# v0.48.6: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
+# v0.48.7: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
 # answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
 # start failed otherwise.
 function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
@@ -1639,7 +1639,7 @@ switch ($Step) {
         Say "the previous release's Jason Desktop $previousVersion installed by its own setup /S"
 
         # Open, as a person leaves it. The previous release, installed fresh, opens on the Demo, which starts no runtime
-        # (desktop/src/mode.ts opensOnDemo(), at v0.48.6); a person who works in it has one running from the carried jason,
+        # (desktop/src/mode.ts opensOnDemo(), at v0.48.7); a person who works in it has one running from the carried jason,
         # which the updater then stops, so one is started from it here.
         $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
@@ -1647,7 +1647,7 @@ switch ($Step) {
         }
         Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
-        # What the previous release's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.6):
+        # What the previous release's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.7):
         # it stops the runtime the application carries through jason runtime stop, keeps the application aside, and
         # electron-updater 6.8.11's quitAndInstall() starts the installer with --updated --force-run - not silent, so
         # autoRunAppAfterInstall decides the force-run - and quits the application at once. The copy kept aside is the
@@ -1678,7 +1678,7 @@ switch ($Step) {
     }
 
     'InstallOverOpenWindow' {
-        # A shape the previous release's updater never makes (desktop/src/updates.ts install(), at v0.48.6): this build's
+        # A shape the previous release's updater never makes (desktop/src/updates.ts install(), at v0.48.7): this build's
         # setup run by hand, silently, as an update, over an open window, the Demo the previous release opens on when
         # installed fresh. The previous release is installed again for it, and taken off after by Installed apps.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
@@ -2549,7 +2549,7 @@ switch ($Step) {
         if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
         # Side by side as that release leaves them: the command-line folder's own entry on the Path, and nothing of the
-        # Desktop's there. Its setup runs no step of its own at install (v0.48.6's desktop/installer holds only uninstall.nsh,
+        # Desktop's there. Its setup runs no step of its own at install (v0.48.7's desktop/installer holds only uninstall.nsh,
         # with no customInstall), and its application places its command, jason.cmd and a Git Bash wrapper in WindowsApps,
         # only on the person's word and never as a Path entry (desktop/src/path-command.ts, at the same tag). Held, so that
         # what this build's setup puts there after is its own doing.

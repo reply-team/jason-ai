@@ -4,20 +4,20 @@ namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
 /// The way back from 0.49 that the update page gives, "### Going back from 0.49": take Jason off keeping the data
-/// directory, install 0.48.6 by its pinned line, put back what the uninstall took. Each row holds one of its claims to
+/// directory, install 0.48.7 by its pinned line, put back what the uninstall took. Each row holds one of its claims to
 /// what makes it true, so the section goes red the day the claim stops being so.
 /// </summary>
 public partial class PageClaimsTests
 {
     /// <summary>The release the section goes back to.</summary>
-    private const string GoingBackTo = "0.48.6";
+    private const string GoingBackTo = "0.48.7";
 
-    /// <summary>The newest migration 0.48.6 shipped: a database 0.49 opened is one 0.48.6 opens only while no later one exists.</summary>
+    /// <summary>The newest migration 0.48.7 shipped: a database 0.49 opened is one 0.48.7 opens only while no later one exists.</summary>
     private const string GoingBackToNewestMigration = "20261116053811_DecisionThread";
 
     /// <summary>
-    /// The newest line of each package's digest list at v0.48.6, the version and the digest of the package that release
-    /// published. A plugin 0.49 placed is one 0.48.6 runs as it is only while it is the same package.
+    /// The newest line of each package's digest list at v0.48.7, the version and the digest of the package that release
+    /// published. A plugin 0.49 placed is one 0.48.7 runs as it is only while it is the same package.
     /// </summary>
     private static readonly (string Plugin, string Line)[] GoingBackToPackages =
     [
@@ -31,11 +31,11 @@ public partial class PageClaimsTests
     /// <summary>
     /// The section's commands, in their order: the uninstall, the two pinned install lines, and what is put back. The
     /// two install lines are the install scripts' own pinned forms, read from the scripts, with the release this tree
-    /// builds replaced by 0.48.6, and nothing added: an option that keeps the PATH unchanged would leave the new
+    /// builds replaced by 0.48.7, and nothing added: an option that keeps the PATH unchanged would leave the new
     /// terminal of step 2 without <c>jason</c>.
     /// </summary>
     [Fact]
-    public void Going_back_from_0_49_installs_0_48_6_by_the_scripts_own_pinned_lines()
+    public void Going_back_from_0_49_installs_0_48_7_by_the_scripts_own_pinned_lines()
     {
         var section = GoingBack();
         var builds = TreeVersion.Prefix();
@@ -59,7 +59,7 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("--no-modify-path", section, StringComparison.Ordinal);
         Assert.Contains(
             "and `jason runtime autostart enable` where the runtime started at logon before.", Flat(section), StringComparison.Ordinal);
-        Assert.Contains($"[0.48.6's release page](https://get.jasonharness.ai/releases/tag/v{GoingBackTo})", Flat(section), StringComparison.Ordinal);
+        Assert.Contains($"[0.48.7's release page](https://get.jasonharness.ai/releases/tag/v{GoingBackTo})", Flat(section), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -86,13 +86,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// "0.49 adds no migration to the database": the newest migration this tree compiles is the newest 0.48.6 shipped. A
-    /// migration added in 0.49 turns this red, and the section with it, since 0.48.6 refuses data a newer Jason migrated.
+    /// "0.49 adds no migration to the database": the newest migration this tree compiles is the newest 0.48.7 shipped. A
+    /// migration added in 0.49 turns this red, and the section with it, since 0.48.7 refuses data a newer Jason migrated.
     /// </summary>
     [Fact]
     public void Going_back_from_0_49_holds_while_0_49_adds_no_migration()
     {
-        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.6 runs, so 0.48.6 opens the same data as it is, and there is no backup to put back.", Flat(GoingBack()), StringComparison.Ordinal);
+        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7 opens the same data as it is, and there is no backup to put back.", Flat(GoingBack()), StringComparison.Ordinal);
 
         var migrations = Directory.GetFiles(Path.Combine(Root(), "dotnet", "src", "Jason.Runtime", "Persistence", "Migrations"), "*.Designer.cs")
             .Select(file => MigrationId().Match(File.ReadAllText(file)))
@@ -105,13 +105,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// "plugins and their grants are data 0.48.6 reads as it is": each package's newest version and digest is the one
-    /// v0.48.6 published, and there is no package 0.48.6 did not have. A package that moves in 0.49 turns this red.
+    /// "plugins and their grants are data 0.48.7 reads as it is": each package's newest version and digest is the one
+    /// v0.48.7 published, and there is no package 0.48.7 did not have. A package that moves in 0.49 turns this red.
     /// </summary>
     [Fact]
-    public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_6_shipped()
+    public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_7_shipped()
     {
-        Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.6 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
+        Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
 
         var newest = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
             .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Line: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Last().Trim()))
@@ -126,13 +126,13 @@ public partial class PageClaimsTests
     /// that step 1 takes away: the words in the section are the check's own, so the section goes red the day they change.
     /// </summary>
     [Fact]
-    public void Going_back_from_0_49_moves_a_folder_of_yours_out_of_the_way_before_0_48_6_deploys()
+    public void Going_back_from_0_49_moves_a_folder_of_yours_out_of_the_way_before_0_48_7_deploys()
     {
         var section = Flat(GoingBack());
         var said = section.IndexOf("Before step 1, run `jason status`.", StringComparison.Ordinal);
         Assert.True(said >= 0 && said < section.IndexOf("1. Quit Jason Desktop", StringComparison.Ordinal), "the section does not say, before step 1, to read jason status.");
         Assert.Contains(
-            "Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one \"Jason did not deploy, under a name Jason ships, left as it is\", move that folder out of the skills folder before step 3 and put it back after step 3. 0.49 leaves such a folder as it is; 0.48.6's `jason skills install` deploys its own skill over a folder of the same name and records it as its own, and 0.48.6's uninstall removes what it recorded. A folder put back after step 3 differs from what 0.48.6 recorded, and 0.48.6 keeps a file it finds changed since it wrote it.",
+            "Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one \"Jason did not deploy, under a name Jason ships, left as it is\", move that folder out of the skills folder before step 3 and put it back after step 3. 0.49 leaves such a folder as it is; 0.48.7's `jason skills install` deploys its own skill over a folder of the same name and records it as its own, and 0.48.7's uninstall removes what it recorded. A folder put back after step 3 differs from what 0.48.7 recorded, and 0.48.7 keeps a file it finds changed since it wrote it.",
             section,
             StringComparison.Ordinal);
 
@@ -142,14 +142,14 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// "Under 0.48.6, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again": the uninstall
+    /// "Under 0.48.7, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again": the uninstall
     /// leaves the move's record, which says done, so the sentence holds only while a done record whose application is gone
     /// and whose install path holds a command-line executable again does not stand, and is a move to make again.
     /// </summary>
     [Fact]
     public void Going_back_from_0_49_leaves_a_done_move_record_that_no_longer_stands()
     {
-        Assert.Contains("Under 0.48.6, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again,", Flat(GoingBack()), StringComparison.Ordinal);
+        Assert.Contains("Under 0.48.7, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again,", Flat(GoingBack()), StringComparison.Ordinal);
 
         using var dir = new TempPaths();
         var from = Path.Combine(dir.Paths.Root, "bin", "jason");
