@@ -134,12 +134,18 @@ export interface DesktopChatOptions {
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
-/** `updates.item()`: the desktop's version, and its update item as the menu shows it. */
+/** `updates.item()`: the desktop's version, its update item as the menu shows it, and what the last check found. */
 export interface DesktopUpdateItem {
     /** The desktop's own version, as its About says it. */
     version: string;
     /** The menu's update item: its label and whether it can be pressed now; null where the menu shows none. */
     item: { label: string; enabled: boolean } | null;
+    /**
+     * What the check the person last asked for found, in the desktop's words, wherever it was asked from: replaced by
+     * their next check, null once the item moves to another step, at a restart, and before any. A look the desktop makes
+     * by itself never writes one. A desktop of an earlier version answers without it.
+     */
+    said: string | null;
 }
 
 /**

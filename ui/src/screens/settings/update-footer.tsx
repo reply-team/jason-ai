@@ -7,8 +7,9 @@ import { can, currentDesktop } from '../../platform/places';
  * The foot of Settings' list in the desktop's own window: the desktop's name and version, and beside it the desktop's
  * update item as its menu shows it, the same label, enabled when the menu's is, and a press of it a click in the menu.
  * The item is the desktop's to say: the page reads it again whenever the desktop says it changed and never guesses a
- * step between, and with no item it shows the version alone. Nothing at all in a tab, and from a desktop of an earlier
- * version, which has no such item.
+ * step between, and with no item it shows the version alone. Under the item, what the check the person last asked for
+ * found, as the desktop words it and for as long as its answer carries it; a desktop of an earlier version carries none.
+ * Nothing at all in a tab, and from a desktop of an earlier version, which has no such item.
  */
 export function UpdateFooter() {
     const [shown, setShown] = useState<DesktopUpdateItem | null>(null);
@@ -37,6 +38,7 @@ export function UpdateFooter() {
     }, []);
     if (shown === null) return null;
     const item = shown.item;
+    const said = typeof shown.said === 'string' && shown.said !== '' ? shown.said : null;
     const press = (label: string) => {
         const desktop = currentDesktop();
         if (desktop === undefined || !can('updates.press')) return;
@@ -51,6 +53,11 @@ export function UpdateFooter() {
                 <button className="btn" type="button" disabled={!item.enabled} onClick={() => press(item.label)}>
                     {item.label}
                 </button>
+            )}
+            {said !== null && (
+                <p className="settings-said" role="status">
+                    {said}
+                </p>
             )}
         </div>
     );

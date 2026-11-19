@@ -164,7 +164,10 @@ Beside Quit Jason, two more items of the Jason menu have keys of their own: the 
 Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
 Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
 the tray's menu or the Mac's menu bar, and in the same item at the foot of Settings' list, beside Jason Desktop's
-version, where a click does what a click in the menu does. At the install the key asks
+version, where a click does what a click in the menu does. A check you ask for says what it found, under the item in
+Settings: "Jason Desktop X is the latest version.", "Version Y is available." or why it could not check; asked from the
+tray, the menu or the key, the same sentence comes as a notification too. The line goes when the item moves on, and the
+checks Jason makes by itself say nothing. At the install the key asks
 first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray

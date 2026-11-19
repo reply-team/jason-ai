@@ -413,6 +413,15 @@
     color: var(--mute);
     font-size: 12px;
 }
+/* What the person's last check for updates found, under the item, in the desktop's words. */
+.jc-console .harness .settings > .settings-list > .settings-update > .settings-said {
+    margin: 0;
+    max-width: 100%;
+    color: var(--mute);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
 /* A section other than the one shown holds an error: its name carries a dot, and the error is its description. */
 .jc-console .harness .settings > .settings-list > button[data-flagged] {
     background-image: radial-gradient(circle at calc(100% - 12px) 50%, var(--red) 4px, transparent 5px);

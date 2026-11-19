@@ -258,7 +258,7 @@ test('the update item and the way back from the Demo have keys of their own, whi
     // A press of the update item goes through `pressItem`, which asks first when the key brought the install and installs
     // only on yes, asked in the desk's own box. The tray's menu has no key, and on Linux it reports a click with no mouse
     // button, which Electron counts as a key's (`triggeredByAccelerator`): a press there is always a click.
-    assert.match(method('updateItems'), /click: \(_menuItem, _window, event\) => this\.pressUpdate\(item\.act, !inTray && event\.triggeredByAccelerator === true\),/);
+    assert.match(method('updateItems'), /click: \(_menuItem, _window, event\) => this\.pressUpdate\(item\.act, !inTray && event\.triggeredByAccelerator === true, 'menu'\),/);
     assert.ok(desk.includes('...this.updateItems(false),'), 'the window’s menu: its key asks');
     assert.match(method('renderTray'), /\.\.\.this\.updateItems\(true\),/);
     // The page and the versions-differ sentence take the update key's words from the desktop, and only where the item can
@@ -284,10 +284,19 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const calls = sources.flatMap((name) => [...readFileSync(join(root, 'src', name), 'utf8').matchAll(/\bpressItem\(/g)].map(() => name));
     assert.deepEqual(calls, ['desk.ts']);
     const press = body('pressUpdate');
-    assert.ok(press.startsWith("\n    pressUpdate(act: MenuItem['act'], byKey: boolean): void {"));
-    const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question));';
+    assert.ok(press.startsWith("\n    pressUpdate(act: MenuItem['act'], byKey: boolean, from: 'menu' | 'page'): void {"));
+    const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question)).then((said) => {';
     assert.ok(press.includes(pressed));
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // What a check the person asked for found: asked from the menu, the tray or the key, whose menu closes or shows no
+    // label, it comes as a notification too, whose click shows the window; asked from Settings, the page's line alone says
+    // it. The sentence is in the item's answer either way (`updates.said`).
+    assert.ok(press.includes("if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.show());"));
+    assert.equal(desk.split('this.notify(').length - 1, 2, 'the attention watcher and the update check');
+    assert.ok(desk.includes("notify: (text) => this.notify(text, () => this.send('navigate.attention')),"), 'the attention notice opens What Needs You');
+    const notify = desk.slice(desk.indexOf('    private notify('), desk.indexOf('\n    }\n', desk.indexOf('    private notify(')));
+    assert.ok(notify.includes('if (!Notification.isSupported()) return;'));
+    assert.ok(notify.includes("notification.on('click', clicked);"));
     // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
     // none in a demo run.
     const item = body('updateItem');
@@ -296,8 +305,8 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
-    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);"));
-    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);"));
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
     assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
@@ -326,7 +335,10 @@ test('a press from the page acts only on the item it drew: the same label, enabl
     const acts: string[] = [];
     const updater = {
         current: { step: 'downloaded', version: '0.48.6' } as UpdateState,
-        check: async () => void acts.push('check'),
+        check: async () => {
+            acts.push('check');
+            return null;
+        },
         download: async () => void acts.push('download'),
         install: async () => {
             acts.push('install');
@@ -342,8 +354,14 @@ test('a press from the page acts only on the item it drew: the same label, enabl
     await pressItem(updater, actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), false, ask);
     assert.deepEqual(acts, ['install'], 'the current label presses once, as a click');
     // The page is answered the label and whether it is enabled, never the act.
-    assert.deepEqual(updateAnswerOf('0.48.5', offered), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true } });
-    assert.deepEqual(updateAnswerOf('0.48.5', null), { version: '0.48.5', item: null });
+    assert.deepEqual(updateAnswerOf('0.48.5', offered, null), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true }, said: null });
+    assert.deepEqual(updateAnswerOf('0.48.5', null, null), { version: '0.48.5', item: null, said: null });
+    // What the person's last check found rides the same answer: no other member of the seam carries it.
+    assert.deepEqual(updateAnswerOf('0.48.5', offered, 'Version 0.48.6 is available.'), {
+        version: '0.48.5',
+        item: { label: 'Download Jason 0.48.6', enabled: true },
+        said: 'Version 0.48.6 is available.',
+    });
 });
 
 test('a packaged build offers no developer tools', () => {
