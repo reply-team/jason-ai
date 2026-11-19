@@ -234,26 +234,25 @@ public class ManagerLoopTests
     /// <summary>
     /// An installation where no role can be launched, as a fresh one is: no execution profile, and no entry command for
     /// every role. The review its start summons fails at the claim and says why at once; that failure is the check-in's
-    /// own line and summons no successor; and the campaign's work is claimed after it rather than held behind it. The
-    /// work is of a role with a command of its own, so that it runs where the manager cannot.
+    /// own line and summons no successor; and the work queued behind the review is claimed at the next scan, held by
+    /// nothing. That work is waiting before the review exists, one step below a check-in's priority so that the review
+    /// is claimed ahead of it, and is of a role with a command of its own, so that it runs where the manager cannot.
     /// </summary>
     [Fact]
     public async Task A_start_where_no_role_can_launch_fails_its_review_at_once_and_holds_nothing_behind_it()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct);
         var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("fake-succeed", Ct, "succeed");
+        var work = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-succeed", priority = -1 }, Ct);
 
         await host.ScanAsync(Ct);
         var started = await CheckInAsync(host, campaign);
         Assert.Equal(JournalKinds.CampaignStarted, (string?)started.Context["trigger"]);
         Assert.Equal(WorkItemStatus.Failed, started.Status);
         Assert.Equal(AttemptErrors.RoleNotLaunchable, started.LastError!.Code);
+        Assert.Equal(WorkItemStatus.Created, (await host.GetAsync(work.Id, Ct)).Status);
 
-        await host.ScanAsync(Ct);
-        Assert.Equal(started.Id, (await CheckInAsync(host, campaign)).Id);
-
-        await host.RoleAsync("fake-succeed", Ct, "succeed");
-        var work = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-succeed" }, Ct);
         await host.ScanAsync(Ct);
         await host.WaitForStatusAsync(work.Id, WorkItemStatus.Succeeded, Ct);
         Assert.Equal(started.Id, (await CheckInAsync(host, campaign)).Id);
