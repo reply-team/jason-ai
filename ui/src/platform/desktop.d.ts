@@ -145,7 +145,7 @@ export interface DesktopUpdateItem {
      * their next check, null once the item moves to another step, at a restart, and before any. A look the desktop makes
      * by itself never writes one. A desktop of an earlier version answers without it.
      */
-    said: string | null;
+    said?: string | null;
 }
 
 /**

@@ -8,12 +8,13 @@ import type { MenuItem } from './updates.ts';
 
 /**
  * What the seam's `updates.item` answers: the desktop's version, the update item as the menu shows it, or none, and what
- * the person's last check found (`Updater.said`), or null.
+ * the person's last check found (`Updater.said`), or null. This desktop always sends `said`; it is optional because the
+ * type is held equal to the page's, which an earlier desktop answers without it.
  */
 export interface UpdateItemAnswer {
     version: string;
     item: { label: string; enabled: boolean } | null;
-    said: string | null;
+    said?: string | null;
 }
 
 /**
