@@ -21,13 +21,13 @@
 #      desktop session to ask a password in, it refuses in its own words and installs nothing; with a terminal it
 #      installs the deb by sudo and apt, and the jason the package carries sets the account up, its last line naming
 #      /usr/bin/jason. What the package placed: the source naming the address's /apt/ path signed by
-#      /usr/share/keyrings/jason-desktop.gpg, that key the repository's, the rule for automatic updates a configuration
-#      file apt reads, and /usr/bin/jason the jason the package carries, found by name in a new login shell;
+#      /usr/share/keyrings/jason-desktop.gpg, that key the repository's, and /usr/bin/jason the jason the package carries,
+#      found by name in a new login shell;
 #   3. apt reading the repository through the chain, offering the release's version from it, and installing the package
 #      from it, the deb taken from the release's opaque asset address;
 #   4. the next release published: Ubuntu's automatic updates (unattended-upgrade, the program the daily
-#      apt-daily-upgrade unit runs, with the package's rule) leave the package where `apt-mark hold` holds it, and
-#      install the next version once it is not held; `jason update apply` then refuses with
+#      apt-daily-upgrade unit runs) leave the package where it is, apt offers the next version, and installs it when
+#      asked, as a person's `sudo apt upgrade` does; `jason update apply` then refuses with
 #      update_managed_by_package_manager, naming apt;
 #   5. the one uninstall, `jason uninstall --purge-data --yes` in a terminal, whose package step sudo allows: the
 #      package purged and everything the account had of Jason gone, and the listing taken again: the same as before, but
@@ -35,7 +35,7 @@
 #      folder .NET's single-file host makes for every such program of the account, whose folder of this build the
 #      uninstall takes.
 # Everything it set up for the run (the server, the host names, the certificate, the rule that keeps the automatic
-# updates to Jason's origin for the run) is taken back on its way out.
+# updates off the machine's own origins for the run) is taken back on its way out.
 set -euo pipefail
 export LC_ALL=C DEBIAN_FRONTEND=noninteractive
 
@@ -51,7 +51,7 @@ fail() { echo "::error title=apt route::$1"; exit 1; }
 
 work=$(mktemp -d)
 hosts_line="127.0.0.1 get.jasonharness.ai github.example.test assets.example.test # test-apt-route.sh"
-only_jason=/etc/apt/apt.conf.d/99zz-test-apt-route
+no_origins=/etc/apt/apt.conf.d/99zz-test-apt-route
 server=""
 cleanup() {
   [ -z "$server" ] || $SUDO kill "$server" 2> /dev/null || true
@@ -62,7 +62,7 @@ cleanup() {
     $SUDO rm -f /usr/local/share/ca-certificates/test-apt-route.crt
     $SUDO update-ca-certificates --fresh > /dev/null 2>&1 || true
   fi
-  $SUDO rm -f "$only_jason"
+  $SUDO rm -f "$no_origins"
   gpgconf --homedir "$work/gpg" --kill all > /dev/null 2>&1 || true
   $SUDO rm -rf "$work"
 }
@@ -186,14 +186,10 @@ printf 'Types: deb\nURIs: https://get.jasonharness.ai/apt/\nSuites: ./\nSigned-B
   || { cat "$source" || true; fail "$source is not the source of Jason's repository through the address, signed by the package's key."; }
 cmp -s /usr/share/keyrings/jason-desktop.gpg "$repository/install/jason-desktop-archive-keyring.gpg" \
   || fail "/usr/share/keyrings/jason-desktop.gpg is not the repository's key."
-dpkg-query -W -f='${Conffiles}\n' jason-desktop | grep -q '^ /etc/apt/apt.conf.d/50jason-desktop ' \
-  || fail "/etc/apt/apt.conf.d/50jason-desktop is not a configuration file of the package."
-apt-config dump | grep -qF 'Unattended-Upgrade::Origins-Pattern:: "origin=Jason,site=get.jasonharness.ai";' \
-  || fail "apt does not read the rule that lets the automatic updates take Jason's."
 [ "$(readlink /usr/bin/jason)" = /opt/Jason/resources/bundle/jason ] || fail "/usr/bin/jason is not the jason the package carries."
 said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -l -c 'jason --version')
 [ "${said%%+*}" = "$built" ] || fail "A new login shell's jason says '$said', and this run's build is $built."
-echo "The deb placed Jason's source, its key, the rule for automatic updates and /usr/bin/jason; a new login shell runs jason $said."
+echo "The deb placed Jason's source, its key and /usr/bin/jason; a new login shell runs jason $said."
 
 # The repository's key, which the package placed, stands for the leg's from here on.
 trust_the_leg() { $SUDO cp "$work/key.gpg" /usr/share/keyrings/jason-desktop.gpg; }
@@ -219,19 +215,20 @@ tail -n "+$((asked + 1))" "$work/served.log" \
 trust_the_leg
 echo "apt read Jason's repository through the address and the chain, offered $version, and installed it from there."
 
-# 4. The next release, taken by Ubuntu's automatic updates as the daily run takes it: unattended-upgrade, with the
-# package's rule, and for this run nothing but Jason's origin, so the leg upgrades nothing else of the machine's.
+# 4. The next release, offered and not taken on its own: Ubuntu's automatic updates, run as the daily run runs them
+# (unattended-upgrade), with the machine's own origins kept out for this run so the leg upgrades nothing else of the
+# machine's, leave the package where it is; apt offers the next version, and installs it when asked, as a person's
+# `sudo apt upgrade` does, for this one package.
 echo "$next" > "$work/releases/latest"
 update_jason
-printf '#clear Unattended-Upgrade::Allowed-Origins;\nUnattended-Upgrade::Allowed-Origins {};\n' | $SUDO tee "$only_jason" > /dev/null
-$SUDO apt-mark hold jason-desktop > /dev/null
-$SUDO unattended-upgrade -v > "$work/held.log" 2>&1 || { cat "$work/held.log"; fail "unattended-upgrade failed with the package held."; }
-[ "$(installed)" = "$version" ] || { cat "$work/held.log"; fail "The automatic updates moved a held jason-desktop to $(installed)."; }
-$SUDO apt-mark unhold jason-desktop > /dev/null
-$SUDO unattended-upgrade -v > "$work/upgrade.log" 2>&1 || { cat "$work/upgrade.log"; fail "unattended-upgrade failed."; }
-[ "$(installed)" = "$next" ] || { cat "$work/upgrade.log"; fail "The automatic updates left jason-desktop at $(installed), and the repository offers $next."; }
+printf '#clear Unattended-Upgrade::Allowed-Origins;\nUnattended-Upgrade::Allowed-Origins {};\n' | $SUDO tee "$no_origins" > /dev/null
+$SUDO unattended-upgrade -v > "$work/automatic.log" 2>&1 || { cat "$work/automatic.log"; fail "unattended-upgrade failed."; }
+[ "$(installed)" = "$version" ] || { cat "$work/automatic.log"; fail "Ubuntu's automatic updates installed jason-desktop $(installed) on their own; Jason's updates are offered, and installed when the person says so."; }
+apt list --upgradable 2> /dev/null | grep -q "^jason-desktop/.* $next " || { apt list --upgradable; fail "apt does not offer jason-desktop $next as an upgrade."; }
+$SUDO apt-get install -y -q --only-upgrade jason-desktop > "$work/upgrade.log" 2>&1 || { cat "$work/upgrade.log"; fail "apt-get did not upgrade jason-desktop."; }
+[ "$(installed)" = "$next" ] || { cat "$work/upgrade.log"; fail "apt left jason-desktop at $(installed), and the repository offers $next."; }
 grep -q "\"version\": \"$next\"" /opt/Jason/resources/bundle/version.json || fail "The package's version.json does not name $next after the update."
-echo "Ubuntu's automatic updates left the held package at $version, and once it was not held installed $next from the repository."
+echo "Ubuntu's automatic updates left the package at $version; apt offered $next and installed it when asked."
 status=0
 "${person[@]}" /usr/bin/jason update apply > "$work/apply.json" 2>&1 || status=$?
 cat "$work/apply.json"
@@ -240,7 +237,7 @@ cat "$work/apply.json"
 echo "jason update apply on the deb refuses, naming apt."
 
 # 5. The one uninstall, in a terminal, where sudo takes the package off, and the listing again.
-$SUDO rm -f "$only_jason"
+$SUDO rm -f "$no_origins"
 "${person[@]}" script -qec "/usr/bin/jason uninstall --purge-data --yes" /dev/null < /dev/null > "$work/uninstall.out" 2>&1 \
   || { cat "$work/uninstall.out"; fail "jason uninstall --purge-data --yes ended non-zero."; }
 cat "$work/uninstall.out"

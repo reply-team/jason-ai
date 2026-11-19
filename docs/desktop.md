@@ -1069,8 +1069,8 @@ install 0.48.5 or later yourself once, and from then on the application's own up
 Updates come to the Windows installer, the macOS application and the AppImage. An AppImage update replaces the file
 where it is, so its folder must be writable; `jason update apply` from a terminal with no display, an ssh session say, is
 refused, since the application it starts needs one. The deb's updates come with the system's, from Jason's apt
-repository, which the package adds: Ubuntu's automatic updates install a new version, and Software Updater, or `sudo apt
-update && sudo apt upgrade`, install it at once. There the item says "Updates Come Through the Package"; where the system
+repository, which the package adds: Software Updater offers a new version and installs it when you say so, as `sudo apt
+update && sudo apt upgrade` does, and Ubuntu's automatic updates leave it alone. There the item says "Updates Come Through the Package"; where the system
 installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
 `<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
 ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. `sudo apt-mark hold jason-desktop`

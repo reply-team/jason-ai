@@ -462,9 +462,9 @@ with nothing installed; an install still going after twenty minutes is said to b
 part-way says so, with the commands that finish the package or take it off. The deb's
 own scripts add Jason's apt repository, `https://get.jasonharness.ai/apt/`, as
 `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key the package carries as
-`/usr/share/keyrings/jason-desktop.gpg`; the rule `/etc/apt/apt.conf.d/50jason-desktop`, a configuration file of the
-package, which lets Ubuntu's automatic updates take Jason's; and `/usr/bin/jason`, a link to the `jason` the package
-carries, for every account. Where there is no apt (Arch, Fedora and the rest), the AppImage is placed for this account
+`/usr/share/keyrings/jason-desktop.gpg`, and `/usr/bin/jason`, a link to the `jason` the package carries, for every
+account; the package adds no rule for Ubuntu's automatic updates, so Jason's updates are offered and never installed on
+their own. Where there is no apt (Arch, Fedora and the rest), the AppImage is placed for this account
 alone, with no password, at `~/Applications/jason-desktop-linux-x64.AppImage` by one rename, its menu entry and icons
 written under `~/.local/share`, and the `jason` it carries copied under `<data>/desktop/bundle/<version>/` as the
 application's own start copies it; refused before anything is downloaded where the system refuses unprivileged user
@@ -615,9 +615,9 @@ still the old build; `jason status` says so in its required `runtime_version` ch
 `jason update apply`: a restart from the older `jason` would start the older build on the newer data.
 
 **On Linux the deb's updates come with the system's.** The package is one of the system's, read from Jason's apt
-repository like any other: Ubuntu's automatic updates install a new version by the package's rule
-`/etc/apt/apt.conf.d/50jason-desktop`, and Software Updater, or `sudo apt update && sudo apt upgrade` in a terminal,
-install it at once. So the `jason` the deb carries refuses `jason update apply` and `jason update rollback` with
+repository like any other: Software Updater offers a new version and installs it when the person says so, as `sudo apt
+update && sudo apt upgrade` does in a terminal, and Ubuntu's automatic updates leave it alone, since the package adds no
+rule for them. So the `jason` the deb carries refuses `jason update apply` and `jason update rollback` with
 `update_managed_by_package_manager` before anything is read or staged, printing apt's commands, with the runtime stopped
 first and started after; for a rollback, the previous release's deb installed again and held with `sudo apt-mark hold
 jason-desktop`, since apt keeps no previous version, and `sudo apt-mark unhold jason-desktop` takes updates again. `jason
@@ -630,8 +630,7 @@ Package**. `jason status`'s optional `update` check says when updates cannot arr
 off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
 Software — and when the package is a version this installation was not set up for yet, with `jason update apply
 --finish` as the repair, which opening Jason Desktop runs as well. `sudo apt-mark hold jason-desktop` stops every update
-of it, and deleting `/etc/apt/apt.conf.d/50jason-desktop` leaves Jason's updates to Software Updater and apt; the package
-never puts that file back.
+of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;

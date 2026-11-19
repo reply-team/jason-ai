@@ -8,9 +8,8 @@
 # Then what makes Jason one installation here, as comparable desktop applications do from their own package (Chrome,
 # Visual Studio Code, Claude Desktop): jason in every terminal, /usr/bin/jason, a link to the jason this package
 # carries; and Jason's apt repository, /etc/apt/sources.list.d/jason-desktop.sources, signed by the key this package
-# carries as /usr/share/keyrings/jason-desktop.gpg, so later updates come with the system's. The rule that lets Ubuntu's
-# automatic updates take them, /etc/apt/apt.conf.d/50jason-desktop, is a configuration file of the package and not
-# written here. after-remove.sh takes back what this writes.
+# carries as /usr/share/keyrings/jason-desktop.gpg, so the system's updater offers later updates, installed when the
+# person says so. after-remove.sh takes back what this writes.
 
 if type update-alternatives >/dev/null 2>&1; then
     # Remove previous link if it doesn't use update-alternatives

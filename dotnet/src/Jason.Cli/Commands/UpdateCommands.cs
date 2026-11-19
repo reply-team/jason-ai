@@ -1225,7 +1225,7 @@ public static class UpdateCommands
 
     /// <summary>
     /// Linux, the deb: the application and the jason it carries are one package of the system's, updated by the system as
-    /// every package from an apt repository is (Ubuntu's automatic updates, Software Updater, or apt in a terminal), so
+    /// every package from an apt repository is (Software Updater, or apt in a terminal, when the person says so), so
     /// `jason update apply` and `rollback` replace nothing and say what to type; `--finish` still runs, as the application's
     /// start runs it once apt has installed a new version.
     /// </summary>
@@ -1247,8 +1247,8 @@ public static class UpdateCommands
             : new[] { "jason runtime stop", "sudo apt update && sudo apt upgrade", "jason runtime start" };
         env.Out.WriteLine(CliErrors.Serialize(
             UpdateCodes.ManagedByPackageManager,
-            $"This jason is the one Jason Desktop's package carries, at {carried.Executable}, and the package is the system's: Ubuntu's automatic updates install a new version, "
-            + $"and Software Updater, or apt in a terminal, install it at once, so `jason update {verb}` would replace a file the package owns. "
+            $"This jason is the one Jason Desktop's package carries, at {carried.Executable}, and the package is the system's: Software Updater offers a new version "
+            + $"and installs it when you say so, as apt in a terminal does, so `jason update {verb}` would replace a file the package owns. "
             + (verb == "rollback" ? "apt keeps no previous version to go back to; the previous release's package is installed again by hand:\n" : "Its version is changed through apt, with the runtime stopped first and started after:\n")
             + string.Join("\n", lines.Select(line => "  " + line)),
             retryable: false));

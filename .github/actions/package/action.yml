@@ -975,7 +975,7 @@ runs:
         opened="$RUNNER_TEMP/jason-desktop-deb"
         rm -rf "$opened"
         dpkg-deb --raw-extract "$deb" "$opened"
-        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key or its rule for automatic updates."; exit 1; }
+        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key, or an apt configuration it must not carry."; exit 1; }
         carries "$opened/opt/Jason" deb
         entries=("$opened"/usr/share/applications/*.desktop)
         [ -f "${entries[0]}" ] || { echo "::error title=Desktop::The deb puts no entry in the applications menu."; exit 1; }

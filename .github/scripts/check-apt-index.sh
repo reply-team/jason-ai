@@ -9,7 +9,7 @@
 #
 #   Packages     one entry, for the deb: its package, version and architecture as dpkg-deb reads them from the deb,
 #                its file name, and its size, MD5 and SHA-256 computed again from the deb
-#   Release      the origin Jason, which the deb's rule for automatic updates names, and Packages' size, MD5 and
+#   Release      the origin Jason, by which apt names Jason's source, and Packages' size, MD5 and
 #                SHA-256 computed again
 #   signatures   InRelease and Release.gpg, each one good signature by a key in the keyring, read from gpgv's status
 #                lines and never from its exit code alone, which is 0 for a key that has expired or been revoked; and
@@ -63,7 +63,7 @@ done
 
 # Release: Jason's origin, and Packages' size and each hash, each once in its own section.
 origin=$(said Origin "$folder/Release") || origin=
-[ "$origin" = Jason ] || problem "Release says the origin '$origin', and the deb's rule for automatic updates takes the origin Jason."
+[ "$origin" = Jason ] || problem "Release says the origin '$origin', and Jason's source is the origin Jason."
 size=$(stat -c %s "$folder/Packages")
 for pair in "MD5Sum $(md5sum < "$folder/Packages" | cut -d' ' -f1)" "SHA256 $(sha256sum < "$folder/Packages" | cut -d' ' -f1)"; do
   section=${pair%% *}

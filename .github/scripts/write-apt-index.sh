@@ -8,7 +8,7 @@
 #
 #   Packages     the deb's own control fields, then its file name, size, MD5 and SHA-256
 #   Release      Jason as the origin and the label, the suite stable, the deb's architecture, the date, and Packages'
-#                MD5 and SHA-256: the shape under which Ubuntu's automatic updates were seen to take the package
+#                MD5 and SHA-256: the shape under which apt and Software Updater were seen to take the package
 #   InRelease    Release, clearsigned
 #   Release.gpg  Release's detached signature, armored
 #

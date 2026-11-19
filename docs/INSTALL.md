@@ -540,9 +540,9 @@ UI as `jason ui install` does; an update applied by a build before 0.12.0 needs 
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
 Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's
 `jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7); on Linux an
-AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Ubuntu's automatic
-updates install them, and Software Updater or `sudo apt update && sudo apt upgrade` at once; there `jason update apply`
-refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
+AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Software Updater offers
+them and installs them when you say so, as `sudo apt update && sudo apt upgrade` does, and Ubuntu's automatic updates
+leave them alone; there `jason update apply` refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
 manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is

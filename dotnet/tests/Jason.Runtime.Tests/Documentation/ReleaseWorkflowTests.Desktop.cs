@@ -430,7 +430,7 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The deb is read for its control fields (the package jason-desktop, the release's version as dpkg spells it, amd64),
     /// unpacked with its control files, and held by check-package to the configuration as a deb, which must carry
-    /// package-type, the tree's maintainer scripts, its key and its rule for automatic updates as a configuration file;
+    /// package-type, the tree's maintainer scripts and its key, and no apt configuration;
     /// the AppImage's runtime is refused when it names a shared library or an interpreter, which is how it needs no
     /// libfuse2, and its contents, extracted by that runtime, are held as an AppImage, which must carry none. Each carries
     /// the executable this call published, byte for byte and runnable, with its notices and version.json, and the deb's menu
@@ -448,7 +448,7 @@ public partial class ReleaseWorkflowTests
             "dpkg-deb --field \"$deb\" Recommends | grep -q 'libicu74 | libicu72' || { echo \"::error title=Desktop::The deb does not recommend the ICU library its jason needs.\"; exit 1; }",
             "if dpkg-deb --field \"$deb\" Depends | grep -q libicu; then echo \"::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives.\"; exit 1; fi",
             "dpkg-deb --raw-extract \"$deb\" \"$opened\"",
-            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key or its rule for automatic updates.\"; exit 1; }",
+            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key, or an apt configuration it must not carry.\"; exit 1; }",
             "carries \"$opened/opt/Jason\" deb",
             "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
             "readelf -lW -d \"$appimage\" | grep -E '\\(NEEDED\\)|^ *INTERP ' && { echo \"::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe.\"; exit 1; }",

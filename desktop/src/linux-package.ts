@@ -31,8 +31,8 @@ export function linuxPackage(env: Readonly<Record<string, string | undefined>>, 
 }
 
 /**
- * electron-updater as this form uses it: the deb's turned off, since the package is the system's and the system's updates
- * install its new versions (Ubuntu's automatic updates, Software Updater, apt), so its item says updates come through the
+ * electron-updater as this form uses it: the deb's turned off, since the package is the system's and the system's updater
+ * offers its new versions (Software Updater, apt), installed when the person says so, so its item says updates come through the
  * package (`updates.ts`, `menuItemOf`); every other form's as electron-updater makes it.
  */
 export function updaterOf<T extends { isUpdaterActive(): boolean }>(form: LinuxPackage | null, updater: T): T {
