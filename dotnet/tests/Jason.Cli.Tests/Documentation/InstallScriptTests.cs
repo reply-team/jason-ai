@@ -863,6 +863,20 @@ public partial class InstallScriptTests
             return script[(at + 1)..(end + 2)];
         }
 
+        // The proof's own prelude, taken from its text: the block of lines after param()'s closing parenthesis, up to the first
+        // blank line. Of it, the lines that set the session's own settings, a preference variable or the strict mode, are
+        // taken; the one other line it holds, making the folder of the step's -Out parameter, reads a parameter the row does
+        // not give and writes outside the row's tree, and is left. A line of any other form fails the row, for its author to
+        // decide which side it is on.
+        var paramsEnd = script.IndexOf("\n)\n\n", StringComparison.Ordinal);
+        Assert.True(paramsEnd >= 0, "Test-InstallationWindows.ps1 has no param() block followed by its prelude");
+        var preludeAt = paramsEnd + "\n)\n\n".Length;
+        var block = script[preludeAt..script.IndexOf("\n\n", preludeAt, StringComparison.Ordinal)].Split('\n');
+        var prelude = block.Where(line => Regex.IsMatch(line, @"^(?:\$\w+Preference = .+|Set-StrictMode .+)$")).ToArray();
+        Assert.Equal(["New-Item -ItemType Directory -Force -Path $Out | Out-Null"], block.Except(prelude));
+        Assert.Contains("$ErrorActionPreference = 'Stop'", prelude);
+        Assert.Contains("Set-StrictMode -Version Latest", prelude);
+
         var standIn = UninstallerRunStandIn.Value;
         Assert.Equal(Subsystem.WindowsGui, StandInPrograms.SubsystemOf(standIn));
 
@@ -880,6 +894,7 @@ public partial class InstallScriptTests
         static string Quoted(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
         var harness = Path.Combine(tree.Root, "harness.ps1");
         File.WriteAllText(harness, HelperHarness
+            .Replace("@PRELUDE@", string.Join('\n', prelude), StringComparison.Ordinal)
             .Replace("@UNDER@", Quoted(under), StringComparison.Ordinal)
             .Replace("@OUTSIDE@", Quoted(outside), StringComparison.Ordinal)
             .Replace("@STARTED@", Quoted(started), StringComparison.Ordinal)
@@ -950,10 +965,11 @@ public partial class InstallScriptTests
     /// <summary>
     /// The pwsh the helper row runs. Say, Fail and the process listing are stood in, each line said prefixed by its case; every
     /// stand-in it starts is written to a file by its id, for the row to end by that id should the harness not get to its end.
-    /// The harness ends one process, the stand-in of (b) by its id; every other stand-in ends by itself and is waited for.
+    /// The harness ends one process, the stand-in of (b) by its id; every other stand-in ends by itself and is waited for. It
+    /// opens with the settings lines of the proof's own prelude, so the helpers run as strictly as the proof runs them.
     /// </summary>
     private const string HelperHarness = """
-        $ErrorActionPreference = 'Stop'
+        @PRELUDE@
         $under = @UNDER@
         $outside = @OUTSIDE@
         $started = @STARTED@
