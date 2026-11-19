@@ -129,6 +129,7 @@ export function SettingsScreen() {
             {withWayOut && (
                 <div className="settings-back">
                     <button type="button" onClick={leaveSettings}>
+                        {/* Inline: svg() is markup for Painted, whose div wrapper would break the button's svg-and-text row. */}
                         <svg
                             width="14"
                             height="14"
