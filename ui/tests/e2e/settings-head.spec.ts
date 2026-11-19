@@ -7,7 +7,10 @@ import { expect, quietDesktop, test } from './fixtures';
 // box is: the share of a box's height above its baseline is the same for every size of one font, and the title, whose
 // font Back's words inherit, says what that share is.
 for (const width of [2000, 800]) {
-    test(`Settings' Back stands on the baseline of the title, in a window ${width} pixels wide`, async ({ page, jason }) => {
+    test(`Settings' Back stands on the baseline of the title, in a window ${width} pixels wide`, async ({
+        page,
+        jason,
+    }) => {
         await page.setViewportSize({ width, height: 800 });
         await page.addInitScript(quietDesktop);
         const { url } = await jason.uiOpen();
@@ -45,6 +48,8 @@ for (const width of [2000, 800]) {
             const back = words(root.querySelector(':scope > .settings-back > button')!);
             return { title: titleBaseline, back: back.top + back.height * share };
         });
-        expect(Math.abs(lines.back - lines.title), `Back ${lines.back}, the title ${lines.title}`).toBeLessThanOrEqual(1);
+        expect(Math.abs(lines.back - lines.title), `Back ${lines.back}, the title ${lines.title}`).toBeLessThanOrEqual(
+            1,
+        );
     });
 }
