@@ -518,8 +518,6 @@
     border: 0;
     background: none;
     color: var(--mute);
-    font-size: 12.5px;
-    line-height: inherit;
     cursor: pointer;
 }
 .jc-console .caret:hover {
