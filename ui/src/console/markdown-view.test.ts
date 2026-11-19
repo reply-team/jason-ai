@@ -16,7 +16,7 @@ describe("the chat's Markdown, drawn", () => {
                 '<ul><li><p>e</p></li></ul>' +
                 '<ol start="2"><li><p>f</p></li></ol>' +
                 '<blockquote><p>g</p></blockquote>' +
-                '<div class="chat-md-code"><button type="button" class="chat-md-copy" data-action="chat.copyCode">Copy code</button>' +
+                '<div class="chat-md-code"><button type="button" class="chat-md-copy" data-action="chat.copyCode" data-args="[&quot;:0&quot;]">Copy code</button>' +
                 '<pre><code>h</code></pre></div>' +
                 '<div class="chat-md-table"><table><thead><tr><th>i</th><th>j</th></tr></thead>' +
                 '<tbody><tr><td>k</td><td>l</td></tr></tbody></table></div>' +
@@ -69,12 +69,18 @@ describe("the chat's Markdown, drawn", () => {
         const attributes = [...drawn(hostile).matchAll(/\s([a-z-]+)="([^"]*)"/g)].map(
             (each) => `${each[1]}=${each[2]}`,
         );
-        const copy = ['class=chat-md-code', 'type=button', 'class=chat-md-copy', 'data-action=chat.copyCode'];
+        const copy = (n: number) => [
+            'class=chat-md-code',
+            'type=button',
+            'class=chat-md-copy',
+            'data-action=chat.copyCode',
+            `data-args=[&quot;:${n}&quot;]`,
+        ];
         expect(attributes).toEqual([
             'class=chat-md',
-            ...copy,
+            ...copy(0),
             'start=7',
-            ...copy,
+            ...copy(1),
             'class=chat-md-table',
             'class=chat-md-link',
         ]);

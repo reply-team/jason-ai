@@ -1180,7 +1180,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 named = true;
                 return html`<div class="m ai">
                         ${who}
-                        <div class="bub">${markdownView(words)}</div>
+                        <div class="bub">${markdownView(words, `${chat.id}:${index}`)}</div>
                     </div>
                     ${card}`;
             }
@@ -1305,7 +1305,7 @@ function threadOf(chatId: string) {
         read: unknown;
         proposed: unknown;
         listed: unknown;
-        copying: string | null;
+        copying: unknown;
         view: Html;
     } | null = null;
     return computed(() => {

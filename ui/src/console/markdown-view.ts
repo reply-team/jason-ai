@@ -7,23 +7,30 @@ import { markdown, type Block, type Inline } from './markdown';
 // The agent's words drawn from the Markdown subset's tree. Every word is text the html tag escapes; the elements are
 // the ones named here and no others, and a link is a span of text, never an anchor.
 
-/** The text of the block just copied, while its button says so; the button of every block with that text says it. */
-export const copied = signal<string | null>(null);
+/** The block just pressed and what came of it, while its button says so; no other block says it. */
+export const copied = signal<{ key: string; outcome: 'copied' | 'refused' } | null>(null);
 let forget: ReturnType<typeof setTimeout> | undefined;
 
+function say(key: string, outcome: 'copied' | 'refused'): void {
+    copied.value = { key, outcome };
+    clearTimeout(forget);
+    forget = setTimeout(() => {
+        copied.value = null;
+    }, 2000);
+}
+
 /** Puts a code block's text on the clipboard as it is: the way Copy prompt does, by the page's own clipboard. */
-define('chat.copyCode', (_args, element) => {
+define('chat.copyCode', (args, element) => {
+    const key = typeof args[0] === 'string' ? args[0] : '';
     const text = element.closest('.chat-md-code')?.querySelector('code')?.textContent;
-    if (text === undefined || text === null || typeof navigator.clipboard?.writeText !== 'function') return;
+    if (text === undefined || text === null) return;
+    if (typeof navigator.clipboard?.writeText !== 'function') {
+        say(key, 'refused');
+        return;
+    }
     void navigator.clipboard.writeText(text).then(
-        () => {
-            copied.value = text;
-            clearTimeout(forget);
-            forget = setTimeout(() => {
-                copied.value = null;
-            }, 2000);
-        },
-        () => undefined,
+        () => say(key, 'copied'),
+        () => say(key, 'refused'),
     );
 });
 
@@ -63,6 +70,9 @@ function heading(level: number, children: Html[]): Html {
     }
 }
 
+let place = '';
+let counter = 0;
+
 function blockView(block: Block): Html {
     switch (block.kind) {
         case 'paragraph':
@@ -70,9 +80,16 @@ function blockView(block: Block): Html {
         case 'heading':
             return heading(block.level, inlines(block.children));
         case 'code': {
-            const label = copied.value === block.text ? t('chat.code.copied') : t('chat.code.copy');
+            const key = `${place}:${counter++}`;
+            const said = copied.value?.key === key ? copied.value.outcome : null;
+            const label =
+                said === 'copied'
+                    ? t('chat.code.copied')
+                    : said === 'refused'
+                      ? t('chat.code.notCopied')
+                      : t('chat.code.copy');
             return html`<div class="chat-md-code">
-                <button type="button" class="chat-md-copy" ${act('chat.copyCode')}>${label}</button>
+                <button type="button" class="chat-md-copy" ${act('chat.copyCode', key)}>${label}</button>
                 <pre><code>${block.text}</code></pre>
             </div>`;
         }
@@ -110,6 +127,8 @@ function blockView(block: Block): Html {
 }
 
 /** The agent's text, drawn as the Markdown subset. */
-export function markdownView(source: string): Html {
+export function markdownView(source: string, where = ''): Html {
+    place = where;
+    counter = 0;
     return html`<div class="chat-md">${markdown(source).map(blockView)}</div>`;
 }

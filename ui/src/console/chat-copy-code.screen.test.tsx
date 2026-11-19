@@ -22,7 +22,7 @@ const answer = `Go to the folder and run it.\n\n\`\`\`powershell\n${block}\`\`\`
 
 let written: string[] = [];
 
-function renderChat(): void {
+function renderChat(text: string = answer): void {
     const fake = nothingWaitsInChats(new FakeApi())
         .answer('system.info', 'system.info/with-ui')
         .answer('preference.list', 'preference.list/set')
@@ -47,7 +47,7 @@ function renderChat(): void {
         title: 'Spring',
         entries: [
             { kind: 'user', text: 'How do I run it?' },
-            { kind: 'text', text: answer },
+            { kind: 'text', text },
         ],
     });
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
@@ -135,5 +135,53 @@ describe('a code block in an answer', () => {
             vi.advanceTimersByTime(200);
         });
         expect(button().textContent).toBe('Copy code');
+    });
+
+    it('says Not copied for about two seconds when the write is refused, and nothing else happens', async () => {
+        renderChat();
+        const pane = await openChat();
+        await waitFor(() => within(pane).getAllByRole('button', { name: 'Copy code' }));
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
+        });
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const buttons = () => [...pane.querySelectorAll<HTMLElement>('.chat-md-copy')];
+        await flush(async () => {
+            fireEvent.click(buttons()[0]!);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(buttons().map((each) => each.textContent)).toEqual(['Not copied', 'Copy code']);
+        await flush(async () => {
+            vi.advanceTimersByTime(2100);
+        });
+        expect(buttons().map((each) => each.textContent)).toEqual(['Copy code', 'Copy code']);
+    });
+
+    it('says Not copied when the page has no clipboard to write to', async () => {
+        renderChat();
+        const pane = await openChat();
+        await waitFor(() => within(pane).getAllByRole('button', { name: 'Copy code' }));
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+        const first = () => pane.querySelector<HTMLElement>('.chat-md-copy')!;
+        await flush(async () => {
+            fireEvent.click(first());
+            await Promise.resolve();
+        });
+        expect(first().textContent).toBe('Not copied');
+    });
+
+    it('says Copied only on the block that was pressed when two blocks are equal', async () => {
+        renderChat('One.\n\n```\nsame\n```\n\nTwo.\n\n```\nsame\n```');
+        const pane = await openChat();
+        await waitFor(() => expect(within(pane).getAllByRole('button', { name: 'Copy code' })).toHaveLength(2));
+        const buttons = () => [...pane.querySelectorAll<HTMLElement>('.chat-md-copy')];
+        await flush(async () => {
+            fireEvent.click(buttons()[1]!);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(buttons().map((each) => each.textContent)).toEqual(['Copy code', 'Copied']);
     });
 });

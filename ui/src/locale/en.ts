@@ -92,6 +92,7 @@ export const en = {
     'chat.tab.running': 'running',
     'chat.code.copy': 'Copy code',
     'chat.code.copied': 'Copied',
+    'chat.code.notCopied': 'Not copied',
     'chat.queue.placeholder': 'Sent when this turn ends · Esc stops it',
     'chat.queue.send': 'Send when this turn ends',
     'chat.queue.sendTitle': 'Send when this turn ends (Esc stops the turn)',
