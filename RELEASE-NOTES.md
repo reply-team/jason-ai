@@ -19,41 +19,27 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.48.6
+# Jason 0.48.7
 
-## What is new since 0.48.5
+## What is new since 0.48.6
 
-- **A campaign's manager looks at it when it starts.** When you start a campaign, or start it again after a pause, its
-  manager looks at it at once instead of at its first scheduled review, five hours later by default. A role can pause a
-  campaign and cannot start or resume one: that is yours, or your own session's on your word.
-- **The desktop chat follows the answer.** While you are at the end of the conversation, it follows what is added
-  there: your message, the AI's words as they come, a card. Scroll up and it keeps your place until you come back to
-  the end or send something; a message you send, and a card that asks for your permission, always bring you back,
-  the first message of a new chat included. Approvals waiting under the conversation stay under it, and the end of
-  what was said stays in view above them.
-- **Approved lines leave once their work is done.** Under an agent's chat, a line that says "It was sent." or "It is
-  done." leaves five seconds after it says so. A line whose work is still on its way stays until it gets there, and
-  one that says the work was not sent or not done stays, since it is the sign that something failed.
-- **Copy code.** A code block in the desktop chat's answers has a **Copy code** button at its top right, which puts the
-  block's text on the clipboard exactly and says "Copied", or "Not copied" if the clipboard refused it.
-- **A way out of Settings.** **Back**, at the left of Settings' head, and the Escape key return to the place you
-  opened Settings from, or to Start.
-- **Check for Updates says what it found.** A check you ask for says, under the item in Settings, that Jason Desktop
-  is the latest version, that a newer version is available, that a newer version is out but not offered because you
-  went back from it, or why it could not check. Asked from the tray, the menu bar or the key, the same sentence comes
-  as a notification. The checks Jason makes by itself say nothing.
-- **Question chips only in an empty chat.** The desktop chat no longer offers suggested questions under an agent's
-  answer; an empty chat still opens with its three.
-- **Plain labels.** Settings › Your name and tone names the writer's grammar forms Female, Male and Neutral.
+- **Copy code is an icon.** A code block in the desktop chat's answers has a copy icon at its top right. Once the
+  block is on the clipboard it shows a green check for about two seconds, and a red cross if the clipboard refused it.
+  Its name, and the tip a resting pointer shows, still say Copy code, Copied or Not copied. On a block of one line
+  the icon stands in the block's middle; on a taller block it stays at the top right.
 
-## Upgrading from 0.48.5
+## Fixed since 0.48.6
+
+- **The tray's menu is narrow again after an update.** The line under the update item, in the tray's menu and in the
+  Jason menu, now says only which version is kept, "The previous version 0.48.6 is kept.", without the folder. A start
+  that failed and an update that was not installed still name the folder, where you need it.
+- **Back sits on the line of Settings' title.** Back, at the left of Settings' head, no longer sits lower than the
+  title.
+
+## Upgrading from 0.48.6
 
 Nothing stops, no setting is renamed and no migration runs.
 
-- **The desktop:** from 0.48.5, Jason Desktop takes this release by its own update. A Jason Desktop of 0.48.4 or
-  earlier on Windows and macOS installs this release from its installer once; on Linux its own update works.
+- **The desktop:** Jason Desktop takes this release by its own update.
 - **The executable:** `jason update`, as for every release.
-- **The manager's triggers:** an installation that wrote its own `Manager:Triggers` keeps its list; add
-  `campaign_started` to it to have a start summon the manager. Each start, a resume included, is one more review on
-  your agent host and your plan.
-- **From 0.48.4 or earlier,** the notes of each release in between apply as well.
+- **From 0.48.5 or earlier,** the notes of each release in between apply as well.
