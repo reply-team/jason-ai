@@ -493,7 +493,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               pid: process.pid,
           }
         : null;
-    // The deb: apt replaces the package under a running window (Ubuntu's automatic updates, Software Updater). Its
+    // The deb: apt replaces the package under a running window (Software Updater, `apt upgrade`). Its
     // version.json is looked at once a minute; once it names another version, the update item offers the restart, and one
     // notice says so too, whose click restarts: the old build's runtime stopped, then Jason started again, whose start
     // finishes the update (`machine-setup.ts`).

@@ -28,8 +28,9 @@ public sealed partial class InstallDesktopScriptTests
 
     /// <summary>
     /// With apt and no terminal - an agent runs the line in the person's session - the deb is downloaded, checked, and
-    /// installed by apt through pkexec, whose dialog asks the password once, with the package lock waited for ten minutes;
-    /// then the jason the package carries sets the machine up, and the last line is the full path of jason.
+    /// installed by apt through pkexec, whose dialog asks the password once, with the package lock waited for ten minutes
+    /// and the whole run for longer, so apt's own answer comes first; then the jason the package carries sets the machine up,
+    /// and the last line is the full path of jason. Catches a bound that ends the wait while apt still waits on the lock.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "install.sh installs the deb on Linux with apt only once its checksum holds, and sets it up")]
@@ -45,6 +46,8 @@ public sealed partial class InstallDesktopScriptTests
         var install = Assert.Single(calls, call => call.StartsWith("pkexec ", StringComparison.Ordinal));
         Assert.Contains("apt-get install -y -o DPkg::Lock::Timeout=600 ", install, StringComparison.Ordinal);
         Assert.EndsWith("/jason-desktop-linux-x64.deb|", install, StringComparison.Ordinal);
+        var bound = Assert.Single(calls, call => call.StartsWith("timeout ", StringComparison.Ordinal));
+        Assert.True(int.Parse(bound["timeout ".Length..^1], System.Globalization.CultureInfo.InvariantCulture) > 600, bound);
         Assert.Equal($"install --roles|{linux.Data}", calls[^1]);
         Assert.True(File.Exists(linux.DebCarried), run.Stdout + run.Stderr);
         Assert.Empty(linux.InApplications());
@@ -55,7 +58,9 @@ public sealed partial class InstallDesktopScriptTests
     /// Where the password could not be asked or was not given, the line refuses in the words of the case, read from pkexec's
     /// and apt's own words and never from an exit code alone: the dialog dismissed (and, for an account that is not an
     /// administrator, who can type a password there), no agent to ask in, the system's dialog failing, the package lock held
-    /// for ten minutes, no pkexec at all, and apt itself failing. Nothing is set up after any of them.
+    /// for ten minutes (apt's own words, also where the line's bound passed while apt waited), the dialog left unanswered
+    /// until the line's bound ended it, no pkexec at all, and apt itself failing. Nothing is set up after any of them.
+    /// Catches apt's lock read as an unanswered dialog, and an unanswered dialog said as an apt that may yet install.
     /// </summary>
     [Theory]
     [InlineData("Error executing command as another user: Request dismissed", 126, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.")]
@@ -65,6 +70,8 @@ public sealed partial class InstallDesktopScriptTests
     [InlineData("sudo-rs: Maximum 3 incorrect authentication attempts", 1, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed.")]
     [InlineData("GDBus.Error:org.freedesktop.DBus.Error.NoReply: Message recipient disconnected from message bus without replying", 127, "user sudo", "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again.")]
     [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 100, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
+    [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 124, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
+    [InlineData("", 124, "user sudo", "The password dialog was not answered within 20 minutes, so nothing was installed. Run the line again to be asked again.")]
     [InlineData("E: Sub-process /usr/bin/dpkg returned an error code (1)", 100, "user sudo", "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off.")]
     [InlineData(null, 0, "user sudo", "this session has no way to ask for it: run the line in a terminal of your desktop")]
     [UnsupportedOSPlatform("windows")]
@@ -153,13 +160,19 @@ public sealed partial class InstallDesktopScriptTests
     /// ~/Applications/jason-desktop-linux-x64.AppImage by one rename, the menu entry written under ~/.local/share with
     /// TryExec naming the file, so it hides once the file is gone, and Exec starting it, the icons beside it, and the jason it
     /// carries copied under the data directory as the application's own start copies it, whose `jason install` then runs.
+    /// The entry spells the file's path as the Desktop Entry Specification reads it, whatever the home's name holds: TryExec
+    /// with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a backslash and
+    /// a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file. A per-cent
+    /// is spelled as the specification asks, and GLib's launchers still list no such entry.
     /// </summary>
-    [Fact]
+    [Theory]
+    [InlineData("home", "home", "home")]
+    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""")]
     [Critical(Family.I1, "install.sh places the AppImage, its menu entry and its copy on Linux with no password")]
     [UnsupportedOSPlatform("windows")]
-    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up()
+    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up(string home, string tryExecHome, string execHome)
     {
-        var linux = Linux.Start(_tree, apt: false);
+        var linux = Linux.Start(_tree, apt: false, home: home);
 
         var run = linux.Run(linux.Feed());
 
@@ -168,8 +181,9 @@ public sealed partial class InstallDesktopScriptTests
         Assert.Equal([placed], linux.InApplications());
         var entry = File.ReadAllLines(Path.Combine(linux.Home, ".local", "share", "applications", "jason-desktop.desktop"));
         Assert.Equal("[Desktop Entry]", entry[0]);
-        Assert.Equal($"TryExec={placed}", entry[1]);
-        Assert.Contains($"Exec=\"{placed}\" %U", entry);
+        var above = Path.GetDirectoryName(linux.Home)!;
+        Assert.Equal($"TryExec={Path.Combine(above, tryExecHome, "Applications", "jason-desktop-linux-x64.AppImage")}", entry[1]);
+        Assert.Contains($"Exec=\"{Path.Combine(above, execHome, "Applications", "jason-desktop-linux-x64.AppImage")}\" %U", entry);
         Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(linux.Home, ".local", "share", "icons", "hicolor", "256x256", "apps", "jason-desktop-app.png")));
         var copy = Path.Combine(linux.Data, "desktop", "bundle", LinuxVersion);
@@ -254,10 +268,10 @@ public sealed partial class InstallDesktopScriptTests
 
         private readonly TempTree _tree;
 
-        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse)
+        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse, string home)
         {
             _tree = tree;
-            Home = tree.NewDirectory("home");
+            Home = tree.NewDirectory(home);
             Applications = Path.Combine(Home, "Applications");
             Data = tree.NewDirectory("data");
             Log = Path.Combine(tree.NewDirectory("log"), "calls.log");
@@ -274,6 +288,7 @@ public sealed partial class InstallDesktopScriptTests
             Stub("uname", "case \"${1:-}\" in -m) echo x86_64 ;; *) echo Linux ;; esac\n");
             Stub("id", "case \"${1:-}\" in -u) echo \"${STUB_UID:-1000}\" ;; -nG) echo \"${STUB_GROUPS:-user sudo}\" ;; *) exit 1 ;; esac\n");
             Stub("pgrep", "[ -n \"${STUB_RUNNING:-}\" ]\n");
+            Stub("timeout", $"echo \"timeout $1|\" >> '{Log}'\nshift\nexec \"$@\"\n");
             Stub("unshare", userNamespaces ? "exit 0\n" : "echo 'unshare: write failed /proc/self/uid_map: Operation not permitted' >&2\nexit 1\n");
             if (fuse)
             {
@@ -292,7 +307,8 @@ public sealed partial class InstallDesktopScriptTests
 
             if (pkexec)
             {
-                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
+                // A dialog nobody answers: timeout ends pkexec at the bound, and pkexec says nothing.
+                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ \"${{STUB_PKEXEC_EXIT:-}}\" = 124 ] && [ -z \"${{STUB_PKEXEC_SAYS:-}}\" ]; then exit 124; fi\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
             }
 
             File.WriteAllText(Path.Combine(DebPlace, "..", "jason"), StandInJason);
@@ -327,10 +343,11 @@ public sealed partial class InstallDesktopScriptTests
             + "  'install --roles') printf '%s\\n' \"${STANDIN_REPORT:-$STANDIN_DEFAULT}\" | sed \"s|{self}|$HOME/.local/bin/jason|g; s|{dir}|$HOME/.local/bin|g\" ;;\n"
             + "esac\n";
 
-        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true)
+        /// <param name="home">The name of the account's home folder, which may hold any character a file name can.</param>
+        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true, string home = "home")
         {
             Assert.SkipWhen(!OperatingSystem.IsLinux(), "install.sh's Linux routes are run by sh on Linux; CI's Linux leg runs these rows.");
-            return new Linux(tree, apt, pkexec, userNamespaces, fuse);
+            return new Linux(tree, apt, pkexec, userNamespaces, fuse, home);
         }
 
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];

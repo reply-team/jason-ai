@@ -135,7 +135,7 @@ public static partial class DesktopRemoval
     public const string IconName = LinuxLauncher + ".png";
 
     /// <summary>How long the package's purge is given, the password asked included: the move's own bound for its install.</summary>
-    public static readonly TimeSpan PurgeWait = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan PurgeWait = MoveSystem.AptWait;
 
     /// <summary>The application's folder that carries <paramref name="carried"/>, or null where it is not inside one.</summary>
     public static string? ApplicationOf(CarriedExecutable carried, SetupPlaces places)
@@ -660,36 +660,76 @@ public static partial class DesktopRemoval
         return Path.Combine(places.ConfigHome ?? Path.Combine(places.Home, ".config"), "autostart", Identifier + ".desktop");
     }
 
-    /// <summary>A desktop entry's value for <paramref name="key"/>, as written on its line; null where it has none.</summary>
-    private static string? DesktopEntryValue(string text, string key) =>
-        text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..];
-
-    /// <summary>
-    /// The program a desktop entry's <c>Exec</c> starts, its first argument: the string value's own escapes undone, then a
-    /// quoted argument read with each backslash taking the character after it, as the Desktop Entry Specification reads it and
-    /// <c>autostartExec</c> writes it; an unquoted one up to the first space.
-    /// </summary>
-    internal static string? DesktopEntryProgram(string text)
+    /// <summary>A desktop entry's value for <paramref name="key"/>, the string value's own escapes undone; null where it has none.</summary>
+    private static string? DesktopEntryValue(string text, string key)
     {
-        if (DesktopEntryValue(text, "Exec") is not { Length: > 0 } exec)
+        if (text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..] is not { } written)
         {
             return null;
         }
 
         var value = new System.Text.StringBuilder();
-        for (var at = 0; at < exec.Length; at++)
+        for (var at = 0; at < written.Length; at++)
         {
-            if (exec[at] == '\\' && at + 1 < exec.Length && exec[at + 1] is '\\' or 's' or 'n' or 't' or 'r')
+            if (written[at] == '\\' && at + 1 < written.Length && written[at + 1] is '\\' or 's' or 'n' or 't' or 'r')
             {
-                value.Append(exec[++at] switch { 's' => ' ', 'n' => '\n', 't' => '\t', 'r' => '\r', var other => other });
+                value.Append(written[++at] switch { 's' => ' ', 'n' => '\n', 't' => '\t', 'r' => '\r', var other => other });
             }
             else
             {
-                value.Append(exec[at]);
+                value.Append(written[at]);
             }
         }
 
-        var line = value.ToString();
+        return value.ToString();
+    }
+
+    /// <summary>
+    /// A value as a desktop entry's string spells it, which <see cref="DesktopEntryValue"/> reads back: a backslash, a newline,
+    /// a tab and a carriage return each as its escape (the Desktop Entry Specification, "Possible value types").
+    /// </summary>
+    internal static string DesktopEntryString(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal).Replace("\t", "\\t", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path as the first, quoted argument of an entry's <c>Exec</c>, which <see cref="DesktopEntryProgram"/> reads back (the
+    /// specification, "The Exec key"): a double quote, a backtick, a dollar sign and a backslash each take a backslash, and a
+    /// per-cent is doubled, since a launcher reads field codes before it reads quotes; then the string's own escapes
+    /// (<see cref="DesktopEntryString"/>).
+    /// </summary>
+    internal static string DesktopEntryArgument(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var quoted = new System.Text.StringBuilder("\"");
+        foreach (var character in path)
+        {
+            _ = character switch
+            {
+                '"' or '`' or '$' or '\\' => quoted.Append('\\').Append(character),
+                '%' => quoted.Append("%%"),
+                _ => quoted.Append(character),
+            };
+        }
+
+        return DesktopEntryString(quoted.Append('"').ToString());
+    }
+
+    /// <summary>
+    /// The program a desktop entry's <c>Exec</c> starts, its first argument: the string value's own escapes undone, then a
+    /// quoted argument read with each backslash taking the character after it and a doubled per-cent read as one, as the
+    /// Desktop Entry Specification reads it and <see cref="DesktopEntryArgument"/> and <c>autostartExec</c> write it; an
+    /// unquoted one up to the first space.
+    /// </summary>
+    internal static string? DesktopEntryProgram(string text)
+    {
+        if (DesktopEntryValue(text, "Exec") is not { Length: > 0 } line)
+        {
+            return null;
+        }
+
         if (!line.StartsWith('"'))
         {
             var end = line.IndexOf(' ', StringComparison.Ordinal);
@@ -702,6 +742,9 @@ public static partial class DesktopRemoval
             switch (line[at])
             {
                 case '\\' when at + 1 < line.Length:
+                    program.Append(line[++at]);
+                    break;
+                case '%' when at + 1 < line.Length && line[at + 1] == '%':
                     program.Append(line[++at]);
                     break;
                 case '"':
@@ -1262,13 +1305,26 @@ public static partial class DesktopRemoval
     /// Linux, the deb: the package purged (<see cref="IInstallationRemover.PurgePackageAsync"/>), once the runtime has stopped and
     /// before anything of this account's is removed, so a password not given removes nothing. Null where it went; else the
     /// refusal, which ends the uninstall: why, in the words of sudo, pkexec and apt, the logon registration where it was already
-    /// taken away (<paramref name="registrationTaken"/>), and the way by hand.
+    /// taken away (<paramref name="registrationTaken"/>), and the way by hand; and the runtime it stopped started again
+    /// (<see cref="StartOwedAgainAsync"/>), except after a run still going at its bound, which may yet be taking off the files
+    /// that runtime would run from.
     /// </summary>
-    public static async Task<RemovalRefused?> PurgePackageAsync(CliEnvironment env, DesktopPlan plan, bool registrationTaken, List<string> done, CancellationToken cancellationToken)
+    public static async Task<RemovalRefused?> PurgePackageAsync(CliEnvironment env, DesktopPlan plan, UninstallOptions options, bool registrationTaken, List<string> done, List<string> problems, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
 
+        var refused = await PurgeAsync(env, plan, registrationTaken, done, cancellationToken).ConfigureAwait(false);
+        if (refused is { Unended: false })
+        {
+            await StartOwedAgainAsync(env, options, done, problems, cancellationToken).ConfigureAwait(false);
+        }
+
+        return refused?.Refusal;
+    }
+
+    private static async Task<(RemovalRefused Refusal, bool Unended)?> PurgeAsync(CliEnvironment env, DesktopPlan plan, bool registrationTaken, List<string> done, CancellationToken cancellationToken)
+    {
         PackageRun run;
         try
         {
@@ -1276,7 +1332,7 @@ public static partial class DesktopRemoval
         }
         catch (Exception unstarted) when (unstarted is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            return PackageStays(registrationTaken, $"apt could not be started to take Jason Desktop's package off ({unstarted.Message}).", "Take it off with `sudo apt purge jason-desktop`, then delete what this account keeps by hand, or run `jason uninstall` again once apt runs.");
+            return (PackageStays(registrationTaken, $"apt could not be started to take Jason Desktop's package off ({unstarted.Message}).", "Take it off with `sudo apt purge jason-desktop`, then delete what this account keeps by hand, or run `jason uninstall` again once apt runs."), false);
         }
 
         if (run.ExitCode == 0)
@@ -1291,14 +1347,22 @@ public static partial class DesktopRemoval
         }
 
         const string ByHand = "or an administrator takes the package off with `sudo apt purge jason-desktop`, which leaves this account's own files, as the system's removal of any application does.";
-        return run.Refusal switch
+        if (run.Refusal is AptRefusal.Unended)
+        {
+            return (PackageStays(
+                registrationTaken,
+                string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {PurgeWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet take Jason Desktop's package off, so the runtime this uninstall stopped was not started again from the files apt may be taking away."),
+                "Once apt has ended: where the package stayed, run `jason uninstall` again, or an administrator takes it off with `sudo apt purge jason-desktop`, and Jason Desktop's next start or `jason runtime start` starts the runtime meanwhile; where apt took it off, `jason` went with it, and what this account keeps, which the plan above lists, is deleted by hand, or by installing Jason again and running `jason uninstall`."), true);
+        }
+
+        return (run.Refusal switch
         {
             AptRefusal.NoPassword => PackageStays(registrationTaken, "Jason Desktop is a system package here, and taking it off needs an administrator's password, which was not given.", "Run `jason uninstall` again to be asked again; where this account is not an administrator, an administrator of this computer can type theirs, " + ByHand),
             AptRefusal.NoSession => PackageStays(registrationTaken, "Jason Desktop is a system package here, which needs an administrator's password to take off, and this session cannot ask for one.", "Run `jason uninstall` in a terminal of your desktop, " + ByHand),
             AptRefusal.DialogFailed => PackageStays(registrationTaken, "The system's password dialog failed, so Jason Desktop's package was not taken off.", "Sign out and back in, or restart, then run `jason uninstall` again, " + ByHand),
             AptRefusal.LockHeld => PackageStays(registrationTaken, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop's package was not taken off.", "Run `jason uninstall` again in a few minutes, " + ByHand),
             _ => PackageStays(registrationTaken, string.Create(CultureInfo.InvariantCulture, $"apt did not take Jason Desktop's package off: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}."), "`sudo dpkg --configure -a` finishes a package left half configured, and `sudo apt purge jason-desktop` takes it off; then run `jason uninstall` again where it is still there."),
-        };
+        }, false);
     }
 
     private static RemovalRefused PackageStays(bool registrationTaken, string why, string what) =>

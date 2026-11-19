@@ -74,11 +74,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>How long a download may go without a byte before it counts as stalled.</summary>
     internal TimeSpan StallWait { get; init; } = TimeSpan.FromMinutes(2);
 
-    /// <summary>
-    /// How long the Windows setup, or on Linux apt's install of the package with the password it asks, is waited for. A
-    /// Windows setup that has not ended by then is left running, never killed.
-    /// </summary>
+    /// <summary>How long the Windows setup is waited for. A setup that has not ended by then is left running, never killed.</summary>
     internal TimeSpan SetupWait { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>Linux: how long apt's install of the package, with the password it asks, is waited for (<see cref="MoveSystem.AptWait"/>).</summary>
+    internal TimeSpan AptWait { get; init; } = MoveSystem.AptWait;
 
     /// <summary>How long the application's <c>jason install</c> is waited for: its own waits are a minute's drain and the stop's.</summary>
     internal TimeSpan RoutineWait { get; init; } = TimeSpan.FromMinutes(10);
@@ -454,7 +454,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     /// <summary>
     /// Linux, the deb: the verified package installed by apt with the one password a system package needs, asked as the
-    /// install line asks it, within the setup's bound. A refusal changes nothing and leaves the move pending, saying why and
+    /// install line asks it, within its own bound (AptWait). A refusal changes nothing and leaves the move pending, saying why and
     /// what carries it on; the package's own scripts write Jason's apt source, so later updates come with the system's.
     /// </summary>
     private async Task<UpdateMoveResponse?> PlaceDebAsync(SetupPlaces places, SemanticVersion version, string application, string package, CancellationToken cancellationToken)
@@ -464,7 +464,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         PackageRun run;
         try
         {
-            run = await System.InstallPackageAsync(package, SetupWait, Progress, cancellationToken).ConfigureAwait(false);
+            run = await System.InstallPackageAsync(package, AptWait, Progress, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception unstarted) when (unstarted is Win32Exception or IOException or InvalidOperationException)
         {
@@ -509,6 +509,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             AptRefusal.NoSession => (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on."),
             AptRefusal.DialogFailed => (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on."),
             AptRefusal.LockHeld => (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on."),
+            AptRefusal.Unended => (MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {MoveSystem.AptWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. The command line is unchanged; `jason update apply` carries the move on, into the package where apt installed it, or asks again.")),
             _ => (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on.")),
         };
     }
@@ -591,7 +592,8 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>
     /// Linux, an AppImage: what the install line writes beside the file, made here as there. The copy of the jason it carries
     /// under the data directory, for its version, which sets the machine up; then the menu entry, which starts the file where it
-    /// is and is hidden once that file is gone (<c>TryExec</c>), and the icons, in the account's data folder. Null where all of it
+    /// is and is hidden once that file is gone (<c>TryExec</c>), the path spelled as the Desktop Entry Specification reads it
+    /// (<see cref="Uninstall.DesktopRemoval.DesktopEntryArgument"/>), and the icons, in the account's data folder. Null where all of it
     /// is there; else why not.
     /// </summary>
     private async Task<string?> PrepareAppImageAsync(SetupPlaces places, string file, SemanticVersion version, CancellationToken cancellationToken)
@@ -621,10 +623,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                     continue;
                 }
 
-                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec=\"{file}\" %U" : line);
+                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec={Uninstall.DesktopRemoval.DesktopEntryArgument(file)} %U" : line);
                 if (line == "[Desktop Entry]")
                 {
-                    entry.Add($"TryExec={file}");
+                    entry.Add($"TryExec={Uninstall.DesktopRemoval.DesktopEntryString(file)}");
                 }
             }
 

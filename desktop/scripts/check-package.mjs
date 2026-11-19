@@ -258,9 +258,9 @@ export function debScript(name) {
 
 /**
  * What the deb places for the system, read from the folder dpkg-deb --raw-extract writes: its maintainer scripts are the
- * tree's own (which write /usr/bin/jason and Jason's apt source, and take them back), the rule that lets the system's
- * automatic updates take Jason's is the tree's file and a configuration file of the package, so dpkg never puts back one
- * the person deleted, and the key the source is signed by is the repository's own public key.
+ * tree's own (which write /usr/bin/jason and Jason's apt source, and take them back), the key the source is signed by is
+ * the repository's own public key, and nothing goes under /etc/apt/apt.conf.d: Jason's updates are offered by the
+ * system's updater and installed when the person says so, never by a rule that lets the automatic updates take them.
  */
 function checkDebSystem(app) {
     const top = iconRoot(app, 'deb');
@@ -268,16 +268,14 @@ function checkDebSystem(app) {
         const path = join(top, 'DEBIAN', script);
         if (!existsSync(path) || readFileSync(path, 'utf8') !== debScript(name)) throw new Error(`DEBIAN/${script} is not installer/deb/${name}.sh as electron-builder writes it, so the deb would not set up or take back what Jason places for the system.`);
     }
-    const rule = '/etc/apt/apt.conf.d/50jason-desktop';
-    const placed = join(top, rule);
-    if (!existsSync(placed) || !readFileSync(placed).equals(readFileSync(join(desktop, 'installer', 'deb', '50jason-desktop')))) throw new Error(`${rule} is not installer/deb/50jason-desktop.`);
-    const conffiles = join(top, 'DEBIAN', 'conffiles');
-    if (!existsSync(conffiles) || !readFileSync(conffiles, 'utf8').split('\n').includes(rule)) throw new Error(`${rule}: 50jason-desktop is not a configuration file of the deb, so an update would put back a rule the person deleted.`);
+    const aptConfiguration = join(top, 'etc', 'apt', 'apt.conf.d');
+    const configured = existsSync(aptConfiguration) ? readdirSync(aptConfiguration).sort() : [];
+    if (configured.length > 0) throw new Error(`The deb places ${configured.map((name) => `/etc/apt/apt.conf.d/${name}`).join(', ')}, and it places no apt configuration: Jason's updates are offered, never installed by the automatic updates.`);
     const keyring = join(top, 'usr', 'share', 'keyrings', 'jason-desktop.gpg');
     if (!existsSync(keyring) || !readFileSync(keyring).equals(readFileSync(join(desktop, '..', 'install', 'jason-desktop-archive-keyring.gpg')))) throw new Error('/usr/share/keyrings/jason-desktop.gpg is not install/jason-desktop-archive-keyring.gpg, the key the repository is signed with.');
     return [
         'postinst, postrm: installer/deb/after-install.sh and after-remove.sh',
-        `${rule}: installer/deb/50jason-desktop, a configuration file`,
+        '/etc/apt/apt.conf.d: nothing',
         '/usr/share/keyrings/jason-desktop.gpg: install/jason-desktop-archive-keyring.gpg',
     ];
 }

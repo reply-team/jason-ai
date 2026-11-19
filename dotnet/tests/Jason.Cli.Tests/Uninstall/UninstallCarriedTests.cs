@@ -1741,17 +1741,19 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// <c>desktop/bundle</c>, which is the data directory's own and goes with it, so that copy is not an installation the
     /// data directory holds and the purge is not refused for it. Catches the purge refused on every AppImage machine. And the
     /// folder the install line made for the file, <c>~/Applications</c>, goes once it holds nothing else, while a folder of the
-    /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home.
+    /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home. The menu entry and Open Jason at
+    /// Login's entry are found by what their writers write, whatever the file's path holds: catches either left behind for a
+    /// folder whose name holds a quote, a backslash or a dollar sign, the menu entry for one with a per-cent too.
     /// </summary>
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(false, false, """My "Apps" 100% \ $x""")]
+    [InlineData(true, false, """My "Apps" \ $x""")]
+    [InlineData(false, true, "")]
     [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
-    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge, bool linePlace)
+    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge, bool linePlace, string folder)
     {
         var places = LinuxPlaces();
-        var (copy, file) = AppImage(linePlace);
+        var (copy, file) = AppImage(linePlace, folder);
         var bin = places.LocalBin;
         var wrapper = Written(Path.Combine(bin, "jason"), CommandFiles.Wrapper(copy, null));
         var profile = Path.Combine(Home, ".profile");
@@ -1760,8 +1762,14 @@ public sealed partial class UninstallCarriedTests : IDisposable
         PathEntry.AddToProfile(bashrc, bin);
         CreatedProfiles.Add(places, profile);
         var skill = UninstallReceiptTests.Recorded(Path.Combine(Home, ".claude", "skills"), "operating-the-installation");
-        var atLogin = OpenAtLoginEntry(file);
-        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={file}\nName=Jason\nExec=\"{file}\" %U\nIcon=jason-desktop-app\n");
+        // The application offers no Open Jason at Login for a launcher with a per-cent (login-item.ts, autostartExec); the other
+        // special folder's entry is spelled as desktop/test/login.test.ts pins autostartEntry's.
+        var atLogin = file.Contains('%', StringComparison.Ordinal)
+            ? null
+            : linePlace
+                ? OpenAtLoginEntry(file)
+                : OpenAtLoginEntry(Path.Combine(Home, """My "Apps" \\ $x""", "Jason.AppImage"), "\"" + Path.Combine(Home, """My \\"Apps\\" \\\\ \\$x""", "Jason.AppImage") + "\"");
+        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={DesktopRemoval.DesktopEntryString(file)}\nName=Jason\nExec={DesktopRemoval.DesktopEntryArgument(file)} %U\nIcon=jason-desktop-app\n");
         string[] icons = [.. new[] { "256x256", "512x512" }.Select(size => Written(Path.Combine(XdgData, "icons", "hicolor", size, "apps", "jason-desktop-app.png"), "png"))];
         var anotherIcon = Written(Path.Combine(XdgData, "icons", "hicolor", "256x256", "apps", "another-app.png"), "png");
         var desktop = Path.Combine(_dir.Paths.Root, "desktop");
@@ -1778,7 +1786,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
         Assert.Equal("deleted", plan.GetProperty("application_fate").GetString());
         Assert.Equal(file, plan.GetProperty("application").GetString());
-        foreach (var gone in new[] { wrapper, profile, skill, atLogin, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
+        foreach (var gone in new[] { wrapper, profile, skill, atLogin ?? menu, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
         }
@@ -1826,6 +1834,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var purged = log.Steps.IndexOf("package.purge");
         var firstOfTheAccounts = log.Steps.FindIndex(step => step is "file.remove" or "tree.remove" or "directory.remove_if_empty");
         Assert.True(stopped >= 0 && purged > stopped && firstOfTheAccounts > purged, string.Join(" | ", log.Steps));
+        // apt is waited for longer than the package lock it is told to wait for, so its own answer comes first.
+        Assert.True(remover.PurgeBounds.Single() > Jason.Cli.Tests.Update.CommandLineMoveLinuxTests.LockWait(MoveSystem.PurgeArguments(DesktopRemoval.DebPackage)), $"the purge was waited for {remover.PurgeBounds.Single()}");
         foreach (var gone in new[] { atLogin, wrapper, skill })
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
@@ -1840,7 +1850,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
     [Critical(Family.I3, "on Linux a package that stays leaves everything of this account's in place")]
     [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
     [InlineData("no session to ask in", false, 127, "")]
-    public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again(string row, bool asked, int code, string said)
+    [InlineData("apt not ended", true, PackageRun.TimedOut, "")]
+    public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again_unless_apt_may_still_run(string row, bool asked, int code, string said)
     {
         var places = LinuxPlaces();
         var carried = Deb(places);
@@ -1873,9 +1884,21 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.True(Directory.Exists(updater), $"{row}: the updater's cache went");
 
-        // The runtime it stopped, started again from the application's jason on this data directory.
-        Assert.Equal([_dir.Paths.Root], processes.Launches);
-        Assert.Equal([carried], processes.Executables.Single());
+        // The runtime it stopped, started again from the application's jason on this data directory; but not while apt, which
+        // had not ended, may still be taking that jason off: catches a runtime started from files apt is removing.
+        if (row == "apt not ended")
+        {
+            Assert.Empty(processes.Launches);
+            Assert.Contains("apt had not ended after 20 minutes", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.Contains("was not started again", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.Contains("where apt took it off, `jason` went with it", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.True(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed went");
+        }
+        else
+        {
+            Assert.Equal([_dir.Paths.Root], processes.Launches);
+            Assert.Equal([carried], processes.Executables.Single());
+        }
     }
 
     // --- held to the application's own source ------------------------------------------------------------------
@@ -2028,9 +2051,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// An AppImage the person keeps in a folder of their own, which its start recorded in <c>appimage.json</c>, and the copy
     /// of its jason under the data directory, which is the jason that runs.
     /// </summary>
-    private (string Copy, string File) AppImage(bool linePlace = false)
+    private (string Copy, string File) AppImage(bool linePlace = false, string folder = "My Apps")
     {
-        var file = Written(linePlace ? Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage") : Path.Combine(Home, "My Apps", "Jason.AppImage"), "appimage");
+        var file = Written(linePlace ? Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage") : Path.Combine(Home, folder, "Jason.AppImage"), "appimage");
         var copy = Bundle(Path.Combine(_dir.Paths.Root, "desktop", "bundle", "0.34.0"), "jason");
         Written(Path.Combine(_dir.Paths.Root, "desktop", "appimage.json"), JsonSerializer.Serialize(new { file }));
         return (copy, file);
@@ -2051,11 +2074,14 @@ public sealed partial class UninstallCarriedTests : IDisposable
             UninstallReceiptTests.Recorded(Path.Combine(Home, ".claude", "skills"), "operating-the-installation"),
             Plant(Path.Combine(XdgCache, "jason-desktop-updater")));
 
-    /// <summary>Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting <paramref name="launcher"/>.</summary>
-    private string OpenAtLoginEntry(string launcher) =>
+    /// <summary>
+    /// Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting a launcher whose path needs
+    /// no escape; or, for one that does, its TryExec and quoted Exec values as given, spelled by the test.
+    /// </summary>
+    private string OpenAtLoginEntry(string launcher, string? execValue = null) =>
         Written(
             Path.Combine(XdgConfig, "autostart", DesktopRemoval.Identifier + ".desktop"),
-            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec=\"{launcher}\" --opened-at-login\n");
+            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec={execValue ?? $"\"{launcher}\""} --opened-at-login\n");
 
     /// <summary>A runtime that goes when asked: its descriptor, then its process.</summary>
     private FakeHandler StopsWhenAsked(StepLog log, FakeProcessControl processes) => new(_ =>

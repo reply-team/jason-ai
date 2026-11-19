@@ -313,15 +313,12 @@ export function configuration({ version, sign = null, testBuild = false, linuxWa
             recommends: ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70'],
             // The deb's own maintainer scripts in place of electron-builder's templates, which they keep whole: they also
             // link /usr/bin/jason and write Jason's apt source, and take both back on a removal (installer/deb). The
-            // package carries the key that source is signed by, and the rule that lets the system's automatic updates take
-            // Jason's, a configuration file, so dpkg never puts back one the person deleted. fpm takes each extra file as
-            // <source>=<path in the package>.
+            // package carries the key that source is signed by, and no rule for the system's automatic updates: Jason's
+            // updates are offered by the system's updater and installed when the person says so. fpm takes each extra file
+            // as <source>=<path in the package>.
             afterInstall: 'installer/deb/after-install.sh',
             afterRemove: 'installer/deb/after-remove.sh',
             fpm: [
-                '--config-files',
-                '/etc/apt/apt.conf.d/50jason-desktop',
-                `${join(desktop, 'installer', 'deb', '50jason-desktop')}=/etc/apt/apt.conf.d/50jason-desktop`,
                 `${join(desktop, '..', 'install', 'jason-desktop-archive-keyring.gpg')}=/usr/share/keyrings/jason-desktop.gpg`,
             ],
         },

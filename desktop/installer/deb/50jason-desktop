@@ -1,4 +1,0 @@
-// Jason Desktop's package: Ubuntu's automatic updates (unattended-upgrades) take Jason's updates from Jason's own apt
-// repository, as they take the system's. Delete this file to take them only when you choose; the package does not put it
-// back. `sudo apt-mark hold jason-desktop` stops every update of it.
-Unattended-Upgrade::Origins-Pattern { "origin=Jason,site=get.jasonharness.ai"; };

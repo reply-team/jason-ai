@@ -19,7 +19,7 @@
 # On Linux it installs Jason Desktop as each system's users install comparable applications, and opens nothing. The
 # package manager the system has decides. Where there is apt (Ubuntu, Debian, Mint): the release's deb, checked against
 # checksums.txt and installed by apt, with the one password a system package needs - asked by sudo where this line has a
-# terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most ten minutes - and refused
+# terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most twenty minutes - and refused
 # in its own words where none can be asked or given; the package adds Jason's apt repository, its key and /usr/bin/jason,
 # and every later update comes with the system's. Anywhere else (Arch, Fedora and the rest): the AppImage, per account,
 # with no password, placed at ~/Applications/jason-desktop-linux-x64.AppImage by one rename, its menu entry and icons
@@ -417,8 +417,12 @@ DEB_ASSET="jason-desktop-linux-x64.deb"
 DEB_PLACE="/opt/Jason"
 APPIMAGE_ASSET="jason-desktop-linux-x64.AppImage"
 APPIMAGE_PLACE="$HOME/Applications"
-# How long the system's password dialog is given, as the Windows move gives its installer, and apt the package lock.
-ASK_SECONDS=600
+# How long apt waits for the package lock another installation holds.
+LOCK_SECONDS=600
+
+# How long an install through the system's password dialog is given: apt's wait for the lock and ten minutes more, for
+# the password and apt's own work, so that apt answers first.
+ASK_SECONDS=1200
 
 # Whether Jason Desktop runs under this account: a process whose program, the first word of its command line, is
 # jason-desktop-app, the deb's or an AppImage's mount's. Where pgrep is not there, nothing is known to run.
@@ -436,7 +440,7 @@ refuse_while_running() {
 # The apt options every install of the package takes: the package lock waited for, a configuration file the person
 # changed kept, and the person's proxy, which sudo and pkexec both drop.
 apt_options() {
-    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$ASK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$LOCK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
     [ -z "${http_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::http::Proxy=$http_proxy"
     [ -z "${https_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::https::Proxy=$https_proxy"
 }
@@ -493,9 +497,14 @@ apt_install() {
             NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
         fi
     fi
-    if grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
+    # apt's own last words first. pkexec becomes apt, as root, once the password is given, and timeout cannot end that, so
+    # it waits for apt: a run past the bound has ended by now, and said why. Then the bound alone: pkexec was ended while
+    # its dialog waited for an answer, and nothing ran.
+    if grep -qE '^E: (Could not get lock|Unable to acquire the dpkg frontend lock)' "$TMP/apt.err"; then
         fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
-    elif [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
+    elif [ "$STATUS" -eq 124 ] && ! grep -q '^E:' "$TMP/apt.err"; then
+        fail "The password dialog was not answered within $((ASK_SECONDS / 60)) minutes, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
+    elif grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
@@ -607,14 +616,28 @@ install_appimage() {
     fi
 
     # The menu entry and the icons, in the account's own data folder, where desktops and launchers read them. The entry
-    # starts the file where it is, and is hidden once that file is gone (TryExec).
+    # starts the file where it is, and is hidden once that file is gone (TryExec). The path is spelled as the Desktop Entry
+    # Specification reads it: quoted in Exec, where a double quote, a backtick, a dollar sign and a backslash take a
+    # backslash and a per-cent is doubled; then, in both lines, every backslash doubled as a string's own escape. awk reads
+    # the path from its environment, since -v would take its backslashes as escapes.
     SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$SHARE/applications"
-    awk -v exec="$DEST" '
-        /^Exec=/ { print "Exec=\"" exec "\" %U"; next }
+    PLACED="$DEST" awk '
+        function spelled(path, quoted,    out, i, c) {
+            out = ""
+            for (i = 1; i <= length(path); i++) {
+                c = substr(path, i, 1)
+                if (quoted && (c == "\"" || c == "`" || c == "$")) out = out "\\\\" c
+                else if (c == "\\") out = out (quoted ? "\\\\\\\\" : "\\\\")
+                else if (quoted && c == "%") out = out "%%"
+                else out = out c
+            }
+            return out
+        }
+        /^Exec=/ { print "Exec=\"" spelled(ENVIRON["PLACED"], 1) "\" %U"; next }
         /^TryExec=/ { next }
         { print }
-        /^\[Desktop Entry\]$/ { print "TryExec=" exec }
+        /^\[Desktop Entry\]$/ { print "TryExec=" spelled(ENVIRON["PLACED"], 0) }
     ' "$ROOT/jason-desktop-app.desktop" > "$SHARE/applications/jason-desktop.desktop" || fail "the menu entry could not be written to $SHARE/applications. Jason Desktop is installed at $DEST"
     for ICON in "$ROOT"/usr/share/icons/hicolor/*/apps/jason-desktop-app.png; do
         [ -f "$ICON" ] || continue

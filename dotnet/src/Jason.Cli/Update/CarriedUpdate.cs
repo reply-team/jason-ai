@@ -868,7 +868,8 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// Windows. While the installer has the update — the ledger at <c>kept</c>, or the go given to a Desktop that has not
     /// refused, and the application not yet the new version — the folder is the installer's: nothing is put back and no
     /// runtime is started, since one started now would be the old build under the installer, and the answer names the
-    /// finish. Once the application is the new version, the runtime is started from the carried file, which is that version.
+    /// finish. Once the application is the new version, the runtime is started from the carried file, which is that version,
+    /// or for an AppImage from the new version's copy (<see cref="Landed"/>).
     /// Otherwise nothing was installed: the record that stood is put back, and a runtime that answers drained is resumed, or
     /// where one was running before and none answers now, one is started from whichever executable is whole: the carried one
     /// where its record names a version, else the copy of this jason. A cancel waits for nothing: the start is launched and
@@ -904,9 +905,18 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             }
         }
 
-        var whole = CarriedExecutable.Of(carried.Executable) is not null && File.Exists(carried.Executable) ? carried.Executable : Moved ?? Copy;
+        var whole = ledger is { Step: < UpdateStep.Complete } landed && AppImage && Names(landed.ToVersion)
+            ? Landed(landed.ToVersion)
+            : CarriedExecutable.Of(carried.Executable) is not null && File.Exists(carried.Executable) ? carried.Executable : Moved ?? Copy;
         await StartAgainAsync(whole, ledger, waits).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The jason a runtime is started again from once the application is <paramref name="version"/>: the one at the carried
+    /// path, which the installer replaced in place; for an AppImage, whose old copy stays beside the new one under its own
+    /// version, the new version's copy.
+    /// </summary>
+    private string Landed(SemanticVersion version) => AppImage ? FinisherOf(version) : Whole;
 
     /// <summary>
     /// Whether the installer has the update, as the process that waited on the one carrying it reads it: the ledger at
@@ -977,7 +987,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
         if (_stage == Stage.Landed || Names(ledger.ToVersion))
         {
-            await StartAgainAsync(Whole, _written, waits).ConfigureAwait(false);
+            await StartAgainAsync(Landed(ledger.ToVersion), _written, waits).ConfigureAwait(false);
             return $"The application is {ledger.ToVersion}, and {_runtime} `jason update apply` finishes the update.";
         }
 

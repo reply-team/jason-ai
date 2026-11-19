@@ -214,10 +214,10 @@ system decides the form:
 - **Where there is apt** (Ubuntu, Debian, Mint): the release's `jason-desktop-linux-x64.deb` and `checksums.txt`,
   **its SHA-256 verified**, installed by apt with the one administrator's password a system package needs. Where the line
   has a terminal, `sudo` asks for it; otherwise, as when an agent runs it in your desktop session, your desktop asks in
-  its own password dialog, through `pkexec`, for at most ten minutes, and apt waits as long for the package system when
-  Ubuntu's own updates hold it. A password not given, no session to ask in, the dialog failing, the package system still
-  held are each refused in their own words, and nothing is installed; apt failing part-way says so, with the commands
-  that finish the package or take it off. The package puts Jason Desktop in
+  its own password dialog, through `pkexec`; apt waits up to ten minutes for the package system when Ubuntu's own updates
+  hold it, and the install is given twenty. A password not given, the dialog left unanswered for those twenty minutes, no
+  session to ask in, the dialog failing, the package system still held are each refused in their own words, and nothing
+  is installed; apt failing part-way says so, with the commands that finish the package or take it off. The package puts Jason Desktop in
   `/opt/Jason` for every account of the computer, `jason` in every terminal as `/usr/bin/jason`, and Jason's apt
   repository in `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key it carries, so its later updates come
   with the system's (§4). A package already at the version, or a later
@@ -539,9 +539,9 @@ UI as `jason ui install` does; an update applied by a build before 0.12.0 needs 
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
 Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's
 `jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7); on Linux an
-AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Ubuntu's automatic
-updates install them, and Software Updater or `sudo apt update && sudo apt upgrade` at once; there `jason update apply`
-refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
+AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Software Updater offers
+them and installs them when you say so, as `sudo apt update && sudo apt upgrade` does, and Ubuntu's automatic updates
+leave them alone; there `jason update apply` refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
 manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is

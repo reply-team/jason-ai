@@ -22,7 +22,9 @@ public sealed class CommandLineMoveLinuxTests
 
     /// <summary>
     /// Where there is apt and no application: the release's deb downloaded and held to its line, installed by apt, then the
-    /// jason the package carries runs the routine under the move's lock, and the runtime it stopped is started from it.
+    /// jason the package carries runs the routine under the move's lock, and the runtime it stopped is started from it. apt
+    /// is waited for longer than the package lock it is told to wait for, so its own answer comes first: catches a bound
+    /// that ends the wait while apt still waits on the lock.
     /// </summary>
     [Fact]
     public async Task Where_there_is_apt_the_deb_is_installed_by_apt_and_its_jason_sets_the_machine_up()
@@ -38,6 +40,7 @@ public sealed class CommandLineMoveLinuxTests
         Assert.Equal(MoveSteps.Started, answer.Step);
         Assert.Equal(rig.DebApplication, answer.Application);
         Assert.Equal(["apt", "routine", "stop", $"launch {carried}"], rig.Acts);
+        Assert.True(rig.System.Bounds.Single() > LockWait(MoveSystem.AptOptions(null, null)), $"apt was waited for {rig.System.Bounds.Single()}");
         Assert.Equal([carried, "install", "--retire", rig.Old], rig.Installation.Processes.Runs.Single().Command);
         Assert.Contains(rig.Installation.Release.Requested, path => path.EndsWith("/" + CommandLineMove.DebAsset, StringComparison.Ordinal));
         Assert.DoesNotContain(rig.Installation.Release.Requested, path => path.EndsWith("/" + CommandLineMove.AppImageAsset, StringComparison.Ordinal));
@@ -76,14 +79,19 @@ public sealed class CommandLineMoveLinuxTests
     /// Where there is no apt: the release's AppImage downloaded and held to its line, put in the account's Applications folder
     /// by one rename, executable, with nothing staged left beside it; its menu entry written to start that file and hidden once
     /// it is gone, its icons beside it; and the copy of the jason it carries made under the data directory, which runs the
-    /// routine and starts the runtime.
+    /// routine and starts the runtime. The entry spells the file's path as the Desktop Entry Specification reads it, whatever
+    /// the home's name holds: TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a
+    /// backslash taking a backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher
+    /// reads as another file. A per-cent is spelled as the specification asks, and GLib's launchers still list no such entry.
     /// </summary>
-    [Fact]
+    [Theory]
+    [InlineData("home", "home", "home")]
+    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""")]
     [UnsupportedOSPlatform("windows")]
-    public async Task Without_apt_the_AppImage_is_put_in_place_by_one_rename_with_its_menu_entry_and_its_copy()
+    public async Task Without_apt_the_AppImage_is_put_in_place_by_one_rename_with_its_menu_entry_and_its_copy(string home, string tryExecHome, string execHome)
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), LinuxRow);
-        using var rig = new MoveRig(SetupSystem.Linux);
+        using var rig = new MoveRig(SetupSystem.Linux, home: home);
         rig.System.Apt = false;
         rig.Installation.WithRuntime();
         var copy = AppImageCopy.CopyOf(rig.Bundles, SemanticVersion.Current);
@@ -98,9 +106,10 @@ public sealed class CommandLineMoveLinuxTests
 
         var share = Path.Combine(rig.Home, ".local", "share");
         var entry = File.ReadAllLines(Path.Combine(share, "applications", "jason-desktop.desktop"));
-        Assert.Equal(["[Desktop Entry]", $"TryExec={rig.AppImage}"], entry[..2]);
-        Assert.Contains($"Exec=\"{rig.AppImage}\" %U", entry);
+        Assert.Equal(["[Desktop Entry]", $"TryExec={Path.Combine(rig.Installation.Root, tryExecHome, "Applications", AppImageCopy.FileName)}"], entry[..2]);
+        Assert.Contains($"Exec=\"{Path.Combine(rig.Installation.Root, execHome, "Applications", AppImageCopy.FileName)}\" %U", entry);
         Assert.Single(entry, line => line.StartsWith("TryExec=", StringComparison.Ordinal));
+        Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(share, "icons", "hicolor", "512x512", "apps", "jason-desktop-app.png")));
 
         Assert.Equal(SemanticVersion.Current.ToString(), CarriedExecutable.Of(copy)!.Version);
@@ -146,6 +155,7 @@ public sealed class CommandLineMoveLinuxTests
     [Theory]
     [InlineData("no_password", "needs an administrator's password once, and none was given", true)]
     [InlineData("no_session", "this session cannot ask for it", true)]
+    [InlineData("apt_unended", "apt had not ended after 20 minutes", true)]
     [InlineData("user_namespaces", "user namespaces are refused", false)]
     [InlineData("no_fuse", "needs FUSE 3 here", true)]
     [InlineData("running", "is running", true)]
@@ -163,6 +173,9 @@ public sealed class CommandLineMoveLinuxTests
                 break;
             case "no_session":
                 rig.System.OnPackage = _ => new PackageRun(false, 127, string.Empty);
+                break;
+            case "apt_unended":
+                rig.System.OnPackage = _ => new PackageRun(true, PackageRun.TimedOut, string.Empty);
                 break;
             case "user_namespaces":
                 rig.System.Apt = false;
@@ -199,7 +212,7 @@ public sealed class CommandLineMoveLinuxTests
         Assert.Equal(why is "older_appimage" or "not_jason_appimage", File.Exists(rig.AppImage));
         Assert.False(Directory.Exists(rig.Bundles) && Directory.EnumerateFileSystemEntries(rig.Bundles).Any());
         Assert.False(Directory.Exists(rig.Update.MoveDownloads) && Directory.EnumerateFileSystemEntries(rig.Update.MoveDownloads).Any());
-        if (why is not ("no_password" or "no_session"))
+        if (why is not ("no_password" or "no_session" or "apt_unended"))
         {
             Assert.DoesNotContain(rig.Installation.Release.Requested, path => path.EndsWith("/" + CommandLineMove.DebAsset, StringComparison.Ordinal) || path.EndsWith("/" + CommandLineMove.AppImageAsset, StringComparison.Ordinal));
         }
@@ -212,21 +225,27 @@ public sealed class CommandLineMoveLinuxTests
 
     /// <summary>
     /// apt's run, read from the words of sudo, sudo-rs (Ubuntu 26.04's), pkexec and apt as the install line reads them, never
-    /// from an exit code alone; the package lock first, which apt waits on after the password was given. Catches sudo-rs's
-    /// wrong passwords and a machine with no polkit daemon read as apt failing, and a lock held to the bound read as no
-    /// password given.
+    /// from an exit code alone; a run still going at its bound first, then the package lock, which apt waits on after the
+    /// password was given. Catches sudo-rs's wrong passwords and a machine with no polkit daemon read as apt failing, a lock
+    /// apt gave up on read as no password given, and a run still going at its bound, which may yet change the package, read as
+    /// no password given or as the lock.
     /// </summary>
     [Theory]
     [InlineData(true, 126, "Error executing command as another user: Request dismissed", AptRefusal.NoPassword)]
     [InlineData(true, 1, "sudo-rs: Maximum 3 incorrect authentication attempts", AptRefusal.NoPassword)]
-    [InlineData(true, PackageRun.TimedOut, "", AptRefusal.NoPassword)]
+    [InlineData(true, PackageRun.TimedOut, "", AptRefusal.Unended)]
+    [InlineData(true, PackageRun.TimedOut, "Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)...", AptRefusal.Unended)]
     [InlineData(true, 127, "Error getting authority: Error initializing authority: Could not connect: No such file or directory", AptRefusal.NoSession)]
     [InlineData(false, 127, "", AptRefusal.NoSession)]
     [InlineData(true, 127, "GDBus.Error: No session for cookie", AptRefusal.DialogFailed)]
-    [InlineData(true, PackageRun.TimedOut, "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", AptRefusal.LockHeld)]
+    [InlineData(true, 100, "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", AptRefusal.LockHeld)]
     [InlineData(true, 100, "E: Sub-process /usr/bin/dpkg returned an error code (1)", AptRefusal.Apt)]
     public void On_linux_apt_s_run_is_read_from_the_tools_own_words(bool asked, int exit, string said, AptRefusal refusal) =>
         Assert.Equal(refusal, new PackageRun(asked, exit, said).Refusal);
+
+    /// <summary>How long apt is told to wait for the package lock, in the arguments it is given.</summary>
+    internal static TimeSpan LockWait(IEnumerable<string> arguments) =>
+        TimeSpan.FromSeconds(int.Parse(arguments.Single(argument => argument.StartsWith("DPkg::Lock::Timeout=", StringComparison.Ordinal))["DPkg::Lock::Timeout=".Length..], System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>
     /// The move's own look for an open Jason Desktop, on this machine: the deb's window under its rewritten title (one string,

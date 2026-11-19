@@ -1670,7 +1670,7 @@ jobs:
           if ($env:server) { Stop-Process -Id $env:server -Force -ErrorAction SilentlyContinue }
 
   # The install line on Ubuntu, against the deb the desktop job built: the apt route's leg, from the install through
-  # Jason's repository and Ubuntu's automatic updates to the purge (.github/scripts/test-apt-route.sh).
+  # Jason's repository and an update apt offers to the purge (.github/scripts/test-apt-route.sh).
   install-sh:
     name: install.sh on ubuntu
     needs: [version, desktop]
