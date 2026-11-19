@@ -81,6 +81,23 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
     }
 
     /// <summary>
+    /// The AppImage whose own runtime is started is the file this names, or one staged beside it, so it is named by its full
+    /// path whatever the record beside the copies says: a record naming a path that is not a full one is not taken.
+    /// </summary>
+    [Fact]
+    public void The_appimage_is_named_by_its_full_path_whatever_its_record_says()
+    {
+        var copy = Copy("0.49.1");
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        File.WriteAllText(Path.Combine(_data.Paths.Root, "desktop", "appimage.json"), "{\"file\":\"Applications/Jason.AppImage\"}\n");
+
+        var named = AppImageCopy.FileOf(copy, home);
+
+        Assert.Equal(Path.Combine(home, "Applications", AppImageCopy.FileName), named);
+        Assert.True(Path.IsPathFullyQualified(named));
+    }
+
+    /// <summary>
     /// The copy of the new version is read out of the AppImage file by its own runtime only where the file carries that
     /// version, and renamed into place whole beside the other copies; a file still the old version leaves no copy and no
     /// folder of its reading behind.

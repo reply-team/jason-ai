@@ -111,6 +111,12 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// <summary>Linux, the deb: Jason's apt source, which the package writes; a file of a test's own in a test.</summary>
     public string AptSource { get; init; } = "/etc/apt/sources.list.d/jason-desktop.sources";
 
+    /// <summary>
+    /// Linux, the deb: the folder the package installs the application into, which carries its jason at
+    /// <c>resources/bundle/jason</c>; a folder of a test's own in a test.
+    /// </summary>
+    public string DebApplication { get; init; } = "/opt/Jason";
+
     /// <summary>Linux: <c>XDG_DATA_HOME</c> where it is set, else null, which is <c>~/.local/share</c>.</summary>
     public string? DataHome { get; init; }
 

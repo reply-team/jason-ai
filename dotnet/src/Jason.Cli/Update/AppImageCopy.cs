@@ -50,6 +50,9 @@ internal static class AppImageCopy
         return Path.Combine(home, "Applications", FileName);
     }
 
+    /// <summary>The folder of the copies under a data directory: <c>&lt;data&gt;/desktop/bundle</c>.</summary>
+    public static string BundlesUnder(string dataRoot) => Path.Combine(dataRoot, "desktop", "bundle");
+
     /// <summary>The copy's jason for a version, under the copies' folder.</summary>
     public static string CopyOf(string bundles, SemanticVersion version) => Path.Combine(bundles, version.ToString(), ReleaseAssets.ExecutableName);
 
@@ -63,8 +66,13 @@ internal static class AppImageCopy
     /// into place, whole, only where its version.json names that version. Anything else is taken away again. True where the
     /// copy is there afterwards.
     /// </summary>
-    public static async Task<bool> MakeAsync(string appImage, string bundles, SemanticVersion version, CancellationToken cancellationToken)
+    public static Task<bool> MakeAsync(string appImage, string bundles, SemanticVersion version, CancellationToken cancellationToken) =>
+        MakeAsync(appImage, bundles, version, ExtractAsync, cancellationToken);
+
+    /// <summary>The same, reading the file through <paramref name="extract"/> (<see cref="ExtractAsync"/>'s shape).</summary>
+    public static async Task<bool> MakeAsync(string appImage, string bundles, SemanticVersion version, Func<string, string, string, CancellationToken, Task<bool>> extract, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(extract);
         if (Holds(bundles, version))
         {
             return true;
@@ -85,33 +93,9 @@ internal static class AppImageCopy
             }
 
             Directory.CreateDirectory(reading);
-            var start = ChildProcess.StartInfo(appImage, ChildKind.SystemToolWithInput);
-            start.ArgumentList.Add("--appimage-extract");
-            start.ArgumentList.Add("resources/bundle/*");
-            start.WorkingDirectory = reading;
-            start.Environment.Remove(UpdateLock.Variable);
-            using (var process = ChildProcess.Start(start) ?? throw new IOException($"{appImage} could not be started."))
+            if (!await extract(appImage, "resources/bundle/*", reading, cancellationToken).ConfigureAwait(false))
             {
-                process.StandardInput.Close();
-                var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
-                var error = process.StandardError.ReadToEndAsync(cancellationToken);
-                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                bounded.CancelAfter(ExtractWait);
-                try
-                {
-                    await process.WaitForExitAsync(bounded.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    process.Kill(entireProcessTree: true);
-                    return false;
-                }
-
-                await Task.WhenAll(output, error).ConfigureAwait(false);
-                if (process.ExitCode != 0)
-                {
-                    return false;
-                }
+                return false;
             }
 
             var read = Path.Combine(reading, "squashfs-root", "resources", "bundle");
@@ -141,5 +125,36 @@ internal static class AppImageCopy
             {
             }
         }
+    }
+
+    /// <summary>
+    /// What the file carries under <paramref name="pattern"/>, written by its own runtime (<c>--appimage-extract</c>) into
+    /// <c>squashfs-root</c> in <paramref name="folder"/>, within <see cref="ExtractWait"/>. True where it exited 0.
+    /// </summary>
+    public static async Task<bool> ExtractAsync(string appImage, string pattern, string folder, CancellationToken cancellationToken)
+    {
+        var start = ChildProcess.StartInfo(appImage, ChildKind.SystemToolWithInput);
+        start.ArgumentList.Add("--appimage-extract");
+        start.ArgumentList.Add(pattern);
+        start.WorkingDirectory = folder;
+        start.Environment.Remove(UpdateLock.Variable);
+        using var process = ChildProcess.Start(start) ?? throw new IOException($"{appImage} could not be started.");
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(ExtractWait);
+        try
+        {
+            await process.WaitForExitAsync(bounded.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            process.Kill(entireProcessTree: true);
+            return false;
+        }
+
+        await Task.WhenAll(output, error).ConfigureAwait(false);
+        return process.ExitCode == 0;
     }
 }

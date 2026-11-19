@@ -111,6 +111,89 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
     public bool SharedWritable { get; set; }
 
     public bool MayWriteInto(string folder) => SharedWritable;
+
+    /// <summary>Linux: whether apt-get and dpkg are on the PATH.</summary>
+    public bool Apt { get; set; } = true;
+
+    public bool HasApt() => Apt;
+
+    /// <summary>Linux: the program names a process of this account runs, from any folder.</summary>
+    public HashSet<string> RunningNamed { get; } = new(StringComparer.Ordinal);
+
+    public bool RunsNamed(string name) => RunningNamed.Contains(name);
+
+    /// <summary>Linux: whether user namespaces may be made.</summary>
+    public bool UserNamespaces { get; set; } = true;
+
+    public bool UserNamespacesAllowed() => UserNamespaces;
+
+    /// <summary>Linux: whether a setuid fusermount is there.</summary>
+    public bool Fuse { get; set; } = true;
+
+    public bool FuseMounts() => Fuse;
+
+    /// <summary>Linux: the folder the package installs the application into.</summary>
+    public string? PackageInstallsTo { get; set; }
+
+    /// <summary>Linux: what apt does with the package; by default it installs the application at the version <see cref="Installs"/>.</summary>
+    public Func<string, PackageRun>? OnPackage { get; set; }
+
+    public Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
+    {
+        acts.Add("apt");
+        Assert.True(File.Exists(package), "apt is handed the downloaded package");
+        if (OnPackage is { } install)
+        {
+            return Task.FromResult(install(package));
+        }
+
+        MoveRig.PlantPackage(PackageInstallsTo ?? throw new InvalidOperationException("The rig names no folder the package installs into."), Installs);
+        return Task.FromResult(new PackageRun(true, 0, string.Empty));
+    }
+
+    /// <summary>
+    /// Linux: an AppImage's own runtime, stood in for. The file stands for Jason Desktop of the version its text names
+    /// ("Jason Desktop &lt;version&gt;"), and what each pattern reads out of it is written as the real one writes it.
+    /// </summary>
+    public Task<bool> ExtractAppImageAsync(string appImage, string pattern, string folder, CancellationToken cancellationToken)
+    {
+        const string Named = "Jason Desktop ";
+        var text = File.Exists(appImage) ? File.ReadAllText(appImage) : string.Empty;
+        if (!text.StartsWith(Named, StringComparison.Ordinal))
+        {
+            return Task.FromResult(false);
+        }
+
+        var version = text[Named.Length..].Trim();
+        var root = Path.Combine(folder, "squashfs-root");
+        var bundle = Path.Combine(root, "resources", "bundle");
+        switch (pattern)
+        {
+            case "resources/bundle/version.json":
+                Directory.CreateDirectory(bundle);
+                File.WriteAllText(Path.Combine(bundle, CarriedExecutable.RecordName), $"{{\"version\":\"{version}\"}}");
+                break;
+            case "resources/bundle/*":
+                Directory.CreateDirectory(bundle);
+                File.WriteAllText(Path.Combine(bundle, "jason"), "jason " + version);
+                File.WriteAllText(Path.Combine(bundle, CarriedExecutable.RecordName), $"{{\"version\":\"{version}\"}}");
+                break;
+            case "jason-desktop-app.desktop":
+                Directory.CreateDirectory(root);
+                File.WriteAllText(Path.Combine(root, "jason-desktop-app.desktop"), "[Desktop Entry]\nName=Jason\nExec=AppRun --no-sandbox %U\nTryExec=AppRun\nType=Application\nIcon=jason-desktop-app\n");
+                break;
+            case "usr/share/icons/hicolor/*/apps/jason-desktop-app.png":
+                foreach (var size in new[] { "256x256", "512x512" })
+                {
+                    var apps = Directory.CreateDirectory(Path.Combine(root, "usr", "share", "icons", "hicolor", size, "apps")).FullName;
+                    File.WriteAllText(Path.Combine(apps, "jason-desktop-app.png"), "icon " + size);
+                }
+
+                break;
+        }
+
+        return Task.FromResult(true);
+    }
 }
 
 /// <summary>A setup as the move started it: its raw command line, the place NSIS reads from it, and its environment.</summary>
@@ -135,7 +218,7 @@ public sealed record SetupCall(string CommandLine, string? Place, IReadOnlyDicti
 }
 
 /// <summary>
-/// A command-line install whose update to this version is complete, on a Windows or a macOS machine of the test's own: the
+/// A command-line install whose update to this version is complete, on a Windows, a macOS or a Linux machine of the test's own: the
 /// installation's data directory, runtime and release (<see cref="FakeInstallation"/>), a home and a programs folder of its
 /// own, the operating system stood in for (<see cref="FakeMoveSystem"/>), and the application's <c>jason install</c> stood in
 /// for by what U2's routine does to a retired install.
@@ -145,20 +228,49 @@ public sealed class MoveRig : IDisposable
     /// <param name="windows">A Windows machine, else a macOS one.</param>
     /// <param name="localData">The name of the account's local application data folder, which may hold a space, as a profile's often does.</param>
     public MoveRig(bool windows, string localData = "local", IReadOnlyDictionary<string, string>? variables = null)
+        : this(windows ? SetupSystem.Windows : SetupSystem.MacOs, localData, variables)
+    {
+    }
+
+    /// <param name="system">A Windows, a macOS or a Linux machine; on Linux the deb's folder and the AppImage's place are the test's own.</param>
+    public MoveRig(SetupSystem system, string localData = "local", IReadOnlyDictionary<string, string>? variables = null)
     {
         _localData = localData;
-        Windows = windows;
+        Platform = system;
+        var windows = system is SetupSystem.Windows;
         Installation = new FakeInstallation(SemanticVersion.Parse("0.48.2"), SemanticVersion.Current);
-        System = new FakeMoveSystem(Acts) { SharedApplications = Path.Combine(Installation.Root, "Applications") };
+        System = new FakeMoveSystem(Acts) { SharedApplications = Path.Combine(Installation.Root, "Applications"), PackageInstallsTo = DebApplication };
         Directory.CreateDirectory(Home);
         Directory.CreateDirectory(Temporary);
-        Places = windows
-            ? new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, @"Software\jason-tests\never-written", null) { Temporary = Temporary }
-            : new SetupPlaces(SetupSystem.MacOs, Home, null, @"Software\jason-tests\never-written", "/bin/zsh") { Temporary = Temporary };
-        Registrar = new RecordingRegistrar(windows ? Jason.Cli.Autostart.AutostartPlatform.Windows : Jason.Cli.Autostart.AutostartPlatform.MacOs);
+        Places = system switch
+        {
+            SetupSystem.Windows => new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, @"Software\jason-tests\never-written", null) { Temporary = Temporary },
+            SetupSystem.Linux => new SetupPlaces(SetupSystem.Linux, Home, null, @"Software\jason-tests\never-written", "/bin/bash")
+            {
+                Temporary = Temporary,
+                DebApplication = DebApplication,
+                SystemCommand = Path.Combine(Installation.Root, "usr", "bin", "jason"),
+                AptSource = Path.Combine(Installation.Root, "etc", "jason-desktop.sources"),
+            },
+            _ => new SetupPlaces(SetupSystem.MacOs, Home, null, @"Software\jason-tests\never-written", "/bin/zsh") { Temporary = Temporary },
+        };
+        Registrar = new RecordingRegistrar(system switch
+        {
+            SetupSystem.Windows => Jason.Cli.Autostart.AutostartPlatform.Windows,
+            SetupSystem.Linux => Jason.Cli.Autostart.AutostartPlatform.Linux,
+            _ => Jason.Cli.Autostart.AutostartPlatform.MacOs,
+        });
         Env = Installation.Env with { Setup = Places, Moves = System, Autostart = Registrar, Variables = variables ?? new Dictionary<string, string>() };
         Installation.Machine = Env;
-        Installation.Release.WithFile(windows ? CommandLineMove.WindowsAsset : CommandLineMove.MacAsset, Encoding.UTF8.GetBytes("Jason Desktop " + SemanticVersion.Current));
+        if (system is SetupSystem.Linux)
+        {
+            Installation.Release.WithFile(CommandLineMove.DebAsset, Encoding.UTF8.GetBytes("Jason Desktop " + SemanticVersion.Current));
+            Installation.Release.WithFile(CommandLineMove.AppImageAsset, Encoding.UTF8.GetBytes("Jason Desktop " + SemanticVersion.Current));
+        }
+        else
+        {
+            Installation.Release.WithFile(windows ? CommandLineMove.WindowsAsset : CommandLineMove.MacAsset, Encoding.UTF8.GetBytes("Jason Desktop " + SemanticVersion.Current));
+        }
 
         // The application's own `jason install`, run by the move as its child: what U2's routine does to a retired install,
         // stood in for; every other command is the installation's own.
@@ -180,7 +292,9 @@ public sealed class MoveRig : IDisposable
 
     public CliEnvironment Env { get; }
 
-    public bool Windows { get; }
+    public SetupSystem Platform { get; }
+
+    public bool Windows => Platform is SetupSystem.Windows;
 
     /// <summary>Every act of the move's, the system's and the routine's, in order.</summary>
     public List<string> Acts { get; } = [];
@@ -199,12 +313,41 @@ public sealed class MoveRig : IDisposable
     /// <summary>The command-line install's executable, at the path the update put this version.</summary>
     public string Old => Installation.InstallPath;
 
-    /// <summary>Where a new application goes: this account's programs folder, or on macOS its own Applications folder.</summary>
-    public string Application => Windows
-        ? Path.Combine(LocalAppData, "Programs", "jason-desktop")
-        : Path.Combine(Home, "Applications", "Jason.app");
+    /// <summary>
+    /// Where a new application goes: this account's programs folder, or on macOS its own Applications folder; on Linux the
+    /// deb's folder where there is apt, else the AppImage's place.
+    /// </summary>
+    public string Application => Platform switch
+    {
+        SetupSystem.Windows => Path.Combine(LocalAppData, "Programs", "jason-desktop"),
+        SetupSystem.Linux => System.Apt ? DebApplication : AppImage,
+        _ => Path.Combine(Home, "Applications", "Jason.app"),
+    };
 
-    public string Carried => CarriedOf(Application, Windows);
+    /// <summary>The jason the application carries; on Linux the deb's, or the copy of this version an AppImage's makes.</summary>
+    public string Carried => Platform is SetupSystem.Linux
+        ? System.Apt ? Path.Combine(DebApplication, "resources", "bundle", "jason") : AppImageCopy.CopyOf(Bundles, SemanticVersion.Current)
+        : CarriedOf(Application, Windows);
+
+    /// <summary>Linux: the folder the deb installs the application into, the test's own.</summary>
+    public string DebApplication => Path.Combine(Installation.Root, "opt", "Jason");
+
+    /// <summary>Linux: the AppImage's place in this account's home, as the install line puts it.</summary>
+    public string AppImage => Path.Combine(Home, "Applications", AppImageCopy.FileName);
+
+    /// <summary>Linux: the folder of the copies an AppImage's jason runs as, under the data directory.</summary>
+    public string Bundles => AppImageCopy.BundlesUnder(Installation.Paths.Root);
+
+    /// <summary>Linux: the deb's application of <paramref name="version"/> at <paramref name="application"/>, as apt installs it.</summary>
+    public static void PlantPackage(string application, string version)
+    {
+        var bundle = Path.Combine(application, "resources", "bundle");
+        Directory.CreateDirectory(bundle);
+        File.WriteAllText(Path.Combine(application, "resources", "package-type"), "deb\n");
+        File.WriteAllText(Path.Combine(application, "jason-desktop-app"), "Jason Desktop " + version);
+        File.WriteAllText(Path.Combine(bundle, "jason"), "jason " + version);
+        File.WriteAllText(Path.Combine(bundle, CarriedExecutable.RecordName), $"{{\"version\":\"{version}\"}}");
+    }
 
     /// <summary>What the application's <c>jason install</c> does, where a row says; else <see cref="Retire"/>.</summary>
     public Func<IReadOnlyList<string>, string?, FinishedCommand>? Routine { get; set; }
