@@ -30,7 +30,8 @@ Everything about a release happens in one repository, `reply-team/jason-ai`: the
 A release starts as the release pull request into `main`, whose run builds and tests the tree on Linux, macOS and
 Windows. Once that run is green, the tag `v<version>` is pushed on the pull request's head and builds the release from
 it: the critical tests again under the tag's version, the three executables, the macOS and Windows ones signed
-and their archived signatures verified, the plugins' and the UI's packages, and the desktop's. The release job then writes the
+and their archived signatures verified, the plugins' and the UI's packages, the desktop's, and the apt repository's
+index for the desktop's deb, signed and read back as a machine's apt reads it. The release job then writes the
 manifest and the checksums and publishes the release at once, with the assets below and its notes, as the latest
 release unless a newer one already is or the version is a release candidate. The pull request is merged into `main` only
 after the publication is checked: the README and every page GitHub shows are read from `main`, so `main` never
@@ -75,6 +76,10 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-desktop-linux-x64.deb` | the desktop for Linux on x64 as a deb, not signed, carrying the linux-x64 executable; it installs to `/opt/Jason` |
 | `jason-desktop-linux-x64.AppImage` | the same application as one AppImage file, not signed, on the AppImage runtime that needs no libfuse2, its block map inside it; it needs a system that lets it run its sandbox, and on Ubuntu 24.04 and later is built to name the deb instead |
 | `latest-linux.yml` | the Linux desktop's update feed: the version, the deb's and the AppImage's names and their SHA-512 |
+| `Packages` | the apt repository's index of the deb: its control fields, its file name, its size, MD5 and SHA-256 |
+| `Release` | the apt repository's release file: the origin `Jason`, the architecture, the date, and the size, MD5 and SHA-256 of `Packages` |
+| `InRelease` | `Release`, clearsigned with the apt repository's key |
+| `Release.gpg` | `Release`'s detached signature by the same key |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -174,6 +179,29 @@ and harness root, stops a runtime started from any copy of an AppImage's `jason`
 from them, says what came of each step and what to do by hand for one that failed, and says what removes the
 application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. [desktop.md](desktop.md)
 lists the same steps for a Jason that will not start.
+
+**The apt repository's index is published beside the deb, from 0.49.1 on:** `Packages`, `Release`, `InRelease` and
+`Release.gpg`, the four files apt reads from a flat repository, so that a release's downloads are an apt repository
+holding the one deb. `Packages` is the deb's own control fields with its file name, `./jason-desktop-linux-x64.deb`, its
+size, MD5 and SHA-256; `Release` names `Jason` as its origin and label, the suite `stable`, the deb's architecture and
+the date it was written, with the size, MD5 and SHA-256 of `Packages`; `InRelease` is `Release` clearsigned and `Release.gpg` its
+detached signature, both by the apt repository's key, whose public half is
+[`install/jason-desktop-archive-keyring.gpg`](../install/jason-desktop-archive-keyring.gpg): an Ed25519 key that
+certifies, kept offline, with an Ed25519 subkey that signs. The release's `apt-index` job writes them from the deb the
+Linux job built, signing with that subkey, which the `signing` environment holds as the secret `APT_SIGNING_KEY`, and
+then reads them back as a machine's apt reads them, against that public key: gpgv's verdict on both signatures,
+`InRelease` signing the very text of `Release`, the deb's size and hashes against `Packages`, the hashes of `Packages`
+against `Release`, `apt-get update` reading a copy of the files with no warning, through `InRelease` and again through
+`Release` and `Release.gpg`, and every key in that file and every subkey that signs unrevoked and more than 90 days from
+its expiry, read from the key itself.
+Any of these failing stops the release before anything is published, the last one naming the date: an expired key
+makes apt refuse the index, and every machine that reads the repository then takes no update until a deb is installed
+by hand, so the key is extended or replaced, and the new public key shipped in a deb, before then. The job may write
+nothing; the release job needs it and attaches the four files, which `checksums.txt` lists after the desktop's. A pull
+request has no signing environment, so CI's desktop job writes and reads back the same files from its own deb with a
+key the run makes, and says so; before that it holds the repository's own key to the same 90 days, so a key near its
+expiry turns every pull request red, a hotfix's among them. `.github/scripts/write-apt-index.sh`, `check-apt-index.sh`
+and `check-apt-key.sh` say each step.
 
 ## 3. The manifest
 

@@ -3010,7 +3010,7 @@ jobs:
   # Linux packages, the one platform's whose packages need no signature: the package action builds a deb and an
   # AppImage as a release does, around a jason this job publishes at a candidate's version, reads them back and starts
   # each once under a virtual display, with Electron's Linux distribution held to the sha256 the lockfile's electron
-  # package names.
+  # package names; and the apt repository's index, written from that deb and read back as a release does.
   desktop:
     name: The desktop on ubuntu
     needs: version
@@ -3082,6 +3082,31 @@ jobs:
           artifact: ci-desktop-linux-x64
           retention-days: 3
           desktop: true
+
+      # The apt repository's index, written from the deb this job just built and read back as a machine's apt reads it,
+      # by the release's own two scripts, as release.yml's apt-index job runs them. That job signs with the repository's
+      # signing subkey and checks against the repository's public key; a pull request has no signing environment, so this
+      # step makes a key of the run's own in the same shape, an Ed25519 key that certifies with a signing subkey, hands
+      # the writer that subkey alone, checks against that key's public half, and says so. Nothing is uploaded. First, the
+      # repository's own key is held to its expiry, as the release's check holds it: from 90 days before it expires, every
+      # pull request is red until the key is extended or replaced, a hotfix's among them, which has no dry run before its
+      # tag.
+      - name: Write and read back the apt repository's index as a release does, signed with a key this run makes
+        shell: bash
+        working-directory: .
+        run: |
+          bash .github/scripts/check-apt-key.sh install/jason-desktop-archive-keyring.gpg
+          export GNUPGHOME="$RUNNER_TEMP/apt-run-key"
+          rm -rf "$GNUPGHOME" && mkdir -m 700 "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key 'Jason apt index, this run alone' ed25519 cert 3y
+          fpr=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          gpg --batch --passphrase '' --quick-add-key "$fpr" ed25519 sign 3y
+          keyring="$RUNNER_TEMP/apt-run-key.gpg"
+          gpg --batch --yes --output "$keyring" --export "$fpr"
+          echo "::notice title=apt index::This run signs its apt index with a key this run made ($fpr), not the release's: a pull request has no signing environment."
+          APT_SIGNING_KEY="$(gpg --armor --export-secret-subkeys "$fpr")" bash .github/scripts/write-apt-index.sh desktop/dist
+          bash .github/scripts/check-apt-index.sh desktop/dist "$keyring"
+          gpgconf --kill all
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not

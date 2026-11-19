@@ -46,6 +46,10 @@ at this version and released only after its tests passed.
 | `jason-desktop-linux-x64.deb` | Jason Desktop for Linux on x64, as a package for Debian and Ubuntu: `sudo apt install ./jason-desktop-linux-x64.deb` |
 | `jason-desktop-linux-x64.AppImage` | the same application for Linux on x64 as one file, to make executable and run from wherever you keep it, on a system that lets it run its sandbox |
 | `latest-linux.yml` | the Linux desktop's update feed: this version, the deb's and the AppImage's names and their SHA-512 |
+| `Packages` | the apt repository's index of the deb: its control fields, its file name, its size and its hashes |
+| `Release` | the apt repository's release file: the origin `Jason` and the hashes of `Packages`, which apt reads signed as `InRelease`, or with `Release.gpg` |
+| `InRelease` | `Release`, clearsigned with the apt repository's key |
+| `Release.gpg` | `Release`'s detached signature by the same key |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
 included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by

@@ -303,9 +303,9 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The desktop's files leave manifest.json as it was: the release's own line, run over a folder that holds them and
-    /// again over one that does not with their names taken off <c>-Plugins</c>, writes the same manifest but for the time
-    /// it was written. So an updater reads a release with the desktop exactly as it read the one before it, from 0.19.0
+    /// The desktop's files and the apt repository's index leave manifest.json as it was: the release's own line, run over
+    /// a folder that holds them and again over one that does not with their names taken off <c>-Plugins</c>, writes the
+    /// same manifest but for the time it was written. So an updater reads a release with the desktop exactly as it read the one before it, from 0.19.0
     /// on, the manifest's platforms stay the three a <c>jason update</c> applies, and no desktop file is named in it.
     /// </summary>
     [Fact]
@@ -321,12 +321,12 @@ public partial class ReleaseWorkflowTests
         Assert.True(exit == 0, stderr);
 
         var without = Staged(second);
-        foreach (var desktop in ReleaseAssets.Desktop)
+        foreach (var desktop in (string[])[.. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex])
         {
             File.Delete(Path.Combine(without, desktop));
         }
 
-        var stripped = invocation.Replace("," + string.Join(',', ReleaseAssets.Desktop) + " ", " ", StringComparison.Ordinal);
+        var stripped = invocation.Replace("," + string.Join(',', [.. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex]) + " ", " ", StringComparison.Ordinal);
         Assert.NotEqual(invocation, stripped);
         (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", ExpandForThisMachine(stripped, without));
         Assert.True(exit == 0, stderr);
@@ -550,7 +550,8 @@ public partial class ReleaseWorkflowTests
     /// CI's desktop job builds the Linux packages as a release does, through the same action, after its node tests and on
     /// the run's own SDK, at a candidate's version: the release this tree is on the way to with a ci word and the run's
     /// number, since a package is never built at the -dev version the tree carries. It adds steps and no job. The
-    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up.
+    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up, and the apt
+    /// repository's index is written from the deb and read back right after the package call.
     /// </summary>
     [Fact]
     public void Ci_s_desktop_job_builds_the_linux_packages_as_a_release_does()
@@ -561,7 +562,7 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep],
             names);
         // zsh, the Mac's own shell, before the node tests: its real login shell row fails under CI without it.
         Assert.Contains("install -y --no-install-recommends zsh", Scalar(steps[4], "run"), StringComparison.Ordinal);
