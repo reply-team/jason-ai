@@ -181,7 +181,7 @@ public class ManagerLoopTests
     /// <summary>
     /// Silence is the case the cadence exists for: work that simply sits there produces no line at all, so
     /// nothing would ever summon a review of it. Going live is a line, and its review comes first; the cadence is
-    /// measured from that review.
+    /// measured from that review, not from the start, so the clock moves between the two.
     /// </summary>
     [Fact]
     public async Task A_due_review_is_created_with_nothing_in_the_chronicle_to_cause_it()
@@ -189,7 +189,8 @@ public class ManagerLoopTests
         await using var host = await FakeHostRuntime.StartAsync(Ct, Defaults(reviewSeconds: 3_600));
         var campaign = await host.CampaignAsync(Ct);
 
-        // The campaign went live a moment ago: the next scan summons the review its start asks for, and that one alone.
+        // Half an hour after the campaign went live, the next scan summons the review its start asks for, and that one alone.
+        host.Clock.Advance(TimeSpan.FromMinutes(30));
         await host.ScanAsync(Ct);
         var started = await CheckInAsync(host, campaign);
         host.Track(started.Id);
@@ -198,10 +199,16 @@ public class ManagerLoopTests
         Assert.Equal(LineageState.Root, started.Lineage!.State);
         await host.WaitForStatusAsync(started.Id, WorkItemStatus.Succeeded, Ct);
 
-        // The loop's own tick is on this clock, so the hour below wakes it for a scan of its own beside the one
+        // Seventy minutes after the start is past an hour from the start and short of an hour from its review: nothing
+        // is due, whichever scan looks, the loop's own tick included.
+        host.Clock.Advance(TimeSpan.FromMinutes(40));
+        await host.ScanAsync(Ct);
+        Assert.Empty(await CheckInsAsync(host, campaign, except: started.Id));
+
+        // The loop's own tick is on this clock, so the move below may wake it for a scan of its own beside the one
         // asked for here. Scans run one at a time and either may be the one that summons, so the proof is the
         // check-in itself, read back once this scan has had its turn.
-        host.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        host.Clock.Advance(TimeSpan.FromMinutes(20));
         await host.ScanAsync(Ct);
 
         var checkIn = Assert.Single(await CheckInsAsync(host, campaign, except: started.Id));
@@ -222,6 +229,34 @@ public class ManagerLoopTests
         host.Clock.Advance(TimeSpan.FromSeconds(3_600));
         await host.ScanAsync(Ct);
         Assert.Single(await CheckInsAsync(host, campaign, except: checkIn.Id), item => item.Id != started.Id);
+    }
+
+    /// <summary>
+    /// An installation where no role can be launched, as a fresh one is: no execution profile, and no entry command for
+    /// every role. The review its start summons fails at the claim and says why at once; that failure is the check-in's
+    /// own line and summons no successor; and the campaign's work is claimed after it rather than held behind it. The
+    /// work is of a role with a command of its own, so that it runs where the manager cannot.
+    /// </summary>
+    [Fact]
+    public async Task A_start_where_no_role_can_launch_fails_its_review_at_once_and_holds_nothing_behind_it()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var campaign = await host.CampaignAsync(Ct);
+
+        await host.ScanAsync(Ct);
+        var started = await CheckInAsync(host, campaign);
+        Assert.Equal(JournalKinds.CampaignStarted, (string?)started.Context["trigger"]);
+        Assert.Equal(WorkItemStatus.Failed, started.Status);
+        Assert.Equal(AttemptErrors.RoleNotLaunchable, started.LastError!.Code);
+
+        await host.ScanAsync(Ct);
+        Assert.Equal(started.Id, (await CheckInAsync(host, campaign)).Id);
+
+        await host.RoleAsync("fake-succeed", Ct, "succeed");
+        var work = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-succeed" }, Ct);
+        await host.ScanAsync(Ct);
+        await host.WaitForStatusAsync(work.Id, WorkItemStatus.Succeeded, Ct);
+        Assert.Equal(started.Id, (await CheckInAsync(host, campaign)).Id);
     }
 
     /// <summary>

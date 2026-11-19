@@ -21,6 +21,8 @@ public class StartSummonsManagerTests
 
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
+    private const int Hourly = 3_600;
+
     [Fact]
     [Critical(Family.M1, "a start wakes the manager")]
     public async Task A_started_campaign_has_a_check_in_at_the_next_scan_caused_by_the_start()
@@ -79,12 +81,13 @@ public class StartSummonsManagerTests
 
     /// <summary>
     /// The scan order behind the row above: the campaign with an open check-in is skipped whole and reads nothing, so the
-    /// resume's line is still above the watermark when the open review ends, and it summons one more — and only one.
+    /// resume's line is still above the watermark when the open review ends, and it summons one more — and only one. The
+    /// cadence is then measured from that check-in, not from the start: the clock moves between the two.
     /// </summary>
     [Fact]
     public async Task A_start_while_a_check_in_is_open_summons_one_more_once_it_ends()
     {
-        using var harness = new DispatchHarness(Noon);
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = Hourly });
         var campaign = await CreateAsync(harness);
         await StartAsync(harness, campaign);
         Assert.Equal(1, await harness.SummonAsync(Ct));
@@ -94,6 +97,8 @@ public class StartSummonsManagerTests
         await StartAsync(harness, campaign);
         Assert.Equal(0, await harness.SummonAsync(Ct));
 
+        // Half an hour after the resume, the open review ends and the resume's line summons the next.
+        harness.Clock.Advance(TimeSpan.FromMinutes(30));
         await FinishCheckInAsync(harness);
         Assert.Equal(1, await harness.SummonAsync(Ct));
 
@@ -104,9 +109,15 @@ public class StartSummonsManagerTests
             Assert.Equal(await StartLineAsync(harness, campaign, latest: true), (string?)second.Context["cause"]!["journal_entry_id"]);
         }
 
-        // And the cadence is measured from that check-in, so nothing is due again at once.
+        // And the cadence is measured from that check-in. Seventy minutes after the resume is past an hour from the
+        // resume and short of an hour from the check-in: nothing is due. An hour after the check-in, the review is.
         await FinishCheckInAsync(harness);
+        harness.Clock.Advance(TimeSpan.FromMinutes(40));
         Assert.Equal(0, await harness.SummonAsync(Ct));
+        harness.Clock.Advance(TimeSpan.FromMinutes(20));
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+        await using var read = harness.Open();
+        Assert.Equal("scheduled", (string?)(await read.WorkItems.Where(w => w.Role == ManagerCheckIn.Role).OrderByDescending(w => w.Id).FirstAsync(Ct)).Context["review_intent"]);
     }
 
     /// <summary>
