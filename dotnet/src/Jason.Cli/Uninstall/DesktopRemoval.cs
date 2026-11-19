@@ -660,36 +660,76 @@ public static partial class DesktopRemoval
         return Path.Combine(places.ConfigHome ?? Path.Combine(places.Home, ".config"), "autostart", Identifier + ".desktop");
     }
 
-    /// <summary>A desktop entry's value for <paramref name="key"/>, as written on its line; null where it has none.</summary>
-    private static string? DesktopEntryValue(string text, string key) =>
-        text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..];
-
-    /// <summary>
-    /// The program a desktop entry's <c>Exec</c> starts, its first argument: the string value's own escapes undone, then a
-    /// quoted argument read with each backslash taking the character after it, as the Desktop Entry Specification reads it and
-    /// <c>autostartExec</c> writes it; an unquoted one up to the first space.
-    /// </summary>
-    internal static string? DesktopEntryProgram(string text)
+    /// <summary>A desktop entry's value for <paramref name="key"/>, the string value's own escapes undone; null where it has none.</summary>
+    private static string? DesktopEntryValue(string text, string key)
     {
-        if (DesktopEntryValue(text, "Exec") is not { Length: > 0 } exec)
+        if (text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..] is not { } written)
         {
             return null;
         }
 
         var value = new System.Text.StringBuilder();
-        for (var at = 0; at < exec.Length; at++)
+        for (var at = 0; at < written.Length; at++)
         {
-            if (exec[at] == '\\' && at + 1 < exec.Length && exec[at + 1] is '\\' or 's' or 'n' or 't' or 'r')
+            if (written[at] == '\\' && at + 1 < written.Length && written[at + 1] is '\\' or 's' or 'n' or 't' or 'r')
             {
-                value.Append(exec[++at] switch { 's' => ' ', 'n' => '\n', 't' => '\t', 'r' => '\r', var other => other });
+                value.Append(written[++at] switch { 's' => ' ', 'n' => '\n', 't' => '\t', 'r' => '\r', var other => other });
             }
             else
             {
-                value.Append(exec[at]);
+                value.Append(written[at]);
             }
         }
 
-        var line = value.ToString();
+        return value.ToString();
+    }
+
+    /// <summary>
+    /// A value as a desktop entry's string spells it, which <see cref="DesktopEntryValue"/> reads back: a backslash, a newline,
+    /// a tab and a carriage return each as its escape (the Desktop Entry Specification, "Possible value types").
+    /// </summary>
+    internal static string DesktopEntryString(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal).Replace("\t", "\\t", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path as the first, quoted argument of an entry's <c>Exec</c>, which <see cref="DesktopEntryProgram"/> reads back (the
+    /// specification, "The Exec key"): a double quote, a backtick, a dollar sign and a backslash each take a backslash, and a
+    /// per-cent is doubled, since a launcher reads field codes before it reads quotes; then the string's own escapes
+    /// (<see cref="DesktopEntryString"/>).
+    /// </summary>
+    internal static string DesktopEntryArgument(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var quoted = new System.Text.StringBuilder("\"");
+        foreach (var character in path)
+        {
+            _ = character switch
+            {
+                '"' or '`' or '$' or '\\' => quoted.Append('\\').Append(character),
+                '%' => quoted.Append("%%"),
+                _ => quoted.Append(character),
+            };
+        }
+
+        return DesktopEntryString(quoted.Append('"').ToString());
+    }
+
+    /// <summary>
+    /// The program a desktop entry's <c>Exec</c> starts, its first argument: the string value's own escapes undone, then a
+    /// quoted argument read with each backslash taking the character after it and a doubled per-cent read as one, as the
+    /// Desktop Entry Specification reads it and <see cref="DesktopEntryArgument"/> and <c>autostartExec</c> write it; an
+    /// unquoted one up to the first space.
+    /// </summary>
+    internal static string? DesktopEntryProgram(string text)
+    {
+        if (DesktopEntryValue(text, "Exec") is not { Length: > 0 } line)
+        {
+            return null;
+        }
+
         if (!line.StartsWith('"'))
         {
             var end = line.IndexOf(' ', StringComparison.Ordinal);
@@ -702,6 +742,9 @@ public static partial class DesktopRemoval
             switch (line[at])
             {
                 case '\\' when at + 1 < line.Length:
+                    program.Append(line[++at]);
+                    break;
+                case '%' when at + 1 < line.Length && line[at + 1] == '%':
                     program.Append(line[++at]);
                     break;
                 case '"':

@@ -607,14 +607,28 @@ install_appimage() {
     fi
 
     # The menu entry and the icons, in the account's own data folder, where desktops and launchers read them. The entry
-    # starts the file where it is, and is hidden once that file is gone (TryExec).
+    # starts the file where it is, and is hidden once that file is gone (TryExec). The path is spelled as the Desktop Entry
+    # Specification reads it: quoted in Exec, where a double quote, a backtick, a dollar sign and a backslash take a
+    # backslash and a per-cent is doubled; then, in both lines, every backslash doubled as a string's own escape. awk reads
+    # the path from its environment, since -v would take its backslashes as escapes.
     SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$SHARE/applications"
-    awk -v exec="$DEST" '
-        /^Exec=/ { print "Exec=\"" exec "\" %U"; next }
+    PLACED="$DEST" awk '
+        function spelled(path, quoted,    out, i, c) {
+            out = ""
+            for (i = 1; i <= length(path); i++) {
+                c = substr(path, i, 1)
+                if (quoted && (c == "\"" || c == "`" || c == "$")) out = out "\\\\" c
+                else if (c == "\\") out = out (quoted ? "\\\\\\\\" : "\\\\")
+                else if (quoted && c == "%") out = out "%%"
+                else out = out c
+            }
+            return out
+        }
+        /^Exec=/ { print "Exec=\"" spelled(ENVIRON["PLACED"], 1) "\" %U"; next }
         /^TryExec=/ { next }
         { print }
-        /^\[Desktop Entry\]$/ { print "TryExec=" exec }
+        /^\[Desktop Entry\]$/ { print "TryExec=" spelled(ENVIRON["PLACED"], 0) }
     ' "$ROOT/jason-desktop-app.desktop" > "$SHARE/applications/jason-desktop.desktop" || fail "the menu entry could not be written to $SHARE/applications. Jason Desktop is installed at $DEST"
     for ICON in "$ROOT"/usr/share/icons/hicolor/*/apps/jason-desktop-app.png; do
         [ -f "$ICON" ] || continue

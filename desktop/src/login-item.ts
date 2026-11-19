@@ -88,7 +88,8 @@ export function autostartExec(launcher: string): string | null {
 export function autostartEntry(launcher: string): string {
     const exec = autostartExec(launcher);
     // TryExec: a session skips the entry once the file it names is gone, as after the system's own removal of the package.
-    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${exec === null ? '' : `TryExec=${launcher}\n`}${exec ?? ''}\n`;
+    // It is a string, not quoted: of a launcher Exec can spell, only a backslash takes the string's escape.
+    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${exec === null ? '' : `TryExec=${launcher.replaceAll('\\', '\\\\')}\n`}${exec ?? ''}\n`;
 }
 
 /** Whether this start was the computer's, at the person's sign-in. */

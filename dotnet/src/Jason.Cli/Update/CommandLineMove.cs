@@ -591,7 +591,8 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>
     /// Linux, an AppImage: what the install line writes beside the file, made here as there. The copy of the jason it carries
     /// under the data directory, for its version, which sets the machine up; then the menu entry, which starts the file where it
-    /// is and is hidden once that file is gone (<c>TryExec</c>), and the icons, in the account's data folder. Null where all of it
+    /// is and is hidden once that file is gone (<c>TryExec</c>), the path spelled as the Desktop Entry Specification reads it
+    /// (<see cref="Uninstall.DesktopRemoval.DesktopEntryArgument"/>), and the icons, in the account's data folder. Null where all of it
     /// is there; else why not.
     /// </summary>
     private async Task<string?> PrepareAppImageAsync(SetupPlaces places, string file, SemanticVersion version, CancellationToken cancellationToken)
@@ -621,10 +622,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                     continue;
                 }
 
-                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec=\"{file}\" %U" : line);
+                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec={Uninstall.DesktopRemoval.DesktopEntryArgument(file)} %U" : line);
                 if (line == "[Desktop Entry]")
                 {
-                    entry.Add($"TryExec={file}");
+                    entry.Add($"TryExec={Uninstall.DesktopRemoval.DesktopEntryString(file)}");
                 }
             }
 

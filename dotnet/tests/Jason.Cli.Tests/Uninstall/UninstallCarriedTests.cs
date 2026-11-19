@@ -1741,7 +1741,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// <c>desktop/bundle</c>, which is the data directory's own and goes with it, so that copy is not an installation the
     /// data directory holds and the purge is not refused for it. Catches the purge refused on every AppImage machine. And the
     /// folder the install line made for the file, <c>~/Applications</c>, goes once it holds nothing else, while a folder of the
-    /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home.
+    /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home. The menu entry is found by
+    /// what its writers write, whatever the file's path holds: catches it left in the menu for a folder whose name holds a
+    /// per-cent and a backslash.
     /// </summary>
     [Theory]
     [InlineData(false, false)]
@@ -1760,8 +1762,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
         PathEntry.AddToProfile(bashrc, bin);
         CreatedProfiles.Add(places, profile);
         var skill = UninstallReceiptTests.Recorded(Path.Combine(Home, ".claude", "skills"), "operating-the-installation");
-        var atLogin = OpenAtLoginEntry(file);
-        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={file}\nName=Jason\nExec=\"{file}\" %U\nIcon=jason-desktop-app\n");
+        // The application offers no Open Jason at Login for a launcher with a per-cent (login-item.ts, autostartExec).
+        var atLogin = file.Contains('%', StringComparison.Ordinal) ? null : OpenAtLoginEntry(file);
+        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={DesktopRemoval.DesktopEntryString(file)}\nName=Jason\nExec={DesktopRemoval.DesktopEntryArgument(file)} %U\nIcon=jason-desktop-app\n");
         string[] icons = [.. new[] { "256x256", "512x512" }.Select(size => Written(Path.Combine(XdgData, "icons", "hicolor", size, "apps", "jason-desktop-app.png"), "png"))];
         var anotherIcon = Written(Path.Combine(XdgData, "icons", "hicolor", "256x256", "apps", "another-app.png"), "png");
         var desktop = Path.Combine(_dir.Paths.Root, "desktop");
@@ -1778,7 +1781,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
         Assert.Equal("deleted", plan.GetProperty("application_fate").GetString());
         Assert.Equal(file, plan.GetProperty("application").GetString());
-        foreach (var gone in new[] { wrapper, profile, skill, atLogin, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
+        foreach (var gone in new[] { wrapper, profile, skill, atLogin ?? menu, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
         }
@@ -2030,7 +2033,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// </summary>
     private (string Copy, string File) AppImage(bool linePlace = false)
     {
-        var file = Written(linePlace ? Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage") : Path.Combine(Home, "My Apps", "Jason.AppImage"), "appimage");
+        var file = Written(linePlace ? Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage") : Path.Combine(Home, """My "Apps" 100% \ $x""", "Jason.AppImage"), "appimage");
         var copy = Bundle(Path.Combine(_dir.Paths.Root, "desktop", "bundle", "0.34.0"), "jason");
         Written(Path.Combine(_dir.Paths.Root, "desktop", "appimage.json"), JsonSerializer.Serialize(new { file }));
         return (copy, file);
@@ -2055,7 +2058,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
     private string OpenAtLoginEntry(string launcher) =>
         Written(
             Path.Combine(XdgConfig, "autostart", DesktopRemoval.Identifier + ".desktop"),
-            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec=\"{launcher}\" --opened-at-login\n");
+            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={DesktopRemoval.DesktopEntryString(launcher)}\nExec={DesktopRemoval.DesktopEntryArgument(launcher)} --opened-at-login\n");
 
     /// <summary>A runtime that goes when asked: its descriptor, then its process.</summary>
     private FakeHandler StopsWhenAsked(StepLog log, FakeProcessControl processes) => new(_ =>

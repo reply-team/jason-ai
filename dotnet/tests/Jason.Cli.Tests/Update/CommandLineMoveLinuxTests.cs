@@ -76,14 +76,19 @@ public sealed class CommandLineMoveLinuxTests
     /// Where there is no apt: the release's AppImage downloaded and held to its line, put in the account's Applications folder
     /// by one rename, executable, with nothing staged left beside it; its menu entry written to start that file and hidden once
     /// it is gone, its icons beside it; and the copy of the jason it carries made under the data directory, which runs the
-    /// routine and starts the runtime.
+    /// routine and starts the runtime. The entry spells the file's path as the Desktop Entry Specification reads it, whatever
+    /// the home's name holds: TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a
+    /// backslash taking a backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher
+    /// reads as another file, or as a field code.
     /// </summary>
-    [Fact]
+    [Theory]
+    [InlineData("home", "home", "home")]
+    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""")]
     [UnsupportedOSPlatform("windows")]
-    public async Task Without_apt_the_AppImage_is_put_in_place_by_one_rename_with_its_menu_entry_and_its_copy()
+    public async Task Without_apt_the_AppImage_is_put_in_place_by_one_rename_with_its_menu_entry_and_its_copy(string home, string tryExecHome, string execHome)
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), LinuxRow);
-        using var rig = new MoveRig(SetupSystem.Linux);
+        using var rig = new MoveRig(SetupSystem.Linux, home: home);
         rig.System.Apt = false;
         rig.Installation.WithRuntime();
         var copy = AppImageCopy.CopyOf(rig.Bundles, SemanticVersion.Current);
@@ -98,9 +103,10 @@ public sealed class CommandLineMoveLinuxTests
 
         var share = Path.Combine(rig.Home, ".local", "share");
         var entry = File.ReadAllLines(Path.Combine(share, "applications", "jason-desktop.desktop"));
-        Assert.Equal(["[Desktop Entry]", $"TryExec={rig.AppImage}"], entry[..2]);
-        Assert.Contains($"Exec=\"{rig.AppImage}\" %U", entry);
+        Assert.Equal(["[Desktop Entry]", $"TryExec={Path.Combine(rig.Installation.Root, tryExecHome, "Applications", AppImageCopy.FileName)}"], entry[..2]);
+        Assert.Contains($"Exec=\"{Path.Combine(rig.Installation.Root, execHome, "Applications", AppImageCopy.FileName)}\" %U", entry);
         Assert.Single(entry, line => line.StartsWith("TryExec=", StringComparison.Ordinal));
+        Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(share, "icons", "hicolor", "512x512", "apps", "jason-desktop-app.png")));
 
         Assert.Equal(SemanticVersion.Current.ToString(), CarriedExecutable.Of(copy)!.Version);

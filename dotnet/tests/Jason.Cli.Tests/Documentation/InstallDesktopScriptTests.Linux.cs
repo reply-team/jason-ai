@@ -153,13 +153,19 @@ public sealed partial class InstallDesktopScriptTests
     /// ~/Applications/jason-desktop-linux-x64.AppImage by one rename, the menu entry written under ~/.local/share with
     /// TryExec naming the file, so it hides once the file is gone, and Exec starting it, the icons beside it, and the jason it
     /// carries copied under the data directory as the application's own start copies it, whose `jason install` then runs.
+    /// The entry spells the file's path as the Desktop Entry Specification reads it, whatever the home's name holds: TryExec
+    /// with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a backslash and
+    /// a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file, or as a field
+    /// code.
     /// </summary>
-    [Fact]
+    [Theory]
+    [InlineData("home", "home", "home")]
+    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""")]
     [Critical(Family.I1, "install.sh places the AppImage, its menu entry and its copy on Linux with no password")]
     [UnsupportedOSPlatform("windows")]
-    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up()
+    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up(string home, string tryExecHome, string execHome)
     {
-        var linux = Linux.Start(_tree, apt: false);
+        var linux = Linux.Start(_tree, apt: false, home: home);
 
         var run = linux.Run(linux.Feed());
 
@@ -168,8 +174,9 @@ public sealed partial class InstallDesktopScriptTests
         Assert.Equal([placed], linux.InApplications());
         var entry = File.ReadAllLines(Path.Combine(linux.Home, ".local", "share", "applications", "jason-desktop.desktop"));
         Assert.Equal("[Desktop Entry]", entry[0]);
-        Assert.Equal($"TryExec={placed}", entry[1]);
-        Assert.Contains($"Exec=\"{placed}\" %U", entry);
+        var above = Path.GetDirectoryName(linux.Home)!;
+        Assert.Equal($"TryExec={Path.Combine(above, tryExecHome, "Applications", "jason-desktop-linux-x64.AppImage")}", entry[1]);
+        Assert.Contains($"Exec=\"{Path.Combine(above, execHome, "Applications", "jason-desktop-linux-x64.AppImage")}\" %U", entry);
         Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(linux.Home, ".local", "share", "icons", "hicolor", "256x256", "apps", "jason-desktop-app.png")));
         var copy = Path.Combine(linux.Data, "desktop", "bundle", LinuxVersion);
@@ -254,10 +261,10 @@ public sealed partial class InstallDesktopScriptTests
 
         private readonly TempTree _tree;
 
-        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse)
+        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse, string home)
         {
             _tree = tree;
-            Home = tree.NewDirectory("home");
+            Home = tree.NewDirectory(home);
             Applications = Path.Combine(Home, "Applications");
             Data = tree.NewDirectory("data");
             Log = Path.Combine(tree.NewDirectory("log"), "calls.log");
@@ -327,10 +334,11 @@ public sealed partial class InstallDesktopScriptTests
             + "  'install --roles') printf '%s\\n' \"${STANDIN_REPORT:-$STANDIN_DEFAULT}\" | sed \"s|{self}|$HOME/.local/bin/jason|g; s|{dir}|$HOME/.local/bin|g\" ;;\n"
             + "esac\n";
 
-        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true)
+        /// <param name="home">The name of the account's home folder, which may hold any character a file name can.</param>
+        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true, string home = "home")
         {
             Assert.SkipWhen(!OperatingSystem.IsLinux(), "install.sh's Linux routes are run by sh on Linux; CI's Linux leg runs these rows.");
-            return new Linux(tree, apt, pkexec, userNamespaces, fuse);
+            return new Linux(tree, apt, pkexec, userNamespaces, fuse, home);
         }
 
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];

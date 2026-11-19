@@ -233,9 +233,11 @@ public sealed class MoveRig : IDisposable
     }
 
     /// <param name="system">A Windows, a macOS or a Linux machine; on Linux the deb's folder and the AppImage's place are the test's own.</param>
-    public MoveRig(SetupSystem system, string localData = "local", IReadOnlyDictionary<string, string>? variables = null)
+    /// <param name="home">The name of the account's home folder, which may hold any character a file name can.</param>
+    public MoveRig(SetupSystem system, string localData = "local", IReadOnlyDictionary<string, string>? variables = null, string home = "home")
     {
         _localData = localData;
+        _home = home;
         Platform = system;
         var windows = system is SetupSystem.Windows;
         Installation = new FakeInstallation(SemanticVersion.Parse("0.48.2"), SemanticVersion.Current);
@@ -299,7 +301,9 @@ public sealed class MoveRig : IDisposable
     /// <summary>Every act of the move's, the system's and the routine's, in order.</summary>
     public List<string> Acts { get; } = [];
 
-    public string Home => Path.Combine(Installation.Root, "home");
+    public string Home => Path.Combine(Installation.Root, _home);
+
+    private readonly string _home;
 
     public string LocalAppData => Path.Combine(Installation.Root, _localData);
 

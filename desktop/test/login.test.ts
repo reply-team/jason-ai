@@ -176,11 +176,14 @@ test('on Linux the entry goes under $XDG_CONFIG_HOME when it names an absolute f
     assert.equal(autostartEntryFile('/home/a', { XDG_CONFIG_HOME: '' }), join('/home/a', '.config', 'autostart', 'ai.jasonharness.desktop.desktop'));
 });
 
-test('on Linux the Exec line quotes the launcher as the Desktop Entry Specification says, and a launcher it cannot spell is not offered', () => {
+test('on Linux the Exec and TryExec lines spell the launcher as the Desktop Entry Specification says, and a launcher it cannot spell is not offered', () => {
     assert.equal(autostartExec('/opt/Jason/jason-desktop-app'), `Exec="/opt/Jason/jason-desktop-app" ${loginFlag}`);
     // Inside quotes a double quote, a backtick, a dollar sign and a backslash take a backslash; the string escape then
     // doubles every backslash.
     assert.equal(autostartExec('/home/a/R&D "x" `y` $z \\w/Jason.AppImage'), `Exec="/home/a/R&D \\\\"x\\\\" \\\\\`y\\\\\` \\\\$z \\\\\\\\w/Jason.AppImage" ${loginFlag}`);
+    // TryExec is a string and is not quoted: only the string escape, a backslash doubled. Catches a session that reads a
+    // backslash's escape and looks for another file, or drops the line as an unreadable value.
+    assert.ok(autostartEntry('/home/a/R&D "x" `y` $z \\w/Jason.AppImage').includes('\nTryExec=/home/a/R&D "x" `y` $z \\\\w/Jason.AppImage\n'));
     assert.equal(autostartExec('/home/a/100%/Jason.AppImage'), null, 'a per-cent begins a field code');
     assert.equal(autostartExec('/home/a/new\nline/Jason.AppImage'), null);
     assert.equal(new LoginItem({ platform: 'linux', home: '/home/a', executable: '/home/a/100%/Jason.AppImage', electron: electronLogin(), pathRead, log: memoryLog(), env: {} }).supported, false);
