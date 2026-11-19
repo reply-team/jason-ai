@@ -64,9 +64,10 @@ Jason is installed, updated and removed as it was.
   do the same. It keeps the data directory unless you add `--purge-data`. On macOS and Linux it waits for a runtime that
   is still starting and stops it; where another `jason` of this installation still runs, it removes nothing more and says
   `jason_running`.
-- **Jason Desktop finishes each version at its first start.** It puts `jason` in the terminal and the skills in place,
-  finishes an update a terminal started, and starts the runtime an install or an update stopped. An application opened
-  from its disk image, or from where it was downloaded, sets nothing up: move it into Applications and open it there.
+- **Jason Desktop finishes each version at its first start.** On macOS and Windows, it puts `jason` in the terminal and
+  the skills in place, finishes an update a terminal started, and starts the runtime an install or an update stopped. An
+  application opened from its disk image, or from where it was downloaded, sets nothing up: move it into Applications
+  and open it there.
   [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md) says what the first start does.
 - **`jason status` says which `jason` a terminal finds.** On macOS and Windows, where `jason` by name is another file
   than the `jason` answering, its `path` check fails, naming both files, and `ready` is false until that file is removed
@@ -85,8 +86,9 @@ Jason is installed, updated and removed as it was.
 ## Upgrading from 0.48.7
 
 - **Jason Desktop.** A Jason Desktop of 0.48 takes 0.49.0 by its own update: Check for Updates…, the update item in the
-  Jason menu, in the tray's menu or the Mac's menu bar, and at the foot of Settings' list. The first start of 0.49.0
-  puts `jason` where a new terminal finds it, puts the skills in place and starts again the runtime the update stopped.
+  Jason menu, in the tray's menu or the Mac's menu bar, and at the foot of Settings' list. On macOS and Windows, the
+  first start of 0.49.0 puts `jason` where a new terminal finds it, puts the skills in place and starts again the
+  runtime the update stopped.
   On macOS and Windows a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
   install 0.48.5 or later yourself once, and from then on its own update works.
 - **A command-line install on macOS or Windows.** `jason update apply` updates it and moves it into Jason Desktop, as
