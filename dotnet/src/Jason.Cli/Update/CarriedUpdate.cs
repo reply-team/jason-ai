@@ -352,8 +352,8 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>
     /// Whether this carried jason carries on the update <paramref name="ledger"/> records: the jason it recorded, or, for an
-    /// AppImage, whose copies are a file each under the version, the copy of the version it goes to beside the recorded one,
-    /// which the hand-over starts to finish it.
+    /// AppImage, whose copies are a file each under the version, any copy beside the recorded one: the record names the old
+    /// copy until the swap and the new one after it, and a terminal's wrapper runs the old one until the finish re-points it.
     /// </summary>
     public bool Carries(UpdateLedger ledger) => CarriesOn(carried, platform, ledger);
 
@@ -364,7 +364,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         ArgumentNullException.ThrowIfNull(ledger);
         return carried.Is(ledger.InstallPath)
             || (platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable)
-                && carried.Is(AppImageCopy.CopyOf(AppImageCopy.BundlesOf(ledger.InstallPath), ledger.ToVersion)));
+                && string.Equals(AppImageCopy.BundlesOf(carried.Executable), AppImageCopy.BundlesOf(ledger.InstallPath), StringComparison.Ordinal));
     }
 
     /// <summary>When the AppImage file was last read for its new copy.</summary>
@@ -807,11 +807,15 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         Say(UpdateStep.Stopped, $"Jason Desktop told to go, request {id}");
     }
 
-    /// <summary>The ledger at <c>swapped</c>, and the record kept for a refusal let go: the update is happening.</summary>
+    /// <summary>
+    /// The ledger at <c>swapped</c>, and the record kept for a refusal let go: the update is happening. For an AppImage the
+    /// installation's jason is now the copy of the new version, a file of its own, which the finish starts the runtime from
+    /// and sets the machine up through, so the record names it from here on.
+    /// </summary>
     public UpdateLedger Swapped(UpdateLedger ledger)
     {
         ArgumentNullException.ThrowIfNull(ledger);
-        var swapped = ledger.At(UpdateStep.Swapped);
+        var swapped = AppImage ? ledger.At(UpdateStep.Swapped) with { InstallPath = FinisherOf(ledger.ToVersion) } : ledger.At(UpdateStep.Swapped);
         Record(swapped);
         TryDelete(update.DesktopRequest);
         try

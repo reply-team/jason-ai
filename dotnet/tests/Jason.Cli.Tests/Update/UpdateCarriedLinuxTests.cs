@@ -124,24 +124,31 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
     }
 
     /// <summary>
-    /// An AppImage's copies are a file each, under the version (<c>bundle/&lt;version&gt;/jason</c>), so the update one copy
-    /// recorded is carried on by the copy of the version it goes to, the one the hand-over starts to finish it, as well as by
-    /// the copy that recorded it; the copy of that version under another data directory is not this installation's. Catches
-    /// the new copy refusing the update with update_in_progress, as another jason's, and leaving it at 'swapped'.
+    /// An AppImage's copies are a file each, under the version (<c>bundle/&lt;version&gt;/jason</c>). Once the AppImage is
+    /// the new version, the record names the copy of that version as the installation's jason, the one the finish starts the
+    /// runtime from and sets the machine up through; and any copy of the installation, the old one a terminal's wrapper still
+    /// runs among them, carries the update on, while a copy under another data directory does not. Catches the new copy
+    /// refusing the update as another jason's (update_in_progress, left at 'swapped'), and the finish starting the old copy's
+    /// runtime (update_not_healthy, left at 'healthy').
     /// </summary>
     [Fact]
-    public void On_linux_the_appimage_s_copy_of_the_new_version_carries_on_the_update_the_old_copy_recorded()
+    public void On_linux_the_appimage_s_record_names_the_new_copy_at_the_swap_and_every_copy_carries_it_on()
     {
         var old = Copy("0.49.1");
         var next = Copy("0.49.2");
-        var ledger = new UpdateLedger(SemanticVersion.Parse("0.49.1"), SemanticVersion.Parse("0.49.2"), UpdateStep.Swapped, DateTimeOffset.UtcNow, old, old, old);
+        var kept = new UpdateLedger(SemanticVersion.Parse("0.49.1"), SemanticVersion.Parse("0.49.2"), UpdateStep.Kept, DateTimeOffset.UtcNow, old, old, old);
+
+        var ledger = Handing(old).Swapped(kept);
+
+        Assert.Equal(UpdateStep.Swapped, ledger.Step);
+        Assert.Equal(next, ledger.InstallPath);
         var elsewhere = Path.Combine(_tree.Paths.Root, "other", "desktop", "bundle", "0.49.2", "jason");
         Directory.CreateDirectory(Path.GetDirectoryName(elsewhere)!);
         File.WriteAllText(elsewhere, "jason");
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(elsewhere)!, CarriedExecutable.RecordName), "{\n  \"version\": \"0.49.2\"\n}\n");
 
         Assert.True(Handing(next).Carries(ledger), "the copy of the version the update goes to did not carry it on");
-        Assert.True(Handing(old).Carries(ledger), "the copy that recorded the update did not carry it on");
+        Assert.True(Handing(old).Carries(ledger), "the copy that began the update did not carry it on");
         Assert.False(Handing(elsewhere).Carries(ledger), "another data directory's copy carried this installation's update on");
     }
 
