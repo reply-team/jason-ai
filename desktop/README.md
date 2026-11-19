@@ -822,7 +822,8 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
   it, then a relaunch, whose machine set-up finishes that update. If a version the deb's updater recorded does
   not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. An AppImage
-  replacing itself is built so and not yet seen on a real machine. The updater's cache is
+  replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
+  update apply`. The updater's cache is
   `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
 - Uninstall Jason… in the Jason menu (and the tray's; `src/uninstall-door.ts`) is the one uninstall, as on macOS: it asks
   first, with a box for the data directory, Cancel the default, and on the person's word starts the carried `jason

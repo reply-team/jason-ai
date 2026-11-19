@@ -319,8 +319,8 @@ It is published with every release, from the [releases page](https://github.com/
 `jason-desktop-macos-x64.dmg` for macOS, and for Linux on x64 `jason-desktop-linux-x64.deb` (Debian and Ubuntu, and the
 one to take on Ubuntu 24.04 and later) and `jason-desktop-linux-x64.AppImage`, or from the short addresses `get.jasonharness.ai/desktop/windows`, `/desktop/mac`,
 `/desktop/mac-intel`, `/desktop/linux-deb` and `/desktop/linux-appimage`. The Windows and macOS packages are
-signed; the Linux ones are not, and are built so, started once under a virtual display, and not yet seen on a real
-machine. It comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS and Linux, or
+signed; the Linux ones are not, and have been installed, updated and removed in virtual machines (Ubuntu 24.04 and
+26.04, Arch), not yet on a person's own machine. It comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS and Linux, or
 Installed apps on Windows; on Linux the deb asks for your password first, to take its package off. Your data stays. [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md)
 says what it does, what its chat may run, how it updates and how it comes off.
 

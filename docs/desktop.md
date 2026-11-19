@@ -53,8 +53,9 @@ Jason never runs without Chromium's sandbox. An AppImage's launcher adds `--no-s
 unprivileged user namespaces, and Jason refuses a start that carries it, with a dialog and no window, on every system.
 So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
 it says so and names the deb, whose install brings an AppArmor profile that lets the program make the user namespaces
-its sandbox uses. Built so, not yet seen on a real machine: neither package has been seen there; each was started once
-under a virtual display, sandboxed, when it was built.
+its sandbox uses. The deb has started sandboxed with that profile on Ubuntu 24.04 and 26.04, and the AppImage on Arch,
+each in a virtual machine with a desktop of its own, and not yet on a person's own machine; the AppImage's refusal on
+Ubuntu is built so and not yet seen.
 
 ## What it does at a start
 
@@ -1039,8 +1040,10 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   registration or a PATH wrapper that was set up from another version's copy under `bundle/`. Another version's copy goes
   only after that, and never the one an update kept to go back to, one something still names or one the running runtime
   was started from.
-- Built so, and not yet seen on a real machine: the tray on GNOME and KDE, the keyring backends, a start at login across
-  a real sign-out, and the AppImage's mount.
+- Seen in virtual machines with desktops of their own, and not yet on a person's own machine: the tray on Ubuntu's GNOME,
+  GNOME's keyring, and the AppImage's mount on Arch's GNOME and Hyprland, where no tray shows and Settings carries the
+  update item. Built so and not yet seen: the tray on KDE, other keyring backends, and a start at login across a real
+  sign-out.
 
 ## Updating
 
