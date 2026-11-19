@@ -510,10 +510,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             toPage('updates.changed');
             if (Notification.isSupported()) {
                 const notice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason to finish the update.` });
-                notice.on('click', () => {
-                    app.relaunch();
-                    app.quit();
-                });
+                notice.on('click', () => modeDeps.relaunch());
                 notice.show();
             }
         });
@@ -528,6 +525,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         autostart,
         updates,
         packageMoved,
+        restart: () => modeDeps.relaunch(),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),

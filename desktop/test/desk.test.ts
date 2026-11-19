@@ -288,6 +288,12 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question));';
     assert.ok(press.includes(pressed));
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // The restart the deb's item offers once the system updated the package under the window is the desktop's own, not the
+    // updater's: the same press, behind the same guard, and the same relaunch the notice's click asks for.
+    const restart = "if (act === 'restart') {\n            this.deps.restart?.();\n            return;\n        }";
+    assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
+    assert.ok(main.includes('        restart: () => modeDeps.relaunch(),\n'));
+    assert.ok(main.includes("notice.on('click', () => modeDeps.relaunch());"));
     // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
     // none in a demo run.
     const item = body('updateItem');

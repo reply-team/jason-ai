@@ -36,6 +36,8 @@ export interface DeskDeps {
     updates: Updater | null;
     /** The deb: the version the system installed under this window, where its version.json names another than runs; else null. */
     packageMoved?(): string | null;
+    /** The desktop starting itself again, which the update item offers once the system updated the deb under this window. */
+    restart?(): void;
     /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
@@ -248,6 +250,10 @@ export class Desk {
      */
     pressUpdate(act: MenuItem['act'], byKey: boolean): void {
         if (this.removing()) return;
+        if (act === 'restart') {
+            this.deps.restart?.();
+            return;
+        }
         const { updates } = this.deps;
         if (updates === null) return;
         void pressItem(updates, act, byKey, (question) => this.box(question));
