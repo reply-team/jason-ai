@@ -4,8 +4,8 @@ import { expect, quietDesktop, test } from './fixtures';
 // see where Back is drawn, so this row has a real engine draw the head, in a wide window and in a narrow one, where the
 // console pads its content less. A baseline is where a marker of no height that stands on it sits; Back's words are in a
 // row of their own with the chevron, where no marker stands on a baseline, so theirs is found from where the words' own
-// box is: the share of a box's height above its baseline is the same for every size of one font, and the title, whose
-// font Back's words inherit, says what that share is.
+// box is: the share of a box's height above its baseline is the same for every size of one font, and the title, drawn
+// in the same family as Back's words, says what that share is.
 for (const width of [2000, 800]) {
     test(`Settings' Back stands on the baseline of the title, in a window ${width} pixels wide`, async ({
         page,
@@ -25,6 +25,7 @@ for (const width of [2000, 800]) {
         const settings = page.locator('.harness .settings');
         await expect(settings.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
         await expect(settings.getByRole('button', { name: 'Back' })).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
         const lines = await settings.evaluate((root) => {
             const words = (element: Element) => {
                 const text = Array.from(element.childNodes).find(
@@ -45,11 +46,18 @@ for (const width of [2000, 800]) {
             marker.remove();
             const titleWords = words(title);
             const share = (titleBaseline - titleWords.top) / titleWords.height;
-            const back = words(root.querySelector(':scope > .settings-back > button')!);
-            return { title: titleBaseline, back: back.top + back.height * share };
+            const button = root.querySelector(':scope > .settings-back > button')!;
+            const back = words(button);
+            return {
+                title: titleBaseline,
+                back: back.top + back.height * share,
+                fonts: [getComputedStyle(title).fontFamily, getComputedStyle(button).fontFamily],
+            };
         });
+        // The share holds for one font: the two must be drawn in the same family for the measure to mean anything.
+        expect(lines.fonts[1], "Back is in the title's font").toBe(lines.fonts[0]);
         expect(Math.abs(lines.back - lines.title), `Back ${lines.back}, the title ${lines.title}`).toBeLessThanOrEqual(
-            1,
+            0.5,
         );
     });
 }
