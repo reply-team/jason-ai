@@ -1829,6 +1829,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var purged = log.Steps.IndexOf("package.purge");
         var firstOfTheAccounts = log.Steps.FindIndex(step => step is "file.remove" or "tree.remove" or "directory.remove_if_empty");
         Assert.True(stopped >= 0 && purged > stopped && firstOfTheAccounts > purged, string.Join(" | ", log.Steps));
+        // apt is waited for longer than the package lock it is told to wait for, so its own answer comes first.
+        Assert.True(remover.PurgeBounds.Single() > Jason.Cli.Tests.Update.CommandLineMoveLinuxTests.LockWait(MoveSystem.PurgeArguments(DesktopRemoval.DebPackage)), $"the purge was waited for {remover.PurgeBounds.Single()}");
         foreach (var gone in new[] { atLogin, wrapper, skill })
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
@@ -1843,7 +1845,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
     [Critical(Family.I3, "on Linux a package that stays leaves everything of this account's in place")]
     [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
     [InlineData("no session to ask in", false, 127, "")]
-    public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again(string row, bool asked, int code, string said)
+    [InlineData("apt not ended", true, PackageRun.TimedOut, "")]
+    public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again_unless_apt_may_still_run(string row, bool asked, int code, string said)
     {
         var places = LinuxPlaces();
         var carried = Deb(places);
@@ -1876,9 +1879,20 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.True(Directory.Exists(updater), $"{row}: the updater's cache went");
 
-        // The runtime it stopped, started again from the application's jason on this data directory.
-        Assert.Equal([_dir.Paths.Root], processes.Launches);
-        Assert.Equal([carried], processes.Executables.Single());
+        // The runtime it stopped, started again from the application's jason on this data directory; but not while apt, which
+        // had not ended, may still be taking that jason off: catches a runtime started from files apt is removing.
+        if (row == "apt not ended")
+        {
+            Assert.Empty(processes.Launches);
+            Assert.Contains("apt had not ended after 20 minutes", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.Contains("was not started again", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.True(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed went");
+        }
+        else
+        {
+            Assert.Equal([_dir.Paths.Root], processes.Launches);
+            Assert.Equal([carried], processes.Executables.Single());
+        }
     }
 
     // --- held to the application's own source ------------------------------------------------------------------

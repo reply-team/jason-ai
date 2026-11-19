@@ -299,9 +299,13 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     /// <summary>What apt's purge of a package answers, where a test says; else the package taken off.</summary>
     public Func<string, Jason.Cli.Update.PackageRun>? Purges { get; set; }
 
+    /// <summary>The bound each purge was given, in order.</summary>
+    public List<TimeSpan> PurgeBounds { get; } = [];
+
     public Task<Jason.Cli.Update.PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
     {
         Record("package.purge", package);
+        PurgeBounds.Add(bound);
         return Task.FromResult(Purges?.Invoke(package) ?? new Jason.Cli.Update.PackageRun(true, 0, string.Empty));
     }
 

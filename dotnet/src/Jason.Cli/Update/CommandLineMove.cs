@@ -74,11 +74,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>How long a download may go without a byte before it counts as stalled.</summary>
     internal TimeSpan StallWait { get; init; } = TimeSpan.FromMinutes(2);
 
-    /// <summary>
-    /// How long the Windows setup, or on Linux apt's install of the package with the password it asks, is waited for. A
-    /// Windows setup that has not ended by then is left running, never killed.
-    /// </summary>
+    /// <summary>How long the Windows setup is waited for. A setup that has not ended by then is left running, never killed.</summary>
     internal TimeSpan SetupWait { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>Linux: how long apt's install of the package, with the password it asks, is waited for (<see cref="MoveSystem.AptWait"/>).</summary>
+    internal TimeSpan AptWait { get; init; } = MoveSystem.AptWait;
 
     /// <summary>How long the application's <c>jason install</c> is waited for: its own waits are a minute's drain and the stop's.</summary>
     internal TimeSpan RoutineWait { get; init; } = TimeSpan.FromMinutes(10);
@@ -464,7 +464,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         PackageRun run;
         try
         {
-            run = await System.InstallPackageAsync(package, SetupWait, Progress, cancellationToken).ConfigureAwait(false);
+            run = await System.InstallPackageAsync(package, AptWait, Progress, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception unstarted) when (unstarted is Win32Exception or IOException or InvalidOperationException)
         {
@@ -509,6 +509,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             AptRefusal.NoSession => (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on."),
             AptRefusal.DialogFailed => (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on."),
             AptRefusal.LockHeld => (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on."),
+            AptRefusal.Unended => (MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {MoveSystem.AptWait.TotalMinutes:F0} minutes: the password dialog was left unanswered, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. The command line is unchanged; `jason update apply` carries the move on, into the package where apt installed it, or asks again.")),
             _ => (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on.")),
         };
     }

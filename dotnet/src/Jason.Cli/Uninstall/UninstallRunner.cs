@@ -143,7 +143,7 @@ public static class UninstallRunner
             }
 
             // On Linux from the deb, the package, while nothing of this account's is yet removed: a password not given then removes
-            // nothing, and the runtime stopped above starts again. The demo's runtime runs the jason apt deletes, so it is stopped
+            // nothing, and the runtime stopped above starts again, unless apt may still be at work. The demo's runtime runs the jason apt deletes, so it is stopped
             // first; and every assembly the steps after the purge need is loaded before it, since it deletes this process's file.
             var demoStopped = false;
             if (purges)
@@ -155,9 +155,8 @@ public static class UninstallRunner
 
                 demoStopped = true;
                 Update.AssemblyWarmUp.Run();
-                if (await DesktopRemoval.PurgePackageAsync(env, desktop!, done.Contains(RegistrationRemovedLine), done, cancellationToken).ConfigureAwait(false) is { } refusedAtPackage)
+                if (await DesktopRemoval.PurgePackageAsync(env, desktop!, options, done.Contains(RegistrationRemovedLine), done, problems, cancellationToken).ConfigureAwait(false) is { } refusedAtPackage)
                 {
-                    await DesktopRemoval.StartOwedAgainAsync(env, options, done, problems, cancellationToken).ConfigureAwait(false);
                     return new UninstallReport(plan, done, kept, problems, refusedAtPackage.Code, refusedAtPackage.Message);
                 }
             }

@@ -417,8 +417,12 @@ DEB_ASSET="jason-desktop-linux-x64.deb"
 DEB_PLACE="/opt/Jason"
 APPIMAGE_ASSET="jason-desktop-linux-x64.AppImage"
 APPIMAGE_PLACE="$HOME/Applications"
-# How long the system's password dialog is given, as the Windows move gives its installer, and apt the package lock.
-ASK_SECONDS=600
+# How long apt waits for the package lock another installation holds.
+LOCK_SECONDS=600
+
+# How long an install through the system's password dialog is given: apt's wait for the lock and ten minutes more, for
+# the password and apt's own work, so that apt answers first.
+ASK_SECONDS=1200
 
 # Whether Jason Desktop runs under this account: a process whose program, the first word of its command line, is
 # jason-desktop-app, the deb's or an AppImage's mount's. Where pgrep is not there, nothing is known to run.
@@ -436,7 +440,7 @@ refuse_while_running() {
 # The apt options every install of the package takes: the package lock waited for, a configuration file the person
 # changed kept, and the person's proxy, which sudo and pkexec both drop.
 apt_options() {
-    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$ASK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$LOCK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
     [ -z "${http_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::http::Proxy=$http_proxy"
     [ -z "${https_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::https::Proxy=$https_proxy"
 }
@@ -493,9 +497,13 @@ apt_install() {
             NOT_ADMIN=" This account is not an administrator: an administrator of this computer can type their password in that dialog, or install the package for you."
         fi
     fi
-    if grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
+    # A run still going at the bound first, whatever apt said so far: it may be waiting on the lock or at work, and may yet
+    # install the package.
+    if [ "$STATUS" -eq 124 ]; then
+        fail "apt had not ended after $((ASK_SECONDS / 60)) minutes: the password dialog was left unanswered, or apt was still waiting for another installation or still at work, and it may yet install Jason Desktop. Run the line again once it has ended: it sets up the package where apt installed it, or asks again.$NOT_ADMIN"
+    elif grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock' "$TMP/apt.err"; then
         fail "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed: run the line again in a few minutes."
-    elif [ "$STATUS" -eq 124 ] || grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
+    elif grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"

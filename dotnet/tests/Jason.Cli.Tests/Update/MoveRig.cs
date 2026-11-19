@@ -138,9 +138,13 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
     /// <summary>Linux: what apt does with the package; by default it installs the application at the version <see cref="Installs"/>.</summary>
     public Func<string, PackageRun>? OnPackage { get; set; }
 
+    /// <summary>Linux: the bound each install by apt was given, in order.</summary>
+    public List<TimeSpan> Bounds { get; } = [];
+
     public Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
     {
         acts.Add("apt");
+        Bounds.Add(bound);
         Assert.True(File.Exists(package), "apt is handed the downloaded package");
         if (OnPackage is { } install)
         {

@@ -131,14 +131,20 @@ public sealed record PackageRun(bool Asked, int ExitCode, string Said)
         get
         {
             bool Says(params string[] words) => words.Any(word => Said.Contains(word, StringComparison.Ordinal));
-            // The lock first: apt waited on it and timed out with the password given.
+            // A run still going at its bound first, whatever it said so far: apt may be waiting on the lock or at work.
+            if (ExitCode == TimedOut)
+            {
+                return AptRefusal.Unended;
+            }
+
+            // Then the lock: apt waited on it and gave up with the password given.
             if (Says("Could not get lock", "Unable to acquire the dpkg frontend lock"))
             {
                 return AptRefusal.LockHeld;
             }
 
             // sudo's and sudo-rs's words (Ubuntu 26.04 ships sudo-rs) alike.
-            if (ExitCode == TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "incorrect authentication attempt", "Authentication failed", "a password is required", "is not in the sudoers file", "may not run sudo", "afraid I can't do that"))
+            if (Says("Request dismissed", "Not authorized", "incorrect password attempt", "incorrect authentication attempt", "Authentication failed", "a password is required", "is not in the sudoers file", "may not run sudo", "afraid I can't do that"))
             {
                 return AptRefusal.NoPassword;
             }
@@ -165,7 +171,7 @@ public sealed record PackageRun(bool Asked, int ExitCode, string Said)
 /// <summary>Why apt's run with the one password did not succeed (<see cref="PackageRun.Refusal"/>).</summary>
 public enum AptRefusal
 {
-    /// <summary>No password was given: the dialog dismissed, a wrong one, an account that is not an administrator, or the bound passed.</summary>
+    /// <summary>No password was given: the dialog dismissed, a wrong one, or an account that is not an administrator.</summary>
     NoPassword,
 
     /// <summary>This session cannot ask for one: no terminal for sudo, and no pkexec or no agent to show its dialog.</summary>
@@ -176,6 +182,12 @@ public enum AptRefusal
 
     /// <summary>Another installation held the package system for the whole of apt's wait.</summary>
     LockHeld,
+
+    /// <summary>
+    /// The run had not ended within its bound, which is longer than apt's own wait for the package lock: the password not
+    /// given in that time, or apt still at work, which may yet change the package.
+    /// </summary>
+    Unended,
 
     /// <summary>apt itself failed.</summary>
     Apt,
@@ -445,7 +457,22 @@ public sealed class MoveSystem : IMoveSystem
     /// the one password asked as an install asks it, and the package lock waited for as an install waits for it.
     /// </summary>
     internal static Task<PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
-        AptAsync("taking Jason Desktop's package off with apt", ["purge", "-y", "-o", "DPkg::Lock::Timeout=600", package], bound, progress, cancellationToken);
+        AptAsync("taking Jason Desktop's package off with apt", PurgeArguments(package), bound, progress, cancellationToken);
+
+    /// <summary>What apt-get is given to purge <paramref name="package"/>: the package lock waited for as an install waits for it.</summary>
+    internal static IReadOnlyList<string> PurgeArguments(string package) => ["purge", "-y", "-o", LockOption, package];
+
+    /// <summary>How long apt waits for the package lock another installation holds, in seconds.</summary>
+    internal const int AptLockSeconds = 600;
+
+    private static readonly string LockOption = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"DPkg::Lock::Timeout={AptLockSeconds}");
+
+    /// <summary>
+    /// How long an apt run with its password is waited for: apt's own wait for the package lock and ten minutes more, for the
+    /// password and apt's own work, so that apt answers first. A run still going then may yet change the package
+    /// (<see cref="AptRefusal.Unended"/>).
+    /// </summary>
+    internal static readonly TimeSpan AptWait = TimeSpan.FromSeconds(AptLockSeconds) + TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// apt-get run with the one password a system package needs: by <c>sudo</c> where this process has a terminal, else by
@@ -482,7 +509,7 @@ public sealed class MoveSystem : IMoveSystem
     /// </summary>
     internal static IReadOnlyList<string> AptOptions(string? httpProxy, string? httpsProxy) =>
     [
-        "-y", "-o", "DPkg::Lock::Timeout=600", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold",
+        "-y", "-o", LockOption, "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold",
         .. string.IsNullOrEmpty(httpProxy) ? Array.Empty<string>() : ["-o", "Acquire::http::Proxy=" + httpProxy],
         .. string.IsNullOrEmpty(httpsProxy) ? Array.Empty<string>() : ["-o", "Acquire::https::Proxy=" + httpsProxy],
     ];

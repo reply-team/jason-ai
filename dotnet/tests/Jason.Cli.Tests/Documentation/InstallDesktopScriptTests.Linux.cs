@@ -28,8 +28,9 @@ public sealed partial class InstallDesktopScriptTests
 
     /// <summary>
     /// With apt and no terminal - an agent runs the line in the person's session - the deb is downloaded, checked, and
-    /// installed by apt through pkexec, whose dialog asks the password once, with the package lock waited for ten minutes;
-    /// then the jason the package carries sets the machine up, and the last line is the full path of jason.
+    /// installed by apt through pkexec, whose dialog asks the password once, with the package lock waited for ten minutes
+    /// and the whole run for longer, so apt's own answer comes first; then the jason the package carries sets the machine up,
+    /// and the last line is the full path of jason. Catches a bound that ends the wait while apt still waits on the lock.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "install.sh installs the deb on Linux with apt only once its checksum holds, and sets it up")]
@@ -45,6 +46,8 @@ public sealed partial class InstallDesktopScriptTests
         var install = Assert.Single(calls, call => call.StartsWith("pkexec ", StringComparison.Ordinal));
         Assert.Contains("apt-get install -y -o DPkg::Lock::Timeout=600 ", install, StringComparison.Ordinal);
         Assert.EndsWith("/jason-desktop-linux-x64.deb|", install, StringComparison.Ordinal);
+        var bound = Assert.Single(calls, call => call.StartsWith("timeout ", StringComparison.Ordinal));
+        Assert.True(int.Parse(bound["timeout ".Length..^1], System.Globalization.CultureInfo.InvariantCulture) > 600, bound);
         Assert.Equal($"install --roles|{linux.Data}", calls[^1]);
         Assert.True(File.Exists(linux.DebCarried), run.Stdout + run.Stderr);
         Assert.Empty(linux.InApplications());
@@ -55,7 +58,8 @@ public sealed partial class InstallDesktopScriptTests
     /// Where the password could not be asked or was not given, the line refuses in the words of the case, read from pkexec's
     /// and apt's own words and never from an exit code alone: the dialog dismissed (and, for an account that is not an
     /// administrator, who can type a password there), no agent to ask in, the system's dialog failing, the package lock held
-    /// for ten minutes, no pkexec at all, and apt itself failing. Nothing is set up after any of them.
+    /// for ten minutes, a run still going at the line's bound (which apt may yet finish), no pkexec at all, and apt itself
+    /// failing. Nothing is set up after any of them.
     /// </summary>
     [Theory]
     [InlineData("Error executing command as another user: Request dismissed", 126, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.")]
@@ -65,6 +69,7 @@ public sealed partial class InstallDesktopScriptTests
     [InlineData("sudo-rs: Maximum 3 incorrect authentication attempts", 1, "user sudo", "The install needs an administrator's password once, and none was given, so nothing was installed.")]
     [InlineData("GDBus.Error:org.freedesktop.DBus.Error.NoReply: Message recipient disconnected from message bus without replying", 127, "user sudo", "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again.")]
     [InlineData("E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", 100, "user sudo", "Another installation (Ubuntu's own updates, likely) held the package system for ten minutes, so nothing was installed")]
+    [InlineData("Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)...", 124, "user sudo", "apt had not ended after 20 minutes")]
     [InlineData("E: Sub-process /usr/bin/dpkg returned an error code (1)", 100, "user sudo", "Jason Desktop was not installed whole: apt said why above. sudo dpkg --configure -a finishes it, or sudo apt purge jason-desktop takes it off.")]
     [InlineData(null, 0, "user sudo", "this session has no way to ask for it: run the line in a terminal of your desktop")]
     [UnsupportedOSPlatform("windows")]
@@ -281,6 +286,7 @@ public sealed partial class InstallDesktopScriptTests
             Stub("uname", "case \"${1:-}\" in -m) echo x86_64 ;; *) echo Linux ;; esac\n");
             Stub("id", "case \"${1:-}\" in -u) echo \"${STUB_UID:-1000}\" ;; -nG) echo \"${STUB_GROUPS:-user sudo}\" ;; *) exit 1 ;; esac\n");
             Stub("pgrep", "[ -n \"${STUB_RUNNING:-}\" ]\n");
+            Stub("timeout", $"echo \"timeout $1|\" >> '{Log}'\nshift\nexec \"$@\"\n");
             Stub("unshare", userNamespaces ? "exit 0\n" : "echo 'unshare: write failed /proc/self/uid_map: Operation not permitted' >&2\nexit 1\n");
             if (fuse)
             {
