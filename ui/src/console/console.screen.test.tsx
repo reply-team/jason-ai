@@ -15,6 +15,7 @@ import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { choicesOf, chooseIn, currentOf, menuButton, openMenu, waitForMenus } from '../test/menus';
 import { fixtures } from '../test/fixtures';
+import { fromFoot, layOutChats, scrollAs } from '../test/scroll';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention, forgetNeeds } from './needs';
@@ -109,6 +110,23 @@ const rules = (): { selector: string; body: string }[] =>
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ');
 
 const asked = (fake: FakeApi, operation: string) => fake.calls.filter((each) => each.operation === operation).length;
+
+/** The shown chat's scrolling box, where its thread is drawn. */
+const thread = () => document.querySelector<HTMLElement>('.chat-scroll')!;
+
+/** Lets what a change set going run out: the effects, the observers and the timers already due. */
+const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+
+/** Sends `text` from the console's first chat, at its foot, as a person does; resolves with the chat's id. */
+async function sendFromFoot(desktop: StubDesktop, text: string): Promise<string> {
+    const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+    scrollAs(thread(), thread().scrollHeight);
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+    await waitFor(() => expect(fromFoot(thread())).toBe(0));
+    return desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+}
 
 afterEach(() => {
     delete (window as { hit?: number }).hit;
@@ -1046,34 +1064,23 @@ describe('the console', () => {
         }
     });
 
-    it('scrolls to a new permission card even in the update that answers the one before it', async () => {
-        const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-            configurable: true,
-            get(this: HTMLElement) {
-                return this.classList.contains('chat-scroll') ? 900 : 0;
-            },
-        });
+    it('follows a new permission card at the foot, even in the update that answers the one before it', async () => {
+        const layout = layOutChats();
         try {
             const fake = pending(new FakeApi());
             const { desktop } = renderConsole(fake);
-            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
-            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
-            const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
-            const box = () => document.querySelector<HTMLElement>('.chat-scroll')!;
+            const id = await sendFromFoot(desktop, 'Go');
             flush(() =>
                 desktop.emit(id, {
                     kind: 'permission',
                     request: 'req_1',
                     title: 'Run a command',
-                    detail: 'a',
+                    detail: 'a'.repeat(300),
                     remember: null,
                 }),
             );
-            await waitFor(() => expect(box().scrollTop).toBe(900));
-            box().scrollTop = 100;
+            await waitFor(() => expect(thread().textContent).toContain('Run a command'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
             // The first card ends and a second one arrives in one update: the count of open cards is the same.
             flush(() => {
                 desktop.emit(id, { kind: 'permission_gone', request: 'req_1' });
@@ -1081,14 +1088,121 @@ describe('the console', () => {
                     kind: 'permission',
                     request: 'req_2',
                     title: 'Write a file',
-                    detail: 'b',
+                    detail: 'b'.repeat(600),
                     remember: null,
                 });
             });
-            await waitFor(() => expect(box().scrollTop).toBe(900));
+            await waitFor(() => expect(thread().textContent).toContain('Write a file'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
         } finally {
-            if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
-            else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+            layout.restore();
+        }
+    });
+
+    it('follows the AI’s words and a card as they come while the person stays at the foot', async () => {
+        const layout = layOutChats();
+        try {
+            const fake = pending(new FakeApi());
+            const { desktop } = renderConsole(fake);
+            const id = await sendFromFoot(desktop, 'Go');
+            for (const part of [1, 2, 3]) {
+                flush(() => desktop.emit(id, { kind: 'text', text: `Part ${part}: ${'words '.repeat(80)}` }));
+                await waitFor(() => expect(thread().textContent).toContain(`Part ${part}:`));
+                await waitFor(() => expect(fromFoot(thread())).toBe(0));
+            }
+            // The answer is taller than the view: the thread moved to keep its foot in view.
+            expect(thread().scrollTop).toBeGreaterThan(1000);
+            flush(() =>
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: 'req_1',
+                    title: 'Run a command',
+                    detail: 'c'.repeat(300),
+                    remember: null,
+                }),
+            );
+            await waitFor(() => expect(thread().textContent).toContain('Run a command'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+        } finally {
+            layout.restore();
+        }
+    });
+
+    it('keeps the person’s place once they scroll more than 120 px above the foot, and follows again once they are back', async () => {
+        const layout = layOutChats();
+        try {
+            const fake = pending(new FakeApi());
+            const { desktop } = renderConsole(fake);
+            const id = await sendFromFoot(desktop, 'Go');
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 1: ${'words '.repeat(200)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 1:'));
+            scrollAs(thread(), thread().scrollHeight);
+            // 120 px above the foot is still at it: what comes is followed.
+            scrollAs(thread(), thread().scrollTop - 120);
+            expect(fromFoot(thread())).toBe(120);
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 2: ${'words '.repeat(80)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 2:'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+            // One pixel further and the place is the person's: neither words nor a card move it.
+            scrollAs(thread(), thread().scrollTop - 121);
+            const kept = thread().scrollTop;
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 3: ${'words '.repeat(80)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 3:'));
+            flush(() =>
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: 'req_1',
+                    title: 'Run a command',
+                    detail: 'd'.repeat(300),
+                    remember: null,
+                }),
+            );
+            await waitFor(() => expect(thread().textContent).toContain('Run a command'));
+            await settle();
+            expect(thread().scrollTop).toBe(kept);
+            expect(fromFoot(thread())).toBeGreaterThan(120);
+            // Back at the foot, the thread follows again.
+            scrollAs(thread(), thread().scrollHeight);
+            flush(() => desktop.emit(id, { kind: 'permission_gone', request: 'req_1' }));
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 4: ${'words '.repeat(80)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 4:'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+        } finally {
+            layout.restore();
+        }
+    });
+
+    it('takes a message the person sends from further up to the foot, one that waits for the turn included, and follows from there', async () => {
+        const layout = layOutChats();
+        try {
+            const fake = pending(new FakeApi());
+            const { desktop } = renderConsole(fake);
+            const id = await sendFromFoot(desktop, 'Go');
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 1: ${'words '.repeat(200)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 1:'));
+            // Read from the top while the turn runs; what is sent then waits for the turn, and goes to the foot.
+            scrollAs(thread(), 0);
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'And then' } });
+            fireEvent.keyDown(screen.getByRole('textbox', { name: 'Your message' }), { key: 'Enter' });
+            await waitFor(() => expect(thread().textContent).toContain('And then'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+            flush(() => desktop.emit(id, { kind: 'text', text: `Part 2: ${'words '.repeat(80)}` }));
+            await waitFor(() => expect(thread().textContent).toContain('Part 2:'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+            // The turn ends, the waiting message is sent and answered, and the person reads from the top again; the
+            // next message goes to the foot as well.
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'chat.send')).toHaveLength(2));
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(screen.queryByText('Thinking…')).toBeNull());
+            scrollAs(thread(), 0);
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Last one' } });
+            fireEvent.keyDown(screen.getByRole('textbox', { name: 'Your message' }), { key: 'Enter' });
+            await waitFor(() => expect(thread().textContent).toContain('Last one'));
+            await waitFor(() => expect(fromFoot(thread())).toBe(0));
+            expect(thread().scrollTop).toBeGreaterThan(0);
+        } finally {
+            layout.restore();
         }
     });
 
