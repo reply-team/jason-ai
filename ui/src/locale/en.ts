@@ -84,6 +84,8 @@ export const en = {
     'chat.tab.answered': 'This is answered in Jason Desktop.',
     'chat.tab.full': 'This chat is in Full access. Send messages to it from Jason Desktop.',
     'chat.tab.auto': 'This chat is in Auto-edit. Send messages to it from Jason Desktop.',
+    'chat.code.copy': 'Copy code',
+    'chat.code.copied': 'Copied',
     'chat.tab.other': 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.',
     'chat.tab.list': 'Chats',
     'chat.tab.new': 'New chat',

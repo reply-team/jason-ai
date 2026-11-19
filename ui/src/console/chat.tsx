@@ -81,7 +81,7 @@ import { campaigns, reload as reloadCampaigns, summary } from './campaigns';
 import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
-import { markdownView } from './markdown-view';
+import { copied, markdownView } from './markdown-view';
 import { barMarks, svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
@@ -1305,6 +1305,7 @@ function threadOf(chatId: string) {
         read: unknown;
         proposed: unknown;
         listed: unknown;
+        copying: string | null;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -1334,6 +1335,8 @@ function threadOf(chatId: string) {
         const proposed = proposals.value[chatId];
         // A list card draws what its press did, and its rows shown whole.
         const listed = lists.value[chatId];
+        // A code block's Copy code button says Copied for a moment, which redraws the thread.
+        const copying = copied.value;
         const same =
             last !== null &&
             last.now === now &&
@@ -1348,6 +1351,7 @@ function threadOf(chatId: string) {
             last.read === read &&
             last.proposed === proposed &&
             last.listed === listed &&
+            last.copying === copying &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
@@ -1364,6 +1368,7 @@ function threadOf(chatId: string) {
                 read,
                 proposed,
                 listed,
+                copying,
                 view: threadView(chat, host),
             };
         return last!.view;

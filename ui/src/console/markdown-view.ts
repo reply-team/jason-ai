@@ -1,8 +1,31 @@
+import { signal } from '@preact/signals-react';
+import { t } from '../platform/i18n';
+import { act, define } from './actions';
 import { html, type Html } from './html';
 import { markdown, type Block, type Inline } from './markdown';
 
 // The agent's words drawn from the Markdown subset's tree. Every word is text the html tag escapes; the elements are
 // the ones named here and no others, and a link is a span of text, never an anchor.
+
+/** The text of the block just copied, while its button says so; the button of every block with that text says it. */
+export const copied = signal<string | null>(null);
+let forget: ReturnType<typeof setTimeout> | undefined;
+
+/** Puts a code block's text on the clipboard as it is: the way Copy prompt does, by the page's own clipboard. */
+define('chat.copyCode', (_args, element) => {
+    const text = element.closest('.chat-md-code')?.querySelector('code')?.textContent;
+    if (text === undefined || text === null || typeof navigator.clipboard?.writeText !== 'function') return;
+    void navigator.clipboard.writeText(text).then(
+        () => {
+            copied.value = text;
+            clearTimeout(forget);
+            forget = setTimeout(() => {
+                copied.value = null;
+            }, 2000);
+        },
+        () => undefined,
+    );
+});
 
 function inlineView(item: Inline): Html {
     switch (item.kind) {
@@ -46,8 +69,13 @@ function blockView(block: Block): Html {
             return html`<p>${inlines(block.children)}</p>`;
         case 'heading':
             return heading(block.level, inlines(block.children));
-        case 'code':
-            return html`<pre><code>${block.text}</code></pre>`;
+        case 'code': {
+            const label = copied.value === block.text ? t('chat.code.copied') : t('chat.code.copy');
+            return html`<div class="chat-md-code">
+                <button type="button" class="chat-md-copy" ${act('chat.copyCode')}>${label}</button>
+                <pre><code>${block.text}</code></pre>
+            </div>`;
+        }
         case 'list': {
             const items = block.items.map((item) => html`<li>${item.map(blockView)}</li>`);
             return block.ordered
