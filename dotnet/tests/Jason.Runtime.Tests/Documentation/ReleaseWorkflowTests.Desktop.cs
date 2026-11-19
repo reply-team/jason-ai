@@ -258,9 +258,9 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// What the notes and the release guide tell a person about the desktop beyond its files: the three platforms, that the
     /// test suite does not run on an Intel Mac, that it updates to stable releases only, that an update restarts the runtime
-    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, that on macOS and
-    /// Windows the one uninstall takes the application off from any of its doors, and that an uninstall stops the runtime
-    /// first or removes nothing.
+    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, that on macOS,
+    /// Windows and Linux the one uninstall takes the application off from any of its doors, on Linux the deb's package
+    /// first, and that an uninstall stops the runtime first or removes nothing.
     /// </summary>
     [Fact]
     public void The_notes_and_the_guide_say_how_the_desktop_updates_goes_back_and_where_it_is_tested()
@@ -275,12 +275,11 @@ public partial class ReleaseWorkflowTests
             "A runtime that does not stop leaves the update uninstalled, saying why, and a runtime started from another `jason` is never stopped.",
             "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
             "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
-            "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
-            "It is removed once, by `jason uninstall` in a terminal, by Installed apps on Windows, or by Uninstall Jason… in the Jason menu on macOS.",
+            "On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
+            "It is removed once, by `jason uninstall` in a terminal, by Installed apps on Windows, or by Uninstall Jason… in the Jason menu on macOS and Linux.",
             "The uninstall stops the runtime first, and removes nothing when that runtime does not stop.",
+            "On Linux it then takes the deb's package off, with an administrator's password asked once, and removes nothing of yours when that is refused.",
             "and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so.",
-            "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
-            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);
@@ -294,8 +293,8 @@ public partial class ReleaseWorkflowTests
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
             "going back is quitting Jason and putting that folder back in the place of the installed application by hand",
-            "Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,",
-            "and the data directory, the harness root and the updater's cache, `~/.cache/jason-desktop-updater`, stay.",
+            "Either is taken off by the one uninstall, `jason uninstall` or Uninstall Jason… in the Jason menu (§9), which takes the updater's cache, `~/.cache/jason-desktop-updater`, and the demo's two folders with it",
+            "The deb's own updater is off: its updates come with the system's, from Jason's apt repository,",
         ])
         {
             Assert.Contains(said, guide, StringComparison.Ordinal);

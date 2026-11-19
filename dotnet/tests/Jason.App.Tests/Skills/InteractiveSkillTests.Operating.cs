@@ -444,10 +444,9 @@ public partial class InteractiveSkillTests
         Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
         Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
 
-        // On macOS and Windows, Jason is one installation, in the words every page uses: a session asked to install never
-        // offers the command line alone there. On Linux the desktop's packages stay separate downloads, which the install
-        // page's section for an agent says when to offer.
-        Assert.Contains("On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once,", skill, StringComparison.Ordinal);
+        // On macOS, Windows and Linux, Jason is one installation, in the words every page uses: a session asked to install
+        // never offers the command line alone. The install page's section for an agent says what to offer on Linux.
+        Assert.Contains("On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once,", skill, StringComparison.Ordinal);
         Assert.Contains("That section also says what to offer them on Linux, and what to do when they take Jason Desktop there.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("Jason installs two ways", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("A person installs it with the two lines below.", skill, StringComparison.Ordinal);

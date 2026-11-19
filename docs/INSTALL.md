@@ -3,9 +3,11 @@
 This page takes a machine with nothing on it to an installation that can start work, and then takes it off
 again. It is written to be followed by a person or by an agent, in order, without reading anything else first.
 
-Nothing here needs administrator rights or a password. On Windows and Linux everything is installed under your own
-account. On a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`;
-the terminal command, the skills and Jason's data are your account's own.
+On macOS and Windows nothing here needs administrator rights or a password; on Linux only the deb's install does,
+once, where there is apt. On Windows everything is installed under your own account, and so is an AppImage on Linux. On
+a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the deb
+installs Jason Desktop for every account of the computer, at `/opt/Jason`; the skills and Jason's data are your
+account's own everywhere, and the terminal command everywhere but the deb's `/usr/bin/jason`.
 
 ---
 
@@ -13,9 +15,9 @@ the terminal command, the skills and Jason's data are your account's own.
 
 Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
 Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
-script ends by teaching it its role skills (§4). On macOS and Windows they come with Jason Desktop: the set-up reads them
-from the folder beside the `jason` it carries, with no network. On Linux teaching it is a fetch of its own, and so is a
-later `jason skills install` on any system: a release takes its skills from the package of them it published,
+script ends by teaching it its role skills (§4). On macOS, Windows and Linux they come with Jason Desktop: the set-up reads them
+from the folder beside the `jason` it carries, with no network. A command-line install made by hand teaches them by a
+fetch of its own, and so does a later `jason skills install` on any system: a release takes its skills from the package of them it published,
 `jason-skills.zip`, over the network, at the tag it was published as. A machine without the network teaches it from a
 checkout instead, with `--source`, which also takes a git repository at a ref;
 only that needs `git`.
@@ -69,49 +71,49 @@ they have asked for the install, so do it without stopping to confirm a step. As
 you do not have that yes: ask before the install and before each act this page marks **Ask first.**
 
 Given only the link, or only the repository's address, that question before the install says what is installed. On
-macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
-your terminal and your agents use. It is installed once, updated once and removed once. The rest of this page installs
-it, and there is nothing to choose. On Linux the question offers both, side by side, each said by whom it suits: the command
-line with the person's own agent, for a person at home in a terminal or an editor, which is the rest of this page; or
-Jason Desktop's deb or AppImage, a separate download for a person who wants a desktop application (§2, *Jason
-Desktop*). A person on Linux with no preference is offered Jason Desktop. Given the three lines, the person has asked
-for the install this page makes: do it, with no choice offered.
+macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+line your terminal and your agents use. It is installed once, updated once and removed once. The rest of this page
+installs it, and there is nothing to choose. Given the three lines, the person has asked for the install this page
+makes: do it, with no choice offered.
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
 
-On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex
-read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI
-read too): nobody is asked, and where your own host is one of those the step below changes nothing there.
+The install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where
+it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too): nobody is
+asked, and where your own host is one of those the step below changes nothing there.
 If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
 agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
 [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.
 That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them
-are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
-that line names only a host the install script did not give its skills.
+are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. That line
+names only a host the install script did not give its skills.
 
 This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
-  §7 takes the installation off again. On Linux, where the person took Jason Desktop, do only §2 *Jason Desktop*, and
-  stop there.
+  §7 takes the installation off again.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
   already on this machine, use it (*With a package manager*); where it names none, take the next route. Where the
-  package fails, or where it or your harness refuses it, say so once and take the next route. On macOS and Windows that is this release's install
+  package fails, or where it or your harness refuses it, say so once and take the next route. On macOS, Windows and Linux that is this release's install
   script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file (`sh <file>`;
   `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`). It installs Jason Desktop and opens nothing, puts
   `jason` in the terminal, deploys the skills for Claude Code and Codex where each is found and the role skills, and ends non-zero,
   saying which act failed, when `jason` is not in the terminal. On an Intel Mac it stops before it downloads anything,
-  since it installs Jason Desktop on Apple silicon only: report that as it stands. Its last line is the full path of `jason`: call
-  `jason` by that path for the rest of your session, which does not see the new PATH. On Linux it is §2 *By hand*:
-  download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the
-  two notice files beside the executable, and run `jason --version` by its full path. That is the next route, not a
+  since it installs Jason Desktop on Apple silicon only: report that as it stands. On Linux, where there is apt, it
+  installs a system package, which asks the person for their password: in their desktop's own dialog when your session
+  has no terminal, and where there is neither it stops before anything is installed, saying so: report that as it stands. Its last line is the full path of `jason`: call
+  `jason` by that path for the rest of your session, which does not see the new PATH. On Linux, where your harness
+  refuses the script, it is the route by hand of §2 *Jason Desktop*: download the deb where there is apt, else the
+  AppImage, and `checksums.txt` from the release, check the digest and stop on a mismatch, and hand the file to the
+  person to install or open. That is the next route, not a
   way around the refusal. Never pipe a download into a shell. Where your harness refuses the script or the route by
   hand, say so and give the person the one-liner to type themselves.
-- Write only what those steps write: on macOS and Windows what the install script writes — the application in its
-  place, the terminal command `jason install` places, and the skills for Claude Code and Codex where each is found; the executable and
+- Write only what those steps write: what the install script writes — the application in its place (on Linux the
+  system package and Jason's apt repository, or the AppImage with its menu entry), the terminal command `jason install`
+  places, and the skills for Claude Code and Codex where each is found; the executable and
   its install directory; this account's PATH entry for it;
   Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
   goes into; and the directory the executable unpacks its native libraries into when it first runs — under
@@ -126,7 +128,7 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
-- Install nothing but Jason, and on Linux Jason Desktop where the person took it, and build nothing (§3). A 404 from a
+- Install nothing but Jason, and build nothing (§3). A 404 from a
   download is §2's: stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
 - A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.
@@ -145,9 +147,8 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and,
   where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question
   about what comes next: its question goes in a message of its own. The last line of that first message names Jason
-  Desktop once: on macOS and Windows as part of what was just installed, the window onto this installation with its
-  own chat, which the person opens as any other application and you do not open for them; on Linux as a window onto
-  this same installation with its own chat, with the short address for it (§2, *Jason Desktop*). Where your host does not see a skill installed a
+  Desktop once, as part of what was just installed, the window onto this installation with its
+  own chat, which the person opens as any other application and you do not open for them. Where your host does not see a skill installed a
   minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of
   `jason skills install` that names the `jason-runtime-skills` pack and your host.
 
@@ -170,7 +171,7 @@ Both lines install the **latest release**. If either answers 404, the release co
 address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line
 again, and build nothing instead.
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
 your terminal and your agents use. It is installed once, updated once and removed once (§7).
 
 **On macOS and Windows each script installs Jason Desktop**, with `jason` in the terminal, and opens nothing:
@@ -202,20 +203,43 @@ your terminal and your agents use. It is installed once, updated once and remove
   already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in
   place. Its last line is the full path of `jason`, to type in the terminal it ran in, which does not see the new PATH.
 
-**On Linux**, `install.sh` downloads the archive for the machine, **verifies its SHA-256 before unpacking**,
-installs the executable under your own account — with its licence and the third-party notices beside it, as
-`jason-LICENSE` and `jason-THIRD-PARTY-NOTICES` — and puts that directory on your PATH. Run again over the version
-already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
-it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
+**On Linux `install.sh` installs Jason Desktop too**, as the system's users install comparable applications, and opens
+nothing. It reads the release's `manifest.json`, installs no release before 0.49.1 (an earlier one's own script installs
+the command line alone there), and stops before anything is read when run as root, when given `--install-dir` or
+`--no-modify-path`, or from an agent that runs it confined to its sandbox, a process with `NoNewPrivs` set, where
+neither `sudo`, `pkexec` nor `fusermount` can act: it says to run the line in your own terminal, or to let the agent run
+it outside its sandbox. The
+system decides the form:
 
-Then it teaches the executable it installed its role skills: it runs that executable's
-`jason skills install --roles-only` (§4), which takes the skills from the release's `jason-skills.zip` and writes them
-into Jason's data directory and nowhere else, and what it prints is shown. Where that fails — no network, say — Jason
-is still installed and the run still succeeds: one line says the role skills were not deployed and what to run, and
-`jason status` names the same line. Pointed at a feed in a directory, with `--feed`, it leaves this step out and says
-what to run instead, because the skills verb reads no directory.
+- **Where there is apt** (Ubuntu, Debian, Mint): the release's `jason-desktop-linux-x64.deb` and `checksums.txt`,
+  **its SHA-256 verified**, installed by apt with the one administrator's password a system package needs. Where the line
+  has a terminal, `sudo` asks for it; otherwise, as when an agent runs it in your desktop session, your desktop asks in
+  its own password dialog, through `pkexec`, for at most ten minutes, and apt waits as long for the package system when
+  Ubuntu's own updates hold it. A password not given, no session to ask in, the dialog failing, the package system still
+  held and apt failing are each refused in their own words, and nothing is installed. The package puts Jason Desktop in
+  `/opt/Jason` for every account of the computer, `jason` in every terminal as `/usr/bin/jason`, and Jason's apt
+  repository in `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key it carries, so its later updates come
+  with the system's (§4). A package already at the version, or a later
+  one, is kept and set up again.
+- **Where there is no apt** (Arch, Fedora and the rest): `jason-desktop-linux-x64.AppImage`, **its SHA-256 verified**,
+  for your account alone and with no password: placed at `~/Applications/jason-desktop-linux-x64.AppImage` by one
+  rename, its menu entry and icons written under `~/.local/share`, and the `jason` it carries copied under
+  `~/.jason/desktop/bundle/<version>/`, which is the one your terminal runs. Before anything is downloaded it stops where
+  the system refuses the unprivileged user namespaces the application needs for its sandbox, which Jason never runs without (on Arch,
+  the `linux-hardened` kernel or a setting that turns them off), or has no setuid `fusermount`, which opens the file
+  (install `fuse3`). A file of that name that is not Jason Desktop is left as it is, and nothing is installed; a Jason
+  AppImage already there stays the installation, apt or not.
 
-On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
+Either way it changes nothing while Jason Desktop runs and the install would change it: it says to quit Jason first.
+Then, as on a Mac, the `jason` the application carries runs `jason install --roles` and the script shows its report:
+`jason` in the terminal — for the deb the package's `/usr/bin/jason`, with no PATH line; for an AppImage the wrapper
+`~/.local/bin/jason` and the PATH lines below — Jason's skills for Claude Code and Codex where each is found, an older
+command-line install retired, and the role skills, read from the folder beside the carried `jason` with no network. It
+ends non-zero, saying which act failed, when `jason` was not put in the terminal, and its last line is the full path of
+`jason`. The command-line archive, `jason-linux-x64.tar.gz`, is still published, for the update of a command-line install
+made before; the script does not install it.
+
+On macOS, and for an AppImage on Linux, the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
 `~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
 that file and not the login profile, and so finds `jason` without your signing out. For any other shell the script
 says to sign out and back in, because only a new sign-in reads the login profile again. Every run ends with the
@@ -249,17 +273,18 @@ to the folder it starts in — read the root's and the project's with a campaign
 |---|---|
 | `/Applications/Jason.app`, or `~/Applications/Jason.app`; `jason` at `~/.local/bin/jason` | macOS |
 | `%LOCALAPPDATA%\Programs\jason-desktop\`; `jason.exe` in its `resources\bundle` | Windows |
-| `~/.local/bin/jason` | Linux |
+| `/opt/Jason/`; `jason` at `/usr/bin/jason` | Linux, where there is apt (the deb) |
+| `~/Applications/jason-desktop-linux-x64.AppImage`; `jason` at `~/.local/bin/jason` | Linux, elsewhere (the AppImage) |
 
 The line runs as you. Jason Desktop and everything it sets up are your account's own, so `install.sh` run as root, with
 `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or another account's than the one signed
 in — stop before anything is downloaded, and say to run the line again as yourself. On Linux, where the system's package
 needs an administrator's password once, the line asks for it itself.
 
-Three flags matter on Linux — spelled `--version`, `--install-dir` and `--no-modify-path`. On macOS and Windows
-`--version` (`-Version` for `install.ps1`) is the one taken, from 0.49.0: `--install-dir` and `--no-modify-path`
-(`-InstallDir`, `-NoModifyPath`) are refused there before anything is read or written, since the application has its
-place and every install puts `jason` in the terminal:
+`--version` (`-Version` for `install.ps1`) is the one flag taken, from 0.49.0 on macOS and Windows and from 0.49.1 on
+Linux: `--install-dir` and `--no-modify-path` (`-InstallDir`, `-NoModifyPath`) are refused before anything is read or
+written, since the application has its place and every install puts `jason` in the terminal. A release's own script
+before 0.49.1 still takes them on Linux, where it installs the command line:
 
 - `--version X.Y.Z` installs a particular release instead of the latest. The script checks that the manifest
   it gets back is the release you asked for, rather than trusting the feed to have answered the question you
@@ -313,7 +338,7 @@ jason --version
 
 The terminal you typed the install into has not heard of the new PATH entry: open a new terminal — or sign out and
 back in, where the script said so — or type `jason` by the full path the script's last line gives:
-`~/.local/bin/jason --version` on macOS and Linux, and on Windows
+`~/.local/bin/jason --version` on macOS and for an AppImage on Linux, `/usr/bin/jason --version` for the deb, and on Windows
 `& "$env:LOCALAPPDATA\Programs\jason-desktop\resources\bundle\jason.exe" --version`.
 
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
@@ -328,8 +353,8 @@ skills step and by `jason skills`.
 
 ### With a package manager
 
-This page names no package for a new install: on macOS and Windows the route is the install script above, which
-installs Jason Desktop, and on Linux the script or the steps by hand below.
+This page names no package for a new install: on macOS, Windows and Linux the route is the install script above, which
+installs Jason Desktop.
 
 Where a package manager installed Jason, it is under the same MIT licence, and the package manager owns that
 installation: it updates it and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
@@ -338,8 +363,10 @@ upgrade removes the previous version's keg by default, the path a running runtim
 
 ### By hand
 
-On Linux, to install without running a downloaded script, take the steps the script takes there, yourself. On macOS
-and Windows the install is Jason Desktop, which the script installs and sets up; there is no route by hand.
+On Linux, to install without running a downloaded script, take these steps yourself. On macOS and Windows the install
+is Jason Desktop, which the script installs and sets up; there is no route by hand. On Linux they install the command
+line alone, from the archive a release still publishes, not Jason Desktop: its update to a later release, `jason update
+apply`, moves it into Jason Desktop (§4), and Jason Desktop's own package is the route of *Jason Desktop* below.
 
 1. Download the archive and `checksums.txt` beside it: for the latest release,
    `https://get.jasonharness.ai/releases/latest/download/jason-linux-x64.tar.gz` and
@@ -370,23 +397,23 @@ is found, and its Command Line item says what that placed
 ([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install
 and update. The Windows and macOS packages are signed.
 
-On Linux, Jason Desktop is a separate download beside the command line: `jason-desktop-linux-x64.deb`
-(`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or
-`jason-desktop-linux-x64.AppImage`, at `https://get.jasonharness.ai/desktop/linux-deb` and `/desktop/linux-appimage`,
-which send you to the latest release's file. Each carries the release's own `jason` and works on this same
-installation. On Linux the Command Line item of its menu puts a command in the terminal: `jason`, or `jason-desktop`
-where another `jason` already stands, so beside a command-line install the terminal's `jason` stays that install's and
-the desktop's is `jason-desktop`; the same act puts `~/.local/bin` on your terminal's PATH where it is not yet, with
-the lines and in the files the installer itself writes (§2), naming them before it writes
-([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Linux packages are not signed, and are built so,
-not yet seen on a real machine.
+On Linux it is the installation too, which the install script above installs: the deb where there is apt, the
+AppImage elsewhere. Each is also one download, `jason-desktop-linux-x64.deb` (`sudo apt install
+./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or `jason-desktop-linux-x64.AppImage`, at
+`https://get.jasonharness.ai/desktop/linux-deb` and `/desktop/linux-appimage`, which send you to the latest release's
+file. Installed by hand, the deb puts `jason` in every terminal as `/usr/bin/jason` and adds Jason's apt repository,
+and the application's first start of each version runs the `jason install` it carries, as on macOS and Windows: for an
+AppImage the wrapper `~/.local/bin/jason` and the PATH lines (§2), for the deb nothing more in the terminal, and Jason's
+skills for Claude Code and Codex where each is found; its Command Line item says what that placed
+([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Linux packages are not signed.
 
-On Linux, when the person takes the desktop (§1, *If an agent installs it*), give them the short address for their
-system, or download the file, check its SHA-256 against the release's `checksums.txt` as *By hand* does, and hand it
-to them to open. That ends the install: at a start the desktop starts a runtime when none is up, and deploys the role
-skills and its chat's own skills from the package it carries ([desktop.md](desktop.md#what-it-does-at-a-start)). The
-skills for the person's own agent, which §4 deploys on a command-line install, come only when they ask:
-`jason skills install --host <their host>`, run with the command the Command Line item put in the terminal.
+On Linux, where an agent's harness refuses the install script (§1, *If an agent installs it*), the route by hand is
+this one: download the file for the system, check its SHA-256 against the release's `checksums.txt` as *By hand* does,
+and hand it to the person to install or open — the deb with `sudo apt install ./jason-desktop-linux-x64.deb`, which
+asks for their password, the AppImage opened where they keep it. That ends the install: at a start the desktop starts a runtime when none is up, and deploys the role
+skills and its chat's own skills from the package it carries ([desktop.md](desktop.md#what-it-does-at-a-start)), and its
+first start puts Jason's skills where Claude Code and Codex read them; another host's come when the person asks:
+`jason skills install --host <their host>`, run with the command its first start put in the terminal.
 
 ---
 
@@ -491,7 +518,7 @@ then `jason update apply`. Its own `jason update check` names 0.19.0 as `install
 `upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0. A
 package manager's upgrade goes straight to the newest release.
 
-**A command-line install moves into Jason Desktop.** On macOS and Windows, a command-line install of an earlier version
+**A command-line install moves into Jason Desktop.** On macOS, Windows and Linux, a command-line install of an earlier version
 moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason
 Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it, so that the
 terminal's `jason` is the one the application carries. The update never fails because of the move. Where the move cannot
@@ -500,14 +527,20 @@ stands in its `move` check, and where a command helps, the check names it: `jaso
 move on. On Windows the move first verifies this `jason`'s own signature; where that does not verify, it fetches nothing
 and says to install Jason Desktop from the release page, whose first start takes the command-line install in. Once the
 install is moved, `jason update rollback` does not take it back
-([release-and-update.md](release-and-update.md), "Going back from 0.49"). On Linux there is no move: the command-line
-install is the installation there.
+([release-and-update.md](release-and-update.md), "Going back from 0.49"). On Linux the move takes the form the install
+script takes: the deb, installed by apt with the one administrator's password, where there is apt, and the AppImage
+placed elsewhere. It waits, saying why, where no password is given or there is no session to ask in, where the system
+refuses user namespaces or has no setuid `fusermount`, while Jason Desktop runs, and beside an AppImage older than this
+version or one whose version cannot be read.
 
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
 Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's
-`jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7). A package
+`jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7); on Linux an
+AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Ubuntu's automatic
+updates install them, and Software Updater or `sudo apt update && sudo apt upgrade` at once; there `jason update apply`
+refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
 manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
@@ -731,11 +764,11 @@ Look first: it prints exactly what it would remove and changes nothing.
 jason uninstall
 ```
 
-On macOS and Windows this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed
+On macOS, Windows and Linux this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed
 once. The same verb takes off the application, what `jason install` placed for it — the terminal command and the
 skills it recorded in agent hosts' folders — and an older command-line install, by the rules below and the steps
 [release-and-update.md](release-and-update.md) §9 adds for the application. It is also reached from Installed apps in
-Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS (*Jason Desktop*, below). Run from a
+Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS and Linux (*Jason Desktop*, below). Run from a
 terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written

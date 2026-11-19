@@ -1271,9 +1271,10 @@ internal static partial class StatusChecks
                 Repair.OnPath(env));
         }
 
-        // Linux keeps the check it had: more than one installation may stand there, and another jason by name is said, not
-        // failed.
-        if (OperatingSystem.IsLinux())
+        // On Linux a jason Jason Desktop does not carry keeps the check it had: a build of a checkout or a jason of the
+        // person's own may stand beside an installation, and another jason by name is said, not failed. Jason Desktop's own is
+        // the machine's one installation, as on macOS and Windows.
+        if (OperatingSystem.IsLinux() && CarriedExecutable.Of(env) is null)
         {
             var installed = env.InstallPath;
             if (installed is not null && !string.Equals(System.IO.Path.GetFullPath(installed), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
@@ -1284,9 +1285,10 @@ internal static partial class StatusChecks
             return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
         }
 
-        // macOS and Windows, where a machine holds one installation. The file answering here, as installed: a release's
-        // image, which every release has. Another file first by name is what a person and every agent typing jason runs, so
-        // this one's readiness says nothing of theirs; the application's wrapper running this image is this jason by name.
+        // macOS and Windows, where a machine holds one installation, and Jason Desktop's jason on Linux. The file answering
+        // here, as installed: a release's image, which every release has. Another file first by name is what a person and
+        // every agent typing jason runs, so this one's readiness says nothing of theirs; the application's wrapper running
+        // this image, or the deb's link to it, is this jason by name.
         var running = env.InstallPath ?? SelfExecutable.InstalledImage;
         if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {

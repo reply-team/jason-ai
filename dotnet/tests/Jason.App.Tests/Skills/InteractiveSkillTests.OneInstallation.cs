@@ -85,8 +85,8 @@ public partial class InteractiveSkillTests
     /// version's <c>jason</c>; the desktop's first start of each version runs the set-up and the finish itself; a held lock,
     /// <c>update_in_progress</c> or <c>install_in_progress</c>, means later; <c>update_desktop_not_installed</c> names a
     /// running Jason Desktop as the likely cause, as the verb's own message does; and on Linux the carried <c>jason</c> is
-    /// refused. It says too that a desktop installed by hand sets the machine up at its first start, and that on macOS and
-    /// Windows a person is sent to open Jason Desktop rather than download it.
+    /// refused, the deb's by the package manager's code since the system updates it. It says too that a desktop installed by
+    /// hand sets the machine up at its first start, and that a person is sent to open Jason Desktop rather than download it.
     /// </summary>
     [Fact]
     public void The_operating_skill_says_how_the_carried_update_goes_and_what_a_held_lock_means()
@@ -98,6 +98,7 @@ public partial class InteractiveSkillTests
         Assert.Contains($"A refusal with `{UpdateCodes.InProgress}` or `{CliErrors.InstallInProgress}` means later, not a failure", skill, StringComparison.Ordinal);
         Assert.Contains($"`{UpdateCodes.DesktopNotInstalled}` means Jason Desktop's installer had not installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason Desktop that is running, one of another data directory included", skill, StringComparison.Ordinal);
         Assert.Contains($"refused with `{UpdateCodes.CarriedByDesktop}`", skill, StringComparison.Ordinal);
+        Assert.Contains($"The deb's `jason` refuses with `{UpdateCodes.ManagedByPackageManager}`, since the system updates the package from Jason's apt repository", skill, StringComparison.Ordinal);
         Assert.Contains("A person who installs Jason Desktop on macOS or Windows by hand, from its disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it carries", skill, StringComparison.Ordinal);
         Assert.Contains("Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download link, which is for Linux", skill, StringComparison.Ordinal);
 
@@ -115,12 +116,13 @@ public partial class InteractiveSkillTests
     public void The_skills_say_how_a_command_line_install_moves_into_Jason_Desktop()
     {
         var operating = Flattened("operating-the-installation");
-        Assert.Contains("On macOS and Windows, `jason update apply` typed into a command-line install of an earlier version updates it and then moves it into Jason Desktop", operating, StringComparison.Ordinal);
-        Assert.Contains($"`move.state`: `{MoveStates.Done}`, `{MoveStates.Pending}`, `{MoveStates.Failed}`, or `{MoveStates.NotApplicable}` on Linux, where there is no move.", operating, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux, `jason update apply` typed into a command-line install of an earlier version updates it and then moves it into Jason Desktop", operating, StringComparison.Ordinal);
+        Assert.Contains($"`move.state`: `{MoveStates.Done}`, `{MoveStates.Pending}`, `{MoveStates.Failed}`, or `{MoveStates.NotApplicable}` on a system that is none of the three, where there is no move.", operating, StringComparison.Ordinal);
+        Assert.DoesNotContain("on Linux, where there is no move", operating, StringComparison.Ordinal);
         Assert.Contains("On Windows the move first verifies this `jason`'s own signature: where that does not verify, nothing is fetched or changed, and the way on is installing Jason Desktop from the release page", operating, StringComparison.Ordinal);
         Assert.Contains($"Once the install is moved, `jason update rollback` refuses with `{UpdateCodes.CarriedByDesktop}` and points to \"Going back from 0.49\" in `docs/release-and-update.md`", operating, StringComparison.Ordinal);
 
         var troubleshooting = Flattened("troubleshooting-jason");
-        Assert.Contains("On macOS and Windows, `jason status`'s optional `move` check says where the move of a command-line install into Jason Desktop stands. It never stops work", troubleshooting, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux, `jason status`'s optional `move` check says where the move of a command-line install into Jason Desktop stands. It never stops work", troubleshooting, StringComparison.Ordinal);
     }
 }

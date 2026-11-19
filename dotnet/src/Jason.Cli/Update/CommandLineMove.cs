@@ -149,7 +149,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 MoveStates.NotApplicable,
                 null,
                 null,
-                "Jason Desktop takes a command-line install in on macOS and Windows only; on this system the command line is the installation, and nothing was moved.");
+                "Jason Desktop takes a command-line install in on macOS, Windows and Linux only; on this system the command line is the installation, and nothing was moved.");
         }
 
         var old = Path.GetFullPath(ledger.InstallPath);

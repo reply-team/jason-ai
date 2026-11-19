@@ -38,8 +38,10 @@ test('the item is the set-up on macOS, Windows and Linux', () => {
     assert.ok(!desktop.includes('- **Command Line**, on Linux,'), 'the page still has a Linux Command Line item of its own');
 });
 
-test('the README and the desktop page say the first start sets the machine up on macOS and Windows', () => {
-    assert.ok(readme.includes('on macOS and Windows the first start of each version puts `jason` there and gives Claude Code and Codex Jason\'s skills, each where it is found, and the Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there'));
+test('the README and the desktop page say the first start sets the machine up on macOS, Windows and Linux', () => {
+    assert.ok(readme.includes('The first start of each version runs the carried `jason install`, which puts `jason` in your terminal and gives Claude Code and Codex Jason\'s skills, each where it is found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command Line item of its menu says what that placed and puts it back.'));
+    assert.ok(!readme.includes('on Linux that item puts a command there'), 'the README still gives Linux a Command Line item of its own');
+    assert.ok(desktop.includes('on macOS, Windows and Linux the first start of each version puts `jason` where a new terminal finds it'));
     assert.ok(desktop.includes('installed by hand: the application\'s first start of each version then puts `jason` in your terminal'));
     assert.ok(desktop.includes('## The command line, and the login items'));
 });

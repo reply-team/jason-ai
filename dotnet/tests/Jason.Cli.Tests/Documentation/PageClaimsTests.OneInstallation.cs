@@ -79,7 +79,7 @@ public partial class PageClaimsTests
     public async Task The_pages_take_Jason_off_every_system_by_the_one_uninstall()
     {
         var install = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
-        Assert.Contains("On macOS and Windows this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed once.", install, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed once.", install, StringComparison.Ordinal);
         Assert.Contains("Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.", install, StringComparison.Ordinal);
         Assert.Contains("On Linux the one uninstall is the same: Uninstall Jason… in the Jason menu, or `jason uninstall`. For the deb your system asks for an administrator's password first, to take the package off; an AppImage goes with no password.", install, StringComparison.Ordinal);
         Assert.Contains($"it refuses with `{CliErrors.DesktopRunning}` before anything is removed", install, StringComparison.Ordinal);
@@ -102,11 +102,12 @@ public partial class PageClaimsTests
         Assert.Contains("The data directory stays unless you say otherwise, with `--purge-data` or that box, and the harness root always stays.", Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again")), StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("On macOS and Windows it takes Jason Desktop off with everything it placed, and it is also in Installed apps on Windows and in the Jason menu on macOS (Uninstall Jason…).", readme, StringComparison.Ordinal);
-        Assert.Contains("On macOS and Windows it comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS, or Installed apps on Windows;", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux it takes Jason Desktop off with everything it placed, and it is also in Installed apps on Windows and in the Jason menu on macOS and Linux (Uninstall Jason…).", readme, StringComparison.Ordinal);
+        Assert.Contains("It comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS and Linux, or Installed apps on Windows; on Linux the deb asks for your password first, to take its package off.", readme, StringComparison.Ordinal);
 
         var handbook = Flat(Page("docs", "handbook.md"));
         Assert.Contains("On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed and an older command-line install", handbook, StringComparison.Ordinal);
+        Assert.Contains("On Linux it is the one uninstall too, reached from Uninstall Jason… in the Jason menu as well; for the deb it asks for an administrator's password first, to take the package off.", handbook, StringComparison.Ordinal);
 
         foreach (var (page, text) in new[] { ("README.md", readme), ("docs/INSTALL.md", Flat(Page("docs", "INSTALL.md"))), ("docs/desktop.md", Flat(Page("docs", "desktop.md"))), ("docs/release-and-update.md", Flat(Page("docs", "release-and-update.md"))), (".github/release-notes-template.md", Flat(Page(".github", "release-notes-template.md"))), ("desktop/README.md", Flat(Page("desktop", "README.md"))) })
         {
@@ -212,13 +213,13 @@ public partial class PageClaimsTests
             AgentHosts.All.Where(row => row.HomeSkills == codex.HomeSkills && row.Kind != AgentHostKind.Codex).Select(row => row.Kind));
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too):", install, StringComparison.Ordinal);
+        Assert.Contains("The install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too):", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("Where your agent is another host than Claude Code or Codex, or on Linux, give it Jason's skills with `jason skills install --host <your host>`", readme, StringComparison.Ordinal);
+        Assert.Contains("Where your agent is another host than Claude Code or Codex, give it Jason's skills with `jason skills install --host <your host>`", readme, StringComparison.Ordinal);
         Assert.Contains("another host gets them with `jason skills install --host <host>`.", Flat(Page("docs", "handbook.md")), StringComparison.Ordinal);
         Assert.Contains("another agent host gets them with `jason skills install --host <host>`.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
-        Assert.Contains("Any other agent host, and on Linux every one, gets Jason's skills with `jason skills install --host <host>`", Flat(Page("skills", "runtime", "operating-the-installation", "SKILL.md")), StringComparison.Ordinal);
+        Assert.Contains("Any other agent host gets Jason's skills with `jason skills install --host <host>`", Flat(Page("skills", "runtime", "operating-the-installation", "SKILL.md")), StringComparison.Ordinal);
 
         foreach (var page in new[] { "README.md", "CLAUDE.md", "docs/INSTALL.md", "docs/handbook.md", "docs/desktop.md", "docs/release-and-update.md", ".github/release-notes-template.md", "desktop/README.md", "skills/runtime/operating-the-installation/SKILL.md", "install/install.sh", "install/install.ps1", "desktop/installer/uninstall.nsh", "dotnet/src/Jason.Cli/CliApp.cs", "dotnet/src/Jason.Cli/Installation/InstallCommand.cs" })
         {
@@ -243,7 +244,7 @@ public partial class PageClaimsTests
     [InlineData("desktop/README.md")]
     public void The_pages_that_install_Jason_say_one_installation_in_the_same_words(string page) =>
         Assert.Contains(
-            "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
+            "On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
             Flat(Page(page.Split('/'))),
             StringComparison.Ordinal);
 
@@ -263,9 +264,9 @@ public partial class PageClaimsTests
 
         Assert.Contains("Installed by hand from one of them, it sets the machine up as the script does (§2), once it is in its place: on macOS, drag Jason into Applications, or into the Applications folder in your home, and open it there. Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first. From its place, the application's first start of each version runs the `jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is found, and its Command Line item says what that placed", Flat(Section(Page("docs", "INSTALL.md"), "## 2. Install from a release")), StringComparison.Ordinal);
         Assert.Contains("the Windows installer runs it too, at every install and update.", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
-        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found.", Flat(Page("README.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found.", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.Contains("and so does the package for your system below, installed by hand: the application's first start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where it is found", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
-        Assert.Contains("On macOS and Windows, the application's first start of each version puts `jason` in the terminal and Jason's skills where Claude Code and Codex read them, each where it is found, through the `jason` it carries; the Windows installer does the same at every install and update.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows, the application's first start of each version puts `jason` in the terminal and Jason's skills where Claude Code and Codex read them, each where it is found, through the `jason` it carries; the Windows installer does the same at every install and update. On Linux the first start does the same, from the `jason` the deb carries or from an AppImage's copy.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -301,6 +302,7 @@ public partial class PageClaimsTests
         Assert.Contains("On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: `apply` hands the update to the application's own updater, with no window, and the new version's `jason` finishes it", handbook, StringComparison.Ordinal);
         Assert.Contains($"it is refused with `{UpdateCodes.InProgress}` or `{CliErrors.InstallInProgress}`, which mean later: let that one end, then run it again.", handbook, StringComparison.Ordinal);
         Assert.Contains("On macOS and Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's `jason` takes these steps when it finishes it", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("on Linux an AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
         Assert.Contains("On macOS and Windows, `jason update apply` typed into the `jason` the application carries is such a word too: it hands the update to the same updater with no window, and the new version's `jason` finishes it", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
     }
 
@@ -334,22 +336,23 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The Command Line item is the machine set-up's status on macOS and Windows and the PATH command on Linux; the README
-    /// says which, and no longer says the item puts a folder on the PATH on macOS. The desktop's own split is held by
-    /// <c>desktop/test/one-installation-pages.test.ts</c>.
+    /// The Command Line item is the machine set-up's status on macOS, Windows and Linux, and Jason Desktop's start runs the
+    /// carried set-up and finish itself; the README says so, and no longer says the item puts a folder on the PATH, or a
+    /// command of its own on Linux. The desktop's own split is held by <c>desktop/test/one-installation-pages.test.ts</c>.
     /// </summary>
     [Fact]
     public void The_readme_says_what_the_command_line_item_is_on_each_system()
     {
         var readme = Flat(Page("README.md"));
-        Assert.Contains("on macOS and Windows the first start of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there", readme, StringComparison.Ordinal);
+        Assert.Contains("on macOS, Windows and Linux: it carries that `jason`, and sets the installation up itself. The first start of each version runs the carried `jason install`, which puts `jason` in your terminal and gives Claude Code and Codex Jason's skills, each where it is found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command Line item of its menu says what that placed and puts it back.", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("and on macOS and Linux puts its folder on your terminal's PATH", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("on Linux that item puts a command there", readme, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// On macOS and Windows a command-line install of an earlier version moves into Jason Desktop through its own update, and
-    /// the pages say what a person sees. Each claim is held to a real run of the move: on a system with no application (Linux)
-    /// it does not apply; on Windows a jason whose own signature does not verify fetches nothing, changes nothing and points to
+    /// On macOS, Windows and Linux a command-line install of an earlier version moves into Jason Desktop through its own update,
+    /// and the pages say what a person sees, and no longer that Linux has no move. Each claim is held to a real run of the
+    /// move: on a system that is none of the three it does not apply; on Windows a jason whose own signature does not verify fetches nothing, changes nothing and points to
     /// the release page; <c>jason status</c> names it in its <c>move</c> check; and a rollback points to the release page's
     /// section on going back from 0.49, which is there.
     /// </summary>
@@ -361,7 +364,7 @@ public partial class PageClaimsTests
         {
             var answer = await new CommandLineMove(rig.Env with { Setup = null }, rig.Update, TimeProvider.System).RunAsync(rig.Complete(), rig.Installation.Feed, ct);
             Assert.Equal(MoveStates.NotApplicable, answer.State);
-            Assert.Contains("on macOS and Windows only", answer.Reason!, StringComparison.Ordinal);
+            Assert.Contains("on macOS, Windows and Linux only", answer.Reason!, StringComparison.Ordinal);
         }
 
         using (var rig = new Update.MoveRig(windows: true))
@@ -383,20 +386,27 @@ public partial class PageClaimsTests
         Assert.Contains("\n### Going back from 0.49\n", Page("docs", "release-and-update.md"), StringComparison.Ordinal);
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("On macOS and Windows, a command-line install of an earlier version moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it", install, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux, a command-line install of an earlier version moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it", install, StringComparison.Ordinal);
         Assert.Contains("The update never fails because of the move. Where the move cannot go on, the command-line install is left as it was and still answers as `jason`, `jason status` says where the move stands in its `move` check", install, StringComparison.Ordinal);
         Assert.Contains("On Windows the move first verifies this `jason`'s own signature; where that does not verify, it fetches nothing and says to install Jason Desktop from the release page, whose first start takes the command-line install in.", install, StringComparison.Ordinal);
-        Assert.Contains("Once the install is moved, `jason update rollback` does not take it back ([release-and-update.md](release-and-update.md), \"Going back from 0.49\"). On Linux there is no move", install, StringComparison.Ordinal);
+        Assert.Contains("Once the install is moved, `jason update rollback` does not take it back ([release-and-update.md](release-and-update.md), \"Going back from 0.49\"). On Linux the move takes the form the install script takes", install, StringComparison.Ordinal);
 
-        Assert.Contains("On macOS and Windows a command-line install of an earlier version moves into Jason Desktop through that same `apply`", Flat(Page("docs", "handbook.md")), StringComparison.Ordinal);
-        Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
-        Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`: it installs the application and moves the command line into it, and the update never fails because of the move; `jason status` says where the move stands. Linux has no move.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows a command-line install of an earlier version moves into Jason Desktop through that same `apply`, and on Linux too", Flat(Page("docs", "handbook.md")), StringComparison.Ordinal);
+        Assert.Contains("A command-line install of an earlier version on macOS, Windows or Linux moves into Jason Desktop through its own `jason update apply`, which installs the application", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
+        Assert.Contains("A command-line install of an earlier version on macOS, Windows or Linux moves into Jason Desktop through its own `jason update apply`: it installs the application and moves the command line into it, and the update never fails because of the move; `jason status` says where the move stands.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+        foreach (var (page, text) in new[] { ("docs/INSTALL.md", install), ("docs/handbook.md", Flat(Page("docs", "handbook.md"))), ("docs/desktop.md", Flat(Page("docs", "desktop.md"))), (".github/release-notes-template.md", Flat(Page(".github", "release-notes-template.md"))) })
+        {
+            foreach (var said in new[] { "On Linux there is no move", "Linux has no move", "on Linux there is no move" })
+            {
+                Assert.False(text.Contains(said, StringComparison.Ordinal), $"{page} still says \"{said}\".");
+            }
+        }
     }
 
     /// <summary>
-    /// On macOS and Windows the install script's set-up teaches the role skills from the folder beside the jason the
+    /// On macOS, Windows and Linux the install script's set-up teaches the role skills from the folder beside the jason the
     /// application carries, with no network, as the routine reads them; §1 of the install page says so, and keeps the fetch of
-    /// the release's package for Linux and for a later <c>jason skills install</c>.
+    /// the release's package for a command-line install made by hand and for a later <c>jason skills install</c>.
     /// </summary>
     [Fact]
     public void The_install_page_says_the_role_skills_come_with_the_application_on_macOS_and_Windows()
@@ -406,8 +416,8 @@ public partial class PageClaimsTests
         Assert.Contains("SkillsSource.StageAsync(env with { Out = TextWriter.Null }, Bundle, null, null, cancellationToken)", setup, StringComparison.Ordinal);
 
         var need = Flat(Section(Page("docs", "INSTALL.md"), "## 1. What you need"));
-        Assert.Contains("On macOS and Windows they come with Jason Desktop: the set-up reads them from the folder beside the `jason` it carries, with no network.", need, StringComparison.Ordinal);
-        Assert.Contains("On Linux teaching it is a fetch of its own, and so is a later `jason skills install` on any system: a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.", need, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux they come with Jason Desktop: the set-up reads them from the folder beside the `jason` it carries, with no network.", need, StringComparison.Ordinal);
+        Assert.Contains("A command-line install made by hand teaches them by a fetch of its own, and so does a later `jason skills install` on any system: a release takes its skills from the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as.", need, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -432,7 +442,8 @@ public partial class PageClaimsTests
     /// <summary>
     /// Restoring a database by hand starts the version the backup was written by. A command-line install's update kept that
     /// version under <c>update/previous</c>; where Jason Desktop carries jason, the copy of the application the Desktop kept
-    /// is that version, as the rollback's own line says, and <c>update/previous</c> there holds what a move retired.
+    /// is that version, as the rollback's own line says, an AppImage's file on Linux, and for the deb, which keeps none, the
+    /// previous release's package; <c>update/previous</c> there holds what a move retired.
     /// </summary>
     [Fact]
     public void Restoring_a_database_by_hand_names_the_version_before_for_each_kind_of_install()
@@ -441,7 +452,7 @@ public partial class PageClaimsTests
 
         var restoring = Flat(Section(Page("docs", "release-and-update.md"), "### Restoring a database by hand"));
         Assert.Contains("for a backup taken before a migration is the version you were on before the update; a command-line # install's update kept it here: ~/.jason/update/previous/jason runtime start", restoring, StringComparison.Ordinal);
-        Assert.Contains("Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/` (`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder, then run `jason runtime start`.", restoring, StringComparison.Ordinal);
+        Assert.Contains("Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows and for an AppImage on Linux, the version before the update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/` (`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder, or of the AppImage file, then run `jason runtime start`. For the deb it is the previous release's package, installed again and held as \"Going back\" above says.", restoring, StringComparison.Ordinal);
         Assert.Contains("`~/.jason/update/previous/jason` is not that version there: after a move into Jason Desktop it is the command-line executable the move's update replaced, a release before 0.49.", restoring, StringComparison.Ordinal);
     }
 

@@ -53,7 +53,7 @@ If anything stops you, ask me directly and tell me why.
 ```
 
 **Or with [Jason Desktop](#jason-desktop)**, if you would rather start from a window: one download, and its window sets
-the rest up. On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first
+the rest up. On macOS, Windows and Linux both make one installation: Jason Desktop and the `jason` it carries, whose first
 start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where
 it is found. Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -65,22 +65,21 @@ it is found. Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
 means today.
 
 - **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
-- **What it installs:** on macOS and Windows, one installation: [Jason Desktop](#jason-desktop) and the `jason` it
+- **What it installs:** on macOS, Windows and Linux, one installation: [Jason Desktop](#jason-desktop) and the `jason` it
   carries, with `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is found. It is
-  installed once, updated once and removed once. On Linux, one self-contained executable. No admin rights and no
-  password: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`,
-  and the terminal command, the skills and Jason's data are your account's own; on Windows and Linux everything goes
-  under your own account. The install script checks the download's SHA-256, and on macOS and Windows its signature,
-  before it places anything, and ends by deploying the role skills. No Docker, Python or Node for Jason itself.
+  installed once, updated once and removed once. On macOS and Windows no admin rights and no password: on a Mac the
+  application goes to `/Applications` where your account may write there, else `~/Applications`, and the terminal
+  command, the skills and Jason's data are your account's own; on Windows everything goes under your own account. On
+  Linux it is the deb where there is apt, installed with your password once and then updated with the system, and the
+  AppImage, under your own account, elsewhere. The install script checks the download's SHA-256, and on macOS and
+  Windows its signature, before it places anything, and ends by deploying the role skills. No Docker, Python or Node for
+  Jason itself.
 - **How you know it worked:** `jason status --human` checks everything, and each failed check names the command that fixes it.
 - **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
-- **How you take it off:** `jason uninstall`. On macOS and Windows it takes Jason Desktop off with everything it placed,
-  and it is also in Installed apps on Windows and in the Jason menu on macOS (Uninstall Jason…). It removes only the
+- **How you take it off:** `jason uninstall`. On macOS, Windows and Linux it takes Jason Desktop off with everything it placed,
+  and it is also in Installed apps on Windows and in the Jason menu on macOS and Linux (Uninstall Jason…). It removes only the
   skills it recorded installing, so anything you copied in by hand stays. Your data stays too unless you add
   `--purge-data`, and your `~/Jason` folder is never touched.
-- **Jason Desktop on Linux:** a separate download, a deb or an AppImage, which puts a command in your terminal from its
-  menu whenever you want one (`jason`, or `jason-desktop` where another `jason` already stands) and comes off with
-  Remove What Jason Placed… in its menu, and then the application itself. It keeps your data too.
 
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
 yes, or run the install line under "Or install it yourself".
@@ -98,8 +97,9 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-On macOS and Windows that installs Jason Desktop, with `jason` in your terminal and Jason's skills for Claude Code and
-Codex, where each is found; on Linux, the `jason` executable. Either way the script ends by teaching it its role skills. In a new
+That installs Jason Desktop, with `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is
+found; on Linux the deb where there is apt, asking for your password once, and the AppImage elsewhere. The script ends
+by teaching it its role skills. In a new
 terminal, start it and ask whether it can work; the first line is for when the script said it could not teach the role
 skills:
 
@@ -119,7 +119,7 @@ jason profile set-default claude-code
 ```
 
 Or open Jason Desktop in Live, with Claude Code or Codex connected there: it makes and names one for the agent its
-chat runs on. Where your agent is another host than Claude Code or Codex, or on Linux, give it Jason's skills with
+chat runs on. Where your agent is another host than Claude Code or Codex, give it Jason's skills with
 `jason skills install --host <your host>`, which prints the folder before it writes there; the host words are in the
 install guide. Then go back to your
 agent and ask it to start Jason's quick-start skill: it takes you to your first campaign.
@@ -161,7 +161,7 @@ to.
 | **Deliverability and warm-up** | Deliverability modules ship with Jason: sending and LinkedIn guardrail skills (authentication, warm-up, pacing, bounces, recovery) and a Deliverability role that reads bounces, opt-outs and failures and can pause a campaign at once. Warm-up itself runs in the provider you connect: Reply, or TrulyInbox, Lemwarm, Warmy and others. Jason has no warm-up engine of its own. | [Deliverability](#deliverability-and-warm-up) |
 | **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
-| **Installation** | One prompt pasted into your agent, or one line in a shell. On macOS and Windows one installation, Jason Desktop and the `jason` it carries; on Linux one self-contained executable. No admin rights: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows and Linux all of it is. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
+| **Installation** | One prompt pasted into your agent, or one line in a shell. One installation on macOS, Windows and Linux, Jason Desktop and the `jason` it carries. No admin rights on macOS and Windows: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows all of it is. On Linux the deb asks for your password once and then updates with the system; the AppImage is your account's own. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 987 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
 | **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1195 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
@@ -304,16 +304,15 @@ No forms, no sequence builder. You say what you want the way you'd brief a great
 
 ## Jason Desktop
 
-Jason Desktop is a window onto the same installation your agent and the `jason` command use. It is one more client of
-the runtime, not a second Jason: it works on the data directory the CLI uses, starts the runtime through
-`jason runtime start`, and changes the installation only through the CLI's verbs. Its chat is a session with your own
-agent, started for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads
-and advises. Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification
-channels and your AI provider's key. The terminal stays open to you at any time: on macOS and Windows the first start
-of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the
-Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there, `jason`,
-or `jason-desktop` where another `jason` already stands, and puts its folder on your terminal's PATH where it is not
-yet, as the installer does.
+Jason Desktop is the window of the one installation your agent and the `jason` command use, on macOS, Windows and
+Linux: it carries that `jason`, and sets the installation up itself. The first start of each version runs the carried
+`jason install`, which puts `jason` in your terminal and gives Claude Code and Codex Jason's skills, each where it is
+found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command
+Line item of its menu says what that placed and puts it back. It is not a second Jason: it works on the data directory
+the CLI uses and starts the runtime through `jason runtime start`. Its chat is a session with your own agent, started
+for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads and advises.
+Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification channels and your AI
+provider's key.
 
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
@@ -321,9 +320,8 @@ It is published with every release, from the [releases page](https://github.com/
 one to take on Ubuntu 24.04 and later) and `jason-desktop-linux-x64.AppImage`, or from the short addresses `get.jasonharness.ai/desktop/windows`, `/desktop/mac`,
 `/desktop/mac-intel`, `/desktop/linux-deb` and `/desktop/linux-appimage`. The Windows and macOS packages are
 signed; the Linux ones are not, and are built so, started once under a virtual display, and not yet seen on a real
-machine. On macOS and Windows it comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on
-macOS, or Installed apps on Windows; on Linux, choose Remove What Jason Placed… in its menu and then remove the
-application. Your data stays. [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md)
+machine. It comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS and Linux, or
+Installed apps on Windows; on Linux the deb asks for your password first, to take its package off. Your data stays. [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md)
 says what it does, what its chat may run, how it updates and how it comes off.
 
 ---
