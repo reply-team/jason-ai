@@ -536,8 +536,9 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// A run's start is refused, so a campaign the manager paused is started again by the person: the example question
-    /// offers only what can be carried out, and the skill says what the manager's line says where an answer is to resume.
+    /// A run's start is refused, and a paused campaign is never reviewed, so a campaign the manager paused is started
+    /// again by the person: the example question offers only what can be carried out, the skill says the question names
+    /// the start as theirs, and no command the skill prints starts a campaign.
     /// </summary>
     [Fact]
     public void The_manager_leaves_starting_a_campaign_it_paused_to_the_person()
@@ -546,6 +547,7 @@ public partial class RoleSkillTests
 
         Assert.DoesNotContain("--option \"resume", skill, StringComparison.Ordinal);
         Assert.Contains("--option \"keep it paused\" --option \"start it again myself at half volume\"", skill, StringComparison.Ordinal);
-        Assert.Contains("A campaign you paused is started again by the person, never by you", skill, StringComparison.Ordinal);
+        Assert.Contains("A campaign you paused is started again by the person, never by you: a run's `jason campaign start` is refused, and no review runs while it stays paused, so the question says the start is theirs and what you recommend they set first.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain(SkillPack.PrintedCommands(SkillPack.Find("manager").File), line => line.StartsWith("jason campaign start", StringComparison.Ordinal));
     }
 }

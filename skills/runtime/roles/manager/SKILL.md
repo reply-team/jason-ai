@@ -599,8 +599,8 @@ words; an identifier goes in the member made for it, a question's `--reference`,
 jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "Three bounces from the new domain in a day, so I paused the campaign. Keep it paused until the domain is warm, or start it again yourself at half volume? I recommend keeping it paused: the domain is nine days old." --option "keep it paused" --option "start it again myself at half volume" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "bounce rate above the guardrail"
 ```
 
-A campaign you paused is started again by the person, never by you: a run's `jason campaign start` is refused, so
-where an answer says to resume it, your line says the start is theirs and what you recommend they set first.
+A campaign you paused is started again by the person, never by you: a run's `jason campaign start` is refused, and
+no review runs while it stays paused, so the question says the start is theirs and what you recommend they set first.
 
 One question. If you find two things worth asking, ask the one that matters and leave the other in the
 chronicle for next time; a person who opens ten questions from one review answers none of them. A question is
