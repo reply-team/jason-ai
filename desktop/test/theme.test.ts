@@ -94,6 +94,11 @@ test('a data directory that holds only the desktop’s own mode record, or that 
 test('what a Demo run writes, Electron’s profile and the desktop’s own log, leaves a new installation new', () => {
     const person = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
     writeMode(desktopPaths(person).mode, 'demo');
+    // An AppImage's first start, the Demo's, copies the jason it carries and records where its file is: both are the
+    // desktop's own, and a person choosing Live is still at a new installation's first start.
+    mkdirSync(join(desktopPaths(person).bundle, '0.49.1'), { recursive: true });
+    writeFileSync(join(desktopPaths(person).bundle, '0.49.1', 'jason'), 'jason');
+    writeFileSync(join(desktopPaths(person).desktop, 'appimage.json'), '{"file":"/home/a/Applications/jason-desktop-linux-x64.AppImage"}');
     mkdirSync(join(desktopPaths(person).electron, 'Partitions'), { recursive: true });
     writeFileSync(join(desktopPaths(person).electron, 'Local State'), '{}');
     mkdirSync(desktopPaths(person).logs);

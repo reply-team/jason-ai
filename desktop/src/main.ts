@@ -29,14 +29,14 @@ import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './dee
 import { Desk } from './desk.ts';
 import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
-import { keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount, type LinuxPackage } from './linux-package.ts';
+import { childEnvironment, keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { wrapperTarget } from './command-line.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, restartForPackage, updateKeyWords, Updater } from './updates.ts';
+import { debFile, packageMovedTo, previousRelease, restartOnce, updateKeyWords, Updater } from './updates.ts';
 import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
 import { carriedRuntimeStart, refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
@@ -497,12 +497,19 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // version.json is looked at once a minute; once it names another version, the update item offers the restart, and one
     // notice says so too, whose click restarts: the old build's runtime stopped, then Jason started again, whose start
     // finishes the update (`machine-setup.ts`).
-    const packageRestart = { stopRuntime: stopCarriedRuntime, relaunch: () => modeDeps.relaunch(), refused: (why: string) => dialog.showErrorBox(windowTitle, why) };
-    const packageMoved = (): string | null => {
-        if (form?.form !== 'deb' || version === null) return null;
-        const now = bundleVersion(packaged);
-        return now !== null && now !== version ? now : null;
+    // Once its runtime has stopped, the window goes quiet as an update's install makes it (`beforeInstall`): the repairer
+    // would otherwise start the old build's runtime again while the relaunch waits for a set-up that is running.
+    const packageRestart = {
+        stopRuntime: stopCarriedRuntime,
+        relaunch: () => {
+            quitting = true;
+            repairer.stop();
+            modeDeps.relaunch();
+        },
+        refused: (why: string) => dialog.showErrorBox(windowTitle, why),
     };
+    const restartPackage = restartOnce(packageRestart);
+    const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged)) : null);
     // Held for as long as the window runs: a notice nothing refers to is collected, and its click with it.
     let packageNotice: Notification | null = null;
     if (form?.form === 'deb') {
@@ -515,7 +522,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             toPage('updates.changed');
             if (Notification.isSupported()) {
                 packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
-                packageNotice.on('click', () => void restartForPackage(packageRestart));
+                packageNotice.on('click', () => void restartPackage());
                 packageNotice.show();
             }
         });
@@ -530,7 +537,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         autostart,
         updates,
         packageMoved,
-        restart: () => void restartForPackage(packageRestart),
+        restart: () => void restartPackage(),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
@@ -1047,7 +1054,7 @@ async function linuxOwedStart(log: Logger): Promise<void> {
     const bundle = bundleDirectory();
     const jason = linuxOwedJason(form, bundle, desktopPaths(runOn.person).bundle, bundleVersion(bundle), existsSync);
     if (jason === null) return;
-    const cli = cliAt(jason, withoutMount(withPath(process.env, pathOf(process.env)), mountOf(form, process.env)));
+    const cli = cliAt(jason, childEnvironment(form, process.env));
     await payOwedStart({ note: desktopPaths(runOn.person).startOwed, exists: existsSync, runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile), log });
 }
 
@@ -1063,7 +1070,7 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
     if (carried !== null && !carried.outlives) return null;
     const bundle = carried?.bundle ?? packaged;
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
-    const cli = cliAt(executable, withPath(process.env, pathOf(process.env)));
+    const cli = cliAt(executable, childEnvironment(linuxForm(), process.env));
     return new MachineSetup({
         cli,
         executable,
@@ -1232,7 +1239,8 @@ function startDesktop(): void {
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
-        // On Linux no set-up runs: a Demo start pays the note that a start is owed itself, and a Live start brings a runtime up.
+        // Where no set-up runs (an AppImage whose copy was not made), a Demo start pays the note that a start is owed itself,
+        // and a Live start brings a runtime up.
         void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }

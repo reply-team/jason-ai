@@ -17,7 +17,7 @@ import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } 
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, pressItem, type MenuItem, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, restartQuestion, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -251,7 +251,9 @@ export class Desk {
     pressUpdate(act: MenuItem['act'], byKey: boolean): void {
         if (this.removing()) return;
         if (act === 'restart') {
-            this.deps.restart?.();
+            const moved = this.deps.packageMoved?.() ?? null;
+            if (!byKey) this.deps.restart?.();
+            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());
             return;
         }
         const { updates } = this.deps;

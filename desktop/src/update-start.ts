@@ -22,11 +22,10 @@ import { cliAt } from './cli.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { loggedCli } from './installation.ts';
 import { runtimeDoor, startAgain } from './machine-setup.ts';
-import { keptAsideOf, linuxPackage, type LinuxPackage } from './linux-package.ts';
+import { childEnvironment, keptAsideOf, packageFormOf, type LinuxPackage } from './linux-package.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
-import { pathOf, withPath } from './programs.ts';
 import { settleByRequest } from './rollback.ts';
 import { applyExit, applyExits, busyRecord, createRequestFile, headlessLimitOf, requestFile, requestSupport, systemShell, takeRequest, usageRecord, windowOpenUpdate, type UpdateRequest, type UpdateRequests } from './update-request.ts';
 import { Updater, type UpdateState } from './updates.ts';
@@ -58,21 +57,14 @@ export interface RequestUpdaterDeps {
 export function carriedRuntimeStart(data: string, log: Logger): () => Promise<'started' | 'answering' | 'not_started'> {
     return async () => {
         const executable = carriedJason(data);
-        const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
+        const cli = loggedCli(cliAt(executable, childEnvironment(thisForm(), process.env)), log);
         return (await startAgain(runtimeDoor(cli, desktopPaths(data).runFile))).act;
     };
 }
 
 /** Which Linux package this application runs as (`linux-package.ts`); null off Linux. */
 function thisForm(): LinuxPackage | null {
-    if (process.platform !== 'linux') return null;
-    let packageType: string | null = null;
-    try {
-        packageType = readFileSync(join(process.resourcesPath, 'package-type'), 'utf8');
-    } catch {
-        packageType = null;
-    }
-    return linuxPackage(process.env, packageType);
+    return packageFormOf(process.platform, process.resourcesPath, process.env);
 }
 
 /**
@@ -94,7 +86,7 @@ export function requestUpdater(deps: RequestUpdaterDeps): Updater {
     const platform = process.platform;
     const paths = desktopPaths(deps.data);
     const executable = carriedJason(deps.data);
-    const env = withPath(process.env, pathOf(process.env));
+    const env = childEnvironment(thisForm(), process.env);
     const cli = loggedCli(cliAt(executable, env), deps.log);
     const updater = new Updater({
         updater: autoUpdater,

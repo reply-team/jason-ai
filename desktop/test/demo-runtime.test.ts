@@ -138,7 +138,7 @@ test('the update, the installer’s stop and the uninstall stop a runtime an ear
     // One stop, which the update's install and the deb's restart both take.
     assert.ok(main.includes('const stopCarriedRuntime = () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }));'));
     assert.ok(main.includes('stopRuntime: stopCarriedRuntime,'));
-    assert.ok(main.includes('const packageRestart = { stopRuntime: stopCarriedRuntime,'));
+    assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,'));
     for (const gone of ['prepareDemo(', 'openDemoDirectory', 'writeDemoSettings(', 'placeDemoPlugin(']) assert.equal(main.includes(gone), false, gone);
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime('));

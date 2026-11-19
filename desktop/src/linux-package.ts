@@ -17,6 +17,7 @@
 
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, posix } from 'node:path';
+import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
 
 export type LinuxPackage = { form: 'deb' } | { form: 'appimage'; file: string } | { form: 'folder' };
@@ -78,6 +79,27 @@ export function keptAsideOf(platform: NodeJS.Platform, form: LinuxPackage | null
 export function mountOf(form: LinuxPackage | null, env: Readonly<Record<string, string | undefined>>): string | undefined {
     const appdir = env['APPDIR'];
     return form?.form === 'appimage' && appdir && posix.isAbsolute(appdir) ? appdir : undefined;
+}
+
+/**
+ * The environment a start of this application hands the jason it carries, and so the runtime that jason starts: the
+ * person's PATH, and no folder of an AppImage's mount on any list (`withoutMount`). Every start builds what it hands a
+ * child from this, the window's, the set-up's, a window-less update's and the uninstall's alike.
+ */
+export function childEnvironment(form: LinuxPackage | null, env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+    return withoutMount(withPath(env, pathOf(env)), mountOf(form, env));
+}
+
+/** Which Linux package this application runs as, from its resources' `package-type`; null off Linux. */
+export function packageFormOf(platform: NodeJS.Platform, resourcesPath: string, env: Readonly<Record<string, string | undefined>>): LinuxPackage | null {
+    if (platform !== 'linux') return null;
+    let packageType: string | null;
+    try {
+        packageType = readFileSync(join(resourcesPath, 'package-type'), 'utf8');
+    } catch {
+        packageType = null;
+    }
+    return linuxPackage(env, packageType);
 }
 
 /** The lists the pinned app-builder-lib's AppRun puts the mount's folders on (`appImageUtil.js`, `generateAppRunScript`). */

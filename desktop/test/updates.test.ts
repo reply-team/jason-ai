@@ -27,7 +27,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, packageMovedTo, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, restartOnce, restartQuestion, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -581,6 +581,47 @@ test('the deb’s restart stops the runtime the old build runs before Jason star
     const unanswered = await run({ kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' });
     assert.equal(unanswered.length, 2);
     assert.match(unanswered[1]!, /^refused: Jason was not restarted, because .+\. Jason was left as it was\. .+ Then choose Restart Jason and Its Runtime to Finish the Update again\.$/);
+});
+
+test('the deb has moved when its version.json names another version than the window runs, and nothing else has', () => {
+    // The one comparison the window's watch makes once a minute: wrong, the notice and the item never come, or come for
+    // the version already running.
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.2'), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.1'), null, 'the version running');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', null), null, 'a version.json that could not be read');
+    assert.equal(packageMovedTo({ form: 'deb' }, null, '0.49.2'), null, 'a window that knows no version of its own');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.1', '0.49.2'), null, 'an AppImage updates itself');
+    assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
+});
+
+test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
+    // A click on the notice and then the item, or two clicks, would stop the runtime twice and relaunch twice, the second
+    // stop racing the first into a refusal while Jason in fact restarts.
+    const calls: string[] = [];
+    let outcome: StopOutcome = { kind: 'failed', exit: 1 };
+    let release: () => void = () => undefined;
+    const press = restartOnce({
+        stopRuntime: () => new Promise<StopOutcome>((resolve) => {
+            calls.push('stop');
+            release = () => resolve(outcome);
+        }),
+        relaunch: () => calls.push('relaunch'),
+        refused: () => calls.push('refused'),
+    });
+    const first = press();
+    await press();
+    release();
+    await first;
+    assert.deepEqual(calls, ['stop', 'refused']);
+    outcome = { kind: 'stopped' };
+    const again = press();
+    release();
+    await again;
+    await press();
+    assert.deepEqual(calls, ['stop', 'refused', 'stop', 'relaunch'], 'refused, the next press goes; relaunched, none does');
+    // The key's question names what the restart ends, as the install's does.
+    assert.equal(restartQuestion('0.49.2').message, 'Restart Jason and its runtime to finish the update to Jason 0.49.2?');
+    assert.equal(restartQuestion('0.49.2').cancelId, 1);
 });
 
 test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {

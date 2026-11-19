@@ -29,6 +29,7 @@ import { itemKeys, keyWords } from './keybindings.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
+import type { LinuxPackage } from './linux-package.ts';
 import { isRejected, keepPrevious, readRollback } from './rollback.ts';
 
 /** The deb a release publishes, as its packages are named. */
@@ -178,13 +179,55 @@ export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: t
  * stopped first, as an update's install stops it, so the next start finds none and starts the new build's, then Jason
  * starts again. A runtime that does not stop, or does not answer, leaves Jason as it is and says so.
  */
-export async function restartForPackage(deps: { stopRuntime(): Promise<StopOutcome>; relaunch(): void; refused(why: string): void }): Promise<void> {
+export async function restartForPackage(deps: PackageRestartDeps): Promise<boolean> {
     const stopped = await deps.stopRuntime().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
     if (stopped.kind === 'failed' || stopped.kind === 'unanswered') {
         deps.refused(packageRestartRefusal(stopped));
-        return;
+        return false;
     }
     deps.relaunch();
+    return true;
+}
+
+export interface PackageRestartDeps {
+    stopRuntime(): Promise<StopOutcome>;
+    relaunch(): void;
+    refused(why: string): void;
+}
+
+/**
+ * The deb's restart once at a time, for the item and the notice alike: a press while one is under way does nothing, and
+ * only a refused one lets the next go.
+ */
+export function restartOnce(deps: PackageRestartDeps): () => Promise<void> {
+    let under = false;
+    return async () => {
+        if (under) return;
+        under = true;
+        if (!(await restartForPackage(deps))) under = false;
+    };
+}
+
+/**
+ * Pure: the version the system installed under a running window, which the deb's item and notice name; null where nothing
+ * moved: the version running (`running`) and the one the package's `version.json` names now (`onDisk`, null where it could
+ * not be read) are the same, either is unknown, or this is no deb, whose updates come with the system's.
+ */
+export function packageMovedTo(form: LinuxPackage | null, running: string | null, onDisk: string | null): string | null {
+    if (form?.form !== 'deb' || running === null || onDisk === null) return null;
+    return onDisk !== running ? onDisk : null;
+}
+
+/** The question the restart item's key asks first, as the install's does: the restart ends a running turn. */
+export function restartQuestion(version: string): { type: 'question'; message: string; detail: string; buttons: string[]; defaultId: number; cancelId: number } {
+    return {
+        type: 'question',
+        message: `Restart Jason and its runtime to finish the update to Jason ${version}?`,
+        detail: 'The runtime stops first, which ends a running turn and the work in progress, and Jason starts again on the version your system installed.',
+        buttons: ['Restart', 'Not Now'],
+        defaultId: 1,
+        cancelId: 1,
+    };
 }
 
 /** What the person is told when the runtime did not stop, or did not answer, so the deb's restart did not happen. */
