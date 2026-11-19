@@ -556,26 +556,29 @@ function Get-JasonUninstallEntries {
 # (an uninstaller given no _?=). That copy is matched as any program in any folder named ~nsu*.tmp, wide on purpose: NSIS
 # has named the copy Au_.exe, Un_A.exe and Un.exe, and the folder ~nsu.tmp or ~nsu<hex>.tmp with the number counting on
 # where a folder is held, and none of this proof's listings has shown one; a narrower pattern could miss a run and say
-# none runs. Each one by its handle, within 150 s of the call, the bound of the folder's own watch and
-# the proof's own, never one the product promises; its exit code is said. One still running at the bound fails the step
-# by its own sentence. $since says what the wait follows.
-function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the application folder went') {
-    $seconds = 150
-    $runs = [ordered]@{}
-    foreach ($process in @($watched | Where-Object { $_ })) { $runs[[int] $process.Id] = $process }
-    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' })) {
+# none runs. Each one by its handle, within $seconds of the call - 150 s, the bound of the folder's own watch and the
+# proof's own, never one the product promises; a row runs it with a shorter one - and its exit code is said. One still
+# running at the bound fails the step by its own sentence. $since says what the wait follows. $under keeps the scan to the
+# programs under one folder: the proof never gives it, and the row that runs this helper gives its own folder, so that it
+# never waits on a program of the machine it runs on. The runs are kept as a list with a set of the ids seen: an ordered
+# dictionary indexed by an integer takes it for a position, not a key.
+function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the application folder went', [int] $seconds = 150, [string] $under = '') {
+    $runs = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+    $seen = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($process in @($watched | Where-Object { $_ })) { if ($seen.Add([int] $process.Id)) { $runs.Add($process) } }
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
         $id = [int] $running.ProcessId
-        if ($runs.Contains($id)) { continue }
+        if ($seen.Contains($id)) { continue }
         # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.
         $process = Get-Process -Id $id -ErrorAction SilentlyContinue
         if (-not $process) { continue }
-        try { $null = $process.Handle; $runs[$id] = $process } catch { Say "the uninstaller run $id ended before its handle could be taken: $($running.CommandLine)" }
+        try { $null = $process.Handle; $null = $seen.Add($id); $runs.Add($process) } catch { Say "the uninstaller run $id ended before its handle could be taken: $($running.CommandLine)" }
     }
     if ($runs.Count -eq 0) { Say "no uninstaller runs once $since"; return }
     $from = Get-Date
     $until = [DateTime]::UtcNow.AddSeconds($seconds)
-    foreach ($id in @($runs.Keys)) {
-        $process = $runs[$id]
+    foreach ($process in $runs) {
+        $id = [int] $process.Id
         $left = [int][Math]::Max(0, ($until - [DateTime]::UtcNow).TotalMilliseconds)
         if (-not $process.WaitForExit($left)) {
             Write-JasonProcesses

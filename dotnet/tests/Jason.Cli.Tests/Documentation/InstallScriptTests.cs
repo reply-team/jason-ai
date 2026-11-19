@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -830,6 +831,241 @@ public partial class InstallScriptTests
         entries = entries[..entries.IndexOf("\n}\n", StringComparison.Ordinal)];
         Assert.Contains("$key = $_.PSPath; try { Get-ItemProperty -LiteralPath $key -ErrorAction Stop } catch { if (Test-Path -LiteralPath $key) { throw } }", entries, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The two helpers the Windows proof reads the machine with after an uninstall are run, not only read: a row that reads
+    /// their text let one through that failed the first time it was handed a run, indexing an ordered dictionary by a process
+    /// id, which it takes for a position. Each is taken from the script's own text into a <c>pwsh</c> of the row's own, with
+    /// <c>Say</c>, <c>Fail</c> and the process listing stood in, and the uninstaller runs are stand-ins the row starts, windowed
+    /// programs as an NSIS uninstaller is. <c>Wait-UninstallerEnded</c> is kept by its <c>-under</c> to the row's own folder, so
+    /// that it never waits on a program of the machine the row runs on; the proof gives no <c>-under</c>. A run handed to it that
+    /// ends by itself is said with its exit code, once though the scan sees it too; one still running at a bound of 2 s fails by
+    /// the helper's own sentence, and the row ends that one process by its id; with no run it says none runs, and an
+    /// <c>Uninstall Jason.exe</c> outside its folder is not taken; and the copy NSIS runs on from a <c>~nsu*.tmp</c> folder,
+    /// handed to it by nobody, is found by its scan and waited for. <c>Get-JasonUninstallEntries</c> is run against stand-ins
+    /// of the two registry reads, so that no row writes the registry: a key listed and gone before it is read is no entry, a
+    /// key of another application is none, and a key still there that cannot be read fails.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_helpers_after_an_uninstall_run_as_the_proof_runs_them()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The helpers wait on Windows processes and read Windows' Installed apps entries, and the proof runs them on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string opening)
+        {
+            var at = script.IndexOf("\nfunction " + opening, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"Test-InstallationWindows.ps1 has no function {opening}");
+            var end = script.IndexOf("\n}\n", at, StringComparison.Ordinal);
+            return script[(at + 1)..(end + 2)];
+        }
+
+        var standIn = UninstallerRunStandIn.Value;
+        Assert.Equal(Subsystem.WindowsGui, StandInPrograms.SubsystemOf(standIn));
+
+        using var tree = new TempTree();
+        var under = tree.NewDirectory("uninstallers");
+        var outside = tree.NewDirectory("outside");
+        var started = Path.Combine(tree.Root, "started.txt");
+        string[] programs = [Path.Combine(under, "Uninstall Jason.exe"), Path.Combine(under, "~nsuT.tmp", "Un.exe"), Path.Combine(outside, "Uninstall Jason.exe")];
+        foreach (var program in programs)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(program)!);
+            File.WriteAllBytes(program, standIn);
+        }
+
+        static string Quoted(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, HelperHarness
+            .Replace("@UNDER@", Quoted(under), StringComparison.Ordinal)
+            .Replace("@OUTSIDE@", Quoted(outside), StringComparison.Ordinal)
+            .Replace("@STARTED@", Quoted(started), StringComparison.Ordinal)
+            .Replace("@KEYS@", Quoted(tree.NewDirectory("keys")), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", Function("Wait-UninstallerEnded(") + Function("Get-JasonUninstallEntries {"), StringComparison.Ordinal));
+
+        int exit;
+        string stdout, stderr;
+        try
+        {
+            (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        }
+        finally
+        {
+            EndStandIns(started, programs);
+        }
+
+        var output = "\n" + stdout + stderr;
+        // What each case said, kept with the row's result whether it passes or not.
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var lines = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        string Started(string row) => Regex.Match(stdout, $@"^\({row}\) started (\d+)\r?$", RegexOptions.Multiline).Groups[1].Value;
+        string[] Said(string row) => [.. lines.Where(line => line.StartsWith($"({row}) ", StringComparison.Ordinal) && !line.StartsWith($"({row}) started ", StringComparison.Ordinal))];
+        double Seconds(string line, string pattern)
+        {
+            var match = Regex.Match(line, pattern);
+            Assert.True(match.Success, $"'{line}' is not '{pattern}'{output}");
+            return double.Parse(match.Groups["seconds"].Value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // (a) A run handed to the helper that ends by itself: said once, with its exit code, though the scan sees it too.
+        var a = Started("a");
+        Assert.True(a.Length > 0, output);
+        var saidA = Assert.Single(Said("a"));
+        Seconds(saidA, $@"^\(a\) said: the uninstaller, process {a}, ended (?<seconds>[0-9.]+) s into the wait that began once the application folder went, exit 7$");
+
+        // (b) A run still going at the bound: the processes listed, the helper's own sentence, at the bound and not at 150 s,
+        // and that one process ended by the row, by its id.
+        var b = Started("b");
+        var saidB = Said("b");
+        Assert.True(saidB.Length == 3, output);
+        Assert.Equal("(b) listed the processes", saidB[0]);
+        var waited = Seconds(saidB[1], $@"^\(b\) failed after (?<seconds>[0-9.]+) s: the uninstaller, process {b}, still runs 2 s after the application folder went$");
+        Assert.InRange(waited, 1.5, 30);
+        Assert.Equal($"(b) ended {b}: True", saidB[2]);
+
+        // (c) No run in the helper's folder, while an Uninstall Jason.exe runs outside it: none runs.
+        var c = Started("c");
+        Assert.Equal(["(c) said: no uninstaller runs once the application folder went", $"(c) ended {c}: True"], Said("c"));
+
+        // (d) The copy NSIS runs on from a ~nsu*.tmp folder, handed to the helper by nobody: found by the scan and waited for.
+        var d = Started("d");
+        Seconds(Assert.Single(Said("d")), $@"^\(d\) said: the uninstaller, process {d}, ended (?<seconds>[0-9.]+) s into the wait that began once the asking run was ended, exit 3$");
+
+        // (e) The Installed apps entries: the key that went is no entry, another application's is none, an unreadable one fails.
+        Assert.Equal(["(e) entries: there", "(e) failed on an unreadable key: Requested registry access is not allowed."], Said("e"));
+
+        // Nothing the harness started was left running at its end.
+        Assert.DoesNotContain(lines, line => line.StartsWith("left ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The pwsh the helper row runs. Say, Fail and the process listing are stood in, each line said prefixed by its case; every
+    /// stand-in it starts is written to a file by its id, for the row to end by that id should the harness not get to it.
+    /// </summary>
+    private const string HelperHarness = """
+        $ErrorActionPreference = 'Stop'
+        $under = @UNDER@
+        $outside = @OUTSIDE@
+        $started = @STARTED@
+        $uninstallKeys = @KEYS@
+        $all = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+        $case = ''
+        function Say([string] $line) { [Console]::Out.WriteLine("$case said: $line") }
+        function Fail([string] $why) { throw $why }
+        function Write-JasonProcesses { [Console]::Out.WriteLine("$case listed the processes") }
+        function Write-Failed($record) { [Console]::Out.WriteLine("$case failed: $($record.Exception.Message)") }
+        function Start-StandIn([string] $file, [int] $milliseconds, [int] $exit) {
+            $process = Start-Process -FilePath $file -ArgumentList "$milliseconds", "$exit" -PassThru
+            $null = $process.Handle
+            Add-Content -LiteralPath $started -Value $process.Id
+            $all.Add($process)
+            [Console]::Out.WriteLine("$case started $($process.Id)")
+            return $process
+        }
+        function End-StandIn([System.Diagnostics.Process] $process) {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $null = $process.WaitForExit(10000) }
+            [Console]::Out.WriteLine("$case ended $($process.Id): $($process.HasExited)")
+        }
+
+        @FUNCTIONS@
+
+        $case = '(a)'
+        try { $run = Start-StandIn (Join-Path $under 'Uninstall Jason.exe') 500 7; Wait-UninstallerEnded @($run) -under $under } catch { Write-Failed $_ }
+
+        $case = '(b)'
+        $run = Start-StandIn (Join-Path $under 'Uninstall Jason.exe') 20000 0
+        $from = Get-Date
+        try { Wait-UninstallerEnded @($run) -seconds 2 -under $under; [Console]::Out.WriteLine("$case did not fail") } catch { [Console]::Out.WriteLine("$case failed after $([Math]::Round(((Get-Date) - $from).TotalSeconds, 1)) s: $($_.Exception.Message)") }
+        End-StandIn $run
+
+        $case = '(c)'
+        $run = Start-StandIn (Join-Path $outside 'Uninstall Jason.exe') 20000 0
+        try { Wait-UninstallerEnded @() -under $under } catch { Write-Failed $_ }
+        End-StandIn $run
+
+        $case = '(d)'
+        try { $null = Start-StandIn (Join-Path $under '~nsuT.tmp\Un.exe') 3000 3; Wait-UninstallerEnded @() 'the asking run was ended' -under $under } catch { Write-Failed $_ }
+
+        $case = '(e)'
+        & {
+            $there = Join-Path $uninstallKeys 'there'
+            $gone = Join-Path $uninstallKeys 'gone'
+            $other = Join-Path $uninstallKeys 'other'
+            $unreadable = Join-Path $uninstallKeys 'unreadable'
+            $null = New-Item -ItemType Directory -Path $there, $other, $unreadable
+            $listed = @($there, $gone, $other)
+            function Get-ChildItem { [CmdletBinding()] param([string] $LiteralPath) if ($LiteralPath -cne $uninstallKeys) { throw "listed $LiteralPath" }; foreach ($key in $listed) { [pscustomobject]@{ PSPath = $key } } }
+            function Get-ItemProperty {
+                [CmdletBinding()] param([string] $LiteralPath)
+                switch (Split-Path -Leaf $LiteralPath) {
+                    'there' { [pscustomobject]@{ DisplayName = 'Jason Desktop 0.49.0'; PSChildName = 'there' } }
+                    'other' { [pscustomobject]@{ DisplayName = 'Another application'; PSChildName = 'other' } }
+                    'gone' { throw [System.Management.Automation.ItemNotFoundException]::new("Cannot find path '$LiteralPath' because it does not exist.") }
+                    default { throw [System.UnauthorizedAccessException]::new('Requested registry access is not allowed.') }
+                }
+            }
+            try { [Console]::Out.WriteLine("$case entries: $((@(Get-JasonUninstallEntries) | ForEach-Object { $_.PSChildName }) -join ', ')") } catch { Write-Failed $_ }
+            $listed = @($there, $unreadable)
+            try { $found = @(Get-JasonUninstallEntries); [Console]::Out.WriteLine("$case read an unreadable key as $($found.Count) entries") } catch { [Console]::Out.WriteLine("$case failed on an unreadable key: $($_.Exception.Message)") }
+        }
+
+        $case = ''
+        foreach ($process in $all) { if (-not $process.HasExited) { [Console]::Out.WriteLine("left $($process.Id)"); Stop-Process -Id $process.Id -Force } }
+        """;
+
+    /// <summary>
+    /// Every stand-in the helper row's harness wrote down that still runs, ended by its id, and only where the process of that
+    /// id is one of the row's own programs: a harness that did not get to its own end leaves none behind.
+    /// </summary>
+    private static void EndStandIns(string started, string[] programs)
+    {
+        if (!File.Exists(started))
+        {
+            return;
+        }
+
+        foreach (var line in File.ReadAllLines(started))
+        {
+            if (!int.TryParse(line, out var id))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(id);
+                if (!process.HasExited && programs.Contains(process.MainModule?.FileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    process.Kill();
+                    process.WaitForExit(10000);
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Ended already, or no longer one of the row's own.
+            }
+        }
+    }
+
+    /// <summary>
+    /// A stand-in for an uninstaller run, built by the .NET Framework's C# compiler every Windows carries as a program with no
+    /// window, as an NSIS uninstaller is: it waits the milliseconds its first argument gives and ends with the code its second
+    /// gives.
+    /// </summary>
+    private static readonly Lazy<byte[]> UninstallerRunStandIn = new(() =>
+    {
+        var csc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+        Assert.SkipUnless(File.Exists(csc), "This Windows has no .NET Framework C# compiler to build the stand-in with.");
+        using var tree = new TempTree();
+        var source = Path.Combine(tree.Root, "uninstaller.cs");
+        var output = Path.Combine(tree.Root, "uninstaller.exe");
+        File.WriteAllText(source, "static class Program { static int Main(string[] a) { System.Threading.Thread.Sleep(int.Parse(a[0])); return int.Parse(a[1]); } }\n");
+        var (exit, stdout, stderr) = Run(csc, new Dictionary<string, string>(), "/nologo", "/target:winexe", "/out:" + output, source);
+        Assert.True(exit == 0, stdout + stderr);
+        return File.ReadAllBytes(output);
+    });
 
     /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
