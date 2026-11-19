@@ -941,18 +941,18 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
-      # The previous release, named: these legs begin in the world before one installation, and v0.48.5 is the last release
-      # of that world, whose install puts a command-line Jason of its own where every leg that starts from a previous
-      # release expects one. Never the latest published release: once 0.49.0 is published that is a release that installs
-      # Jason Desktop alone, and every such leg would fail on it. Its files come from its public downloads. No token: the
-      # repository's releases are public.
+      # The previous release, named: these legs begin in the world before one installation, and v0.48.6, a release of that
+      # world, is the 0.48 release these legs were last read against: its install puts a command-line Jason of its own where
+      # every leg that starts from a previous release expects one. Never the latest published release: once 0.49.0 is
+      # published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its files come
+      # from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: pwsh
         env:
-          PREVIOUS_RELEASE: v0.48.5
+          PREVIOUS_RELEASE: v0.48.6
         run: |
           $release = "v$($env:VERSION -replace '-.*$', '')"
           $tag = $env:PREVIOUS_RELEASE
@@ -1188,18 +1188,18 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # The previous release, named: these legs begin in the world before one installation, and v0.48.5 is the last release
-      # of that world, whose install puts a command-line Jason of its own where every leg that starts from a previous
-      # release expects one. Never the latest published release: once 0.49.0 is published that is a release that installs
-      # Jason Desktop alone, and every such leg would fail on it. Its files come from its public downloads. No token: the
-      # repository's releases are public.
+      # The previous release, named: these legs begin in the world before one installation, and v0.48.6, a release of that
+      # world, is the 0.48 release these legs were last read against: its install puts a command-line Jason of its own where
+      # every leg that starts from a previous release expects one. Never the latest published release: once 0.49.0 is
+      # published that is a release that installs Jason Desktop alone, and every such leg would fail on it. Its files come
+      # from its public downloads. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
         env:
-          PREVIOUS_RELEASE: v0.48.5
+          PREVIOUS_RELEASE: v0.48.6
         run: |
           release="v${VERSION%%-*}"
           tag="$PREVIOUS_RELEASE"
@@ -1517,7 +1517,7 @@ jobs:
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
   # Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the
-  # formula stays at 0.48.5, the last release it carries; this job comes back, bumping a cask, with the release that
+  # formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that
   # carries one. The last clause of its condition is what switches it off.
   #
   # Asks the tap to bump its formula once a tag's release is published: after the release job succeeded, never after it

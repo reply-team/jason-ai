@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.0-rc.1
+# Jason 0.49.0-rc.2
 
 This is a release candidate, published for a walk before 0.49.0 and not for general use: it is never the latest release,
 so no install line and no update reaches it, and it is installed only by naming its version.
@@ -28,7 +28,7 @@ On macOS and Windows, Jason is now one installation: Jason Desktop and the `jaso
 terminal and your agents use. One line installs it, one update moves it on, and one removal takes it off. On Linux,
 Jason is installed, updated and removed as it was.
 
-## What is new since 0.48.5
+## What is new since 0.48.6
 
 - **The install line installs Jason Desktop.** On macOS and Windows the one line installs the application, puts `jason`
   in the terminal and deploys Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and
@@ -58,7 +58,7 @@ Jason is installed, updated and removed as it was.
 - **A command-line install moves into Jason Desktop.** On macOS and Windows, `jason update apply` in a command-line
   install of an earlier version updates it and then moves it into Jason Desktop, so that the terminal's `jason` is the
   one the application carries. The update never fails because of the move: where the move cannot go on, the install is
-  left as it was and `jason status` says where the move stands. How to go back to 0.48.5 afterwards, with your data
+  left as it was and `jason status` says where the move stands. How to go back to 0.48.6 afterwards, with your data
   kept, is in
   [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049).
 - **One removal.** `jason uninstall` takes off Jason Desktop, the terminal command, the skills it deployed, the start at
@@ -84,7 +84,7 @@ Jason is installed, updated and removed as it was.
 - **Approval cards for a paid people search show its definition** and arguments, in Jason Desktop's chat as on
   Attention.
 
-## Upgrading from 0.48.5
+## Upgrading from 0.48.6
 
 - **Installing this candidate.** It is installed by naming its version. On macOS:
   ```sh
@@ -97,11 +97,11 @@ Jason is installed, updated and removed as it was.
   A command-line install of 0.48 takes it with `jason update apply --version {{version}}`, and moves into Jason Desktop
   as above.
 - **Going back.** `jason update rollback` does not undo the move into Jason Desktop. Going back is taking Jason off with
-  `jason uninstall`, keeping the data directory, and installing 0.48.5 by its own pinned line: 0.49 adds no migration to
-  the database, so 0.48.5 opens the same data as it is.
+  `jason uninstall`, keeping the data directory, and installing 0.48.6 by its own pinned line: 0.49 adds no migration to
+  the database, so 0.48.6 opens the same data as it is.
   [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049)
   lists the steps.
-- **Homebrew.** The Homebrew formula carries the command line alone and stays at 0.48.5; on a Mac and on Linux the one
-  line is the way to 0.49, and
+- **Homebrew.** The Homebrew formula carries the command line alone and stays at the last 0.48 release it carries; on a
+  Mac and on Linux the one line is the way to 0.49, and
   [the update page](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#6-installing)
   says how to come from a Homebrew install.
