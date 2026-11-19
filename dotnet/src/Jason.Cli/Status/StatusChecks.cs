@@ -553,7 +553,7 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason's apt source, {places.AptSource}, is {(text is null ? "not there" : "turned off")}, so no update of Jason Desktop arrives with the system's updates; a release upgrade of Ubuntu turns such sources off. Turn it on in Software & Updates → Other Software.",
+                $"Jason's apt source, {places.AptSource}, is {(text is null ? "not there" : "turned off")}, so no update of Jason Desktop arrives with the system's updates; a release upgrade of Ubuntu turns such sources off. Turn it on in Software & Updates, Other Software.",
                 null);
     }
 

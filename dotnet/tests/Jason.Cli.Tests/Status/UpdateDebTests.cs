@@ -64,6 +64,6 @@ public sealed class UpdateDebTests : IDisposable
         Assert.Equal(CheckState.Failed, update.State);
         Assert.False(update.Required);
         Assert.Contains(said, update.Fact, StringComparison.Ordinal);
-        Assert.Contains(source == "on" ? "jason update apply --finish" : "Software & Updates → Other Software", update.Fact, StringComparison.Ordinal);
+        Assert.Contains(source == "on" ? "jason update apply --finish" : "Software & Updates, Other Software", update.Fact, StringComparison.Ordinal);
     }
 }
