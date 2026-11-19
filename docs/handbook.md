@@ -516,7 +516,7 @@ account. If a role is refused on `antigravity_cli`, add two rules to your own se
 [host matrix](execution-profiles.md#12-the-hosts) gives the two lines of JSON, says why, and says what was built from
 documentation and has not yet been run on an account.
 
-When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
+When a campaign is looked at, and by whom, is its own loop: a campaign's start, a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live
 campaign's conversations on a cadence. How often a manager looks at a campaign when nothing has happened is the

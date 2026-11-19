@@ -81,7 +81,8 @@ public class PrivacyTests
         const string Shape = "fmt-canary-77aa";
         const string Outcome = "res-canary-31c0";
 
-        var host = await FakeHostRuntime.StartAsync(Ct);
+        // A start summons nothing here: the review it would summon is the campaign's claim the leaking item waits behind.
+        var host = await FakeHostRuntime.StartAsync(Ct, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings));
         var token = host.Fixture.Runtime.Token;
         var paths = host.Paths;
         try

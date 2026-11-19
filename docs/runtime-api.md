@@ -223,8 +223,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.get`: Jason's campaign, read without calling a provider.
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
-- `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started.
-- `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item.
+- `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started. From inside a
+  run it is refused `403` `decided_inside_a_run`, whatever actor it names: only a person, or their own session on their
+  word, starts or resumes one.
+- `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`
 - `campaign.set_send_mode`: the campaign's own send mode for its cold contacts, its warm ones or both, `automatic` or
@@ -750,6 +752,8 @@ interrupted.
   it names, and changes nothing: a person's word is given outside any run. A preference is refused there for every key,
   since no person is in a run to state one. That is a higher bar, not a
   boundary: a run that dropped the header and named a person would not be told apart.
+  `campaign.start` is refused there the same way, whatever actor it names, though it takes any actor outside a run: a
+  role may pause a campaign, and only a person, or their own session on their word, starts or resumes one.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it

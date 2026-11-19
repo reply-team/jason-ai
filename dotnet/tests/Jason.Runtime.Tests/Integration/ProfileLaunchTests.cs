@@ -465,7 +465,8 @@ public class ProfileLaunchTests
     [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_profile_status_names_is_made_the_default()
     {
-        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        // A start summons nothing here: the review it would summon is the campaign's claim the next researcher waits behind.
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings));
         var (campaign, check) = await FailFreshAsync(host);
 
         var made = new StringWriter();
@@ -496,7 +497,8 @@ public class ProfileLaunchTests
     [Fact]
     public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_settings_file_names_the_default()
     {
-        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        // A start summons nothing here: the review it would summon is the campaign's claim the next researcher waits behind.
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings));
         var (campaign, check) = await FailFreshAsync(host);
 
         var made = new StringWriter();
@@ -507,7 +509,7 @@ public class ProfileLaunchTests
         const string line = """
             "Roles": {"DefaultExecutionProfile": "claude-code"}
             """;
-        await File.WriteAllTextAsync(host.Paths.UserSettingsFile, FakeHostRuntime.Settings.TrimEnd()[..^1] + "," + line + "}", Ct);
+        await File.WriteAllTextAsync(host.Paths.UserSettingsFile, Dispatch.StartlessTriggers.Into(FakeHostRuntime.Settings)[..^1] + "," + line + "}", Ct);
         var roles = host.Fixture.Resolve<Microsoft.Extensions.Options.IOptionsMonitor<Jason.Runtime.Configuration.RolesOptions>>();
         Assert.True(await FakeHostRuntime.EventuallyAsync(() => Task.FromResult(roles.CurrentValue.DefaultExecutionProfile == "claude-code"), Ct));
 

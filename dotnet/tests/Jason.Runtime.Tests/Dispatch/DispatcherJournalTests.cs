@@ -17,9 +17,10 @@ namespace Jason.Runtime.Tests.Dispatch;
 /// </summary>
 public class DispatcherJournalTests
 {
-    private const string Settings = """
+    // A start summons nothing here: the review it would summon is a line and a claim of the campaign's that is not this chronicle's.
+    private static readonly string Settings = StartlessTriggers.Into("""
         {"Dispatcher":{"TickSeconds":3600,"RetryDelaySeconds":0},"Roles":{"DefaultEntryCommand":["agent-host"]}}
-        """;
+        """);
 
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 

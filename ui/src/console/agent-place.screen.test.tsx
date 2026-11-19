@@ -12,6 +12,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { fromFoot, layOutChats } from '../test/scroll';
 import type { FixtureName } from '../test/fixtures';
 import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
@@ -466,6 +467,30 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         await waitFor(() => expect(sends(desktop)).toHaveLength(1));
         await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
         await waitFor(() => expect(document.activeElement).toBe(shownBox()));
+    });
+
+    it('takes the first message, which makes the conversation, to the foot, and follows the answer from there', async () => {
+        const layout = layOutChats();
+        try {
+            const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+            await autumnChatShown();
+            // A first message taller than the view.
+            const text = `Find me ten founders. ${'In fintech, in Berlin, with a seed round behind them. '.repeat(6)}`;
+            fireEvent.change(shownBox(), { target: { value: text } });
+            fireEvent.keyDown(shownBox(), { key: 'Enter' });
+            await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+            await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+            const scroller = () => shown().querySelector<HTMLElement>('.chat-scroll')!;
+            await waitFor(() => expect(scroller().textContent).toContain('Find me ten founders.'));
+            await waitFor(() => expect(fromFoot(scroller())).toBe(0));
+            expect(scroller().scrollTop).toBeGreaterThan(0);
+            const id = sends(desktop)[0]!.args[0] as string;
+            flush(() => desktop.emit(id, { kind: 'text', text: `Here they are: ${'a founder, '.repeat(120)}` }));
+            await waitFor(() => expect(scroller().textContent).toContain('Here they are:'));
+            await waitFor(() => expect(fromFoot(scroller())).toBe(0));
+        } finally {
+            layout.restore();
+        }
     });
 
     it('opens a composer menu once on Space, whose click comes after the key, and makes one conversation', async () => {
