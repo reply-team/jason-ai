@@ -124,6 +124,31 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
     }
 
     /// <summary>
+    /// An AppImage's copies are a file each, under the version (<c>bundle/&lt;version&gt;/jason</c>), so the update one copy
+    /// recorded is carried on by the copy of the version it goes to, the one the hand-over starts to finish it, as well as by
+    /// the copy that recorded it; the copy of that version under another data directory is not this installation's. Catches
+    /// the new copy refusing the update with update_in_progress, as another jason's, and leaving it at 'swapped'.
+    /// </summary>
+    [Fact]
+    public void On_linux_the_appimage_s_copy_of_the_new_version_carries_on_the_update_the_old_copy_recorded()
+    {
+        var old = Copy("0.49.1");
+        var next = Copy("0.49.2");
+        var ledger = new UpdateLedger(SemanticVersion.Parse("0.49.1"), SemanticVersion.Parse("0.49.2"), UpdateStep.Swapped, DateTimeOffset.UtcNow, old, old, old);
+        var elsewhere = Path.Combine(_tree.Paths.Root, "other", "desktop", "bundle", "0.49.2", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(elsewhere)!);
+        File.WriteAllText(elsewhere, "jason");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(elsewhere)!, CarriedExecutable.RecordName), "{\n  \"version\": \"0.49.2\"\n}\n");
+
+        Assert.True(Handing(next).Carries(ledger), "the copy of the version the update goes to did not carry it on");
+        Assert.True(Handing(old).Carries(ledger), "the copy that recorded the update did not carry it on");
+        Assert.False(Handing(elsewhere).Carries(ledger), "another data directory's copy carried this installation's update on");
+    }
+
+    private CarriedUpdate Handing(string executable) =>
+        new(Environment(executable, display: true).Env, new UpdatePaths(_data.Paths), TimeProvider.System, CarriedExecutable.Of(executable)!, SetupSystem.Linux);
+
+    /// <summary>
     /// From a terminal with no display (an ssh session, a service), the AppImage's update is refused before anything is
     /// read or staged: the Desktop it would start to take the update needs one.
     /// </summary>

@@ -350,6 +350,23 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>Whether this carried jason is an AppImage's copy, which an update leaves where it is and copies anew.</summary>
     private bool AppImage => platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable);
 
+    /// <summary>
+    /// Whether this carried jason carries on the update <paramref name="ledger"/> records: the jason it recorded, or, for an
+    /// AppImage, whose copies are a file each under the version, the copy of the version it goes to beside the recorded one,
+    /// which the hand-over starts to finish it.
+    /// </summary>
+    public bool Carries(UpdateLedger ledger) => CarriesOn(carried, platform, ledger);
+
+    /// <summary>The rule <see cref="Carries"/> keeps, for <paramref name="carried"/> on <paramref name="platform"/>.</summary>
+    public static bool CarriesOn(CarriedExecutable carried, SetupSystem? platform, UpdateLedger ledger)
+    {
+        ArgumentNullException.ThrowIfNull(carried);
+        ArgumentNullException.ThrowIfNull(ledger);
+        return carried.Is(ledger.InstallPath)
+            || (platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable)
+                && carried.Is(AppImageCopy.CopyOf(AppImageCopy.BundlesOf(ledger.InstallPath), ledger.ToVersion)));
+    }
+
     /// <summary>When the AppImage file was last read for its new copy.</summary>
     private DateTime _readAt;
 

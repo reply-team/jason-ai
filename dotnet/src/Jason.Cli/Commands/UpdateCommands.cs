@@ -687,7 +687,7 @@ public static class UpdateCommands
         var wasLive = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is not null;
         try
         {
-            if (inFlight is not null && !carried.Is(inFlight.InstallPath))
+            if (inFlight is not null && !handing.Carries(inFlight))
             {
                 throw new UpdateException(
                     UpdateCodes.InProgress,
@@ -1137,7 +1137,7 @@ public static class UpdateCommands
             return false;
         }
 
-        if (ledger is null || string.IsNullOrWhiteSpace(ledger.InstallPath) || carried.Is(ledger.InstallPath))
+        if (ledger is null || string.IsNullOrWhiteSpace(ledger.InstallPath) || CarriedUpdate.CarriesOn(carried, env.Setup?.Platform, ledger))
         {
             return false;
         }
