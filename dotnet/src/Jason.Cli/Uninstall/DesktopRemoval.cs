@@ -1241,6 +1241,16 @@ public static partial class DesktopRemoval
         {
             env.Removes!.RemoveFile(file);
             done.Add($"Removed the application, {file}.");
+
+            // The folder the install line made for it, ~/Applications, goes too once it holds nothing else; a folder of the
+            // person's own choosing is never touched.
+            var linePlace = env.Setup is { } places ? Path.Combine(places.Home, "Applications") : null;
+            if (linePlace is not null
+                && string.Equals(Path.GetDirectoryName(Path.GetFullPath(file)), Path.GetFullPath(linePlace), StringComparison.Ordinal)
+                && env.Removes.RemoveDirectoryIfEmpty(linePlace))
+            {
+                done.Add($"Removed {linePlace}, which held nothing else.");
+            }
         }
         catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
         {

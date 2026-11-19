@@ -604,7 +604,6 @@ install_appimage() {
         SIZE="$(basename "$(dirname "$(dirname "$ICON")")")"
         mkdir -p "$SHARE/icons/hicolor/$SIZE/apps" && cp "$ICON" "$SHARE/icons/hicolor/$SIZE/apps/jason-desktop-app.png"
     done
-    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$SHARE/applications" >/dev/null 2>&1 || true; fi
     set_up_and_end
 }
 

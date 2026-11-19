@@ -1700,16 +1700,19 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// <summary>
     /// With <c>--purge-data</c> as without it: an AppImage's jason runs as a copy under the data directory's
     /// <c>desktop/bundle</c>, which is the data directory's own and goes with it, so that copy is not an installation the
-    /// data directory holds and the purge is not refused for it. Catches the purge refused on every AppImage machine.
+    /// data directory holds and the purge is not refused for it. Catches the purge refused on every AppImage machine. And the
+    /// folder the install line made for the file, <c>~/Applications</c>, goes once it holds nothing else, while a folder of the
+    /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
     [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
-    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge)
+    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge, bool linePlace)
     {
         var places = LinuxPlaces();
-        var (copy, file) = AppImage();
+        var (copy, file) = AppImage(linePlace);
         var bin = places.LocalBin;
         var wrapper = Written(Path.Combine(bin, "jason"), CommandFiles.Wrapper(copy, null));
         var profile = Path.Combine(Home, ".profile");
@@ -1750,10 +1753,11 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.True(File.Exists(anotherIcon), "another application's icon went");
         Assert.Equal(!purge, File.Exists(settings));
         Assert.True(Directory.Exists(harnessRoot), "the harness root went");
+        Assert.Equal(!linePlace, Directory.Exists(Path.GetDirectoryName(file)));
 
-        // The file is the last thing removed, after the data directory where it is purged: everything above ran from the
-        // copy of the jason it carries.
-        Assert.Equal($"file.remove {file}", remover.Calls[^1]);
+        // The file is the last thing removed, after the data directory where it is purged, and only the empty folder the
+        // install line made goes after it: everything above ran from the copy of the jason it carries.
+        Assert.Equal($"file.remove {file}", remover.Calls[linePlace ? ^2 : ^1]);
     }
 
     [Fact]
@@ -1985,9 +1989,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// An AppImage the person keeps in a folder of their own, which its start recorded in <c>appimage.json</c>, and the copy
     /// of its jason under the data directory, which is the jason that runs.
     /// </summary>
-    private (string Copy, string File) AppImage()
+    private (string Copy, string File) AppImage(bool linePlace = false)
     {
-        var file = Written(Path.Combine(Home, "My Apps", "Jason.AppImage"), "appimage");
+        var file = Written(linePlace ? Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage") : Path.Combine(Home, "My Apps", "Jason.AppImage"), "appimage");
         var copy = Bundle(Path.Combine(_dir.Paths.Root, "desktop", "bundle", "0.34.0"), "jason");
         Written(Path.Combine(_dir.Paths.Root, "desktop", "appimage.json"), JsonSerializer.Serialize(new { file }));
         return (copy, file);
