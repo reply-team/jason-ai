@@ -377,11 +377,11 @@ const linux = { ...probes('linux', []), onPath: (command: string) => (command ==
 test('an icon is read for an editor’s program and File Explorer on Windows, an editor, Finder and Terminal on macOS, and nothing on Linux', () => {
     assert.equal(iconPath('vscode', windows), 'C:\\Users\\ada\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe');
     assert.equal(iconPath('files', windows), 'C:\\Windows\\explorer.exe');
-    for (const id of ['claude', 'codex', 'terminal', 'browser', 'copy', 'cursor'] as const) assert.equal(iconPath(id, windows), null, id);
+    for (const id of ['claude', 'codex', 'terminal', 'copy', 'cursor'] as const) assert.equal(iconPath(id, windows), null, id);
     assert.equal(iconPath('vscode', mac), '/Applications/Visual Studio Code.app');
     assert.equal(iconPath('files', mac), finderApp);
     assert.equal(iconPath('terminal', mac), terminalApp);
-    for (const id of ['claude', 'codex', 'browser', 'copy'] as const) assert.equal(iconPath(id, mac), null, id);
+    for (const id of ['claude', 'codex', 'copy'] as const) assert.equal(iconPath(id, mac), null, id);
     for (const id of ['vscode', 'files', 'terminal'] as const) assert.equal(iconPath(id, linux), null, id);
 });
 

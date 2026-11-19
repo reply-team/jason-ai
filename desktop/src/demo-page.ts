@@ -407,8 +407,7 @@ export function switchChoice(url: string): 'live' | null {
  * desktop open this address in the person's browser. The page itself stays as it was built and reaches nothing: the
  * link is the desktop's own sheet and script, put into the page's view (`demoLinkSheet`, `demoLinkScript`), and the
  * address leaves the view only through the view's own navigation guard, which refuses the navigation as it refuses every
- * other and hands this address, compared whole, to the browser (`demoLinkOpener`). In a browser tab the page is the same
- * file and the address stays text.
+ * other and hands this address, compared whole, to the browser (`demoLinkOpener`).
  */
 export const demoRepository = 'https://github.com/reply-team/jason-ai';
 

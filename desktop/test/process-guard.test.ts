@@ -30,8 +30,8 @@ test('every named module is there, so renaming one cannot pass by leaving the ru
     }
 });
 
-test('only the two named modules listen: the permission endpoint and the browser bridge', () => {
-    assert.deepEqual(Object.keys(listeningModules).sort(), ['src/browser-bridge.ts', 'src/chat-permission-endpoint.ts']);
+test('only the named module listens: the permission endpoint', () => {
+    assert.deepEqual(Object.keys(listeningModules).sort(), ['src/chat-permission-endpoint.ts']);
     for (const path of Object.keys(listeningModules)) {
         const text = readFileSync(join(root, path), 'utf8');
         assert.ok(text.includes("listen(0, '127.0.0.1'"), `${path} listens on the loopback address, on a port the system picks`);
@@ -54,7 +54,7 @@ test('a server or a listen planted in a module that is not named is refused, by 
         const found = processViolations('src/setup.ts', planted + '\n');
         assert.ok(found.some((line) => /may listen on a port/.test(line)), planted);
     }
-    assert.deepEqual(processViolations('src/browser-bridge.ts', "import { createServer } from 'node:http';\nserver.listen(0, '127.0.0.1');\n"), []);
+    assert.deepEqual(processViolations('src/chat-permission-endpoint.ts', "import { createServer } from 'node:http';\nserver.listen(0, '127.0.0.1');\n"), []);
     // A word that only names a program is no server.
     assert.deepEqual(processViolations('src/chat-literal.ts', "if (program === 'net') return true;\n"), []);
 });
@@ -142,23 +142,22 @@ test('a second IPC registration surface, webContents.ipc, is refused outside the
 test('shell.openPath is refused everywhere, and shell.openExternal anywhere but main.ts’s navigation lock', () => {
     assert.notDeepEqual(processViolations('src/main.ts', 'void shell.openPath(file);'), []);
     assert.notDeepEqual(processViolations('src/setup.ts', 'void shell.openExternal(url);'), []);
-    const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n';
+    const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser } = lockNavigation(contents);\n';
     assert.deepEqual(processViolations('src/main.ts', locked), []);
     assert.notDeepEqual(processViolations('src/main.ts', `${locked}\nfunction other() {\n    void shell.openExternal('https://x');\n}\n`), []);
 });
 
-test('inside the navigation lock a URL reaches the system browser only through its two named openers, each once', () => {
-    assert.deepEqual(Object.keys(navigationOpeners).sort(), ['leave', 'ownPage']);
+test('inside the navigation lock a URL reaches the system browser only through its named opener, once', () => {
+    assert.deepEqual(Object.keys(navigationOpeners).sort(), ['leave']);
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
-    assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 3, 'main.ts hands a URL to the system browser in two places, and the Demo its one address in a third');
-    assert.match(main, /const ownPage = \(url: string\): Promise<void> => openOwnPage\(url, \{ origin, log, open: \(held\) => shell\.openExternal\(held\) \}\);/, 'ownPage hands the system opener to openOwnPage, which holds the address itself');
-    const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n`;
-    const both = '    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => void shell.openExternal(url);';
-    assert.deepEqual(processViolations('src/main.ts', lock(both)), []);
+    assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 2, 'main.ts hands a URL to the system browser in one place, and the Demo its one address in a second');
+    const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\nconst { leave: toBrowser } = lockNavigation(contents);\n`;
+    const leave = '    const leave = (url) => void shell.openExternal(url);';
+    assert.deepEqual(processViolations('src/main.ts', lock(leave)), []);
     for (const planted of [
-        `${both}\n    const other = (url) => void shell.openExternal(url);`,
-        `${both}\n    const guard = (event, url) => 0;\n    contents.setWindowOpenHandler(({ url }) => void shell.openExternal(url));`,
-        '    const ownPage = (url) => { void shell.openExternal(url); void shell.openExternal(url); };',
+        `${leave}\n    const other = (url) => void shell.openExternal(url);`,
+        `${leave}\n    const guard = (event, url) => 0;\n    contents.setWindowOpenHandler(({ url }) => void shell.openExternal(url));`,
+        '    const leave = (url) => { void shell.openExternal(url); void shell.openExternal(url); };',
         '    void shell.openExternal(url);',
     ]) {
         assert.notDeepEqual(processViolations('src/main.ts', lock(planted)), [], planted);
@@ -170,7 +169,7 @@ test('outside the navigation lock only the Demo’s opener reaches the system br
     assert.ok(main.includes(`${demoOpener.definition}\n    ${demoOpener.call}.then(`), 'the Demo’s opener takes no address and opens the constant');
     assert.match(main, /open: \(\) => openDemoRepository\(log\),/);
     assert.deepEqual(processViolations('src/main.ts', main), []);
-    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\nimport { demoRepository } from './demo-page.ts';\n";
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser } = lockNavigation(contents);\nimport { demoRepository } from './demo-page.ts';\n";
     const opener = (body: string) => `${demoOpener.definition}\n${body}\n}\n`;
     const called = '            open: () => openDemoRepository(log),\n';
     assert.deepEqual(processViolations('src/main.ts', lock + opener(`    ${demoOpener.call}.then(() => 0);`) + called), []);
@@ -187,7 +186,7 @@ test('outside the navigation lock only the Demo’s opener reaches the system br
 });
 
 test('the Demo’s opener has one caller, the Demo window’s open, and main.ts binds no name of its own to the address', () => {
-    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser } = lockNavigation(contents);\n";
     const defined = `${lock}import { demoBeforeReady, demoRepository } from './demo-page.ts';\n${demoOpener.definition}\n    ${demoOpener.call}.then(() => 0);\n}\n`;
     const called = '            open: () => openDemoRepository(log),\n';
     assert.deepEqual(processViolations('src/main.ts', defined + called), []);
@@ -214,32 +213,13 @@ test('the Demo’s opener has one caller, the Demo window’s open, and main.ts 
     assert.notDeepEqual(processViolations('src/demo-window.ts', 'void openDemoRepository(log);\n'), []);
 });
 
-test('the opener of the runtime\'s own page is called only by the bridge\'s opening act, and a planted call anywhere else fires the rule', () => {
-    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
-    assert.match(main, /browser: \(\) => openTab\(\{ origin, cli, bridge: \(\) => bridges\.ensure\(\), open: ownPage, log \}\),/);
-    const lock = "function lockNavigation(contents) {\n    const ownPage = (url) => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });\n}\n";
-    const wired = `import { openOwnPage, openTab } from './browser-bridge.ts';\n${lock}\nconst { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);\n    browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),\n`;
-    assert.deepEqual(processViolations('src/main.ts', wired), []);
-    for (const planted of [
-        'void ownPage(link);',
-        '    openLink: ownPage,',
-        "    other: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),",
-        'const opener = ownPage;',
-        'void openOwnPage(link, deps);',
-    ]) {
-        assert.notDeepEqual(processViolations('src/main.ts', `${wired}${planted}\n`), [], planted);
-    }
-    assert.notDeepEqual(processViolations('src/setup.ts', "import { openOwnPage } from './browser-bridge.ts';\nvoid openOwnPage(link, deps);\n"), []);
-    assert.deepEqual(processViolations('src/browser-bridge.ts', 'export async function openOwnPage(url, deps) {}\n'), []);
-});
-
-test('the navigation lock is called once, in main.ts, and taken apart only into its two openers by name', () => {
-    const defined = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });\n}\n";
-    const once = 'const { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);\n';
+test('the navigation lock is called once, in main.ts, and taken apart only into its opener by name', () => {
+    const defined = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\n";
+    const once = 'const { leave: toBrowser } = lockNavigation(window.webContents, origin, log);\n';
     assert.deepEqual(processViolations('src/main.ts', defined + once), []);
     for (const planted of [
         'const { leave: toBrowser, ...rest } = lockNavigation(window.webContents, origin, log);\n',
-        "const nav = lockNavigation(window.webContents, origin, log);\nvoid nav['own' + 'Page'](link);\n",
+        "const nav = lockNavigation(window.webContents, origin, log);\nvoid nav['lea' + 've'](link);\n",
         once + 'const again = lockNavigation(other, origin, log);\n',
         '',
     ]) {
@@ -249,7 +229,7 @@ test('the navigation lock is called once, in main.ts, and taken apart only into 
 });
 
 test('shell is not reached by an index, an alias, a taking-apart or a renamed import outside the navigation lock', () => {
-    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser } = lockNavigation(contents);\n";
     for (const planted of [
         "void shell['openExternal'](link);",
         'const s = shell;',

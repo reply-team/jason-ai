@@ -81,12 +81,11 @@ const programsWhole = new RegExp(String.raw`import\s*\*\s*as\s+\w+\s*from\s*${pr
 export const ipcModule = 'src/ipc.ts';
 
 /**
- * The modules that may listen on a port, each with what it serves. Both listen on the loopback address alone, on a port
- * the system picks, and check every request's Host before anything else of it is read.
+ * The modules that may listen on a port, each with what it serves. Each listens on the loopback address alone, on a port
+ * the system picks, and checks every request's Host before anything else of it is read.
  */
 export const listeningModules: Readonly<Record<string, string>> = {
     'src/chat-permission-endpoint.ts': "a chat turn's permission prompt tool and its Full access hook, for that turn's host alone, behind the turn's secret",
-    'src/browser-bridge.ts': "the chat's view for a browser tab the desktop opened, behind the runtime's origin and a code the tab traded once",
 };
 
 /** A server module of Node imported or required by any form: what a listening socket is made with. */
@@ -115,20 +114,12 @@ const openPath = /\bshell\s*\.\s*openPath\b/;
 const openExternal = /\bshell\s*\.\s*openExternal\b/g;
 
 /**
- * The two openers inside main.ts's `lockNavigation` that hand a URL to the system browser, each by the name of the
- * function it is written in, each calling it once, with what it opens.
+ * The opener inside main.ts's `lockNavigation` that hands a URL to the system browser, by the name of the function it is
+ * written in, calling it once, with what it opens.
  */
 export const navigationOpeners: Readonly<Record<string, string>> = {
     leave: 'an https link, and nothing else',
-    ownPage: "a page of the runtime's own UI at its origin, under /ui/: the chat in a browser tab",
 };
-
-/**
- * Who may call the opener of the runtime's own page: the browser bridge's opening act alone. In main.ts, `ownPage` is
- * named outside the navigation lock only where the lock hands it out and where `openTab` is given it as its opener;
- * `openOwnPage` is named only by its module and, in main.ts, by its import and inside the lock.
- */
-export const ownPageCaller = "src/main.ts: openTab's open, in the Open in browser place, the bridge's opening act";
 
 /**
  * The one opener outside the navigation lock: the Demo's, in main.ts, which takes no address and hands the system browser
@@ -154,24 +145,19 @@ function demoOpenerBody(text: string): { start: number; end: number } | null {
     return end < 0 ? null : { start, end };
 }
 
-const ownPageName = /\bownPage\b/g;
-const ownPageHandedOut = /=\s*lockNavigation\(/;
-const ownPageToTab = /\bopenTab\(\{[^\n]*\bopen:\s*ownPage\b/;
-const openOwnPageName = /\bopenOwnPage\b/g;
-
 /**
  * The spellings that would reach what the rules above name by another name, each refused. This guard reads text: it
  * holds these spellings and no computed name beyond them (a property reached through a value built at run time, a
  * module loaded by a name made at run time other than as below), as the C# guard reads compiled IL and not reflection.
- * - main.ts calls its navigation lock once, taking its two openers apart by name, so no other part of main.ts holds them
- *   under another name or reaches one by a computed key.
+ * - main.ts calls its navigation lock once, taking its opener apart by name, so no other part of main.ts holds it under
+ *   another name or reaches it by a computed key.
  * - `shell` is not reached by an index, aliased, taken apart or imported under another name outside the lock, so
  *   `openExternal` and `openPath` are never called by a name the rules do not read.
  * - Under src/, `listen` is not reached by an index, and a dynamic import names its module by a plain string.
  */
 const lockCall = /\blockNavigation\s*\(/g;
 const lockDefinition = /\bfunction\s+lockNavigation\s*\(/g;
-const lockTakenApart = 'const { leave: toBrowser, ownPage } = lockNavigation(';
+const lockTakenApart = 'const { leave: toBrowser } = lockNavigation(';
 const shellIndexed = /\bshell\s*\[/g;
 const shellAliased = /=\s*shell\b(?!\s*\.)/g;
 const shellRenamed = /import\s*\{[^}]*\bshell\s+as\b/g;
@@ -302,27 +288,6 @@ export function processViolations(path: string, text: string): string[] {
         if (text.includes(demoOpener.definition) && !demoRepositoryImport.test(text)) found.push(`${path} defines the Demo's opener without importing demoRepository from './demo-page.ts'`);
     }
     const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
-    if (path !== 'src/browser-bridge.ts') {
-        for (const match of text.matchAll(openOwnPageName)) {
-            const line = lineAt(text, match.index);
-            if (path !== 'src/main.ts' || (outsideLock(match.index) && !/^import\s/.test(line))) {
-                found.push(`${path} names the opener of the runtime's own page outside main.ts's navigation lock`);
-            }
-        }
-    }
-    if (path === 'src/main.ts') {
-        const seen = { handedOut: 0, toTab: 0 };
-        for (const match of text.matchAll(ownPageName)) {
-            if (!outsideLock(match.index)) continue;
-            const line = lineAt(text, match.index);
-            // A line of a comment names it and calls nothing.
-            if (/^\s*(?:\*|\/\/|\/\*)/.test(line)) continue;
-            if (ownPageHandedOut.test(line)) seen.handedOut++;
-            else if (ownPageToTab.test(line)) seen.toTab++;
-            else found.push(`${path} uses the opener of the runtime's own page other than as ${ownPageCaller}`);
-        }
-        if (seen.handedOut > 1 || seen.toTab > 1) found.push(`${path} hands the opener of the runtime's own page to more than ${ownPageCaller}`);
-    }
     const lockDefined = [...text.matchAll(lockDefinition)].length;
     const lockCalls = [...text.matchAll(lockCall)].length - lockDefined;
     // main.ts defines the lock and calls it once, taken apart as above; every other module names it nowhere.
