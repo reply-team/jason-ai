@@ -50,6 +50,7 @@ import { heardLine, readActsAgain } from './card-acts';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
+import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
 import { closeMenus, sideView } from './side';
 import { StartPanel } from './start';
 import {
@@ -466,6 +467,7 @@ function makeDock(): Dock {
             const agent = agentChatOf(to);
             if (agent !== null && can('chat.create')) return showAgentChat(agent);
             moves++;
+            if (to.screen === 'settings') rememberPlace();
             // The bar names what is shown: an agent's chat by its own address, anything else by the chat's. A panel a
             // start's address named gives that address up for the chat's, so Back from the page shows the panel.
             if (activePanel.value !== 'page' && shownAgent.value === null && route.value.screen !== 'chat')
@@ -516,6 +518,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         unaddressed = 'start';
         ownAddress = null;
         moves = 0;
+        forgetPlace();
         reveal('start');
         // The address is the truth: one that names something draws it (the window opens with none, so on Start).
         const named = addressPlace(location.hash);

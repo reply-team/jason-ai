@@ -107,6 +107,7 @@ describe('Your name and tone', () => {
         const grammar = screen.getByRole('combobox', { name: 'Grammar forms for the writer' }) as HTMLSelectElement;
         expect(grammar.value).toBe('neutral');
         expect(Array.from(grammar.options).map((each) => each.value)).toEqual(['feminine', 'masculine', 'neutral']);
+        expect(Array.from(grammar.options).map((each) => each.text)).toEqual(['Female', 'Male', 'Neutral']);
         expect(screen.getByText(/languages whose grammar marks the writer/)).toBeTruthy();
         expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
     });
