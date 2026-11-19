@@ -148,7 +148,8 @@ shows before anything is typed and what you send waits, while the window is open
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
-  System holds.
+  System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using it, return to the
+  place you opened Settings from, or to Start when the page does not remember one (after a reload, say); this is kept by the page alone.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
