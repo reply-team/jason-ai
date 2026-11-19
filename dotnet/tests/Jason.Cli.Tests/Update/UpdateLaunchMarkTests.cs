@@ -128,11 +128,11 @@ public class UpdateLaunchEnvironmentTests
         {
             Environment.SetEnvironmentVariable(UpdateLaunch.Variable, "inherited");
 
-            var marked = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started");
+            var marked = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started");
             Assert.Equal("started", marked.Environment[UpdateLaunch.Variable]);
             Assert.DoesNotContain(marked.ArgumentList, argument => argument.Contains("started", StringComparison.Ordinal));
 
-            var plain = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], updateLaunch: null);
+            var plain = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], updateLaunch: null);
             Assert.False(plain.Environment.ContainsKey(UpdateLaunch.Variable), "A launch that is not the update's passed a mark on.");
         }
         finally
@@ -161,7 +161,7 @@ public class UpdateLaunchEnvironmentTests
 
             var plain = RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "Jason"), "--update-settle"]);
             Assert.False(plain.Environment.ContainsKey(UpdateLock.Variable), "a run the lock was not handed to inherited it");
-            var launch = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started");
+            var launch = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started");
             Assert.False(launch.Environment.ContainsKey(UpdateLock.Variable), "a runtime was handed the update's lock");
 
             Assert.Equal("inherited", UpdateLock.Handed(null));
