@@ -16,11 +16,17 @@ describe("the chat's Markdown, drawn", () => {
                 '<ul><li><p>e</p></li></ul>' +
                 '<ol start="2"><li><p>f</p></li></ol>' +
                 '<blockquote><p>g</p></blockquote>' +
-                '<pre><code>h</code></pre>' +
+                '<div class="chat-md-code"><button type="button" class="chat-md-copy" data-action="chat.copyCode" data-args="[&quot;:0&quot;]">Copy code</button>' +
+                '<pre><code>h</code></pre></div>' +
                 '<div class="chat-md-table"><table><thead><tr><th>i</th><th>j</th></tr></thead>' +
                 '<tbody><tr><td>k</td><td>l</td></tr></tbody></table></div>' +
                 '</div>',
         );
+    });
+
+    it('gives a code block a Copy code button and inline code none', () => {
+        expect(drawn('`a`')).not.toContain('button');
+        expect(drawn('```\na\n```').match(/<button/g)).toHaveLength(1);
     });
 
     it('draws a link as its text and its address, as text, and an address alone once', () => {
@@ -63,6 +69,20 @@ describe("the chat's Markdown, drawn", () => {
         const attributes = [...drawn(hostile).matchAll(/\s([a-z-]+)="([^"]*)"/g)].map(
             (each) => `${each[1]}=${each[2]}`,
         );
-        expect(attributes).toEqual(['class=chat-md', 'start=7', 'class=chat-md-table', 'class=chat-md-link']);
+        const copy = (n: number) => [
+            'class=chat-md-code',
+            'type=button',
+            'class=chat-md-copy',
+            'data-action=chat.copyCode',
+            `data-args=[&quot;:${n}&quot;]`,
+        ];
+        expect(attributes).toEqual([
+            'class=chat-md',
+            ...copy(0),
+            'start=7',
+            ...copy(1),
+            'class=chat-md-table',
+            'class=chat-md-link',
+        ]);
     });
 });
