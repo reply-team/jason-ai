@@ -12,6 +12,10 @@ import { inFront, shownPane, bringForward } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
+import { layOutChats } from '../test/scroll';
+
+/** Lets what a change set going run out: the effects, the observers and the timers already due. */
+const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
 import * as consoleCampaigns from './campaigns';
 import { ChatPanel } from './chat';
 import { Console } from './console';
@@ -559,6 +563,38 @@ describe('the desktop’s conversations', () => {
         } finally {
             if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
             else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+        }
+    });
+
+    it('opens a long conversation where it is, and the words its running turn adds then leave the person’s place alone', async () => {
+        const layout = layOutChats();
+        try {
+            const desktop = chatDesktop();
+            const id = 'conv_01JDKEPT0000000000000000R2';
+            desktop.keep({
+                id,
+                campaignId: 'cmp_1',
+                title: 'Spring',
+                running: true,
+                entries: [
+                    { kind: 'user', text: 'How is it doing?' },
+                    { kind: 'text', text: `So far: ${'a reply, '.repeat(200)}` },
+                    { kind: 'user', text: 'And the bounces?' },
+                ],
+            });
+            renderConsole(desktop);
+            await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+            fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+            await waitFor(() => screen.getByText('And the bounces?'));
+            const box = screen.getByText('And the bounces?').closest<HTMLElement>('.chat-scroll')!;
+            await settle();
+            expect(box.scrollTop).toBe(0);
+            flush(() => desktop.emit(id, { kind: 'text', text: `Two bounced: ${'an address, '.repeat(40)}` }));
+            await waitFor(() => expect(box.textContent).toContain('Two bounced:'));
+            await settle();
+            expect(box.scrollTop).toBe(0);
+        } finally {
+            layout.restore();
         }
     });
 
