@@ -679,9 +679,11 @@ test('the new version’s first start settles the record: a start that worked ke
     ]);
 });
 
-test('while a copy of the previous version is kept, the Jason menu says where, under the update item', () => {
+// The line is the same in the tray's menu and the window's: the version kept, and never its folder, whose path makes a
+// menu as wide as itself. Where a person needs the folder, a start that failed and an update that was not installed name it.
+test('while a copy of the previous version is kept, both menus say which version, under the update item, and not where', () => {
     const copy = '/data/desktop/rollback/0.34.0/Jason.app';
-    const line = 'The previous version 0.34.0 is kept at /data/desktop/rollback/0.34.0/Jason.app; put it back by hand.';
+    const line = 'The previous version 0.34.0 is kept.';
     const there = (path: string) => path === copy;
     assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.35.0', there), line);
     // A first start that failed keeps the copy under its pending record.
