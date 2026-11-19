@@ -777,7 +777,7 @@ public static class InstallationRemovers
                         }
 
                         if (ImageOf(process) is { } image
-                            && string.Equals(FolderPaths.Real(image), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                            && string.Equals(FolderPaths.Real(AtItsPath(image)), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }
@@ -804,6 +804,17 @@ public static class InstallationRemovers
         /// </summary>
         private static string? ImageOf(System.Diagnostics.Process process) =>
             (OperatingSystem.IsWindows() ? WindowsProcessTree.ImageOf(process.Id) : null) ?? process.MainModule?.FileName;
+
+        /// <summary>
+        /// The path a process's image was started from. Where the file was replaced or removed under it, as apt replaces a
+        /// package's files under a running application, Linux reports the image as <c>&lt;path&gt; (deleted)</c>; the process
+        /// still runs that installation's program, so it is read at the path it names.
+        /// </summary>
+        private static string AtItsPath(string image)
+        {
+            const string Gone = " (deleted)";
+            return OperatingSystem.IsLinux() && image.EndsWith(Gone, StringComparison.Ordinal) && !File.Exists(image) ? image[..^Gone.Length] : image;
+        }
 
         private static string? SafeName(System.Diagnostics.Process process)
         {

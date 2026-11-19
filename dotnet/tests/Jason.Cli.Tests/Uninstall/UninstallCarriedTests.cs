@@ -668,6 +668,69 @@ public sealed partial class UninstallCarriedTests : IDisposable
     }
 
     /// <summary>
+    /// On Linux apt replaces the deb's files under a running Jason Desktop (Ubuntu's automatic updates, Software Updater):
+    /// dpkg renames the new file over the old one, and the system then reports the running process's image as
+    /// "<path> (deleted)". The application is still open from that installation, and removing it from under itself is what
+    /// the look is for, so it is found before the replacement and after. Catches a look that compares that report with the
+    /// path as it is and lets an uninstall go on under an open window.
+    /// </summary>
+    [Fact]
+    public void On_linux_the_application_whose_file_the_system_replaced_under_it_is_found()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "The '(deleted)' report is Linux's; the rows beside this one hold the other systems' looks.");
+
+        // Under the deb's name, longer than the fifteen characters the system keeps of a process's name. perl stands in for
+        // the application, as in the row below.
+        var folder = Path.Combine(_tree.Paths.Root, "opt", "Jason");
+        Directory.CreateDirectory(folder);
+        var image = Path.Combine(folder, "jason-desktop-app");
+        File.Copy("/usr/bin/perl", image);
+        var start = new System.Diagnostics.ProcessStartInfo(image)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var argument in new[] { "-e", "sleep 120" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var remover = InstallationRemovers.ForThisMachine();
+            IReadOnlyList<int> Look()
+            {
+                IReadOnlyList<int> found = [];
+                var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+                while (DateTime.UtcNow < until && !found.Contains(child.Id))
+                {
+                    Thread.Sleep(100);
+                    found = remover.RunningFrom(image);
+                }
+
+                return found;
+            }
+
+            Assert.True(Look().Contains(child.Id), $"The look did not find process {child.Id} running '{image}'; it read '{ImageReadFor(child.Id)}'.");
+
+            // As dpkg replaces a file: the new one written beside it, then renamed over it.
+            File.Copy("/usr/bin/perl", image + ".dpkg-new");
+            File.Move(image + ".dpkg-new", image, overwrite: true);
+
+            Assert.False(child.HasExited, "the stand-in for the application ended before it was looked for");
+            Assert.True(Look().Contains(child.Id), $"After its file was replaced, the look did not find process {child.Id}: it was given '{image}' and read '{ImageReadFor(child.Id)}'.");
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
+    }
+
+    /// <summary>
     /// The application reached through a linked folder, as an application folder can be: the look is given the path through
     /// the link, the system reports the process at the path the link leads to, and the two are one file, so it is found. On
     /// macOS the temporary folder itself is reached through a link, <c>/var</c> to <c>/private/var</c>; this row adds one of
