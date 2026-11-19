@@ -293,7 +293,12 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const restart = "if (act === 'restart') {\n            this.deps.restart?.();\n            return;\n        }";
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
     assert.ok(main.includes('        restart: () => void restartForPackage(packageRestart),\n'));
-    assert.ok(main.includes("notice.on('click', () => void restartForPackage(packageRestart));"));
+    // The notice is held for as long as the window runs: one nothing refers to is collected, and its click with it, so a
+    // click on it restarted nothing.
+    assert.ok(main.includes('    let packageNotice: Notification | null = null;\n'));
+    assert.ok(main.includes('packageNotice = new Notification({'));
+    assert.ok(main.includes("packageNotice.on('click', () => void restartForPackage(packageRestart));"));
+    assert.equal(main.includes('const notice = new Notification('), false, 'no notice held by a local alone');
     assert.ok(main.includes('const packageRestart = { stopRuntime: stopCarriedRuntime, relaunch: () => modeDeps.relaunch(), refused: (why: string) => dialog.showErrorBox(windowTitle, why) };'));
     // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
     // none in a demo run.

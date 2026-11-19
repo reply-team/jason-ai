@@ -503,6 +503,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const now = bundleVersion(packaged);
         return now !== null && now !== version ? now : null;
     };
+    // Held for as long as the window runs: a notice nothing refers to is collected, and its click with it.
+    let packageNotice: Notification | null = null;
     if (form?.form === 'deb') {
         let told = false;
         watchFile(join(packaged, 'version.json'), { interval: 60_000 }, () => {
@@ -512,9 +514,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             desk.renderMenu();
             toPage('updates.changed');
             if (Notification.isSupported()) {
-                const notice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
-                notice.on('click', () => void restartForPackage(packageRestart));
-                notice.show();
+                packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
+                packageNotice.on('click', () => void restartForPackage(packageRestart));
+                packageNotice.show();
             }
         });
     }
