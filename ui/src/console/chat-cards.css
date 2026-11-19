@@ -32,11 +32,6 @@
 .jc-console .thread .sugs {
     justify-content: center;
 }
-/* The chips under the last answer stand at the answer's edge, not centred. */
-.jc-console .thread .sugs.next {
-    justify-content: flex-start;
-    margin: 2px 0 14px;
-}
 
 /* The trail of steps: an arrow that turns as the list opens, none while the turn still runs. */
 .jc-console .vsteps > summary::after {
