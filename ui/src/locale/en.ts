@@ -39,8 +39,8 @@ export const en = {
     'voice.sender.title': 'Job title',
     'voice.sender.company': 'Company',
     'voice.sender.gender': 'Grammar forms for the writer',
-    'voice.sender.gender.feminine': 'Feminine',
-    'voice.sender.gender.masculine': 'Masculine',
+    'voice.sender.gender.feminine': 'Female',
+    'voice.sender.gender.masculine': 'Male',
     'voice.sender.gender.neutral': 'Neutral',
     'voice.sender.gender.note':
         "Used only in languages whose grammar marks the writer's gender. If unsure, leave Neutral.",
