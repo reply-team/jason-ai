@@ -593,10 +593,11 @@ public static class PathEntry
     /// file's own bytes.
     /// </para>
     /// <para>
-    /// <b>The one thing not promised:</b> in a file that ended without a newline and holds blocks for two folders, one
+    /// <b>The two things not promised:</b> in a file that ended without a newline and holds blocks for two folders, one
     /// under the other, taking the upper block out first keeps the newline it began with, since the lower block follows
     /// it, and the file can then no longer be told from one that ended in a newline, so taking the lower block out
-    /// after it leaves that newline.
+    /// after it leaves that newline. And a file that ended without a newline and was later turned whole to CRLF comes
+    /// back ending in a carriage return: it is no longer the file the installer wrote into.
     /// </para>
     /// </remarks>
     public static string WithoutEntry(string profileText, string installDirectory)
