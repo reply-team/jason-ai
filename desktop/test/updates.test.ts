@@ -26,7 +26,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -238,6 +238,163 @@ test('a version whose first start failed here is not offered again', async (t) =
     updates.start();
     await timers.fire();
     assert.deepEqual(states.at(-1), { step: 'idle' });
+});
+
+// A check the person asks for says what it found, in one sentence the item's answer carries and, asked outside Settings,
+// a notification repeats. A look on the cadence never writes one.
+test('a check the person asks for says what it found; a look on the cadence says nothing', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater();
+    const { updates, timers } = updaterOn(s, updater);
+    const ask = async () => 0;
+    updates.start();
+    await timers.fire();
+    assert.equal(updates.said, null, 'a look on the cadence says nothing');
+    // Nothing newer.
+    assert.equal(await pressItem(updates, 'check', false, ask), 'Jason Desktop 0.34.0 is the latest version.');
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    // A newer one, which the item then offers.
+    updater.latest = '0.35.0';
+    assert.equal(await pressItem(updates, 'check', true, ask), 'Version 0.35.0 is available.');
+    assert.equal(updates.said, 'Version 0.35.0 is available.');
+    assert.deepEqual(updates.current, { step: 'offered', version: '0.35.0' });
+    // The item's next step clears it.
+    await pressItem(updates, 'download', false, ask);
+    assert.equal(updates.said, null);
+    // Only a check returns a sentence.
+    assert.equal(await pressItem(updates, 'install', true, async () => 1), null);
+});
+
+test('a newer version the person went back from is said as out and not offered, never as the latest', async (t) => {
+    const s = scratch(t);
+    writeRollback(s.rollback, { rejected: ['0.35.0'] });
+    const { updates } = updaterOn(s, fakeUpdater({ latest: '0.35.0' }));
+    assert.equal(await updates.check(true), 'Version 0.35.0 is out. It is not offered here because you went back from it.');
+    assert.deepEqual(updates.current, { step: 'idle' });
+    assert.equal(updates.said, 'Version 0.35.0 is out. It is not offered here because you went back from it.');
+});
+
+test('the line is replaced by the next check the person asks for, kept by a look on the cadence, and a failure is cleared by a look that succeeds', async (t) => {
+    const s = scratch(t);
+    let failing = false;
+    const updater = fakeUpdater({ fails: () => failing });
+    const { updates, timers, states } = updaterOn(s, updater);
+    updates.start();
+    assert.equal(await updates.check(true), 'Jason Desktop 0.34.0 is the latest version.');
+    // A look on the cadence that fails, or finds nothing newer, leaves the line as it is.
+    failing = true;
+    await timers.fire();
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    failing = false;
+    await timers.fire();
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    // The person's next check replaces it, a failure too: the error's own text never reaches the sentence.
+    failing = true;
+    const failed = await updates.check(true);
+    assert.equal(failed, 'Could not check for updates: something unexpected went wrong. Try again later.');
+    assert.equal(updates.said, failed);
+    for (const planted of ['planted', 'https://', 'token']) assert.equal(failed?.includes(planted), false, planted);
+    assert.deepEqual(states.at(-1), { step: 'idle' });
+    // A look on the cadence that fails again says nothing new; one that succeeds clears the failure.
+    await timers.fire();
+    assert.equal(updates.said, failed);
+    failing = false;
+    await timers.fire();
+    assert.equal(updates.said, null);
+    // A look on the cadence that finds a newer version moves the item on, which clears a line.
+    assert.equal(await updates.check(true), 'Jason Desktop 0.34.0 is the latest version.');
+    updater.latest = '0.35.0';
+    await timers.fire();
+    assert.deepEqual(updates.current, { step: 'offered', version: '0.35.0' });
+    assert.equal(updates.said, null);
+});
+
+test('a check that is not made says nothing: where electron-updater is not active, and while a step is under way', async (t) => {
+    const s = scratch(t);
+    const inactive = updaterOn(s, fakeUpdater({ inactive: true })).updates;
+    assert.equal(await inactive.check(true), null);
+    assert.equal(inactive.said, null);
+    const { updates } = updaterOn(s, fakeUpdater({ latest: '0.35.0' }));
+    await updates.check(true);
+    await updates.download();
+    assert.equal(await updates.check(true), null, 'downloaded: no look');
+    assert.equal(updates.said, null);
+});
+
+// The reason a failed check gives is one of four, by the kind of failure; the error's text is never shown.
+test('a failed check names one of four reasons by the kind of failure', () => {
+    const coded = (message: string, code: string) => Object.assign(new Error(message), { code });
+    const http = (statusCode: number) => Object.assign(new Error(`${statusCode} planted\nHeaders: {}`), { name: 'HttpError', statusCode, code: `HTTP_ERROR_${statusCode}` });
+    const offline = [
+        new Error('net::ERR_INTERNET_DISCONNECTED'),
+        new Error('net::ERR_NAME_NOT_RESOLVED'),
+        new Error('net::ERR_CONNECTION_REFUSED'),
+        new Error('net::ERR_CONNECTION_TIMED_OUT'),
+        new Error('net::ERR_TIMED_OUT'),
+        new Error('net::ERR_NETWORK_CHANGED'),
+        new Error('net::ERR_PROXY_CONNECTION_FAILED'),
+        new Error('Request timed out'),
+        coded('getaddrinfo ENOTFOUND github.com', 'ENOTFOUND'),
+        coded('connect ECONNREFUSED 127.0.0.1:443', 'ECONNREFUSED'),
+        coded('read ECONNRESET', 'ECONNRESET'),
+        coded('getaddrinfo EAI_AGAIN github.com', 'EAI_AGAIN'),
+        // electron-updater wraps the tag's read; the connection's own words are inside.
+        coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: Error: net::ERR_NAME_NOT_RESOLVED', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'),
+    ];
+    const refused = [http(403), http(429), coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: HttpError: 429 Too Many Requests', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND')];
+    const feedUnread = [
+        http(404),
+        http(500),
+        http(502),
+        coded('Cannot parse releases feed: planted', 'ERR_UPDATER_INVALID_RELEASE_FEED'),
+        coded('No published versions on GitHub', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'),
+        coded('Cannot find latest.yml in the latest release artifacts (planted)', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'),
+        coded('Cannot parse update info from latest.yml', 'ERR_UPDATER_INVALID_UPDATE_INFO'),
+        coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: HttpError: 404', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'),
+    ];
+    const other = [new Error('planted'), new TypeError('planted'), null, undefined, 'planted', { code: 42 }];
+    for (const error of offline) assert.equal(checkFailureOf(error), 'offline', String(error));
+    for (const error of refused) assert.equal(checkFailureOf(error), 'refused', String(error));
+    for (const error of feedUnread) assert.equal(checkFailureOf(error), 'feed', String(error));
+    for (const error of other) assert.equal(checkFailureOf(error), 'other', String(error));
+    assert.deepEqual(
+        (['offline', 'refused', 'feed', 'other'] as const).map((failure) => checkWords({ kind: 'failed', failure })),
+        [
+            'Could not check for updates: there is no connection to where releases are published.',
+            'Could not check for updates: the release server is refusing requests for now. Try again later.',
+            'Could not check for updates: the list of releases could not be read.',
+            'Could not check for updates: something unexpected went wrong. Try again later.',
+        ],
+    );
+    assert.equal(checkWords({ kind: 'latest', version: '0.48.6' }), 'Jason Desktop 0.48.6 is the latest version.');
+    assert.equal(checkWords({ kind: 'available', version: '0.48.7' }), 'Version 0.48.7 is available.');
+    assert.equal(checkWords({ kind: 'held', version: '0.48.7' }), 'Version 0.48.7 is out. It is not offered here because you went back from it.');
+});
+
+// electron-updater 6.8.11 wraps the read of the latest tag twice, each time with the inner error's stack
+// (out/providers/GitHubProvider.js: getLatestTagName throws "Unable to find latest version on GitHub (${url}), please
+// ensure a production release exists: ${e.stack || e.message}" as ERR_UPDATER_LATEST_VERSION_NOT_FOUND, and
+// getLatestVersion catches that and throws "Cannot parse releases feed: ${e.stack || e.message},\nXML:\n${feedXml}" as
+// ERR_UPDATER_INVALID_RELEASE_FEED). The timeout is builder-util-runtime's out/httpExecutor.js `new Error("Request timed
+// out")`, an HttpError's message is `${statusCode} ${statusMessage}` and "\nHeaders: ...". The feed's XML, release
+// notes included, follows "\nXML:\n" and is never read for the kind of failure.
+test('a doubly wrapped failure is told by the words before the feed, never by the feed', () => {
+    const doubly = (inner: string) => Object.assign(
+        new Error(
+            'Cannot parse releases feed: Error: Unable to find latest version on GitHub (https://github.com/planted/planted/releases/latest), '
+                + `please ensure a production release exists: ${inner}\n    at ClientRequest.<anonymous> (planted.js:1:1)\n    at GitHubProvider.getLatestTagName (planted.js:2:2)`
+                + `\n    at GitHubProvider.getLatestVersion (planted.js:3:3),\nXML:\n<?xml version="1.0"?><feed><entry><content>`,
+        ),
+        { code: 'ERR_UPDATER_INVALID_RELEASE_FEED' },
+    );
+    const withNotes = (error: Error, notes: string) => Object.assign(error, { message: `${error.message}${notes}</content></entry></feed>` });
+    assert.equal(checkFailureOf(withNotes(doubly('Error: Request timed out'), 'planted')), 'offline', 'a wrapped timeout');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 429 Too Many Requests\nHeaders: {}'), 'Fixed a read ECONNRESET on a slow proxy.')), 'refused', 'a 429 under notes that name ECONNRESET');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 404 Not Found\nHeaders: {}'), 'Says net::ERR_TIMED_OUT in plain words.')), 'feed', 'a 404 under notes that name net::ERR_TIMED_OUT');
+});
+
+test('asked outside Settings, the sentence comes as a notification of its own', () => {
+    assert.deepEqual(updateNotice('Version 0.48.7 is available.'), { title: 'Jason Desktop', body: 'Version 0.48.7 is available.' });
 });
 
 test('the download happens on the person’s word, and the install on a second one', async (t) => {
