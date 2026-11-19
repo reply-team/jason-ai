@@ -55,6 +55,7 @@ line. These kinds summon a review:
 | `audience_reserve_low` | The campaign's untouched people — the summary's `new` — fell under the threshold the campaign set with `--audience-threshold`. The runtime counts them and says so once per crossing; whether to top the audience up, and how, is the manager's (§9). |
 | `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it, or a read or a stop found it gone (`search_not_found`). Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
 | `audience_search_held` | The provider holds one of the campaign's searches — paused there, out of credits or at the plan's contact limit — so it spends nothing and finds nobody until a person acts at the provider. The runtime tells nobody directly; telling the person, by one question, is the manager's (§10). Said once per hold. |
+| `campaign_started` | The campaign went live, at its first start or after a pause. What it needs now is the manager's — work for its people, or a look at what changed while it stood — rather than a cadence later. One review at each going live; nothing reads what the line says, so a start after a pause summons one as the first start does. |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
@@ -134,8 +135,10 @@ dispatcher must never read a context for meaning.
 **The cadence is measured from an anchor**, which is set when a campaign goes live — the first time
 and every later time — and moved every time the runtime creates a check-in. So:
 
-- a campaign paused for a week and started again is reviewed a full interval after it wakes, rather
-  than the instant it does;
+- going live summons a review of its own, by its `campaign_started` line (§2), and the check-in it
+  creates moves the anchor, so a campaign paused for a week and started again is reviewed when it wakes
+  and its next scheduled review comes a full interval after that one: the week it spent stopped is not
+  a week nobody looked at it;
 - a review that failed does not stop the loop, because the anchor moved when the check-in was
   **created**, not when it finished;
 - cancelling a check-in does not bring the next one forward. A person cancelling a review is saying
@@ -145,7 +148,11 @@ and every later time — and moved every time the runtime creates a check-in. So
 **What a cadence costs.** One launch per active campaign per interval, on the operator's own agent
 host and their own plan. Ten active campaigns at the default are about fifty launches a day; at the
 floor of five minutes they are nearly three thousand. The floor exists because the number is easy to
-type and the bill is somebody's.
+type and the bill is somebody's. A start adds one review at each going live, a resume included.
+
+Where no role can be launched at all — no execution profile resolves and the role has no entry command — that
+review fails at the claim with `role_not_launchable` and says so at the start, as the scheduled one did at its
+time; `jason status` names the cure in its `roles_launchable` check.
 
 ## 5. What a check-in is told
 
@@ -337,7 +344,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held`, `campaign_started` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -361,7 +368,8 @@ kinds." It used to read as the defaults, the opposite of what whoever wrote it m
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
 the kind is added; the same holds for `provider_event_observed`, `provider_blocked`, `audience_reserve_low`,
-`audience_search_ended` and `audience_search_held`.
+`audience_search_ended` and `audience_search_held`; and a list narrowed before `campaign_started` was a default
+does not hold it, so that installation is not woken by a start until the kind is added.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what
