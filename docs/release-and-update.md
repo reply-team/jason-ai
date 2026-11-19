@@ -457,7 +457,8 @@ SHA-256** against `checksums.txt` before anything of it runs, and opens nothing;
 is apt (Ubuntu, Debian, Mint), the release's deb is installed by apt, with the one administrator's password a system
 package needs, asked by `sudo` where the line has a terminal and otherwise by the desktop's own password dialog through
 `pkexec`, waited for at most ten minutes; a password not given, no session to ask in, the dialog failing, the package
-system held by another install and apt failing are each refused in their own words, with nothing installed. The deb's
+system held by another install are each refused in their own words, with nothing installed; apt failing part-way says so,
+with the commands that finish the package or take it off. The deb's
 own scripts add Jason's apt repository, `https://get.jasonharness.ai/apt/`, as
 `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key the package carries as
 `/usr/share/keyrings/jason-desktop.gpg`; the rule `/etc/apt/apt.conf.d/50jason-desktop`, a configuration file of the
@@ -478,7 +479,7 @@ install made before (§7).
 The terminal's `jason` is `~/.local/bin/jason` on macOS, the wrapper that runs the application's own, and so for an
 AppImage on Linux, running the copy; for the deb it is the package's own `/usr/bin/jason`; and on Windows the
 application's `resources\bundle\jason.exe`, its folder on this account's Path. On macOS and Windows nothing here needs
-administrator rights or a password, and on Linux only the deb's install does, once. On Windows everything is installed
+administrator rights or a password, and on Linux the deb does, once each time apt installs or takes it off. On Windows everything is installed
 for this account alone, and so is an AppImage; on a Mac the application goes to `/Applications` where this account may
 write there, else `~/Applications`, and the deb installs Jason Desktop for every account of the computer, at
 `/opt/Jason`, with its `/usr/bin/jason`; the skills and the data are this account's own everywhere, and the terminal

@@ -735,6 +735,45 @@ public sealed partial class UninstallCarriedTests : IDisposable
     }
 
     /// <summary>
+    /// On Linux a process's name keeps its file's extension: an AppImage the person keeps as <c>Jason.AppImage</c> runs as
+    /// <c>Jason.AppImage</c>, and is found by the look as one running under the default name is. Catches a look by the name
+    /// without its extension, which found no such window open and let an uninstall delete the AppImage under it.
+    /// </summary>
+    [Fact]
+    public void On_linux_an_appimage_kept_under_a_short_name_of_its_own_is_found()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "A process's name keeps the extension on Linux; the rows beside this one hold the other systems.");
+        var image = Path.Combine(_tree.Paths.Root, "My Apps", "Jason.AppImage");
+        Directory.CreateDirectory(Path.GetDirectoryName(image)!);
+        File.Copy("/usr/bin/perl", image);
+        var start = new System.Diagnostics.ProcessStartInfo(image) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "-e", "sleep 120" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var remover = InstallationRemovers.ForThisMachine();
+            IReadOnlyList<int> found = [];
+            var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < until && !found.Contains(child.Id))
+            {
+                Thread.Sleep(100);
+                found = remover.RunningFrom(image);
+            }
+
+            Assert.True(found.Contains(child.Id), $"The look did not find process {child.Id} running '{image}'; it read '{ImageReadFor(child.Id)}'.");
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
+    }
+
+    /// <summary>
     /// The application reached through a linked folder, as an application folder can be: the look is given the path through
     /// the link, the system reports the process at the path the link leads to, and the two are one file, so it is found. On
     /// macOS the temporary folder itself is reached through a link, <c>/var</c> to <c>/private/var</c>; this row adds one of

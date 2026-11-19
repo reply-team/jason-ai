@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Jason.Cli.Files;
+using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 
@@ -64,6 +65,7 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
             }
 
             var start = TerminalStartInfo.For(Platform, argv, launch.WorkingDirectory, launch.Variables);
+            StandardStreams.KeepOutOfChildren();
             using var process = ChildProcess.Start(start);
             if (process is null)
             {

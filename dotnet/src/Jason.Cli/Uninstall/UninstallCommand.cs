@@ -733,7 +733,12 @@ public static class UninstallCommand
         return running.Count == 0
             ? null
             : $"Jason Desktop is open (process {string.Join(", ", running.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), and this would remove it from under itself. "
-              + (places.Platform is SetupSystem.Windows ? "Quit it from its icon in the notification area" : "Quit it from the Jason menu")
+              + (places.Platform switch
+              {
+                  SetupSystem.Windows => "Quit it from its icon in the notification area",
+                  SetupSystem.Linux => "Quit it from its icon in the tray, or close its window where your desktop shows no tray",
+                  _ => "Quit it from the Jason menu",
+              })
               + ", then run this again. Nothing was removed; the data directory is kept either way unless --purge-data says otherwise.";
     }
 

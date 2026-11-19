@@ -3,6 +3,7 @@ using Jason.Cli.Installation;
 using Jason.Cli.Status;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -207,5 +208,62 @@ public sealed class CommandLineMoveLinuxTests
         Assert.Contains(answer.Reason!, check.Fact, StringComparison.Ordinal);
         Assert.Equal(repaired ? CheckState.Failed : CheckState.Unknown, check.State);
         Assert.Equal(repaired ? "jason update apply" : null, check.Fix);
+    }
+
+    /// <summary>
+    /// apt's run, read from the words of sudo, sudo-rs (Ubuntu 26.04's), pkexec and apt as the install line reads them, never
+    /// from an exit code alone; the package lock first, which apt waits on after the password was given. Catches sudo-rs's
+    /// wrong passwords and a machine with no polkit daemon read as apt failing, and a lock held to the bound read as no
+    /// password given.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 126, "Error executing command as another user: Request dismissed", AptRefusal.NoPassword)]
+    [InlineData(true, 1, "sudo-rs: Maximum 3 incorrect authentication attempts", AptRefusal.NoPassword)]
+    [InlineData(true, PackageRun.TimedOut, "", AptRefusal.NoPassword)]
+    [InlineData(true, 127, "Error getting authority: Error initializing authority: Could not connect: No such file or directory", AptRefusal.NoSession)]
+    [InlineData(false, 127, "", AptRefusal.NoSession)]
+    [InlineData(true, 127, "GDBus.Error: No session for cookie", AptRefusal.DialogFailed)]
+    [InlineData(true, PackageRun.TimedOut, "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", AptRefusal.LockHeld)]
+    [InlineData(true, 100, "E: Sub-process /usr/bin/dpkg returned an error code (1)", AptRefusal.Apt)]
+    public void On_linux_apt_s_run_is_read_from_the_tools_own_words(bool asked, int exit, string said, AptRefusal refusal) =>
+        Assert.Equal(refusal, new PackageRun(asked, exit, said).Refusal);
+
+    /// <summary>
+    /// The move's own look for an open Jason Desktop, on this machine: the deb's window under its rewritten title (one string,
+    /// the program and its switch) and the name the system keeps of it, found as the uninstall's look finds it. Catches the
+    /// move's refusal to install over an open window never firing on Linux.
+    /// </summary>
+    [Fact]
+    public void On_linux_the_move_s_own_look_finds_jason_desktop_open()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "The look is Linux's here.");
+        using var tree = new TempPaths();
+        var image = Path.Combine(tree.Paths.Root, "opt", "Jason", "jason-desktop-app");
+        Directory.CreateDirectory(Path.GetDirectoryName(image)!);
+        File.Copy("/usr/bin/perl", image);
+        var start = new System.Diagnostics.ProcessStartInfo(image) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "-e", $"$0 = '{image} --'; open(my $c, '>', '/proc/self/comm'); print $c 'jason-desktop-app'; close $c; sleep 120" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var seen = false;
+            var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < until && !seen)
+            {
+                Thread.Sleep(100);
+                seen = MoveSystem.Instance.RunsNamed("jason-desktop-app");
+            }
+
+            Assert.True(seen, "The move's look did not find the window's process.");
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
     }
 }

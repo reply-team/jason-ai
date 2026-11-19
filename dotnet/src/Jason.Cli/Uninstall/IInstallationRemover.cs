@@ -763,7 +763,7 @@ public static class InstallationRemovers
             var session = windows ? System.Diagnostics.Process.GetCurrentProcess().SessionId : 0;
             var wanted = FolderPaths.Real(executable);
             var found = new List<int>();
-            foreach (var process in Named(name))
+            foreach (var process in ProcessImages.Named(executable))
             {
                 using (process)
                 {
@@ -777,7 +777,7 @@ public static class InstallationRemovers
                         }
 
                         if (ImageOf(process) is { } image
-                            && string.Equals(FolderPaths.Real(AtItsPath(image)), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                            && string.Equals(FolderPaths.Real(ProcessImages.AtItsPath(image)), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }
@@ -804,47 +804,6 @@ public static class InstallationRemovers
         /// </summary>
         private static string? ImageOf(System.Diagnostics.Process process) =>
             (OperatingSystem.IsWindows() ? WindowsProcessTree.ImageOf(process.Id) : null) ?? process.MainModule?.FileName;
-
-        /// <summary>
-        /// The processes that may run a program of this name. Linux keeps fifteen characters of a process's name, and .NET reads
-        /// the rest of a longer one from the process's first argument, which Chromium rewrites into one string with its
-        /// switches (<c>/opt/Jason/jason-desktop-app --</c>), so Jason Desktop never answers to its own name there: a longer
-        /// name is matched on the characters the system keeps, and the image decides.
-        /// </summary>
-        private static System.Diagnostics.Process[] Named(string name)
-        {
-            const int Kept = 15;
-            if (!OperatingSystem.IsLinux() || name.Length <= Kept)
-            {
-                return System.Diagnostics.Process.GetProcessesByName(name);
-            }
-
-            var chosen = new List<System.Diagnostics.Process>();
-            foreach (var process in System.Diagnostics.Process.GetProcesses())
-            {
-                if (SafeName(process) is { } named && named.StartsWith(name[..Kept], StringComparison.Ordinal))
-                {
-                    chosen.Add(process);
-                }
-                else
-                {
-                    process.Dispose();
-                }
-            }
-
-            return [.. chosen];
-        }
-
-        /// <summary>
-        /// The path a process's image was started from. Where the file was replaced or removed under it, as apt replaces a
-        /// package's files under a running application, Linux reports the image as <c>&lt;path&gt; (deleted)</c>; the process
-        /// still runs that installation's program, so it is read at the path it names.
-        /// </summary>
-        private static string AtItsPath(string image)
-        {
-            const string Gone = " (deleted)";
-            return OperatingSystem.IsLinux() && image.EndsWith(Gone, StringComparison.Ordinal) && !File.Exists(image) ? image[..^Gone.Length] : image;
-        }
 
         private static string? SafeName(System.Diagnostics.Process process)
         {

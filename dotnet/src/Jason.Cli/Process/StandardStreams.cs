@@ -83,6 +83,48 @@ public static class StandardStreams
         KeepOutOfChildren(InheritableHandles, StandardHandles, Clear);
     }
 
+    /// <summary>
+    /// Linux: every descriptor above 2 this process was handed open across exec, closed. .NET opens its own close-on-exec, so
+    /// those are all a parent's: Jason Desktop's Electron hands the jason it starts its resource files, which inside an
+    /// AppImage's mount keep the AppImage's own process alive, and an uninstall that held them would take that process for an
+    /// open window and refuse. Run where this process needs none of what it was handed; elsewhere than Linux, nothing.
+    /// </summary>
+    public static void CloseInherited() => CloseInherited(_ => true);
+
+    /// <summary>The same, for the descriptors <paramref name="which"/> takes.</summary>
+    internal static void CloseInherited(Func<int, bool> which)
+    {
+        ArgumentNullException.ThrowIfNull(which);
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        foreach (var fd in OpenAboveTwo().Where(which))
+        {
+            var flags = Fcntl(fd, GetDescriptorFlags, 0);
+            if (flags >= 0 && (flags & CloseOnExec) == 0)
+            {
+                _ = Close(fd);
+            }
+        }
+    }
+
+    /// <summary>Linux: this process's open descriptors above 2, read from <c>/proc/self/fd</c>; none where it cannot be read.</summary>
+    private static List<int> OpenAboveTwo()
+    {
+        try
+        {
+            return [.. Directory.EnumerateFileSystemEntries("/proc/self/fd")
+                .Select(entry => int.TryParse(Path.GetFileName(entry), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fd) ? fd : -1)
+                .Where(fd => fd > 2)];
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
     /// <summary>Linux: every descriptor above 2 this process holds open across exec, marked close-on-exec.</summary>
     private static void KeepDescriptorsOutOfChildren()
     {
@@ -114,6 +156,9 @@ public static class StandardStreams
 
     [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     private static extern int Fcntl(int fd, int command, int argument);
+
+    [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static extern int Close(int fd);
 
     /// <summary>
     /// The rule, with its three sources given: every handle <paramref name="inheritable"/> lists is cleared, or, where it

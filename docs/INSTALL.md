@@ -3,8 +3,8 @@
 This page takes a machine with nothing on it to an installation that can start work, and then takes it off
 again. It is written to be followed by a person or by an agent, in order, without reading anything else first.
 
-On macOS and Windows nothing here needs administrator rights or a password; on Linux only the deb's install does,
-once, where there is apt. On Windows everything is installed under your own account, and so is an AppImage on Linux. On
+On macOS and Windows nothing here needs administrator rights or a password; on Linux the deb does, once each time apt
+installs or takes it off, where there is apt. On Windows everything is installed under your own account, and so is an AppImage on Linux. On
 a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the deb
 installs Jason Desktop for every account of the computer, at `/opt/Jason`; the skills and Jason's data are your
 account's own everywhere, and the terminal command everywhere but the deb's `/usr/bin/jason`.
@@ -216,7 +216,8 @@ system decides the form:
   has a terminal, `sudo` asks for it; otherwise, as when an agent runs it in your desktop session, your desktop asks in
   its own password dialog, through `pkexec`, for at most ten minutes, and apt waits as long for the package system when
   Ubuntu's own updates hold it. A password not given, no session to ask in, the dialog failing, the package system still
-  held and apt failing are each refused in their own words, and nothing is installed. The package puts Jason Desktop in
+  held are each refused in their own words, and nothing is installed; apt failing part-way says so, with the commands
+  that finish the package or take it off. The package puts Jason Desktop in
   `/opt/Jason` for every account of the computer, `jason` in every terminal as `/usr/bin/jason`, and Jason's apt
   repository in `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key it carries, so its later updates come
   with the system's (§4). A package already at the version, or a later

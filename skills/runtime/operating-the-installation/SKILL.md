@@ -531,9 +531,9 @@ command line your terminal and your agents use. It is installed once, updated on
 installs it with the two lines below; on Linux they install the deb where there is apt, asking for an administrator's
 password once, and the AppImage elsewhere. If
 they ask you to install it, follow that page yourself, by its section for an agent: a package where the page names one
-for this platform and its package manager is already there, otherwise the install script on macOS and Windows, and on
-Linux the steps it gives by hand. That section also says what to offer them on Linux, and what to do when they take
-Jason Desktop there. Never pipe a download into a shell, and
+for this platform and its package manager is already there, otherwise the install script, on macOS, Windows and Linux
+alike; on Linux, where your harness refuses the script, the deb or the AppImage by hand as that section says. Never pipe a
+download into a shell, and
 ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
 you, hand them the lines to type.
 

@@ -45,6 +45,46 @@ public sealed class StandardStreamsTests
         }
     }
 
+    /// <summary>
+    /// Linux: what this process was handed open across exec is closed, and what it opened itself, close-on-exec as .NET opens
+    /// everything, stays; the uninstall does this at its start, needing none of what Jason Desktop handed it, which inside an
+    /// AppImage's mount kept the AppImage's own process alive to be taken for an open window. And every start of a child
+    /// meant to outlast the CLI keeps out what the CLI was handed. Catches "Uninstall Jason..." refused by its own process,
+    /// and a terminal or a browser started by the CLI holding the Desktop's files.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_the_uninstall_closes_what_it_was_handed_and_every_long_lived_start_keeps_it_out()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var handed = open(file, 0);
+        var own = open(file, CloseOnExecFlag);
+        try
+        {
+            StandardStreams.CloseInherited(fd => fd == handed || fd == own);
+
+            Assert.False(File.Exists($"/proc/self/fd/{handed}"), "a descriptor handed open across exec stayed open");
+            Assert.True(File.Exists($"/proc/self/fd/{own}"), "a descriptor of this process's own was closed");
+        }
+        finally
+        {
+            _ = close(own);
+            File.Delete(file);
+        }
+
+        var root = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..");
+        var router = File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.App", "ModeRouter.cs"));
+        Assert.Contains("if (args is [\"uninstall\", ..])\n        {\n            Jason.Cli.Process.StandardStreams.CloseInherited();", router, StringComparison.Ordinal);
+        foreach (var starter in new[] { "Process/RuntimeProcessControl.cs", "Update/MoveSystem.cs", "Uninstall/IInstallationRemover.cs", "Session/ITerminalStarter.cs", "Process/IUrlOpener.cs" })
+        {
+            Assert.Contains("StandardStreams.KeepOutOfChildren();", File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.Cli", starter)), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Linux's O_CLOEXEC.</summary>
+    private const int CloseOnExecFlag = 0x80000;
+
     private static string ChildSees(int fd)
     {
         var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, UseShellExecute = false };
