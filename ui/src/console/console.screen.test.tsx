@@ -573,7 +573,11 @@ describe('the console', () => {
         expect(words(drawn)).toContain('<iframe srcdoc="<script>parent.hit=1</script>"></iframe>');
         expect(drawn.querySelector('blockquote pre code')?.textContent).toBe('<svg onload="window.hit=1"></svg>');
         expect(within(drawn).getByRole('cell', { name: '<b onclick="window.hit=1">bold</b>' })).toBeTruthy();
-        expect(drawn.querySelectorAll('a, b, img, script, iframe, svg, [href], [src]')).toHaveLength(0);
+        // The one svg a code block's Copy code button draws is its own icon, never the agent's: every other is refused.
+        const elements = Array.from(drawn.querySelectorAll('a, b, img, script, iframe, svg, [href], [src]'));
+        expect(elements.filter((element) => element.closest('.chat-md-copy') === null)).toHaveLength(0);
+        expect(drawn.querySelectorAll('svg')).toHaveLength(drawn.querySelectorAll('.chat-md-copy').length);
+        expect(drawn.querySelectorAll('.chat-md-copy')).toHaveLength(2);
         const handlers = Array.from(drawn.querySelectorAll('*')).flatMap((element) =>
             element.getAttributeNames().filter((name) => name.startsWith('on')),
         );
