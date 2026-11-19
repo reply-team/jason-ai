@@ -1011,8 +1011,9 @@ runtime that does not stop, or a run file that cannot be read, leaves the update
 started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
-`<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+`<data>/desktop/rollback/<version>/`, and the Jason menu and the tray's show an unclickable line, "The previous version
+`<v>` is kept.", until the next update replaces the copy. The menus name no folder: the copy is in that one, and a start
+that failed and an update that was not installed name it again where you need it. The copy is the folder as it is, the
 application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
 installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
 version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing puts the kept copy back by itself, because the
