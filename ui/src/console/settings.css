@@ -25,7 +25,9 @@
 }
 
 /* The way out: Back at the left of the bar, a chevron turned to point left. It is in the markup before the title, holds
-   its place in the bar as the bar is held at the top, and takes no room of its own; the title makes room for it. */
+   its place in the bar as the bar is held at the top, and takes no room of its own; the title makes room for it. Its
+   words stand on the title's baseline, measured in a real engine (`tests/e2e/settings-head.spec.ts`), here and in a
+   narrow window. */
 .jc-console .harness .settings > .settings-back {
     position: sticky;
     top: 22px;
@@ -35,7 +37,7 @@
 .jc-console .harness .settings > .settings-back > button {
     position: absolute;
     left: 0;
-    top: -5px;
+    top: -7px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -496,7 +498,7 @@
         top: 16px;
     }
     .jc-console .harness .settings > .settings-back > button {
-        top: -6px;
+        top: -5px;
     }
     .jc-console .harness .settings[data-chosen] > h1 {
         padding-left: 104px;
