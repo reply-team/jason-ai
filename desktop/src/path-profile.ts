@@ -115,21 +115,53 @@ export function carriesLine(text: string, folder: string): boolean {
  * the blank line above them where there is one — or the same string when it carries none. Every other byte stays.
  */
 export function withoutLines(text: string, folder: string): string {
-    // Exactly what the append wrote, `\n<marker>\n<line>\n`, ending the file or a line of it: taking it out leaves every
-    // other byte as it was, a last line the profile ended without a newline among them.
-    const block = `\n${profileMarker}\n${asBytes(exportLine(folder))}`;
-    let out = text;
-    let from = 0;
-    for (;;) {
-        const at = out.indexOf(block, from);
-        if (at < 0) break;
-        const end = at + block.length;
-        if (end === out.length) out = out.slice(0, at);
-        else if (out[end] === '\n') out = out.slice(0, at) + out.slice(end + 1);
-        else from = at + 1;
+    // The uninstall's rule (`PathEntry.WithoutEntry` in C#), line for line, and held to the same cases: the text split on
+    // `\n` alone, each line keeping its own `\r`, walked from the end. A block is the marker and the line under it, read
+    // past a `\r` or a space at their ends, with the blank line above them where there is one: an empty line, or a lone
+    // `\r` where the block itself was later turned to CRLF, its marker line ending in `\r` too, and nothing else, so a
+    // line of spaces, or a lone `\r` over a block that was not turned, is the person's own. With no blank line above,
+    // the `\n` the block began with ended the person's last line, which had none: where the block is the last thing in
+    // the file it goes too, and the file ends as it began; where anything follows, it stays, because it now separates
+    // the person's lines.
+    // What is promised, and what is not, as in C#. A profile the installer wrote into comes back byte for byte, the
+    // person's own lines above and below its blocks included. Three cases are not promised, and in each only white
+    // space may differ, never a visible character of the person's: in a file that ended without a newline and holds
+    // blocks for two folders, one under the other, taking the upper block out first keeps the newline it began with,
+    // since the lower block still follows it, and the lower block's removal then leaves that newline; a file turned
+    // whole to CRLF after the installer wrote into it is no longer that file, and is not promised back byte for byte:
+    // what can differ is a line ending at its very end; and where an editor later put spaces on the installer's own
+    // blank line, that line stays, and the file ends without its final newline.
+    const line = asBytes(exportLine(folder));
+    if (!text.includes(line)) return text;
+    const lines = text.split('\n');
+    let removed = false;
+    for (let index = lines.length - 1; index >= 0; index--) {
+        if (trimmedEnd(lines[index]) !== line || index === 0 || trimmedEnd(trimmedStart(lines[index - 1])) !== profileMarker) continue;
+        let first = index - 1;
+        const blankAbove = first > 0 && (lines[first - 1] === '' || (lines[first - 1] === '\r' && (lines[first] ?? '').endsWith('\r')));
+        if (blankAbove) first--;
+        let last = index;
+        if (!blankAbove && first > 0 && index === lines.length - 2 && lines[lines.length - 1] === '') last++;
+        lines.splice(first, last - first + 1);
+        removed = true;
+        // And on above what was just taken out.
+        index = first;
     }
-    return out === text ? text : out;
+    return removed ? lines.join('\n') : text;
 }
+
+/** What .NET's `TrimStart` and `TrimEnd` take off a profile's line read one character a byte: the white space among the first 256. */
+const whiteSpace = '\t\n\v\f\r \u0085\u00a0';
+const trimmedStart = (text: string | undefined = '') => {
+    let from = 0;
+    while (from < text.length && whiteSpace.includes(text.charAt(from))) from++;
+    return text.slice(from);
+};
+const trimmedEnd = (text: string | undefined = '') => {
+    let to = text.length;
+    while (to > 0 && whiteSpace.includes(text.charAt(to - 1))) to--;
+    return text.slice(0, to);
+};
 
 /**
  * Whether the folder holds a character the shell reads inside the line's double quotes — `"`, `$`, a backtick or a
