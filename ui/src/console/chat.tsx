@@ -77,8 +77,8 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns, reload as reloadCampaigns, summary } from './campaigns';
-import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
+import { campaigns, reload as reloadCampaigns } from './campaigns';
+import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { copied, markdownView } from './markdown-view';
@@ -1224,7 +1224,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         chat.dropped > 0
             ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
             : null;
-    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? typing(chat) : null}`;
+    return html`${dropped}${parts}${chat.running ? typing(chat) : null}`;
 }
 
 /**
@@ -1256,30 +1256,12 @@ function typing(chat: Chat): Html {
     </div>`;
 }
 
-/** The agent of a chat as the console last read it, its state and its counts; none for a chat of no agent. */
-function agentOf(campaignId: string | null): Agent | undefined {
-    const status = campaigns.value.find((each) => each.id === campaignId)?.status;
-    const row = campaignId === null ? undefined : summary.value[campaignId];
-    return status === undefined || row === undefined ? undefined : { status, row };
-}
-
 /** Chips: each shows its words and sends its own as the person's next message, as a word typed would be. */
 const chipButtons = (chat: Chat, chips: readonly Chip[]): Html[] =>
     chips.map(
         (chip) =>
             html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`,
     );
-
-/**
- * The chips under the last answer (`chipsUnder`), where a message could be sent from here now: none without a host, in a
- * tab that may not send, or while the send waits for a model's name. An agent the console did not list, an archived one
- * among them, has none.
- */
-function chipsNext(chat: Chat, host: DesktopHost | null): Html | null {
-    if (host === null || (inTab() && !tabMaySend(chat.mode)) || sendHeld(onHost(chat, host.id), host)) return null;
-    const chips = chipsUnder(chat, agentOf(chat.campaignId));
-    return chips.length === 0 ? null : html`<div class="sugs next">${chipButtons(chat, chips)}</div>`;
-}
 
 /** What the plan card shows beyond the entries and the host: whether it is live, on another host, approving or approved. */
 function cardOf(chat: Chat, host: DesktopHost | null): string {
@@ -1298,8 +1280,6 @@ function threadOf(chatId: string) {
         host: DesktopHost | null;
         named: unknown;
         now: number;
-        counts: unknown;
-        held: string;
         card: string;
         asked: unknown;
         read: unknown;
@@ -1317,11 +1297,6 @@ function threadOf(chatId: string) {
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
-        // The chips under an agent's last answer are chosen from its state, read with `named`, and its counts as the
-        // console last read them; none stand while the send waits for a model's name, which the model chosen and whether
-        // one is being typed decide (`sendHeld`, asked only when the thread is drawn: it counts as a draw).
-        const counts = chat.campaignId === null ? undefined : summary.value[chat.campaignId];
-        const held = `${chat.typing === true} ${chat.model ?? ''}`;
         // A line's age is counted from the console's clock, which moves on every half minute.
         const now = clock.value;
         // The plan card is the one part of the thread drawn from the chat's mode, its waiting words and the person's
@@ -1342,8 +1317,6 @@ function threadOf(chatId: string) {
             last.now === now &&
             last.host === host &&
             last.named === named &&
-            last.counts === counts &&
-            last.held === held &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.card === card &&
@@ -1361,8 +1334,6 @@ function threadOf(chatId: string) {
                 host,
                 named,
                 now,
-                counts,
-                held,
                 card,
                 asked,
                 read,

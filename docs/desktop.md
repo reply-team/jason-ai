@@ -125,8 +125,10 @@ shows before anything is typed and what you send waits, while the window is open
   line, "You approved: Message to the person." and then how its work stands, read again as the journal moves: "Jason will
   send it." while the work is queued, "Jason is sending it." once a handler runs it, "It is not sent yet:" and why if it parked again, "It was sent." once
   the work succeeded, and "It was not sent:" with "the work failed", "was cancelled" or "expired" otherwise; an act that
-  is no message says "will do it", "is doing it", "not done yet", "is done" or "did not complete". The line is kept while the chat is
-  open; the "Waiting for you" label is drawn only over what waits, never over a read that failed alone.
+  is no message says "will do it", "is doing it", "not done yet", "is done" or "did not complete". A line that says "It was
+  sent." or "It is done." leaves five seconds after it first shows that; a line whose work is still on its way stays until
+  it gets there, and one that says the work was not sent or not done stays while the chat is open, since it is the only
+  sign that something failed. The "Waiting for you" label is drawn only over what waits, never over a read that failed alone.
 - While a turn runs, the line under the conversation says "Thinking…" with a spinner. While a permission card of that
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
@@ -148,7 +150,9 @@ shows before anything is typed and what you send waits, while the window is open
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
-  System holds.
+  System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
+  it, return to the place you opened Settings from, or to Start when the page does not remember one (after a reload,
+  say); this is kept by the page alone.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
