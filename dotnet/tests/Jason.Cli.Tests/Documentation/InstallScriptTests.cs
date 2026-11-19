@@ -840,9 +840,11 @@ public partial class InstallScriptTests
     /// programs as an NSIS uninstaller is. <c>Wait-UninstallerEnded</c> is kept by its <c>-under</c> to the row's own folder, so
     /// that it never waits on a program of the machine the row runs on; the proof gives no <c>-under</c>. A run handed to it that
     /// ends by itself is said with its exit code, once though the scan sees it too; one still running at a bound of 2 s fails by
-    /// the helper's own sentence, and the row ends that one process by its id; with no run it says none runs, and an
-    /// <c>Uninstall Jason.exe</c> outside its folder is not taken; and the copy NSIS runs on from a <c>~nsu*.tmp</c> folder,
-    /// handed to it by nobody, is found by its scan and waited for. <c>Get-JasonUninstallEntries</c> is run against stand-ins
+    /// the helper's own sentence, and the row ends that one process by its id, the only one it ends; with no run it says none
+    /// runs, and an <c>Uninstall Jason.exe</c> outside its folder is not taken; an <c>Uninstall Jason … .exe</c> in its folder,
+    /// handed to it by nobody, is found by its scan, its handle taken, waited for and said with its exit code; and so is the
+    /// copy NSIS runs on from a <c>~nsu*.tmp</c> folder. Every other stand-in ends by itself and is waited for.
+    /// <c>Get-JasonUninstallEntries</c> is run against stand-ins
     /// of the two registry reads, so that no row writes the registry: a key listed and gone before it is read is no entry, a
     /// key of another application is none, and a key still there that cannot be read fails.
     /// </summary>
@@ -868,7 +870,7 @@ public partial class InstallScriptTests
         var under = tree.NewDirectory("uninstallers");
         var outside = tree.NewDirectory("outside");
         var started = Path.Combine(tree.Root, "started.txt");
-        string[] programs = [Path.Combine(under, "Uninstall Jason.exe"), Path.Combine(under, "~nsuT.tmp", "Un.exe"), Path.Combine(outside, "Uninstall Jason.exe")];
+        string[] programs = [Path.Combine(under, "Uninstall Jason.exe"), Path.Combine(under, "Uninstall Jason 0.49.0.exe"), Path.Combine(under, "~nsuT.tmp", "Un.exe"), Path.Combine(outside, "Uninstall Jason.exe")];
         foreach (var program in programs)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(program)!);
@@ -925,24 +927,30 @@ public partial class InstallScriptTests
         Assert.InRange(waited, 1.5, 30);
         Assert.Equal($"(b) ended {b}: True", saidB[2]);
 
-        // (c) No run in the helper's folder, while an Uninstall Jason.exe runs outside it: none runs.
+        // (c) No run in the helper's folder, while an Uninstall Jason.exe runs outside it: none runs, and that one ends by itself.
         var c = Started("c");
-        Assert.Equal(["(c) said: no uninstaller runs once the application folder went", $"(c) ended {c}: True"], Said("c"));
+        Assert.Equal(["(c) said: no uninstaller runs once the application folder went", $"(c) ended by itself {c}: True"], Said("c"));
 
-        // (d) The copy NSIS runs on from a ~nsu*.tmp folder, handed to the helper by nobody: found by the scan and waited for.
+        // (d) An Uninstall Jason … .exe in the helper's folder, handed to it by nobody: found by the scan, its handle taken,
+        // waited for, and said with its exit code.
         var d = Started("d");
-        Seconds(Assert.Single(Said("d")), $@"^\(d\) said: the uninstaller, process {d}, ended (?<seconds>[0-9.]+) s into the wait that began once the asking run was ended, exit 3$");
+        Seconds(Assert.Single(Said("d")), $@"^\(d\) said: the uninstaller, process {d}, ended (?<seconds>[0-9.]+) s into the wait that began once the application folder went, exit 5$");
 
-        // (e) The Installed apps entries: the key that went is no entry, another application's is none, an unreadable one fails.
-        Assert.Equal(["(e) entries: there", "(e) failed on an unreadable key: Requested registry access is not allowed."], Said("e"));
+        // (e) The copy NSIS runs on from a ~nsu*.tmp folder, handed to the helper by nobody: found by the scan and waited for.
+        var e = Started("e");
+        Seconds(Assert.Single(Said("e")), $@"^\(e\) said: the uninstaller, process {e}, ended (?<seconds>[0-9.]+) s into the wait that began once the asking run was ended, exit 3$");
 
-        // Nothing the harness started was left running at its end.
+        // (f) The Installed apps entries: the key that went is no entry, another application's is none, an unreadable one fails.
+        Assert.Equal(["(f) entries: there", "(f) failed on an unreadable key: Requested registry access is not allowed."], Said("f"));
+
+        // Every stand-in the harness started and did not end ended by itself before the harness's end.
         Assert.DoesNotContain(lines, line => line.StartsWith("left ", StringComparison.Ordinal));
     }
 
     /// <summary>
     /// The pwsh the helper row runs. Say, Fail and the process listing are stood in, each line said prefixed by its case; every
-    /// stand-in it starts is written to a file by its id, for the row to end by that id should the harness not get to it.
+    /// stand-in it starts is written to a file by its id, for the row to end by that id should the harness not get to its end.
+    /// The harness ends one process, the stand-in of (b) by its id; every other stand-in ends by itself and is waited for.
     /// </summary>
     private const string HelperHarness = """
         $ErrorActionPreference = 'Stop'
@@ -964,6 +972,9 @@ public partial class InstallScriptTests
             [Console]::Out.WriteLine("$case started $($process.Id)")
             return $process
         }
+        function Wait-StandIn([System.Diagnostics.Process] $process) {
+            [Console]::Out.WriteLine("$case ended by itself $($process.Id): $($process.WaitForExit(15000))")
+        }
         function End-StandIn([System.Diagnostics.Process] $process) {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $null = $process.WaitForExit(10000) }
             [Console]::Out.WriteLine("$case ended $($process.Id): $($process.HasExited)")
@@ -981,14 +992,17 @@ public partial class InstallScriptTests
         End-StandIn $run
 
         $case = '(c)'
-        $run = Start-StandIn (Join-Path $outside 'Uninstall Jason.exe') 20000 0
+        $run = Start-StandIn (Join-Path $outside 'Uninstall Jason.exe') 3000 0
         try { Wait-UninstallerEnded @() -under $under } catch { Write-Failed $_ }
-        End-StandIn $run
+        Wait-StandIn $run
 
         $case = '(d)'
-        try { $null = Start-StandIn (Join-Path $under '~nsuT.tmp\Un.exe') 3000 3; Wait-UninstallerEnded @() 'the asking run was ended' -under $under } catch { Write-Failed $_ }
+        try { $null = Start-StandIn (Join-Path $under 'Uninstall Jason 0.49.0.exe') 3000 5; Wait-UninstallerEnded @() -under $under } catch { Write-Failed $_ }
 
         $case = '(e)'
+        try { $null = Start-StandIn (Join-Path $under '~nsuT.tmp\Un.exe') 3000 3; Wait-UninstallerEnded @() 'the asking run was ended' -under $under } catch { Write-Failed $_ }
+
+        $case = '(f)'
         & {
             $there = Join-Path $uninstallKeys 'there'
             $gone = Join-Path $uninstallKeys 'gone'
@@ -1012,7 +1026,7 @@ public partial class InstallScriptTests
         }
 
         $case = ''
-        foreach ($process in $all) { if (-not $process.HasExited) { [Console]::Out.WriteLine("left $($process.Id)"); Stop-Process -Id $process.Id -Force } }
+        foreach ($process in $all) { if (-not $process.WaitForExit(15000)) { [Console]::Out.WriteLine("left $($process.Id)") } }
         """;
 
     /// <summary>
