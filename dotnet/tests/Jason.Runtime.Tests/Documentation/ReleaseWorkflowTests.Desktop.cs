@@ -258,9 +258,9 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// What the notes and the release guide tell a person about the desktop beyond its files: the three platforms, that the
     /// test suite does not run on an Intel Mac, that it updates to stable releases only, that an update restarts the runtime
-    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, that on macOS and
-    /// Windows the one uninstall takes the application off from any of its doors, and that an uninstall stops the runtime
-    /// first or removes nothing.
+    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, that on macOS,
+    /// Windows and Linux the one uninstall takes the application off from any of its doors, on Linux the deb's package
+    /// first, and that an uninstall stops the runtime first or removes nothing.
     /// </summary>
     [Fact]
     public void The_notes_and_the_guide_say_how_the_desktop_updates_goes_back_and_where_it_is_tested()
@@ -275,12 +275,11 @@ public partial class ReleaseWorkflowTests
             "A runtime that does not stop leaves the update uninstalled, saying why, and a runtime started from another `jason` is never stopped.",
             "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
             "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
-            "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
-            "It is removed once, by `jason uninstall` in a terminal, by Installed apps on Windows, or by Uninstall Jason… in the Jason menu on macOS.",
+            "On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
+            "It is removed once, by `jason uninstall` in a terminal, by Installed apps on Windows, or by Uninstall Jason… in the Jason menu on macOS and Linux.",
             "The uninstall stops the runtime first, and removes nothing when that runtime does not stop.",
+            "On Linux it then takes the deb's package off, with an administrator's password asked once, and removes nothing of yours when that is refused.",
             "and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so.",
-            "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
-            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);
@@ -294,8 +293,8 @@ public partial class ReleaseWorkflowTests
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
             "going back is quitting Jason and putting that folder back in the place of the installed application by hand",
-            "Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,",
-            "and the data directory, the harness root and the updater's cache, `~/.cache/jason-desktop-updater`, stay.",
+            "Either is taken off by the one uninstall, `jason uninstall` or Uninstall Jason… in the Jason menu (§9), which takes the updater's cache, `~/.cache/jason-desktop-updater`, and the demo's two folders with it",
+            "The deb's own updater is off: its updates come with the system's, from Jason's apt repository,",
         ])
         {
             Assert.Contains(said, guide, StringComparison.Ordinal);
@@ -303,9 +302,9 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The desktop's files leave manifest.json as it was: the release's own line, run over a folder that holds them and
-    /// again over one that does not with their names taken off <c>-Plugins</c>, writes the same manifest but for the time
-    /// it was written. So an updater reads a release with the desktop exactly as it read the one before it, from 0.19.0
+    /// The desktop's files and the apt repository's index leave manifest.json as it was: the release's own line, run over
+    /// a folder that holds them and again over one that does not with their names taken off <c>-Plugins</c>, writes the
+    /// same manifest but for the time it was written. So an updater reads a release with the desktop exactly as it read the one before it, from 0.19.0
     /// on, the manifest's platforms stay the three a <c>jason update</c> applies, and no desktop file is named in it.
     /// </summary>
     [Fact]
@@ -321,12 +320,12 @@ public partial class ReleaseWorkflowTests
         Assert.True(exit == 0, stderr);
 
         var without = Staged(second);
-        foreach (var desktop in ReleaseAssets.Desktop)
+        foreach (var desktop in (string[])[.. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex])
         {
             File.Delete(Path.Combine(without, desktop));
         }
 
-        var stripped = invocation.Replace("," + string.Join(',', ReleaseAssets.Desktop) + " ", " ", StringComparison.Ordinal);
+        var stripped = invocation.Replace("," + string.Join(',', [.. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex]) + " ", " ", StringComparison.Ordinal);
         Assert.NotEqual(invocation, stripped);
         (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", ExpandForThisMachine(stripped, without));
         Assert.True(exit == 0, stderr);
@@ -430,7 +429,8 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// The deb is read for its control fields (the package jason-desktop, the release's version as dpkg spells it, amd64),
-    /// unpacked, and its /opt/Jason held by check-package to the configuration as a deb, which must carry package-type;
+    /// unpacked with its control files, and held by check-package to the configuration as a deb, which must carry
+    /// package-type, the tree's maintainer scripts, its key and its rule for automatic updates as a configuration file;
     /// the AppImage's runtime is refused when it names a shared library or an interpreter, which is how it needs no
     /// libfuse2, and its contents, extracted by that runtime, are held as an AppImage, which must carry none. Each carries
     /// the executable this call published, byte for byte and runnable, with its notices and version.json, and the deb's menu
@@ -447,10 +447,8 @@ public partial class ReleaseWorkflowTests
             "[ \"$(dpkg-deb --field \"$deb\" Architecture)\" = amd64 ] || { echo \"::error title=Desktop::The deb is not for amd64.\"; exit 1; }",
             "dpkg-deb --field \"$deb\" Recommends | grep -q 'libicu74 | libicu72' || { echo \"::error title=Desktop::The deb does not recommend the ICU library its jason needs.\"; exit 1; }",
             "if dpkg-deb --field \"$deb\" Depends | grep -q libicu; then echo \"::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives.\"; exit 1; fi",
-            "dpkg-deb --extract \"$deb\" \"$opened\"",
-            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile.\"; exit 1; }",
-            "dpkg-deb --control \"$deb\" \"$control\"",
-            "grep -q 'apparmor_parser --replace' \"$control/postinst\" || { echo \"::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox.\"; exit 1; }",
+            "dpkg-deb --raw-extract \"$deb\" \"$opened\"",
+            "node desktop/scripts/check-package.mjs --app \"$opened/opt/Jason\" --platform linux --form deb || { echo \"::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key or its rule for automatic updates.\"; exit 1; }",
             "carries \"$opened/opt/Jason\" deb",
             "if grep -q -e '--no-sandbox' \"${entries[@]}\"; then echo \"::error title=Desktop::The deb's menu entry starts the program with --no-sandbox.\"; exit 1; fi",
             "readelf -lW -d \"$appimage\" | grep -E '\\(NEEDED\\)|^ *INTERP ' && { echo \"::error title=Desktop::The AppImage's runtime names an interpreter or a shared library, libfuse2 among them maybe.\"; exit 1; }",
@@ -506,7 +504,7 @@ public partial class ReleaseWorkflowTests
             "sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \"$dist/jason-desktop-linux-x64.deb\"",
             "if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo \"The deb installed its AppArmor profile.\"; else echo \"The deb installed no AppArmor profile: this runner's AppArmor reads none.\"; fi",
             "started deb \"$RUNNER_TEMP/jason-desktop-deb-data\" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app",
-            "sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop",
+            "sudo apt-get -o Acquire::Retries=5 purge -y jason-desktop",
             "if ! unshare -Ur true 2> /dev/null; then",
             "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0",
             "unshare -Ur true || { echo \"::error title=Desktop::This runner refuses unprivileged user namespaces with AppArmor's restriction off.\"; exit 1; }",
@@ -550,7 +548,8 @@ public partial class ReleaseWorkflowTests
     /// CI's desktop job builds the Linux packages as a release does, through the same action, after its node tests and on
     /// the run's own SDK, at a candidate's version: the release this tree is on the way to with a ci word and the run's
     /// number, since a package is never built at the -dev version the tree carries. It adds steps and no job. The
-    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up.
+    /// download address's tests run between the desktop's node tests and the SDK, on the node the job set up, and the apt
+    /// repository's index is written from the deb and read back right after the package call.
     /// </summary>
     [Fact]
     public void Ci_s_desktop_job_builds_the_linux_packages_as_a_release_does()
@@ -561,8 +560,10 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Install Electron's binary for the rows that run under it", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does", AptCiStep],
             names);
+        // The index is written and read back here, and nothing of it is uploaded: the install line's job makes its own.
+        Assert.DoesNotContain("desktop/dist/apt-run-key.gpg", Scalar(steps[10], "run") ?? "", StringComparison.Ordinal);
         // zsh, the Mac's own shell, before the node tests: its real login shell row fails under CI without it.
         Assert.Contains("install -y --no-install-recommends zsh", Scalar(steps[4], "run"), StringComparison.Ordinal);
         Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[8], "with"), "sdk-version"));

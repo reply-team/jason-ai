@@ -10,11 +10,9 @@ It adds three things the browser cannot do: a chat that is a session with your o
 computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
 what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
 else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
-on macOS and Windows the first start of each version puts `jason` where a new terminal finds it and gives your agents
+on macOS, Windows and Linux the first start of each version puts `jason` where a new terminal finds it and gives your agents
 Jason's skills, by the `jason install` the application carries, and the Command Line item of its menu says what that
-placed and puts it back; on Linux that item puts a command there, `jason`, or `jason-desktop` where another `jason`
-already stands, and puts its folder on your terminal's PATH where it is not yet, as the installer does
-([The command line, and the login items](#the-command-line-and-the-login-items)).
+placed and puts it back ([The command line, and the login items](#the-command-line-and-the-login-items)).
 
 This page is for the person using it. [desktop/README.md](../desktop/README.md) is the builder's view of the same
 program: its modules, its guards and how a package is made.
@@ -24,22 +22,22 @@ program: its modules, its guards and how a package is made.
 Each release publishes Jason Desktop beside the runtime's downloads ([release-and-update.md](release-and-update.md),
 §2). Every package carries that release's `jason` executable, with `LICENSE` and `THIRD-PARTY-NOTICES`.
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
 your terminal and your agents use. It is installed once, updated once and removed once. The install script installs it
-([INSTALL.md](INSTALL.md) §2), and so does the package for your system below, installed by hand: the application's first
+([INSTALL.md](INSTALL.md) §2), on Linux as the deb where there is apt and as the AppImage elsewhere, and so does the
+package for your system below, installed by hand: the application's first
 start of each version then puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each
-where it is found, and its [Command Line item](#the-command-line-and-the-login-items) says what that placed. On Linux
-the deb and the AppImage are separate downloads beside the command line. A command-line install of an earlier version on
-macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application, or takes
-one of 0.49.0 or later that is already there, and moves the command line into it ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop"); on Linux there is no move.
+where it is found, and its [Command Line item](#the-command-line-and-the-login-items) says what that placed. A command-line install of an earlier version on
+macOS, Windows or Linux moves into Jason Desktop through its own `jason update apply`, which installs the application, or takes
+one of 0.49.0 or later that is already there, and moves the command line into it ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop").
 
 | System | File | Notes |
 | --- | --- | --- |
 | Windows on x64 | `jason-desktop-windows-x64-setup.exe` | Run it. It installs for your account, with no administrator rights. The installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are signed. |
 | macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications, then open Jason from there: opened from the disk image itself, it sets nothing up and says to move it first. Signed, notarized and stapled. |
 | macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application is updated through the application's own updater, which `jason update apply` there hands the update to, as on Apple silicon. |
-| Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
-| Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
+| Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason`, puts Jason in the applications menu and `jason` in every terminal (`/usr/bin/jason`), and adds Jason's apt repository, so its updates come with the system's. This is the package to take on Ubuntu 24.04 and later. Not signed. |
+| Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it; the install line puts it at `~/Applications/jason-desktop-linux-x64.AppImage` with a menu entry. It updates itself. Not signed. |
 
 Each file also has a short address on the download address, which sends you to the latest release's file:
 `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` (Apple silicon), `/desktop/mac-intel`,
@@ -55,8 +53,9 @@ Jason never runs without Chromium's sandbox. An AppImage's launcher adds `--no-s
 unprivileged user namespaces, and Jason refuses a start that carries it, with a dialog and no window, on every system.
 So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
 it says so and names the deb, whose install brings an AppArmor profile that lets the program make the user namespaces
-its sandbox uses. Built so, not yet seen on a real machine: neither package has been seen there; each was started once
-under a virtual display, sandboxed, when it was built.
+its sandbox uses. The deb has started sandboxed with that profile on Ubuntu 24.04 and 26.04, and the AppImage on Arch,
+each in a virtual machine with a desktop of its own, and not yet on a person's own machine; the AppImage's refusal on
+Ubuntu is built so and not yet seen.
 
 ## What it does at a start
 
@@ -183,8 +182,8 @@ first, naming the version, since installing stops the runtime, which ends a runn
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
 reaches.
-The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item, Uninstall Jason…
-on macOS and Remove What Jason Placed on Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
+The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item, and Uninstall
+Jason… on macOS and Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
 `jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
 notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
@@ -237,7 +236,7 @@ them on.
   once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
-- `<data>/desktop/machine-setup.json`: on macOS and Windows, the version `jason install` last completed for at a start or
+- `<data>/desktop/machine-setup.json`: the version `jason install` last completed for at a start or
   from the Command Line item, the place it ran from (the `jason` the application carries), and what it reported, which the item shows (below). It counts among the desktop's own
   records, so a new installation's first start, which writes it, still opens on the demo.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
@@ -401,8 +400,9 @@ the desktop's own log), and no record of a mode writes the record as the demo an
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
 
-**The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed, from the
-place the application runs from, runs the application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
+**The machine set-up at a start.** A start of a version for which it has not yet completed, from the
+place the application runs from, runs the application's own `jason install` (on Linux the one the deb carries, or an
+AppImage's copy under `<data>/desktop/bundle/<version>/`, never the one in its mount) ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
 you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
 installed, and retires an older command-line install of Jason. Then it runs the command line's finishing step,
 `jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
@@ -442,9 +442,8 @@ goes on showing its samples.
 **The start that is owed.** An install, an update or a set-up that stops your runtime leaves a note,
 `<data>/run/start-owed.json`, which stands until a runtime starts on that data directory again (§9). At every start of its
 own, Demo or Live, the application starts a runtime from the `jason` it carries where it finds the note standing and none
-answering: on macOS and Windows after the set-up where one runs, and on its own where none does; on Linux a Live start
-brings the runtime up anyway, and a Demo start starts one from the deb's `jason`, or from the AppImage's copy a Live start
-made. The application writes no note of its own and removes none: the runtime's own start takes it away. A runtime you
+answering: after the set-up where one runs, and on its own where none does; on Linux from the deb's `jason`, or from
+the AppImage's copy. The application writes no note of its own and removes none: the runtime's own start takes it away. A runtime you
 stop yourself while the set-up runs is started again too, since one answered before the set-up and none after it. A start
 that fails is in the desktop's log, and in the Demo it is tried again at the next start, through the same note.
 
@@ -507,8 +506,7 @@ whatever you chose in Appearance.
 **An earlier version's demo.** Up to version 0.44 the demo was a second installation of Jason on invented people, with a
 data directory and a harness root of its own beside yours (`~/.jason-demo` and `~/Jason-demo`). This version neither
 starts nor touches them. An update, the installer and the uninstaller still stop a runtime such a demo left running,
-and the one uninstall on macOS and Windows and Remove What Jason Placed on Linux still take the two folders off (see
-Taking it off, below);
+and the one uninstall still takes the two folders off (see Taking it off, below);
 nothing else reads them, and they can be deleted by hand once nothing runs from them.
 
 ## Connect
@@ -1003,9 +1001,10 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## The command line, and the login items
 
-- **Command Line**, on macOS and Windows, shows what the machine set-up placed, by its report: where a new terminal finds
-  `jason` (on macOS the wrapper `~/.local/bin/jason`, with the installer's two lines in your shell profiles where a new
-  terminal's PATH lacked that folder; on Windows the application's `resources\bundle` folder on your account's Path), the
+- **Command Line**, on macOS, Windows and Linux, shows what the machine set-up placed, by its report: where a new terminal
+  finds `jason` (on macOS, and for an AppImage on Linux, the wrapper `~/.local/bin/jason`, with the installer's two lines in
+  your shell profiles where a new terminal's PATH lacked that folder; on Linux from the deb, the package's own
+  `/usr/bin/jason`; on Windows the application's `resources\bundle` folder on your account's Path), the
   full path a terminal already open types instead, the folders Jason's skills were deployed to and for which programs, and
   what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. Where
   `jason install` read the command back as not in place (a profile it could not write, a Path entry not written), the item
@@ -1013,29 +1012,11 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   jason and the Skills…** runs `jason install` again on your word, after a confirmation that says what it writes, and then
   tells what it did in its own sentences. The application places no command of its own there any more; the `jason.cmd`
   shim and the Git Bash wrapper an earlier version put in `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the
-  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, are taken back by `jason install`. On macOS the update item also
+  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, and on Linux from the deb the `~/.local/bin/jason` or
+  `jason-desktop` wrapper an earlier version's Command Line item wrote, are taken back by `jason install`. On macOS the update item also
   says where the application is and whether its update can write there: where the application or the folder it is in is
   not writable by your account, an update asks for an administrator's password. The menu always shows the executable's
   full path.
-- **Command Line**, on Linux, places a `jason` that your terminal finds and that runs the executable the application
-  carries: a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
-  your login shell gave when the window started, or, where it gave none, taken as not holding it), the same act puts it
-  there by the installer's own rule: the line `# added by jason install` and under it
-  `export PATH="$HOME/.local/bin:$PATH"` (with your home spelled out) go into the file a login shell of your account
-  reads — `~/.zprofile` for zsh; for bash the first of `~/.bash_profile` and `~/.bash_login` that exists, else
-  `~/.profile`; `~/.profile` for any other shell — and, for zsh and bash, into `~/.zshrc` or `~/.bashrc` as well, each
-  only where that whole line is not there already. The confirmation names every file it writes and the two lines;
-  afterwards it says to open a new terminal, or, for a shell with no such second file, to sign out and back in. A
-  profile that is a link, a folder or cannot be written takes nothing, nor does any other: the item names the file and
-  the line to add by hand, and the wrapper is still placed. Removing the command, the one uninstall on macOS, or Remove
-What Jason Placed on Linux, takes
-  those two lines back out of the files that carry them, and never a line the marker does not head, only where
-  `~/.local/bin` then holds nothing but what Jason's installer or the application writes there (`jason`,
-  `jason-desktop`, `jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`), the rule `jason uninstall` keeps: that folder is shared,
-  and where the line puts it on the PATH, the other programs in it are found through it too. While it holds anything
-  else, or another `jason`, the lines stay, and the item says why. It is placed and removed on your word, read back
-  on every look, never rewritten silently, and never put in the place of a `jason` that is not ours: it is then named
-  `jason-desktop`. The menu always shows the executable's full path.
 - **Open Jason at Login** is a Windows login item, a macOS LaunchAgent (`~/Library/LaunchAgents/ai.jasonharness.desktop.plist`)
   or a Linux autostart entry (`~/.config/autostart/ai.jasonharness.desktop.desktop`), and opens the window only.
   **Start the Runtime at Logon** is `jason runtime autostart` for the `jason` the application carries.
@@ -1051,7 +1032,7 @@ What Jason Placed on Linux, takes
   reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), the
   update item and Back to Your Own Installation are reached by their keys (Ctrl+Shift+D, Ctrl+Shift+L; the update key
   acts on the item's current step, which shows nowhere there, and asks before it installs), and Open Jason at Login,
-  Start the Runtime at Logon, Command Line and Remove What Jason Placed cannot be reached from the window. Closing the
+  Start the Runtime at Logon, Command Line and Uninstall Jason… cannot be reached from the window. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.
@@ -1059,15 +1040,17 @@ What Jason Placed on Linux, takes
   registration or a PATH wrapper that was set up from another version's copy under `bundle/`. Another version's copy goes
   only after that, and never the one an update kept to go back to, one something still names or one the running runtime
   was started from.
-- Built so, and not yet seen on a real machine: the tray on GNOME and KDE, the keyring backends, a start at login across
-  a real sign-out, the AppImage's mount, and a deb update's password prompt.
+- Seen in virtual machines with desktops of their own, and not yet on a person's own machine: the tray on Ubuntu's GNOME,
+  GNOME's keyring, and the AppImage's mount on Arch's GNOME and Hyprland, where no tray shows and Settings carries the
+  update item. Built so and not yet seen: the tray on KDE, other keyring backends, and a start at login across a real
+  sign-out.
 
 ## Updating
 
 The desktop's update item reads the latest release's `latest.yml`, `latest-mac.yml` or `latest-linux.yml` through
 electron-updater, straight from GitHub, on stable releases only: a release with a pre-release part is never offered, and
 a candidate is installed by hand. It checks on a back-off, offers what it found, downloads only on your word and installs
-only on your word again. `jason update apply` typed into the `jason` the application carries is such a word too: it hands the update
+only on your word again. `jason update apply` typed into the `jason` the application carries is such a word too (on Linux, an AppImage's; the deb's refuses and names apt): it hands the update
 to the same updater with no window, and the new `jason` then replaces the plugin packages, starts the runtime, redeploys
 the skills, sets the terminal command up and places the UI ([release and update](release-and-update.md) §7, "Handing the
 update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
@@ -1083,11 +1066,16 @@ electron-updater cannot replace what runs the item says "Updates Come Through th
 the package names. On Windows and macOS a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
 install 0.48.5 or later yourself once, and from then on the application's own update works.
 
-Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
-updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
-`dpkg`, through the first of `gksudo`, `kdesudo`, `pkexec` and `beesu` the system has and otherwise `sudo`, and asks for an
-administrator's password every time, so an account that cannot give one cannot install it and Jason stays open and says
-so; an AppImage update replaces the file where it is, so its folder must be writable.
+Updates come to the Windows installer, the macOS application and the AppImage. An AppImage update replaces the file
+where it is, so its folder must be writable; `jason update apply` from a terminal with no display, an ssh session say, is
+refused, since the application it starts needs one. The deb's updates come with the system's, from Jason's apt
+repository, which the package adds: Ubuntu's automatic updates install a new version, and Software Updater, or `sudo apt
+update && sudo apt upgrade`, install it at once. There the item says "Updates Come Through the Package"; where the system
+installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
+`<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
+ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. `sudo apt-mark hold jason-desktop`
+stops its updates. `jason status` says when Jason's apt source is gone or turned off, as a release upgrade of Ubuntu turns
+it off: turn it on again in Software & Updates, Other Software.
 
 **The runtime restarts.** When the runtime runs from the application's own `jason`, the update item says so, "Restart
 Jason and Its Runtime to Install": the desktop stops that runtime with `jason runtime stop` before the installer replaces
@@ -1122,13 +1110,11 @@ seen. The x64 Mac executable is built and signed and not covered by the suite.
 
 ## Taking it off
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
 your terminal and your agents use. It is removed once, by the one uninstall, which takes off what Jason placed and then
-the application. On Linux, take off what Jason placed first, then the application. What stays in every case is your
-data: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), unless you say otherwise on macOS and
-Windows, and the harness root (`~/Jason`, or the one `Harness:Root` names), always; on Linux the updater's cache named
-above stays too. The two folders an earlier version's demo made (see [the demo](#the-demo)) are not your data: the
-removal takes them off too.
+the application. What stays is your data: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), unless you
+say otherwise, and the harness root (`~/Jason`, or the one `Harness:Root` names), always. The two folders an earlier
+version's demo made (see [the demo](#the-demo)) are not your data: the removal takes them off too.
 
 - **Windows.** Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal: the two are
   alternatives, one or the other, not both. Either is the one
@@ -1145,14 +1131,16 @@ removal takes them off too.
   deleting the data directory too, quits Jason and runs the same uninstall, which deletes Jason.app last and writes
   what it did to the file the dialog names. When Jason will not start, run
   `Jason.app/Contents/Resources/bundle/jason uninstall`.
-- **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
-  steps the Windows uninstaller took before the one uninstall: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
-  Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
-  files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
-  them. It last takes off an earlier demo's two folders, its data directory and its harness root, which are yours with `-demo`
-  after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
-  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since that demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
-  the application: `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
+- **Linux.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal: the
+  same one uninstall as on macOS. Jason quits, the runtime is stopped first (nothing more is taken off if it does not
+  stop), and for the deb the package `jason-desktop` is taken off next, by your system's own password dialog, so a
+  dismissed dialog takes nothing off; then Open Jason at Login, the runtime's start at logon, the `jason` command, the
+  skills Jason put in your agents' folders and, for an AppImage, its menu entry, its icons and the copies of its `jason`
+  go, the AppImage file last. The data directory stays unless you choose to delete it; the harness root always stays.
+  Removing it the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage) takes
+  the application and leaves your account's own files, as it does for any application; what they would start is made
+  harmless: the start at logon is skipped once its `jason` is gone, and the login and menu entries are hidden. `jason
+  uninstall` is the full clean.
 - **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is
   `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason` for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
@@ -1162,12 +1150,16 @@ removal takes them off too.
      `<that jason> runtime autostart disable`.
   3. Delete Open Jason at Login, `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when
      that is set), when its `Exec` line starts the AppImage file or the deb's executable.
-  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`. Once that
+  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`: an
+     AppImage's set-up writes one, and for the deb an earlier version's Command Line item may have. Once that
      folder holds no `jason` or `jason-desktop` and nothing else but Jason's `jason-LICENSE` and
      `jason-THIRD-PARTY-NOTICES`, take the line `# added by jason install` and the
      `export PATH="…/.local/bin:$PATH"` line under it out of `~/.zprofile`, `~/.zshrc`, `~/.bash_profile`,
      `~/.bash_login`, `~/.profile` and `~/.bashrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
+  6. Remove the application: `sudo apt purge jason-desktop` for the deb, which takes `/usr/bin/jason` and Jason's apt
+     source with it; for an AppImage delete the file, its menu entry `~/.local/share/applications/jason-desktop.desktop`
+     and its icons `~/.local/share/icons/hicolor/*/apps/jason-desktop-app.png` (under `$XDG_DATA_HOME` when that is set).
 
 ## What is not here
 

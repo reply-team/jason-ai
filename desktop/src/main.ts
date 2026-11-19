@@ -5,12 +5,12 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, Notification, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, watchFile } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
@@ -29,13 +29,14 @@ import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './dee
 import { Desk } from './desk.ts';
 import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
-import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
+import { childEnvironment, keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
+import { wrapperTarget } from './command-line.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
+import { debFile, packageMovedTo, previousRelease, restartOnce, updateKeyWords, Updater } from './updates.ts';
 import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
 import { carriedRuntimeStart, refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
@@ -225,7 +226,7 @@ function serveRequests(log: Logger, data: string, window: { menu: boolean; updat
             data,
             from: app.getVersion(),
             ...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),
-            unsupported: requestSupport(app.isPackaged, process.platform),
+            unsupported: requestSupport(app.isPackaged, process.platform, linuxForm()),
             windowOpen: windowOpenUpdate,
             log,
             startRuntime: carriedRuntimeStart(data, log),
@@ -292,6 +293,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason.
     const carried = carriedOf({ form, packaged, version, bundles: paths.bundle });
     if (carried.failure !== null) log.error('bundle_copy_failed', { Differs: carried.failure.differs });
+    // Where an AppImage's file is, for the jason its copy is (`recordAppImage`).
+    if (form?.form === 'appimage') {
+        try {
+            recordAppImage(dirname(paths.bundle), form.file);
+        } catch {
+            log.error('repoint_failed', { What: 'appimage_record', Exit: -1 });
+        }
+    }
     const { bundle, uncopied } = carried;
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
 
@@ -391,15 +400,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const rollback = paths.rollback;
     // What an update keeps aside to go back to: the AppImage file on Linux, nothing for the deb.
     const aside = keptAsideOf(process.platform, form, process.execPath);
+    // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
+    const stopCarriedRuntime = () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }));
     const updates = app.isPackaged && offers.updates
         ? new Updater({
-              updater: autoUpdater,
+              updater: updaterOf(form, autoUpdater),
               version: app.getVersion(),
               application: aside,
               rollback,
               log,
-              // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
-              stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
+              stopRuntime: stopCarriedRuntime,
               refused: (why) => dialog.showErrorBox(windowTitle, why),
               async beforeInstall() {
                   quitting = true;
@@ -429,8 +439,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         account: { home, shellNamed: accountShell(process.env), terminalPath: () => terminalPath },
         log,
     };
-    // On Linux the Command Line item places the PATH command; on macOS and Windows it is the machine set-up's status
-    // (`machine-setup.ts`), which `jason install` places and the desktop's start runs.
+    // The Command Line item is the machine set-up's status (`machine-setup.ts`), which `jason install` places and the
+    // desktop's start runs; the PATH command remains only for a system the set-up does not cover.
     const command = offers.command && carried.outlives && !commandIsSetup(process.platform) ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
@@ -473,7 +483,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const uninstall = offers.removal && uninstallOffered(process.platform) && version !== null && carried.outlives
         ? {
               scope: () => ({
-                  application: applicationFolder(process.platform, process.execPath),
+                  application: form?.form === 'appimage' ? form.file : form?.form === 'deb' ? packaged.replace(/\/resources\/bundle$/, '') : applicationFolder(process.platform, process.execPath),
+                  ...(form?.form === 'deb' || form?.form === 'appimage' ? { form: form.form } : {}),
                   dataDirectory: paths.data,
                   harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
                   output: uninstallOutput(tmpdir(), new Date()),
@@ -482,6 +493,40 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               pid: process.pid,
           }
         : null;
+    // The deb: apt replaces the package under a running window (Ubuntu's automatic updates, Software Updater). Its
+    // version.json is looked at once a minute; once it names another version, the update item offers the restart, and one
+    // notice says so too, whose click restarts: the old build's runtime stopped, then Jason started again, whose start
+    // finishes the update (`machine-setup.ts`).
+    // Once its runtime has stopped, the window goes quiet as an update's install makes it (`beforeInstall`): the repairer
+    // would otherwise start the old build's runtime again while the relaunch waits for a set-up that is running.
+    const packageRestart = {
+        stopRuntime: stopCarriedRuntime,
+        relaunch: () => {
+            quitting = true;
+            repairer.stop();
+            modeDeps.relaunch();
+        },
+        refused: (why: string) => dialog.showErrorBox(windowTitle, why),
+    };
+    const restartPackage = restartOnce(packageRestart);
+    const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged)) : null);
+    // Held for as long as the window runs: a notice nothing refers to is collected, and its click with it.
+    let packageNotice: Notification | null = null;
+    if (form?.form === 'deb') {
+        let told = false;
+        watchFile(join(packaged, 'version.json'), { interval: 60_000 }, () => {
+            const moved = packageMoved();
+            if (moved === null || told) return;
+            told = true;
+            desk.renderMenu();
+            toPage('updates.changed');
+            if (Notification.isSupported()) {
+                packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
+                packageNotice.on('click', () => void restartPackage());
+                packageNotice.show();
+            }
+        });
+    }
     const desk = new Desk({
         window: () => current,
         origin,
@@ -491,6 +536,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         login,
         autostart,
         updates,
+        packageMoved,
+        restart: () => void restartPackage(),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
@@ -514,6 +561,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // An update that installs the AppImage under a new file name moves Open Jason at Login to it.
     autoUpdater.on('appimage-filename-updated', (file) => {
         try {
+            recordAppImage(dirname(paths.bundle), file);
             login.relocate(file);
         } catch {
             log.error('repoint_failed', { What: 'login_item', Exit: -1 });
@@ -847,7 +895,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const named = async (): Promise<readonly string[] | null> => {
             const registration = autostart === null ? { registered: false, executable: null } : await autostart.registration();
             if (registration === null) return null;
-            return [...(registration.registered && registration.executable !== null ? [registration.executable] : []), ...(command?.named() ?? [])];
+            // On Linux the wrapper `jason install` writes for an AppImage names a copy as well.
+            const wrapped = process.platform === 'linux' ? wrapperTarget(readText(join(home, '.local', 'bin', 'jason')) ?? '')?.executable : undefined;
+            return [...(registration.registered && registration.executable !== null ? [registration.executable] : []), ...(command?.named() ?? []), ...(wrapped === undefined ? [] : [wrapped])];
         };
         void repointed
             .then(() =>
@@ -1004,19 +1054,23 @@ async function linuxOwedStart(log: Logger): Promise<void> {
     const bundle = bundleDirectory();
     const jason = linuxOwedJason(form, bundle, desktopPaths(runOn.person).bundle, bundleVersion(bundle), existsSync);
     if (jason === null) return;
-    const cli = cliAt(jason, withoutMount(withPath(process.env, pathOf(process.env)), mountOf(form, process.env)));
+    const cli = cliAt(jason, childEnvironment(form, process.env));
     await payOwedStart({ note: desktopPaths(runOn.person).startOwed, exists: existsSync, runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile), log });
 }
 
 /**
- * The machine set-up a windowed start runs on macOS and Windows: the carried `jason install`, with the person's own
- * environment, its record in the person's directory; null on Linux, whose Command Line item is the PATH command.
+ * The machine set-up a windowed start runs: the carried `jason install`, with the person's own environment, its record in
+ * the person's directory. An AppImage runs it from its copy under the person's data directory (`bundle-copy.ts`), made
+ * here if this start has not made it yet, and runs none where there is no copy: its mount's jason ends with the run.
  */
 function makeMachineSetup(log: Logger): MachineSetup | null {
     if (!commandIsSetup(process.platform)) return null;
-    const bundle = bundleDirectory();
+    const packaged = bundleDirectory();
+    const carried = process.platform === 'linux' ? carriedOf({ form: linuxForm(), packaged, version: bundleVersion(packaged), bundles: desktopPaths(runOn.person).bundle }) : null;
+    if (carried !== null && !carried.outlives) return null;
+    const bundle = carried?.bundle ?? packaged;
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
-    const cli = cliAt(executable, withPath(process.env, pathOf(process.env)));
+    const cli = cliAt(executable, childEnvironment(linuxForm(), process.env));
     return new MachineSetup({
         cli,
         executable,
@@ -1185,7 +1239,8 @@ function startDesktop(): void {
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
-        // On Linux no set-up runs: a Demo start pays the note that a start is owed itself, and a Live start brings a runtime up.
+        // Where no set-up runs (an AppImage whose copy was not made), a Demo start pays the note that a start is owed itself,
+        // and a Live start brings a runtime up.
         void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }

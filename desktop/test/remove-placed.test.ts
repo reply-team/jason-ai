@@ -643,9 +643,9 @@ test('processes are read from /proc by the file each runs, against the folder re
     assert.equal(processesRunFrom(`${root}/home/bundle`, table({ '4242': `${root}/disk/bundle/0.34.0/jason` }), resolvePosix), 'running');
 });
 
-test('the act is offered on Linux only, in the Jason menu and the tray’s, by an installed build; Windows keeps its uninstaller and macOS has Uninstall Jason', () => {
+test('the act is offered on no system now: Uninstall Jason… is the one uninstall on macOS and Linux, and Windows keeps its uninstaller', () => {
     assert.equal(removalOffered('darwin'), false);
-    assert.equal(removalOffered('linux'), true);
+    assert.equal(removalOffered('linux'), false);
     assert.equal(removalOffered('win32'), false);
     assert.equal(removeLabel, 'Remove What Jason Placed…');
     const desk = readFileSync(join(desktop, 'src', 'desk.ts'), 'utf8');

@@ -120,9 +120,11 @@ public static class UninstallRunner
 
             var desktop = plan.Desktop;
             var places = env.Setup;
+            var purges = desktop is { ApplicationFate: ApplicationFates.Purged };
 
-            // 2. The runtime, and only then.
-            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, startWait, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            // 2. The runtime, and only then. Where a package is to be purged, stopped on the installation's behalf: a package
+            // that stays starts it again by the note that stop leaves.
+            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, startWait, done, kept, purges, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
             }
@@ -138,6 +140,26 @@ public static class UninstallRunner
             if (registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAfterTheStop.Code, refusedAfterTheStop.Message);
+            }
+
+            // On Linux from the deb, the package, while nothing of this account's is yet removed: a password not given then removes
+            // nothing, and the runtime stopped above starts again. The demo's runtime runs the jason apt deletes, so it is stopped
+            // first; and every assembly the steps after the purge need is loaded before it, since it deletes this process's file.
+            var demoStopped = false;
+            if (purges)
+            {
+                if (await DesktopRemoval.StopDemoRuntimeAsync(env, desktop!, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemoFirst)
+                {
+                    return new UninstallReport(plan, done, kept, problems, refusedAtDemoFirst.Code, refusedAtDemoFirst.Message);
+                }
+
+                demoStopped = true;
+                Update.AssemblyWarmUp.Run();
+                if (await DesktopRemoval.PurgePackageAsync(env, desktop!, done.Contains(RegistrationRemovedLine), done, cancellationToken).ConfigureAwait(false) is { } refusedAtPackage)
+                {
+                    await DesktopRemoval.StartOwedAgainAsync(env, options, done, problems, cancellationToken).ConfigureAwait(false);
+                    return new UninstallReport(plan, done, kept, problems, refusedAtPackage.Code, refusedAtPackage.Message);
+                }
             }
 
             // And the application's own start at sign-in, only now, so a runtime that will not stop leaves it where it was
@@ -163,7 +185,7 @@ public static class UninstallRunner
                 }
             }
 
-            if (desktop is not null && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
+            if (desktop is not null && !demoStopped && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);
             }
@@ -236,6 +258,9 @@ public static class UninstallRunner
         return new UninstallReport(plan, done, kept, problems, null, null);
     }
 
+    /// <summary>What the report says when step 1 took away the logon registration.</summary>
+    private const string RegistrationRemovedLine = "Removed the logon registration.";
+
     /// <summary>What the report says when step 1 took away the Windows task 0.1.0 registered for this account.</summary>
     private static readonly string LegacyRemovedLine =
         $"Removed the logon task named {AutostartArtifacts.LegacyTaskName} that an earlier version registered for this account.";
@@ -285,7 +310,7 @@ public static class UninstallRunner
         // registered, and saying "none" after removing it would be the one false line in the report.
         if (removed.Registration)
         {
-            done.Add("Removed the logon registration.");
+            done.Add(RegistrationRemovedLine);
         }
 
         if (removed.Legacy)
@@ -1046,6 +1071,7 @@ public static class UninstallRunner
         StartWait startWait,
         List<string> done,
         List<string> kept,
+        bool onBehalf,
         CancellationToken cancellationToken)
     {
         if (plan.RuntimePid is null && !File.Exists(env.Paths.DescriptorFile))
@@ -1055,9 +1081,9 @@ public static class UninstallRunner
         }
 
         var said = new StringWriter();
-        var exit = await RuntimeStopCommand
-            .RunAsync(env with { Out = said }, human: false, cancellationToken, options.StopTimeout, options.StopPoll)
-            .ConfigureAwait(false);
+        var exit = onBehalf
+            ? await RuntimeStopCommand.RunOnBehalfAsync(env with { Out = said }, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false)
+            : await RuntimeStopCommand.RunAsync(env with { Out = said }, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
 
         if (exit == ExitCodes.Success)
         {

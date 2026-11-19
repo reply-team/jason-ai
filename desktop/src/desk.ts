@@ -17,7 +17,7 @@ import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } 
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, pressItem, type MenuItem, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, restartQuestion, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -34,6 +34,10 @@ export interface DeskDeps {
     autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
+    /** The deb: the version the system installed under this window, where its version.json names another than runs; else null. */
+    packageMoved?(): string | null;
+    /** The desktop starting itself again, which the update item offers once the system updated the deb under this window. */
+    restart?(): void;
     /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
@@ -235,7 +239,7 @@ export class Desk {
     updateItem(): MenuItem | null {
         if (this.demo !== null) return null;
         const { updates } = this.deps;
-        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);
         return { ...item, enabled: item.enabled && !this.removing() };
     }
 
@@ -246,6 +250,12 @@ export class Desk {
      */
     pressUpdate(act: MenuItem['act'], byKey: boolean): void {
         if (this.removing()) return;
+        if (act === 'restart') {
+            const moved = this.deps.packageMoved?.() ?? null;
+            if (!byKey) this.deps.restart?.();
+            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());
+            return;
+        }
         const { updates } = this.deps;
         if (updates === null) return;
         void pressItem(updates, act, byKey, (question) => this.box(question));

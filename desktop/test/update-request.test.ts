@@ -112,10 +112,12 @@ test('what a start hands the running application is read again there and never t
     }
 });
 
-test('a request is taken only by an installed application on Windows or macOS', () => {
+test('a request is taken only by an installed application on Windows, on macOS, and on Linux by an AppImage, whose updater installs it', () => {
     assert.equal(requestSupport(true, 'win32'), null);
     assert.equal(requestSupport(true, 'darwin'), null);
-    assert.equal(requestSupport(true, 'linux'), 'unsupported_platform');
+    assert.equal(requestSupport(true, 'linux', { form: 'appimage', file: '/home/a/Applications/jason-desktop-linux-x64.AppImage' }), null);
+    assert.equal(requestSupport(true, 'linux', { form: 'deb' }), 'unsupported_platform');
+    assert.equal(requestSupport(true, 'linux', null), 'unsupported_platform');
     assert.equal(requestSupport(false, 'win32'), 'not_installed');
 });
 
@@ -645,7 +647,7 @@ test('a Live window’s run takes requests with its own updater, and the Demo’
     assert.ok(demo.includes("serveRequests(log, runOn.person, 'demo');"), 'the Demo’s window refuses as the Demo');
     assert.equal(demo.includes('requestUpdater('), false, 'and holds no updater');
     const served = main.slice(main.indexOf('function serveRequests('), main.indexOf('\n}\n', main.indexOf('function serveRequests(')));
-    for (const member of ['data,', "...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),", 'unsupported: requestSupport(app.isPackaged, process.platform),', 'windowOpen: windowOpenUpdate,', 'log,']) {
+    for (const member of ['data,', "...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),", 'unsupported: requestSupport(app.isPackaged, process.platform, linuxForm()),', 'windowOpen: windowOpenUpdate,', 'log,']) {
         assert.ok(served.includes(member), member);
     }
     assert.equal(existsSync(new URL('../src/update-start.ts', import.meta.url)), true);

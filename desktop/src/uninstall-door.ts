@@ -1,11 +1,11 @@
 /**
- * Uninstall Jason…, the macOS menu item: the one uninstall, reached from the Jason menu and the tray's. A dialog says what
+ * Uninstall Jason…, the macOS and Linux menu item: the one uninstall, reached from the Jason menu and the tray's. A dialog says what
  * goes and what stays and asks whether the data directory goes too, Cancel the default; on the person's word the jason
  * this application carries is started on its own, `jason uninstall [--purge-data --yes] --wait-for <this pid>`, and the
  * application quits. The verb waits for this process to end, so nothing of the application runs or writes into the data
- * directory while it works; it then takes off what Jason and Jason Desktop placed and deletes Jason.app last. What it did
- * is written to a file in the temporary folder, which the dialog names. Windows keeps Installed apps, and Linux Remove What
- * Jason Placed (`remove-placed.ts`).
+ * directory while it works; it then takes off what Jason and Jason Desktop placed and the application: Jason.app last on
+ * macOS; on Linux the AppImage file last, or for the deb its package, first, through the system's own password dialog.
+ * What it did is written to a file in the temporary folder, which the dialog names. Windows keeps Installed apps.
  */
 
 import { join } from 'node:path';
@@ -15,14 +15,16 @@ import type { Logger } from './log.ts';
 /** The menu item. */
 export const uninstallLabel = 'Uninstall Jason…';
 
-/** Whether the item is offered: on macOS, where no uninstaller exists. */
+/** Whether the item is offered: on macOS and Linux, where no uninstaller of the application's own exists. */
 export function uninstallOffered(platform: NodeJS.Platform): boolean {
-    return platform === 'darwin';
+    return platform === 'darwin' || platform === 'linux';
 }
 
 export interface UninstallScope {
-    /** The application, Jason.app, which goes last. */
+    /** The application: Jason.app, the AppImage file, or the deb's /opt/Jason. */
     application: string;
+    /** On Linux, which package the application is; none on macOS. */
+    form?: 'deb' | 'appimage';
     dataDirectory: string;
     harnessRoot: string;
     /** The file the uninstall writes what it did to. */
@@ -51,14 +53,16 @@ export function uninstallQuestion(scope: UninstallScope): UninstallQuestion {
         'The runtime, stopped first; nothing else is taken off if it does not stop',
         'Open Jason at Login and the runtime’s start at logon',
         'The jason command in the terminal, and the skills Jason put in your agents’ folders',
-        `Jason itself, ${inert(scope.application)}, last`,
+        scope.form === 'deb'
+            ? 'Jason itself, the package jason-desktop, taken off by your system first: it asks for an administrator’s password'
+            : `Jason itself, ${inert(scope.application)}, last`,
     ];
     const stays = [
         `The data directory, ${inert(scope.dataDirectory)}, with the campaigns, the journal, the settings and the logs, unless you tick the box below`,
         `The harness root, ${inert(scope.harnessRoot)}, with your folders and memory files, always`,
     ];
     return {
-        message: 'Uninstall Jason from this Mac?',
+        message: scope.form === undefined ? 'Uninstall Jason from this Mac?' : 'Uninstall Jason from this computer?',
         detail: `Jason quits, then this is taken off:\n${list(goes)}\n\nThis stays:\n${list(stays)}\n\nWhat was done is written to ${inert(scope.output)}.`,
         buttons: ['Uninstall', 'Cancel'],
         defaultId: 1,

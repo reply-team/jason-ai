@@ -15,6 +15,93 @@ public sealed class StandardStreamsTests
 {
     private static readonly IntPtr[] Standard = [new(0x10), new(0x14), new(0x18)];
 
+    /// <summary>
+    /// Linux: a descriptor this process holds open across exec, as Jason Desktop's Electron hands a jason its resource
+    /// files, reaches a child started after it until it is kept out, and no longer after; the process keeps it open itself.
+    /// Catches the runtime a Desktop's jason starts holding the Desktop's files, an AppImage's mount among them, for as long
+    /// as it runs.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_a_descriptor_held_open_across_exec_is_kept_out_of_the_children_started_after()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var fd = open(file, 0);
+        Assert.True(fd > 2, "the descriptor could not be opened");
+        try
+        {
+            Assert.Equal("held", ChildSees(fd));
+
+            StandardStreams.KeepOutOfChildren();
+
+            Assert.Equal("free", ChildSees(fd));
+            Assert.True(File.Exists($"/proc/self/fd/{fd}"), "this process lost the descriptor itself");
+        }
+        finally
+        {
+            _ = close(fd);
+            File.Delete(file);
+        }
+    }
+
+    /// <summary>
+    /// Linux: what this process was handed open across exec is closed, and what it opened itself, close-on-exec as .NET opens
+    /// everything, stays; the uninstall does this at its start, needing none of what Jason Desktop handed it, which inside an
+    /// AppImage's mount kept the AppImage's own process alive to be taken for an open window. And every start of a child
+    /// meant to outlast the CLI keeps out what the CLI was handed. Catches "Uninstall Jason..." refused by its own process,
+    /// and a terminal or a browser started by the CLI holding the Desktop's files.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_the_uninstall_closes_what_it_was_handed_and_every_long_lived_start_keeps_it_out()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var handed = open(file, 0);
+        var own = open(file, CloseOnExecFlag);
+        try
+        {
+            StandardStreams.CloseInherited(fd => fd == handed || fd == own);
+
+            Assert.False(File.Exists($"/proc/self/fd/{handed}"), "a descriptor handed open across exec stayed open");
+            Assert.True(File.Exists($"/proc/self/fd/{own}"), "a descriptor of this process's own was closed");
+        }
+        finally
+        {
+            _ = close(own);
+            File.Delete(file);
+        }
+
+        var root = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..");
+        var router = File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.App", "ModeRouter.cs"));
+        Assert.Contains("if (args is [\"uninstall\", ..])\n        {\n            Jason.Cli.Process.StandardStreams.CloseInherited();", router, StringComparison.Ordinal);
+        foreach (var starter in new[] { "Process/RuntimeProcessControl.cs", "Update/MoveSystem.cs", "Uninstall/IInstallationRemover.cs", "Session/ITerminalStarter.cs", "Process/IUrlOpener.cs" })
+        {
+            Assert.Contains("StandardStreams.KeepOutOfChildren();", File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.Cli", starter)), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Linux's O_CLOEXEC.</summary>
+    private const int CloseOnExecFlag = 0x80000;
+
+    private static string ChildSees(int fd)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"[ -e /proc/self/fd/{fd} ] && echo held || echo free");
+        using var child = System.Diagnostics.Process.Start(start)!;
+        var said = child.StandardOutput.ReadToEnd().Trim();
+        child.WaitForExit();
+        return said;
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int open([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string path, int flags);
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int close(int fd);
+
     [Fact]
     public void Where_the_list_cannot_be_had_the_three_standard_streams_are_kept_out_and_nothing_else()
     {

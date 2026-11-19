@@ -4,8 +4,8 @@
 //   node desktop/scripts/check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage]
 //
 // <package> is the folder holding Jason.exe on Windows and Jason.app on macOS, and on Linux the folder holding the
-// program: what a deb installs as /opt/Jason, or what an AppImage's --appimage-extract writes as squashfs-root, which
-// --form names. What was read goes to stdout; a refusal goes to stderr with exit 1, and arguments it cannot use with
+// program: what a deb installs as /opt/Jason, inside the folder dpkg-deb --raw-extract writes, whose DEBIAN folder and
+// system files are read as well, or what an AppImage's --appimage-extract writes as squashfs-root, which --form names. What was read goes to stdout; a refusal goes to stderr with exit 1, and arguments it cannot use with
 // exit 2. It reads files only; it starts no process.
 //
 // On Linux the form decides which updater the package makes. electron-updater makes its deb updater wherever
@@ -228,7 +228,7 @@ function checkForm(app, form) {
             throw new Error(`resources/apparmor-profile does not let ${program} make user namespaces, which its sandbox uses.`);
         }
         said.push(`apparmor-profile: userns for ${program}`);
-        return [...said, ...checkDebScheme(app), ...checkIcons(app, form)];
+        return [...said, ...checkDebScheme(app), ...checkIcons(app, form), ...checkDebSystem(app)];
     }
     if (!appRun) throw new Error(`${app} holds no AppRun; it is not an AppImage's contents.`);
     if (type !== null) throw new Error(`The AppImage carries resources/package-type saying ${type}, so electron-updater would update it as a ${type}.`);
@@ -243,6 +243,43 @@ function checkForm(app, form) {
         said.push(`${entry}: ${exec}`);
     }
     return [...said, ...checkIcons(app, form)];
+}
+
+/**
+ * One of the deb's maintainer scripts as electron-builder writes it from installer/deb/<name>.sh: the two names between
+ * ${ and } filled in, as app-builder-lib 26.18.0 fills them (out/targets/FpmTarget.js, writeConfigFile), with the
+ * program's name and the product's.
+ */
+export function debScript(name) {
+    return readFileSync(join(desktop, 'installer', 'deb', `${name}.sh`), 'utf8')
+        .replaceAll('${executable}', built.linux.executableName)
+        .replaceAll('${sanitizedProductName}', built.productName);
+}
+
+/**
+ * What the deb places for the system, read from the folder dpkg-deb --raw-extract writes: its maintainer scripts are the
+ * tree's own (which write /usr/bin/jason and Jason's apt source, and take them back), the rule that lets the system's
+ * automatic updates take Jason's is the tree's file and a configuration file of the package, so dpkg never puts back one
+ * the person deleted, and the key the source is signed by is the repository's own public key.
+ */
+function checkDebSystem(app) {
+    const top = iconRoot(app, 'deb');
+    for (const [script, name] of [['postinst', 'after-install'], ['postrm', 'after-remove']]) {
+        const path = join(top, 'DEBIAN', script);
+        if (!existsSync(path) || readFileSync(path, 'utf8') !== debScript(name)) throw new Error(`DEBIAN/${script} is not installer/deb/${name}.sh as electron-builder writes it, so the deb would not set up or take back what Jason places for the system.`);
+    }
+    const rule = '/etc/apt/apt.conf.d/50jason-desktop';
+    const placed = join(top, rule);
+    if (!existsSync(placed) || !readFileSync(placed).equals(readFileSync(join(desktop, 'installer', 'deb', '50jason-desktop')))) throw new Error(`${rule} is not installer/deb/50jason-desktop.`);
+    const conffiles = join(top, 'DEBIAN', 'conffiles');
+    if (!existsSync(conffiles) || !readFileSync(conffiles, 'utf8').split('\n').includes(rule)) throw new Error(`${rule}: 50jason-desktop is not a configuration file of the deb, so an update would put back a rule the person deleted.`);
+    const keyring = join(top, 'usr', 'share', 'keyrings', 'jason-desktop.gpg');
+    if (!existsSync(keyring) || !readFileSync(keyring).equals(readFileSync(join(desktop, '..', 'install', 'jason-desktop-archive-keyring.gpg')))) throw new Error('/usr/share/keyrings/jason-desktop.gpg is not install/jason-desktop-archive-keyring.gpg, the key the repository is signed with.');
+    return [
+        'postinst, postrm: installer/deb/after-install.sh and after-remove.sh',
+        `${rule}: installer/deb/50jason-desktop, a configuration file`,
+        '/usr/share/keyrings/jason-desktop.gpg: install/jason-desktop-archive-keyring.gpg',
+    ];
 }
 
 /** The bundle carries no sample of a demo: the desktop's Demo is a sealed page, and nothing reads a `bundle/demo`. */

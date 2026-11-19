@@ -448,7 +448,9 @@ public class AutostartArtifactsTests
 
     /// <summary>
     /// The user unit is written, the manager is told to re-read its directory, and the unit is enabled into the
-    /// account's own default target. Removing it is the same three steps backwards.
+    /// account's own default target. Removing it is the same three steps backwards. It starts only while the jason it
+    /// runs is there, so a removal Jason did not make, the package purged or the AppImage deleted, leaves a unit that is
+    /// skipped at login rather than one that fails.
     /// </summary>
     [Fact]
     public void The_user_unit_starts_at_login_and_restarts_nothing()
@@ -457,6 +459,7 @@ public class AutostartArtifactsTests
 
         Assert.Equal("jason.service", unit.Name);
         Assert.Equal("/home/ada/.config/systemd/user/jason.service", unit.ArtifactPath.Replace('\\', '/'));
+        Assert.Contains("\nConditionPathExists=/home/ada/.local/bin/jason\n", unit.Artifact[..unit.Artifact.IndexOf("[Service]", StringComparison.Ordinal)], StringComparison.Ordinal);
         Assert.Contains("Type=simple", unit.Artifact, StringComparison.Ordinal);
         Assert.Contains($"ExecStart=/home/ada/.local/bin/jason runtime run --detached --data-dir {Unix}", unit.Artifact, StringComparison.Ordinal);
         Assert.Contains("Restart=no", unit.Artifact, StringComparison.Ordinal);

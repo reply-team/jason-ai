@@ -288,11 +288,28 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question));';
     assert.ok(press.includes(pressed));
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // The restart the deb's item offers once the system updated the package under the window is the desktop's own, not the
+    // updater's: the same press, behind the same guard, and the same relaunch the notice's click asks for. A click restarts
+    // at once; the key, which shows no label, asks first, as the install's key does: the restart stops the runtime, which
+    // ends a running turn.
+    const restart = "if (act === 'restart') {\n            const moved = this.deps.packageMoved?.() ?? null;\n            if (!byKey) this.deps.restart?.();\n            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());\n            return;\n        }";
+    assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
+    assert.ok(main.includes('        restart: () => void restartPackage(),\n'));
+    // Once at a time, the item and the notice alike (`restartOnce`).
+    assert.ok(main.includes('const restartPackage = restartOnce(packageRestart);'));
+    // The notice is held for as long as the window runs: one nothing refers to is collected, and its click with it, so a
+    // click on it restarted nothing.
+    assert.ok(main.includes('    let packageNotice: Notification | null = null;\n'));
+    assert.ok(main.includes('packageNotice = new Notification({'));
+    assert.ok(main.includes("packageNotice.on('click', () => void restartPackage());"));
+    assert.equal(main.includes('const notice = new Notification('), false, 'no notice held by a local alone');
+    // Its runtime stopped, the window goes quiet before the relaunch, as an update's install makes it.
+    assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,\n        relaunch: () => {\n            quitting = true;\n            repairer.stop();\n            modeDeps.relaunch();\n        },'));
     // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
     // none in a demo run.
     const item = body('updateItem');
     assert.ok(item.includes('if (this.demo !== null) return null;'));
-    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);"));
+    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);"));
     assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.

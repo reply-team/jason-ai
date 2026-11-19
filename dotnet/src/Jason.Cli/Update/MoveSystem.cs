@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Jason.Cli.Status;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Update;
@@ -78,6 +79,106 @@ public interface IMoveSystem
 
     /// <summary>Whether this account may write into <paramref name="folder"/>: a new application goes into the shared folder only then.</summary>
     bool MayWriteInto(string folder);
+
+    /// <summary>Linux: whether apt installs packages here, by the install line's rule: <c>apt-get</c> and <c>dpkg</c> both on the PATH.</summary>
+    bool HasApt();
+
+    /// <summary>
+    /// Linux: whether a program of the file name <paramref name="name"/> runs under this account, from any folder: Jason
+    /// Desktop runs from the deb's folder or from an AppImage's mount, whose folder changes at each start.
+    /// </summary>
+    bool RunsNamed(string name);
+
+    /// <summary>
+    /// Linux: whether this system lets an application make the user namespaces Chromium's sandbox needs, by
+    /// <c>unshare -Ur true</c>; true where there is no <c>unshare</c> to ask, as the install line takes it.
+    /// </summary>
+    bool UserNamespacesAllowed();
+
+    /// <summary>Linux: whether an AppImage can be mounted here: a setuid <c>fusermount3</c> or <c>fusermount</c> on the PATH.</summary>
+    bool FuseMounts();
+
+    /// <summary>
+    /// Linux: what an AppImage carries under <paramref name="pattern"/>, read out by the file's own runtime into
+    /// <c>squashfs-root</c> in <paramref name="folder"/> (<see cref="AppImageCopy.ExtractAsync"/>); true where it was.
+    /// </summary>
+    Task<bool> ExtractAppImageAsync(string appImage, string pattern, string folder, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Linux: <paramref name="package"/> installed by <c>apt-get install</c>, with the one password a system package needs,
+    /// asked as the install line asks it: by <c>sudo</c> where this process has a terminal, else by the desktop's own dialog
+    /// through <c>pkexec</c>, waited for up to <paramref name="bound"/>. <paramref name="progress"/> is told which, before
+    /// either asks.
+    /// </summary>
+    Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken);
+}
+
+/// <summary>How apt's install or purge of a package ended.</summary>
+/// <param name="Asked">Whether a password could be asked at all: false where there was neither a terminal for sudo nor pkexec.</param>
+/// <param name="ExitCode">Its exit code; <see cref="TimedOut"/> where it had not ended within its bound.</param>
+/// <param name="Said">What sudo, pkexec and apt said on standard error, which tells their refusals apart.</param>
+public sealed record PackageRun(bool Asked, int ExitCode, string Said)
+{
+    /// <summary>The exit a run that had not ended within its bound is given, as <c>timeout</c> gives it.</summary>
+    public const int TimedOut = 124;
+
+    /// <summary>
+    /// Why a run that did not succeed did not, read from the words of sudo, pkexec and apt as the install line reads them,
+    /// never from an exit code alone.
+    /// </summary>
+    public AptRefusal Refusal
+    {
+        get
+        {
+            bool Says(params string[] words) => words.Any(word => Said.Contains(word, StringComparison.Ordinal));
+            // The lock first: apt waited on it and timed out with the password given.
+            if (Says("Could not get lock", "Unable to acquire the dpkg frontend lock"))
+            {
+                return AptRefusal.LockHeld;
+            }
+
+            // sudo's and sudo-rs's words (Ubuntu 26.04 ships sudo-rs) alike.
+            if (ExitCode == TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "incorrect authentication attempt", "Authentication failed", "a password is required", "is not in the sudoers file", "may not run sudo", "afraid I can't do that"))
+            {
+                return AptRefusal.NoPassword;
+            }
+
+            // No agent in this session, or no polkit daemon to reach at all.
+            if (!Asked || Says("No authentication agent found", "Error getting authority"))
+            {
+                return AptRefusal.NoSession;
+            }
+
+            if (Says("Message recipient disconnected", "No session for cookie"))
+            {
+                return AptRefusal.DialogFailed;
+            }
+
+            return AptRefusal.Apt;
+        }
+    }
+
+    /// <summary>apt's own last line, where it said one.</summary>
+    public string? LastLine => Said.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+}
+
+/// <summary>Why apt's run with the one password did not succeed (<see cref="PackageRun.Refusal"/>).</summary>
+public enum AptRefusal
+{
+    /// <summary>No password was given: the dialog dismissed, a wrong one, an account that is not an administrator, or the bound passed.</summary>
+    NoPassword,
+
+    /// <summary>This session cannot ask for one: no terminal for sudo, and no pkexec or no agent to show its dialog.</summary>
+    NoSession,
+
+    /// <summary>The system's password dialog failed.</summary>
+    DialogFailed,
+
+    /// <summary>Another installation held the package system for the whole of apt's wait.</summary>
+    LockHeld,
+
+    /// <summary>apt itself failed.</summary>
+    Apt,
 }
 
 /// <summary>
@@ -277,6 +378,127 @@ public sealed class MoveSystem : IMoveSystem
         }
 
         return false;
+    }
+
+    public bool HasApt() => Executables.OnPath("apt-get", null) is not null && Executables.OnPath("dpkg", null) is not null;
+
+    public bool RunsNamed(string name)
+    {
+        foreach (var process in Process.ProcessImages.Named(name))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.MainModule?.FileName is { } image && string.Equals(Path.GetFileName(Process.ProcessImages.AtItsPath(image)), name, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+                catch (Exception unread) when (unread is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+                {
+                    // Another account's, or gone already.
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public bool UserNamespacesAllowed()
+    {
+        if (Executables.OnPath("unshare", null) is not { } unshare)
+        {
+            return true;
+        }
+
+        var (exit, _, _) = RunTool(unshare, ["-Ur", Executables.OnPath("true", null) ?? "/bin/true"], TimeSpan.FromSeconds(10), CancellationToken.None).GetAwaiter().GetResult();
+        return exit == 0;
+    }
+
+    public bool FuseMounts()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        foreach (var tool in new[] { "fusermount3", "fusermount" })
+        {
+            if (Executables.OnPath(tool, null) is { } found && File.GetUnixFileMode(found).HasFlag(UnixFileMode.SetUser))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public Task<bool> ExtractAppImageAsync(string appImage, string pattern, string folder, CancellationToken cancellationToken) =>
+        AppImageCopy.ExtractAsync(appImage, pattern, folder, cancellationToken);
+
+    public Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+        AptAsync("installing Jason Desktop's package with apt", ["install", .. AptOptions(Environment.GetEnvironmentVariable("http_proxy"), Environment.GetEnvironmentVariable("https_proxy")), package], bound, progress, cancellationToken);
+
+    /// <summary>
+    /// Linux: <paramref name="package"/> purged by <c>apt-get purge</c>, its own scripts taking back what root placed, with
+    /// the one password asked as an install asks it, and the package lock waited for as an install waits for it.
+    /// </summary>
+    internal static Task<PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+        AptAsync("taking Jason Desktop's package off with apt", ["purge", "-y", "-o", "DPkg::Lock::Timeout=600", package], bound, progress, cancellationToken);
+
+    /// <summary>
+    /// apt-get run with the one password a system package needs: by <c>sudo</c> where this process has a terminal, else by
+    /// the desktop's own dialog through <c>pkexec</c>, waited for up to <paramref name="bound"/>; not asked at all where
+    /// there is neither. <paramref name="progress"/> is told which, after <paramref name="doing"/>, before either asks.
+    /// </summary>
+    private static async Task<PackageRun> AptAsync(string doing, IReadOnlyList<string> arguments, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        var aptGet = Executables.OnPath("apt-get", null) ?? throw new IOException("apt-get is not on the PATH.");
+        string asker;
+        if (HasTerminal() && Executables.OnPath("sudo", null) is { } sudo)
+        {
+            progress($"{doing}; sudo asks for your password");
+            asker = sudo;
+        }
+        else if (Executables.OnPath("pkexec", null) is { } pkexec)
+        {
+            progress($"{doing}; your desktop asks for your password in its own window");
+            asker = pkexec;
+        }
+        else
+        {
+            return new PackageRun(false, 127, string.Empty);
+        }
+
+        var (exit, _, error) = await RunTool(asker, [aptGet, .. arguments], bound, cancellationToken).ConfigureAwait(false);
+        return new PackageRun(true, exit == -1 ? PackageRun.TimedOut : exit, error);
+    }
+
+    /// <summary>
+    /// The options every install of the package takes, the install line's own: the package lock waited for, a configuration
+    /// file the person changed kept, and the person's proxy, which sudo and pkexec both drop.
+    /// </summary>
+    internal static IReadOnlyList<string> AptOptions(string? httpProxy, string? httpsProxy) =>
+    [
+        "-y", "-o", "DPkg::Lock::Timeout=600", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold",
+        .. string.IsNullOrEmpty(httpProxy) ? Array.Empty<string>() : ["-o", "Acquire::http::Proxy=" + httpProxy],
+        .. string.IsNullOrEmpty(httpsProxy) ? Array.Empty<string>() : ["-o", "Acquire::https::Proxy=" + httpsProxy],
+    ];
+
+    /// <summary>Whether this process has a terminal sudo can ask in: whether <c>/dev/tty</c> opens, as the install line tests it.</summary>
+    private static bool HasTerminal()
+    {
+        try
+        {
+            using var tty = File.OpenHandle("/dev/tty", FileMode.Open, FileAccess.Read);
+            return true;
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>The tools a move runs on macOS, each where macOS keeps it.</summary>

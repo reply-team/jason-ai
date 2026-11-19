@@ -34,7 +34,9 @@ namespace Jason.Cli.Update;
 /// <para>
 /// <b>It never renames, replaces or deletes an application that is there, and never closes one.</b> One of 0.49.0 or later is
 /// reused and its own routine run; one older than that leaves the move pending, as an elevated process, an Intel Mac and a
-/// setup that has not ended within its bound do. Pending is never failed: <c>jason update apply</c> carries it on.
+/// setup that has not ended within its bound do. Pending is never failed: <c>jason update apply</c> carries it on. The one
+/// exception is Linux's deb, a package of the system's: one older than this version is upgraded by apt, as the system
+/// upgrades every package.
 /// </para>
 /// <para>
 /// <b>One at a time, under the update's lock</b>, held for the whole move. The setup is given the move's marker
@@ -54,6 +56,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>The application a macOS release publishes for Apple silicon, as the updater downloads it.</summary>
     public const string MacAsset = "jason-desktop-macos-arm64.zip";
 
+    /// <summary>The package a Linux release publishes, which apt installs where there is apt.</summary>
+    public const string DebAsset = "jason-desktop-linux-x64.deb";
+
+    /// <summary>The AppImage a Linux release publishes, which goes where there is no apt.</summary>
+    public const string AppImageAsset = AppImageCopy.FileName;
+
     /// <summary>A download is at most this large: an installer is a few hundred megabytes at most.</summary>
     internal const long MaxDownloadBytes = 1024L * 1024 * 1024;
 
@@ -66,7 +74,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>How long a download may go without a byte before it counts as stalled.</summary>
     internal TimeSpan StallWait { get; init; } = TimeSpan.FromMinutes(2);
 
-    /// <summary>How long the Windows setup is waited for. One that has not ended by then is left running, never killed.</summary>
+    /// <summary>
+    /// How long the Windows setup, or on Linux apt's install of the package with the password it asks, is waited for. A
+    /// Windows setup that has not ended by then is left running, never killed.
+    /// </summary>
     internal TimeSpan SetupWait { get; init; } = TimeSpan.FromMinutes(10);
 
     /// <summary>How long the application's <c>jason install</c> is waited for: its own waits are a minute's drain and the stop's.</summary>
@@ -107,6 +118,21 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// <summary>The record a run before this one left, of this same install; null where there was none.</summary>
     private MoveRecord? _before;
 
+    /// <summary>Linux: the form of Jason Desktop the install moves into, decided at the look; null before then and elsewhere.</summary>
+    private LinuxForm? _linux;
+
+    /// <summary>Linux, an AppImage: the version the file is, once read or placed; the copy of its jason is the one that sets up.</summary>
+    private SemanticVersion? _appImageVersion;
+
+    private enum LinuxForm
+    {
+        Deb,
+        AppImage,
+    }
+
+    /// <summary>Linux: the program Jason Desktop runs as, from the deb's folder or from an AppImage's mount.</summary>
+    private const string LinuxProgram = "jason-desktop-app";
+
     /// <summary>
     /// The move of the install <paramref name="ledger"/> updated, at the version it installed, from <paramref name="feed"/>:
     /// carried as far as it goes, and said.
@@ -118,12 +144,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         if (env.Setup is not { } places)
         {
-            // Linux, and any system that is neither: the command-line install is the installation there, and stays it.
+            // A system that is none of the three: the command-line install is the installation there, and stays it.
             return new UpdateMoveResponse(
                 MoveStates.NotApplicable,
                 null,
                 null,
-                "Jason Desktop takes a command-line install in on macOS and Windows only; on this system the command line is the installation, and nothing was moved.");
+                "Jason Desktop takes a command-line install in on macOS, Windows and Linux only; on this system the command line is the installation, and nothing was moved.");
         }
 
         var old = Path.GetFullPath(ledger.InstallPath);
@@ -250,7 +276,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             Say($"checked this jason's own signature: Jason Desktop is held to {_publisher}");
         }
 
-        var found = Look(places);
+        var found = places.Platform is SetupSystem.Linux ? await LookOnLinuxAsync(places, version, cancellationToken).ConfigureAwait(false) : Look(places);
         if (found.Refusal is { } refusal)
         {
             return End(MoveStates.Pending, refusal, application: found.Application, waits: found.Waits);
@@ -259,6 +285,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         Done(MoveSteps.Looked, found.Application);
         if (found.Version is { } there)
         {
+            if (_linux is LinuxForm.AppImage && await PrepareAppImageAsync(places, found.Application, there, cancellationToken).ConfigureAwait(false) is { } unprepared)
+            {
+                return End(MoveStates.Failed, unprepared);
+            }
+
             // Held to the publisher before anything of it runs, as a new one is.
             if (places.Platform is SetupSystem.MacOs
                 && await System.MacSignatureRefusalAsync(found.Application, MoveSignatures.RequirementInForce(env.Variables), cancellationToken).ConfigureAwait(false) is { } unsigned)
@@ -280,6 +311,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         }
         else
         {
+            if (_linux is LinuxForm.AppImage && AppImageRefusal() is { } cannot)
+            {
+                return End(MoveStates.Pending, cannot.Reason, waits: cannot.Waits);
+            }
+
             var installed = await InstallAsync(places, version, found.Application, feed, cancellationToken).ConfigureAwait(false);
             if (installed is not null)
             {
@@ -319,14 +355,20 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     }
 
     /// <summary>
-    /// The application installed where none is: downloaded, held to its line in checksums.txt and to the publisher's
-    /// signature, and on Windows its setup run silently and waited for, on macOS put in place by one rename. Null where it
-    /// is in place; the move's answer where it stopped.
+    /// The application installed where none is: downloaded, held to its line in checksums.txt and, on Windows and macOS, to
+    /// the publisher's signature; on Windows its setup run silently and waited for, on macOS put in place by one rename, on
+    /// Linux the deb installed by apt or the AppImage put in place by one rename. Null where it is in place; the move's answer
+    /// where it stopped.
     /// </summary>
     private async Task<UpdateMoveResponse?> InstallAsync(SetupPlaces places, SemanticVersion version, string application, Uri feed, CancellationToken cancellationToken)
     {
         var windows = places.Platform is SetupSystem.Windows;
-        var asset = windows ? WindowsAsset : MacAsset;
+        var asset = _linux switch
+        {
+            LinuxForm.Deb => DebAsset,
+            LinuxForm.AppImage => AppImageAsset,
+            _ => windows ? WindowsAsset : MacAsset,
+        };
         var release = UpdateFeed.PinnedFor(feed, version);
 
         Begin(MoveSteps.Fetched);
@@ -402,8 +444,263 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             return await RunSetupAsync(places, version, application, download, cancellationToken).ConfigureAwait(false);
         }
 
-        return await PlaceOnMacAsync(version, application, download, cancellationToken).ConfigureAwait(false);
+        return _linux switch
+        {
+            LinuxForm.Deb => await PlaceDebAsync(places, version, application, download, cancellationToken).ConfigureAwait(false),
+            LinuxForm.AppImage => await PlaceAppImageAsync(places, version, application, download, cancellationToken).ConfigureAwait(false),
+            _ => await PlaceOnMacAsync(version, application, download, cancellationToken).ConfigureAwait(false),
+        };
     }
+
+    /// <summary>
+    /// Linux, the deb: the verified package installed by apt with the one password a system package needs, asked as the
+    /// install line asks it, within the setup's bound. A refusal changes nothing and leaves the move pending, saying why and
+    /// what carries it on; the package's own scripts write Jason's apt source, so later updates come with the system's.
+    /// </summary>
+    private async Task<UpdateMoveResponse?> PlaceDebAsync(SetupPlaces places, SemanticVersion version, string application, string package, CancellationToken cancellationToken)
+    {
+        Done(MoveSteps.Verified);
+        Begin(MoveSteps.Placed);
+        PackageRun run;
+        try
+        {
+            run = await System.InstallPackageAsync(package, SetupWait, Progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception unstarted) when (unstarted is Win32Exception or IOException or InvalidOperationException)
+        {
+            return End(MoveStates.Failed, $"apt could not be started to install {DebAsset} ({OneLine(unstarted.Message)}), so nothing was installed or changed. `jason update apply` carries the move on.");
+        }
+        finally
+        {
+            Discard(package);
+        }
+
+        if (run.ExitCode != 0)
+        {
+            if (run.Said.Trim() is { Length: > 0 } said)
+            {
+                env.Error.WriteLine(said);
+            }
+
+            var (state, reason) = PackageRefusal(run);
+            return End(state, reason);
+        }
+
+        if (Carried(places, application) is not { } carried || CarriedExecutable.Of(carried)?.Version != version.ToString())
+        {
+            return End(MoveStates.Failed, $"apt installed {DebAsset}, and {Carried(places, application)} is not Jason {version}; the command-line install was not touched. `jason update apply` carries the move on.");
+        }
+
+        Done(MoveSteps.Placed, application);
+        Say($"installed Jason Desktop {version} to {application} with apt");
+        return null;
+    }
+
+    /// <summary>
+    /// Linux, the deb: what an install by apt that did not succeed comes to, by <see cref="PackageRun.Refusal"/>. Pending where
+    /// nothing was installed and a later run carries the move on; failed where apt itself refused.
+    /// </summary>
+    internal static (string State, string Reason) PackageRefusal(PackageRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return run.Refusal switch
+        {
+            AptRefusal.NoPassword => (MoveStates.Pending, "Moving into Jason Desktop needs an administrator's password once, and none was given; the command line is unchanged, and nothing was installed. `jason update apply` asks again; where this account is not an administrator, an administrator of this computer can type theirs."),
+            AptRefusal.NoSession => (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on."),
+            AptRefusal.DialogFailed => (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on."),
+            AptRefusal.LockHeld => (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on."),
+            _ => (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on.")),
+        };
+    }
+
+    /// <summary>
+    /// Linux, an AppImage: the verified file copied beside its place, made executable and read for its version by its own
+    /// runtime, then put in place by one rename into an empty place only; then what the install line writes beside it
+    /// (<see cref="PrepareAppImageAsync"/>). No root at any step.
+    /// </summary>
+    private async Task<UpdateMoveResponse?> PlaceAppImageAsync(SetupPlaces places, SemanticVersion version, string application, string download, CancellationToken cancellationToken)
+    {
+        var place = Path.GetDirectoryName(application)!;
+        var stage = Path.Combine(place, $".jason-move.{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(place);
+
+            // What a move killed while it staged left beside the place: only a file of this move's own name, under the lock.
+            foreach (var left in Directory.EnumerateFiles(place, ".jason-move.*"))
+            {
+                if (Path.GetFileName(left) is { Length: 44 } name && name[12..].All(char.IsAsciiHexDigitLower) && !File.GetAttributes(left).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    Discard(left);
+                }
+            }
+
+            File.Copy(download, stage);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(stage, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            Discard(download);
+            Discard(stage);
+            return End(MoveStates.Failed, $"{AppImageAsset} could not be put in {place} ({OneLine(refused.Message)}); nothing was installed or changed. `jason update apply` carries the move on.");
+        }
+
+        try
+        {
+            if (await AppImageVersionAsync(stage, cancellationToken).ConfigureAwait(false) != version)
+            {
+                return End(MoveStates.Failed, $"The {AppImageAsset} of the release is not Jason {version}; nothing was installed or changed. `jason update apply` carries the move on.");
+            }
+
+            Done(MoveSteps.Verified);
+            Begin(MoveSteps.Placed);
+            if (File.Exists(application) || Directory.Exists(application))
+            {
+                return End(MoveStates.Pending, $"{application} appeared while the move downloaded Jason Desktop, so it is left as it was and nothing was installed; `jason update apply` carries the move on into it.", application: application);
+            }
+
+            try
+            {
+                File.Move(stage, application);
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                return End(MoveStates.Failed, $"{application} could not be put in place ({OneLine(refused.Message)}); nothing was installed or changed. `jason update apply` carries the move on.");
+            }
+        }
+        finally
+        {
+            Discard(download);
+            Discard(stage);
+        }
+
+        _appImageVersion = version;
+        if (await PrepareAppImageAsync(places, application, version, cancellationToken).ConfigureAwait(false) is { } unprepared)
+        {
+            return End(MoveStates.Failed, unprepared, application: application);
+        }
+
+        Done(MoveSteps.Placed, application);
+        Say($"installed Jason Desktop {version} to {application}");
+        return null;
+    }
+
+    /// <summary>
+    /// Linux, an AppImage: what the install line writes beside the file, made here as there. The copy of the jason it carries
+    /// under the data directory, for its version, which sets the machine up; then the menu entry, which starts the file where it
+    /// is and is hidden once that file is gone (<c>TryExec</c>), and the icons, in the account's data folder. Null where all of it
+    /// is there; else why not.
+    /// </summary>
+    private async Task<string?> PrepareAppImageAsync(SetupPlaces places, string file, SemanticVersion version, CancellationToken cancellationToken)
+    {
+        if (!await AppImageCopy.MakeAsync(file, Bundles, version, System.ExtractAppImageAsync, cancellationToken).ConfigureAwait(false))
+        {
+            return $"The jason Jason Desktop carries could not be copied out of {file} to {Path.GetDirectoryName(AppImageCopy.CopyOf(Bundles, version))}, so nothing could set this machine up; the command-line install was not touched. `jason update apply` carries the move on.";
+        }
+
+        var share = places.DataHome ?? Path.Combine(places.Home, ".local", "share");
+        var reading = Scratch();
+        try
+        {
+            Directory.CreateDirectory(reading);
+            var root = Path.Combine(reading, "squashfs-root");
+            var carriedEntry = Path.Combine(root, "jason-desktop-app.desktop");
+            if (!await System.ExtractAppImageAsync(file, "jason-desktop-app.desktop", reading, cancellationToken).ConfigureAwait(false) || !File.Exists(carriedEntry))
+            {
+                return $"Jason Desktop's menu entry could not be read out of {file}; the command-line install was not touched. `jason update apply` carries the move on.";
+            }
+
+            var entry = new List<string>();
+            foreach (var line in File.ReadAllLines(carriedEntry))
+            {
+                if (line.StartsWith("TryExec=", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec=\"{file}\" %U" : line);
+                if (line == "[Desktop Entry]")
+                {
+                    entry.Add($"TryExec={file}");
+                }
+            }
+
+            var applications = Directory.CreateDirectory(Path.Combine(share, "applications")).FullName;
+            File.WriteAllText(Path.Combine(applications, "jason-desktop.desktop"), string.Join('\n', entry) + "\n");
+
+            // The icons are the entry's look: a file the runtime reads none out of is still started from the menu.
+            var hicolor = Path.Combine(root, "usr", "share", "icons", "hicolor");
+            if (await System.ExtractAppImageAsync(file, "usr/share/icons/hicolor/*/apps/jason-desktop-app.png", reading, cancellationToken).ConfigureAwait(false) && Directory.Exists(hicolor))
+            {
+                foreach (var size in Directory.EnumerateDirectories(hicolor))
+                {
+                    var icon = Path.Combine(size, "apps", "jason-desktop-app.png");
+                    if (File.Exists(icon))
+                    {
+                        var apps = Directory.CreateDirectory(Path.Combine(share, "icons", "hicolor", Path.GetFileName(size), "apps")).FullName;
+                        File.Copy(icon, Path.Combine(apps, "jason-desktop-app.png"), overwrite: true);
+                    }
+                }
+            }
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or Win32Exception or InvalidOperationException)
+        {
+            return $"Jason Desktop's menu entry could not be written under {share} ({OneLine(refused.Message)}); the command-line install was not touched. `jason update apply` carries the move on.";
+        }
+        finally
+        {
+            TryDeleteTree(reading);
+        }
+
+        return null;
+    }
+
+    /// <summary>Linux, an AppImage: the version the file carries, read out of it by its own runtime; null where none can be read.</summary>
+    private async Task<SemanticVersion?> AppImageVersionAsync(string file, CancellationToken cancellationToken)
+    {
+        var reading = Scratch();
+        try
+        {
+            Directory.CreateDirectory(reading);
+            return await System.ExtractAppImageAsync(file, "resources/bundle/version.json", reading, cancellationToken).ConfigureAwait(false)
+                && CarriedExecutable.Of(Path.Combine(reading, "squashfs-root", "resources", "bundle", "jason")) is { } named
+                && SemanticVersion.TryParse(named.Version, out var carried)
+                    ? carried
+                    : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or Win32Exception or InvalidOperationException)
+        {
+            return null;
+        }
+        finally
+        {
+            TryDeleteTree(reading);
+        }
+    }
+
+    /// <summary>Linux, an AppImage: why one cannot run here, asked before anything is downloaded, as the install line asks; null where it can.</summary>
+    private (string Reason, string? Waits)? AppImageRefusal()
+    {
+        if (!System.UserNamespacesAllowed())
+        {
+            return (
+                "This system does not let Jason Desktop run in its sandbox (user namespaces are refused), so the command line stays your installation: nothing was downloaded or changed, and it answers as jason as it did. On Arch this is the linux-hardened kernel, or a setting that turns user namespaces off.",
+                "this system lets applications make user namespaces");
+        }
+
+        return System.FuseMounts()
+            ? null
+            : ("Jason Desktop needs FUSE 3 here; install the fuse3 package, then run `jason update apply`. Nothing was downloaded or changed, and the command-line install answers as jason as it did.", null);
+    }
+
+    /// <summary>A folder of its own under the move's downloads, for what an AppImage's runtime reads out of it.</summary>
+    private string Scratch() => Path.Combine(update.MoveDownloads, $".read-{Guid.NewGuid():N}");
+
+    /// <summary>Linux: the folder of the copies an AppImage's jason runs as.</summary>
+    private string Bundles => AppImageCopy.BundlesUnder(env.Paths.Root);
 
     /// <summary>
     /// Windows: the setup run silently into the application's place and waited for, within its bound; the place looked at
@@ -799,13 +1096,80 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     private static string WindowsApplication(SetupPlaces places) =>
         Path.Combine(places.LocalApplicationData ?? places.Home, "Programs", "jason-desktop");
 
-    /// <summary>The jason an application at <paramref name="application"/> carries; null for no application.</summary>
-    private static string? Carried(SetupPlaces places, string? application) =>
+    /// <summary>
+    /// Linux: the form the install moves into, by the install line's rule — an AppImage already at its place stays the
+    /// installation, apt or not; else the deb where there is apt; else an AppImage — and the application already there, or
+    /// the place a new one goes. Jason Desktop running, from either form, is a refusal, as an open window is. A package of this
+    /// version or later is reused, and an older one is installed over by apt, as the system upgrades its packages; an
+    /// AppImage, the person's own file, is reused at the version it is where that is this version or later, and is never
+    /// replaced, renamed or deleted from here.
+    /// </summary>
+    private async Task<(string Application, SemanticVersion? Version, string? Refusal, string? Waits)> LookOnLinuxAsync(SetupPlaces places, SemanticVersion version, CancellationToken cancellationToken)
+    {
+        var appImage = AppImageCopy.FileOf(AppImageCopy.CopyOf(Bundles, version), places.Home);
+        _linux = File.Exists(appImage) || !System.HasApt() ? LinuxForm.AppImage : LinuxForm.Deb;
+        var application = _linux is LinuxForm.Deb ? places.DebApplication : appImage;
+        if (System.RunsNamed(LinuxProgram))
+        {
+            return (
+                application,
+                null,
+                "Jason Desktop is running, in its window or in the tray, and the move never sets the machine up while it runs, so nothing was changed; the command-line install answers as jason as it did. Quit Jason Desktop (Quit in its tray menu), then `jason update apply` carries the move on.",
+                null);
+        }
+
+        if (_linux is LinuxForm.Deb)
+        {
+            return CarriedExecutable.Of(Carried(places, application)!) is { } placed && SemanticVersion.TryParse(placed.Version, out var packaged) && AtLeast(packaged, version)
+                ? (application, packaged, null, null)
+                : (application, null, null, null);
+        }
+
+        if (!File.Exists(appImage))
+        {
+            return (application, null, null, null);
+        }
+
+        if (await AppImageVersionAsync(appImage, cancellationToken).ConfigureAwait(false) is not { } named)
+        {
+            return (
+                application,
+                null,
+                $"The file at {appImage} is not a Jason Desktop whose version can be read, so it is left as it is and the move of the command-line install waits; nothing was changed, and the command-line install answers as jason as it did. Move that file away: then `jason update apply` installs Jason Desktop there and carries the move on.",
+                $"the file at {appImage} is moved away");
+        }
+
+        if (!AtLeast(named, version))
+        {
+            return (
+                application,
+                null,
+                $"Jason Desktop {named} at {appImage} is older than {version}, so its jason cannot set this machine up for this version and the move of the command-line install waits; nothing was changed, and the command-line install answers as jason as it did. Update Jason Desktop from its own menu (Check for Updates): then `jason update apply` carries the move on.",
+                $"Jason Desktop at {appImage} is updated to {version} or later from its own menu");
+        }
+
+        _appImageVersion = named;
+        return (application, named, null, null);
+    }
+
+    /// <summary>Whether <paramref name="found"/> is <paramref name="version"/> or later, by their numbers, a pre-release part ignored.</summary>
+    private static bool AtLeast(SemanticVersion found, SemanticVersion version) =>
+        (found with { PreRelease = null }) >= (version with { PreRelease = null });
+
+    /// <summary>
+    /// The jason an application at <paramref name="application"/> carries; null for no application. On Linux the deb's, or for
+    /// an AppImage the copy of its version under the data directory, null until that version is known.
+    /// </summary>
+    private string? Carried(SetupPlaces places, string? application) =>
         application is null
             ? null
-            : places.Platform is SetupSystem.Windows
-                ? Path.Combine(application, "resources", "bundle", "jason.exe")
-                : Path.Combine(application, "Contents", "Resources", "bundle", "jason");
+            : places.Platform switch
+            {
+                SetupSystem.Windows => Path.Combine(application, "resources", "bundle", "jason.exe"),
+                SetupSystem.Linux when _linux is LinuxForm.AppImage => _appImageVersion is { } copied ? AppImageCopy.CopyOf(Bundles, copied) : null,
+                SetupSystem.Linux => Path.Combine(application, "resources", "bundle", "jason"),
+                _ => Path.Combine(application, "Contents", "Resources", "bundle", "jason"),
+            };
 
     // --- downloads ---------------------------------------------------------------------------------------------
 
@@ -919,7 +1283,9 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         {
             MoveSteps.Looked => "looking for Jason Desktop",
             MoveSteps.Fetched => "downloading Jason Desktop",
-            MoveSteps.Verified => "checking Jason Desktop against the release's checksums and its publisher's signature",
+            MoveSteps.Verified => _linux is null
+                ? "checking Jason Desktop against the release's checksums and its publisher's signature"
+                : "checking Jason Desktop against the release's checksums",
             MoveSteps.Placed => "installing Jason Desktop",
             MoveSteps.SetUp => "setting this machine up through Jason Desktop's jason",
             MoveSteps.Started => "starting the runtime from Jason Desktop's jason",

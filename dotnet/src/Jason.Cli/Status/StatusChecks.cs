@@ -286,7 +286,7 @@ internal static partial class StatusChecks
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
-            checks.Add(UpdateInFlight(unfinished));
+            checks.Add(UpdateInFlight(env, unfinished));
             checks.Add(Move(env));
             checks.Add(Layout(env));
 
@@ -482,9 +482,9 @@ internal static partial class StatusChecks
             : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
     }
 
-    private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
+    private static StatusCheck UpdateInFlight(CliEnvironment env, Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
-        null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        null => PackageUpdates(env) ?? new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
         _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
@@ -500,6 +500,62 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// Linux, the deb, whose updates come with the system's: where they cannot arrive, because Jason's apt source is gone
+    /// or turned off (a release upgrade of Ubuntu turns third-party sources off, with <c>Enabled: no</c>), and where the
+    /// system installed a version this installation was not set up for yet (the version Jason Desktop's start last set the
+    /// machine up for, <c>&lt;data&gt;/desktop/machine-setup.json</c>, is not the package's). Null elsewhere, and where neither
+    /// stands.
+    /// </summary>
+    private static StatusCheck? PackageUpdates(CliEnvironment env)
+    {
+        if (env.Setup is not { Platform: SetupSystem.Linux } places || CarriedExecutable.Of(env) is not { } carried || !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            return null;
+        }
+
+        string? setUpFor = null;
+        try
+        {
+            using var record = JsonDocument.Parse(File.ReadAllText(MachineSetupRecordUnder(env.Paths.Root)));
+            setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+        {
+        }
+
+        if (setUpFor is not null && !string.Equals(setUpFor, carried.Version, StringComparison.Ordinal))
+        {
+            return new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. `jason update apply --finish` finishes it, and so does opening Jason Desktop.",
+                "jason update apply --finish");
+        }
+
+        string? text = null;
+        try
+        {
+            text = File.Exists(places.AptSource) ? File.ReadAllText(places.AptSource) : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        var on = text is not null
+            && text.Split('\n').Any(line => line.TrimStart().StartsWith("Types:", StringComparison.Ordinal))
+            && !text.Split('\n').Any(line => line.Trim().Equals("Enabled: no", StringComparison.OrdinalIgnoreCase));
+        return on
+            ? null
+            : new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason's apt source, {places.AptSource}, is {(text is null ? "not there" : "turned off")}, so no update of Jason Desktop arrives with the system's updates; a release upgrade of Ubuntu turns such sources off. Turn it on in Software & Updates, Other Software.",
+                null);
+    }
 
     /// <summary>
     /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more
@@ -1215,9 +1271,10 @@ internal static partial class StatusChecks
                 Repair.OnPath(env));
         }
 
-        // Linux keeps the check it had: more than one installation may stand there, and another jason by name is said, not
-        // failed.
-        if (OperatingSystem.IsLinux())
+        // On Linux a jason Jason Desktop does not carry keeps the check it had: a build of a checkout or a jason of the
+        // person's own may stand beside an installation, and another jason by name is said, not failed. Jason Desktop's own is
+        // the machine's one installation, as on macOS and Windows.
+        if (OperatingSystem.IsLinux() && CarriedExecutable.Of(env) is null)
         {
             var installed = env.InstallPath;
             if (installed is not null && !string.Equals(System.IO.Path.GetFullPath(installed), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
@@ -1228,9 +1285,10 @@ internal static partial class StatusChecks
             return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
         }
 
-        // macOS and Windows, where a machine holds one installation. The file answering here, as installed: a release's
-        // image, which every release has. Another file first by name is what a person and every agent typing jason runs, so
-        // this one's readiness says nothing of theirs; the application's wrapper running this image is this jason by name.
+        // macOS and Windows, where a machine holds one installation, and Jason Desktop's jason on Linux. The file answering
+        // here, as installed: a release's image, which every release has. Another file first by name is what a person and
+        // every agent typing jason runs, so this one's readiness says nothing of theirs; the application's wrapper running
+        // this image, or the deb's link to it, is this jason by name.
         var running = env.InstallPath ?? SelfExecutable.InstalledImage;
         if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
@@ -1245,6 +1303,12 @@ internal static partial class StatusChecks
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
+
+    /// <summary>
+    /// Jason Desktop's record of where and for which version `jason install` last ran, which its start writes in its own folder
+    /// of the data directory; read here, never written.
+    /// </summary>
+    private static string MachineSetupRecordUnder(string dataRoot) => System.IO.Path.Combine(dataRoot, "desktop", "machine-setup.json");
 
     /// <summary>
     /// Whether <paramref name="resolved"/> and <paramref name="own"/> are one file by their final paths, a link in the file or
