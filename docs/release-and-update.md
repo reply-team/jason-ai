@@ -1013,8 +1013,10 @@ that exit: `jason update apply` sees a setup that ended 3, Jason Desktop still r
 puts a `jason` back at the carried path and the record that stood, starts the runtime again where one was running
 and answers `update_desktop_not_installed` (below). The Desktop's start never starts a runtime, and touches
 no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window holds no updater: it resolves no host
-name, so it could read no feed, and it refuses the request as `demo_open` before anything is checked, so nothing is
-stopped, kept or downloaded; leaving the Demo, or quitting Jason Desktop, and running the verb again takes it. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
+name, so it could read no feed, and it refuses the request as `demo_open` without checking anything itself. The
+terminal's `jason update apply` has read the feed before it hands anything over, so where the feed offers nothing newer
+the answer is the ordinary one, `update_up_to_date`, and where it offers a newer version the Demo refuses it and nothing
+is stopped, kept or downloaded; leaving the Demo, or quitting Jason Desktop, and running the verb again takes it. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
 folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
 installer's publisher by running PowerShell through that shell, and lets the check pass where PowerShell cannot be run
 at all, so the shell and the PowerShell are found where the system keeps them rather than where the caller's `PATH`
