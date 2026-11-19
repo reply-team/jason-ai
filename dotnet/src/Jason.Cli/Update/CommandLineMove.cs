@@ -497,36 +497,20 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     }
 
     /// <summary>
-    /// Linux, the deb: what an install by apt that did not succeed comes to, read from the words of sudo, pkexec and apt as the
-    /// install line reads them, never from an exit code alone. Pending where nothing was installed and a later run carries the
-    /// move on; failed where apt itself refused.
+    /// Linux, the deb: what an install by apt that did not succeed comes to, by <see cref="PackageRun.Refusal"/>. Pending where
+    /// nothing was installed and a later run carries the move on; failed where apt itself refused.
     /// </summary>
     internal static (string State, string Reason) PackageRefusal(PackageRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        bool Says(params string[] words) => words.Any(word => run.Said.Contains(word, StringComparison.Ordinal));
-        if (run.ExitCode == PackageRun.TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "a password is required", "is not in the sudoers file", "may not run sudo"))
+        return run.Refusal switch
         {
-            return (MoveStates.Pending, "Moving into Jason Desktop needs an administrator's password once, and none was given; the command line is unchanged, and nothing was installed. `jason update apply` asks again; where this account is not an administrator, an administrator of this computer can type theirs.");
-        }
-
-        if (!run.Asked || Says("No authentication agent found"))
-        {
-            return (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on.");
-        }
-
-        if (Says("Message recipient disconnected", "No session for cookie"))
-        {
-            return (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on.");
-        }
-
-        if (Says("Could not get lock", "Unable to acquire the dpkg frontend lock"))
-        {
-            return (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on.");
-        }
-
-        var last = run.Said.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
-        return (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(last is null ? string.Empty : $" and said: {last}")}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on."));
+            AptRefusal.NoPassword => (MoveStates.Pending, "Moving into Jason Desktop needs an administrator's password once, and none was given; the command line is unchanged, and nothing was installed. `jason update apply` asks again; where this account is not an administrator, an administrator of this computer can type theirs."),
+            AptRefusal.NoSession => (MoveStates.Pending, "Jason Desktop is installed from a system package here, which needs your password once, and this session cannot ask for it, so nothing was installed and the command line is unchanged. Run `jason update apply` in a terminal of your desktop to carry the move on."),
+            AptRefusal.DialogFailed => (MoveStates.Pending, "The system's password dialog failed, so Jason Desktop was not installed and the command line is unchanged. Sign out and back in, or restart, then run `jason update apply` to carry the move on."),
+            AptRefusal.LockHeld => (MoveStates.Pending, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop was not installed and the command line is unchanged. Run `jason update apply` again in a few minutes to carry the move on."),
+            _ => (MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"apt did not install Jason Desktop's package: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}. `sudo dpkg --configure -a` finishes a package left half installed, and `sudo apt purge jason-desktop` takes it off; the command-line install was not touched. `jason update apply` carries the move on.")),
+        };
     }
 
     /// <summary>

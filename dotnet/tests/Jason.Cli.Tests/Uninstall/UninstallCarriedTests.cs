@@ -7,16 +7,18 @@ using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Uninstall;
+using Jason.Cli.Update;
 using Jason.Runtime.Tests;
 using Microsoft.Win32;
 
 namespace Jason.Cli.Tests.Uninstall;
 
 /// <summary>
-/// <c>jason uninstall</c> run as the jason Jason Desktop carries: one uninstall, which on macOS and Windows takes off what
-/// the application and <c>jason install</c> placed, an older command-line install, and the application itself last; and
-/// which, where no system's places are known, still refuses before anything is read or removed. Run against a scratch home,
-/// a scratch data directory, an application folder of the test's own and, on Windows, registry keys of the test's own.
+/// <c>jason uninstall</c> run as the jason Jason Desktop carries: one uninstall, which on macOS, Windows and Linux takes off
+/// what the application and <c>jason install</c> placed, an older command-line install, and the application itself, last, or
+/// on Linux from the deb first, as its package; and which, where no system's places are known, still refuses before anything
+/// is read or removed. Run against a scratch home, a scratch data directory, an application folder of the test's own, on
+/// Linux XDG folders of its own away from that home and a stand-in for apt, and on Windows registry keys of its own.
 /// </summary>
 public sealed partial class UninstallCarriedTests : IDisposable
 {
@@ -1620,6 +1622,144 @@ public sealed partial class UninstallCarriedTests : IDisposable
         return folder;
     }
 
+    // --- Linux -----------------------------------------------------------------------------------------------------
+
+    private string XdgData => Path.Combine(_tree.Paths.Root, "xdg", "data");
+
+    private string XdgConfig => Path.Combine(_tree.Paths.Root, "xdg", "config");
+
+    private string XdgCache => Path.Combine(_tree.Paths.Root, "xdg", "cache");
+
+    [Fact]
+    [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
+    public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last()
+    {
+        var places = LinuxPlaces();
+        var (copy, file) = AppImage();
+        var bin = places.LocalBin;
+        var wrapper = Written(Path.Combine(bin, "jason"), CommandFiles.Wrapper(copy, null));
+        var profile = Path.Combine(Home, ".profile");
+        var bashrc = Written(Path.Combine(Home, ".bashrc"), "alias ll='ls -l'\n");
+        PathEntry.AddToProfile(profile, bin);
+        PathEntry.AddToProfile(bashrc, bin);
+        CreatedProfiles.Add(places, profile);
+        var skill = UninstallReceiptTests.Recorded(Path.Combine(Home, ".claude", "skills"), "operating-the-installation");
+        var atLogin = OpenAtLoginEntry(file);
+        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={file}\nName=Jason\nExec=\"{file}\" %U\nIcon=jason-desktop-app\n");
+        string[] icons = [.. new[] { "256x256", "512x512" }.Select(size => Written(Path.Combine(XdgData, "icons", "hicolor", size, "apps", "jason-desktop-app.png"), "png"))];
+        var anotherIcon = Written(Path.Combine(XdgData, "icons", "hicolor", "256x256", "apps", "another-app.png"), "png");
+        var desktop = Path.Combine(_dir.Paths.Root, "desktop");
+        Bundle(Path.Combine(desktop, "bundle", "0.33.0"), "jason");
+        Plant(Path.Combine(desktop, "rollback", "0.33.0"));
+        var settings = Written(Path.Combine(desktop, "settings.json"), "{}");
+        var updater = Plant(Path.Combine(XdgCache, "jason-desktop-updater"));
+        var harnessRoot = Plant(Path.Combine(Home, "Jason"));
+        var (env, output, remover) = Environment(places, copy);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
+        Assert.Equal("deleted", plan.GetProperty("application_fate").GetString());
+        Assert.Equal(file, plan.GetProperty("application").GetString());
+        foreach (var gone in new[] { wrapper, profile, skill, atLogin, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
+        {
+            Assert.False(File.Exists(gone), $"{gone} is still there");
+        }
+
+        foreach (var gone in new[] { bin, Path.Combine(desktop, "bundle"), Path.Combine(desktop, "rollback"), places.SupportFolder, updater })
+        {
+            Assert.False(Directory.Exists(gone), $"{gone} is still there");
+        }
+
+        Assert.Equal("alias ll='ls -l'\n", File.ReadAllText(bashrc));
+        Assert.True(File.Exists(anotherIcon), "another application's icon went");
+        Assert.True(File.Exists(settings), "the data directory's own files went without the word");
+        Assert.True(Directory.Exists(harnessRoot), "the harness root went");
+
+        // The file is the last thing removed: everything above ran from the copy of the jason it carries.
+        Assert.Equal($"file.remove {file}", remover.Calls[^1]);
+    }
+
+    [Fact]
+    public async Task From_the_deb_the_package_is_taken_off_once_the_runtime_has_stopped_and_before_anything_of_this_accounts()
+    {
+        var places = LinuxPlaces();
+        var carried = Deb(places);
+        var (atLogin, wrapper, skill, updater) = PlantForTheDeb(places, carried);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        var (env, output, remover) = Environment(places, carried, log);
+        remover.Purges = _ =>
+        {
+            // As apt does: the package's files go, the jason this runs as among them.
+            Directory.Delete(places.DebApplication, recursive: true);
+            return new PackageRun(true, 0, string.Empty);
+        };
+        env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.Equal("purged", JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop").GetProperty("application_fate").GetString());
+        var stopped = log.Steps.IndexOf("system.shutdown");
+        var purged = log.Steps.IndexOf("package.purge");
+        var firstOfTheAccounts = log.Steps.FindIndex(step => step is "file.remove" or "tree.remove" or "directory.remove_if_empty");
+        Assert.True(stopped >= 0 && purged > stopped && firstOfTheAccounts > purged, string.Join(" | ", log.Steps));
+        foreach (var gone in new[] { atLogin, wrapper, skill })
+        {
+            Assert.False(File.Exists(gone), $"{gone} is still there");
+        }
+
+        Assert.False(Directory.Exists(updater), "the updater's cache is still there");
+        Assert.False(File.Exists(_dir.Paths.StartOwedFile), "a start is owed after the installation went");
+        Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
+    }
+
+    [Theory]
+    [Critical(Family.I3, "on Linux a package that stays leaves everything of this account's in place")]
+    [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
+    [InlineData("no session to ask in", false, 127, "")]
+    public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again(string row, bool asked, int code, string said)
+    {
+        var places = LinuxPlaces();
+        var carried = Deb(places);
+        var (atLogin, wrapper, skill, updater) = PlantForTheDeb(places, carried);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        processes.OnLaunch = _ =>
+        {
+            _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_AGAIN", pid: 5151));
+            processes.RunningPids.Add(5151);
+            return new FakeProcessHandle(5151);
+        };
+        var (env, output, remover) = Environment(places, carried, log);
+        remover.Purges = _ => new PackageRun(asked, code, said);
+        env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.ApiError, $"{row}: {output}");
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(CliErrors.UninstallRefused, report.GetProperty("refusal_code").GetString());
+        Assert.Contains("sudo apt purge jason-desktop", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+        Assert.Equal(["package.purge jason-desktop"], remover.Calls);
+        foreach (var stays in new[] { atLogin, wrapper, skill, carried })
+        {
+            Assert.True(File.Exists(stays), $"{row}: {stays} went");
+        }
+
+        Assert.True(Directory.Exists(updater), $"{row}: the updater's cache went");
+
+        // The runtime it stopped, started again from the application's jason on this data directory.
+        Assert.Equal([_dir.Paths.Root], processes.Launches);
+        Assert.Equal([carried], processes.Executables.Single());
+    }
+
     // --- held to the application's own source ------------------------------------------------------------------
 
     [Fact]
@@ -1725,14 +1865,14 @@ public sealed partial class UninstallCarriedTests : IDisposable
         };
     }
 
-    private (CliEnvironment Env, StringWriter Output, RecordingRemover Remover) Environment(SetupPlaces? places, string executable)
+    private (CliEnvironment Env, StringWriter Output, RecordingRemover Remover) Environment(SetupPlaces? places, string executable, StepLog? log = null)
     {
         // The removal sweeps the temporary directory the places name for retired folders: never the machine's own.
         Assert.True(
             places is null || !string.Equals(Path.GetFullPath(places.Temporary), Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase),
             "these places name the machine's own temporary directory");
         var output = new StringWriter();
-        var remover = new RecordingRemover { ReallyRemoves = true };
+        var remover = new RecordingRemover(log) { ReallyRemoves = true };
         var env = new CliEnvironment(
             output,
             new StringWriter(),
@@ -1740,12 +1880,79 @@ public sealed partial class UninstallCarriedTests : IDisposable
             HttpHandler: RuntimeVerbs.NeverCalled(),
             Processes: new FakeProcessControl(),
             InstallPath: executable,
-            Autostart: new RecordingRegistrar(places?.Platform is SetupSystem.Windows ? Jason.Cli.Autostart.AutostartPlatform.Windows : Jason.Cli.Autostart.AutostartPlatform.MacOs),
+            Autostart: new RecordingRegistrar(places?.Platform switch
+            {
+                SetupSystem.Windows => Jason.Cli.Autostart.AutostartPlatform.Windows,
+                SetupSystem.Linux => Jason.Cli.Autostart.AutostartPlatform.Linux,
+                _ => Jason.Cli.Autostart.AutostartPlatform.MacOs,
+            }),
             Harnesses: HarnessLocators.ForHome(Home),
             Removes: remover,
             Variables: new Dictionary<string, string>(),
             Setup: places);
         return (env, output, remover);
+    }
+
+    /// <summary>Linux places of the test's own: its home, XDG folders away from it, and an <c>/opt/Jason</c> of its own.</summary>
+    private SetupPlaces LinuxPlaces() => new(SetupSystem.Linux, Home, null, UserPathValue.EnvironmentKey, "/bin/bash")
+    {
+        Temporary = _tree.Paths.Root,
+        AccountHome = () => Home,
+        DataHome = XdgData,
+        ConfigHome = XdgConfig,
+        CacheHome = XdgCache,
+        DebApplication = Path.Combine(_tree.Paths.Root, "opt", "Jason"),
+        SystemCommand = Path.Combine(_tree.Paths.Root, "usr", "bin", "jason"),
+        AptSource = Path.Combine(_tree.Paths.Root, "etc", "apt", "sources.list.d", "jason-desktop.sources"),
+    };
+
+    /// <summary>
+    /// An AppImage the person keeps in a folder of their own, which its start recorded in <c>appimage.json</c>, and the copy
+    /// of its jason under the data directory, which is the jason that runs.
+    /// </summary>
+    private (string Copy, string File) AppImage()
+    {
+        var file = Written(Path.Combine(Home, "My Apps", "Jason.AppImage"), "appimage");
+        var copy = Bundle(Path.Combine(_dir.Paths.Root, "desktop", "bundle", "0.34.0"), "jason");
+        Written(Path.Combine(_dir.Paths.Root, "desktop", "appimage.json"), JsonSerializer.Serialize(new { file }));
+        return (copy, file);
+    }
+
+    /// <summary>The deb's application folder of the test's own, as the package installs it, and the jason it carries.</summary>
+    private static string Deb(SetupPlaces places)
+    {
+        Written(Path.Combine(places.DebApplication, "jason-desktop-app"), "electron");
+        Written(Path.Combine(places.DebApplication, "resources", "package-type"), "deb\n");
+        return Bundle(Path.Combine(places.DebApplication, "resources", "bundle"), "jason");
+    }
+
+    /// <summary>What the deb's route leaves in this account: Open Jason at Login, a 0.49.0 wrapper, a skill by receipt, the updater's cache.</summary>
+    private (string AtLogin, string Wrapper, string Skill, string Updater) PlantForTheDeb(SetupPlaces places, string carried) =>
+        (OpenAtLoginEntry(Path.Combine(places.DebApplication, "jason-desktop-app")),
+            Written(Path.Combine(places.LocalBin, "jason"), CommandFiles.Wrapper(carried, null)),
+            UninstallReceiptTests.Recorded(Path.Combine(Home, ".claude", "skills"), "operating-the-installation"),
+            Plant(Path.Combine(XdgCache, "jason-desktop-updater")));
+
+    /// <summary>Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting <paramref name="launcher"/>.</summary>
+    private string OpenAtLoginEntry(string launcher) =>
+        Written(
+            Path.Combine(XdgConfig, "autostart", DesktopRemoval.Identifier + ".desktop"),
+            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec=\"{launcher}\" --opened-at-login\n");
+
+    /// <summary>A runtime that goes when asked: its descriptor, then its process.</summary>
+    private FakeHandler StopsWhenAsked(StepLog log, FakeProcessControl processes) => new(_ =>
+    {
+        log.Add("system.shutdown");
+        File.Delete(_dir.Paths.DescriptorFile);
+        processes.RunningPids.Remove(RuntimeVerbs.Pid);
+        return RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+    });
+
+    private static string Written(string file, string text)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, text);
+        return file;
     }
 
     /// <summary>A process that is running for a number of looks, then gone; no runtime anywhere.</summary>

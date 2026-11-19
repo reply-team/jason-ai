@@ -86,7 +86,9 @@ export function autostartExec(launcher: string): string | null {
 
 /** What starts the application when this person signs in to a Linux session: an XDG autostart entry. */
 export function autostartEntry(launcher: string): string {
-    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${autostartExec(launcher) ?? ''}\n`;
+    const exec = autostartExec(launcher);
+    // TryExec: a session skips the entry once the file it names is gone, as after the system's own removal of the package.
+    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${exec === null ? '' : `TryExec=${launcher}\n`}${exec ?? ''}\n`;
 }
 
 /** Whether this start was the computer's, at the person's sign-in. */

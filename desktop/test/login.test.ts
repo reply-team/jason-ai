@@ -156,7 +156,8 @@ test('on Linux turning it on writes an XDG autostart entry that starts this appl
     assert.equal(item.supported, true);
     assert.equal(item.isOn(), false);
     await item.set(true);
-    assert.equal(readFileSync(file, 'utf8'), `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nExec="${appImage}" ${loginFlag}\n`);
+    // TryExec: once the file it names is gone (the system's own removal, the AppImage deleted), the session skips the entry.
+    assert.equal(readFileSync(file, 'utf8'), `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec=${appImage}\nExec="${appImage}" ${loginFlag}\n`);
     assert.equal(item.isOn(), true);
     assert.deepEqual(readdirSync(dirname(file)), ['ai.jasonharness.desktop.desktop'], 'written by rename, no temporary left');
     await item.set(false);

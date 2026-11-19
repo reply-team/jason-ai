@@ -113,7 +113,7 @@ public interface IMoveSystem
     Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken);
 }
 
-/// <summary>How apt's install of a package ended.</summary>
+/// <summary>How apt's install or purge of a package ended.</summary>
 /// <param name="Asked">Whether a password could be asked at all: false where there was neither a terminal for sudo nor pkexec.</param>
 /// <param name="ExitCode">Its exit code; <see cref="TimedOut"/> where it had not ended within its bound.</param>
 /// <param name="Said">What sudo, pkexec and apt said on standard error, which tells their refusals apart.</param>
@@ -121,6 +121,56 @@ public sealed record PackageRun(bool Asked, int ExitCode, string Said)
 {
     /// <summary>The exit a run that had not ended within its bound is given, as <c>timeout</c> gives it.</summary>
     public const int TimedOut = 124;
+
+    /// <summary>
+    /// Why a run that did not succeed did not, read from the words of sudo, pkexec and apt as the install line reads them,
+    /// never from an exit code alone.
+    /// </summary>
+    public AptRefusal Refusal
+    {
+        get
+        {
+            bool Says(params string[] words) => words.Any(word => Said.Contains(word, StringComparison.Ordinal));
+            if (ExitCode == TimedOut || Says("Request dismissed", "Not authorized", "incorrect password attempt", "a password is required", "is not in the sudoers file", "may not run sudo"))
+            {
+                return AptRefusal.NoPassword;
+            }
+
+            if (!Asked || Says("No authentication agent found"))
+            {
+                return AptRefusal.NoSession;
+            }
+
+            if (Says("Message recipient disconnected", "No session for cookie"))
+            {
+                return AptRefusal.DialogFailed;
+            }
+
+            return Says("Could not get lock", "Unable to acquire the dpkg frontend lock") ? AptRefusal.LockHeld : AptRefusal.Apt;
+        }
+    }
+
+    /// <summary>apt's own last line, where it said one.</summary>
+    public string? LastLine => Said.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+}
+
+/// <summary>Why apt's run with the one password did not succeed (<see cref="PackageRun.Refusal"/>).</summary>
+public enum AptRefusal
+{
+    /// <summary>No password was given: the dialog dismissed, a wrong one, an account that is not an administrator, or the bound passed.</summary>
+    NoPassword,
+
+    /// <summary>This session cannot ask for one: no terminal for sudo, and no pkexec or no agent to show its dialog.</summary>
+    NoSession,
+
+    /// <summary>The system's password dialog failed.</summary>
+    DialogFailed,
+
+    /// <summary>Another installation held the package system for the whole of apt's wait.</summary>
+    LockHeld,
+
+    /// <summary>apt itself failed.</summary>
+    Apt,
 }
 
 /// <summary>
@@ -379,19 +429,34 @@ public sealed class MoveSystem : IMoveSystem
     public Task<bool> ExtractAppImageAsync(string appImage, string pattern, string folder, CancellationToken cancellationToken) =>
         AppImageCopy.ExtractAsync(appImage, pattern, folder, cancellationToken);
 
-    public async Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
+    public Task<PackageRun> InstallPackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+        AptAsync("installing Jason Desktop's package with apt", ["install", .. AptOptions(Environment.GetEnvironmentVariable("http_proxy"), Environment.GetEnvironmentVariable("https_proxy")), package], bound, progress, cancellationToken);
+
+    /// <summary>
+    /// Linux: <paramref name="package"/> purged by <c>apt-get purge</c>, its own scripts taking back what root placed, with
+    /// the one password asked as an install asks it, and the package lock waited for as an install waits for it.
+    /// </summary>
+    internal static Task<PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+        AptAsync("taking Jason Desktop's package off with apt", ["purge", "-y", "-o", "DPkg::Lock::Timeout=600", package], bound, progress, cancellationToken);
+
+    /// <summary>
+    /// apt-get run with the one password a system package needs: by <c>sudo</c> where this process has a terminal, else by
+    /// the desktop's own dialog through <c>pkexec</c>, waited for up to <paramref name="bound"/>; not asked at all where
+    /// there is neither. <paramref name="progress"/> is told which, after <paramref name="doing"/>, before either asks.
+    /// </summary>
+    private static async Task<PackageRun> AptAsync(string doing, IReadOnlyList<string> arguments, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(progress);
         var aptGet = Executables.OnPath("apt-get", null) ?? throw new IOException("apt-get is not on the PATH.");
         string asker;
         if (HasTerminal() && Executables.OnPath("sudo", null) is { } sudo)
         {
-            progress("installing Jason Desktop's package with apt; sudo asks for your password");
+            progress($"{doing}; sudo asks for your password");
             asker = sudo;
         }
         else if (Executables.OnPath("pkexec", null) is { } pkexec)
         {
-            progress("installing Jason Desktop's package with apt; your desktop asks for your password in its own window");
+            progress($"{doing}; your desktop asks for your password in its own window");
             asker = pkexec;
         }
         else
@@ -399,7 +464,7 @@ public sealed class MoveSystem : IMoveSystem
             return new PackageRun(false, 127, string.Empty);
         }
 
-        var (exit, _, error) = await RunTool(asker, [aptGet, "install", .. AptOptions(Environment.GetEnvironmentVariable("http_proxy"), Environment.GetEnvironmentVariable("https_proxy")), package], bound, cancellationToken).ConfigureAwait(false);
+        var (exit, _, error) = await RunTool(asker, [aptGet, .. arguments], bound, cancellationToken).ConfigureAwait(false);
         return new PackageRun(true, exit == -1 ? PackageRun.TimedOut : exit, error);
     }
 

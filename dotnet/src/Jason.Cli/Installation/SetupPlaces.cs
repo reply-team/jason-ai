@@ -120,13 +120,22 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// <summary>Linux: <c>XDG_DATA_HOME</c> where it is set, else null, which is <c>~/.local/share</c>.</summary>
     public string? DataHome { get; init; }
 
+    /// <summary>Linux: <c>XDG_CONFIG_HOME</c> where it is set, else null, which is <c>~/.config</c>.</summary>
+    public string? ConfigHome { get; init; }
+
+    /// <summary>Linux: <c>XDG_CACHE_HOME</c> where it is set, else null, which is <c>~/.cache</c>.</summary>
+    public string? CacheHome { get; init; }
+
+    /// <summary>Linux: the account's data folder, <see cref="DataHome"/> or <c>~/.local/share</c>.</summary>
+    public string Share => DataHome ?? Path.Combine(Home, ".local", "share");
+
     /// <summary>
     /// The application's own folder for the records <c>jason install</c> keeps about this account, which goes with the
     /// application: on macOS <c>~/Library/Application Support/ai.jasonharness.desktop</c>, Apple's convention; on Linux
     /// <c>ai.jasonharness.desktop</c> under <c>XDG_DATA_HOME</c>, <c>~/.local/share</c> by default.
     /// </summary>
     public string SupportFolder => Platform is SetupSystem.Linux
-        ? Path.Combine(DataHome ?? Path.Combine(Home, ".local", "share"), DesktopRemoval.Identifier)
+        ? Path.Combine(Share, DesktopRemoval.Identifier)
         : Path.Combine(Home, "Library", "Application Support", DesktopRemoval.Identifier);
 
     /// <summary>
@@ -163,11 +172,13 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
 
         if (OperatingSystem.IsLinux())
         {
-            var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            static string? Xdg(string name) => Environment.GetEnvironmentVariable(name) is { } value && Path.IsPathFullyQualified(value) ? value : null;
             return new SetupPlaces(SetupSystem.Linux, home, null, UserPathValue.EnvironmentKey, Environment.GetEnvironmentVariable("SHELL"))
             {
                 Elevated = Elevation.OfThisProcess(),
-                DataHome = Path.IsPathFullyQualified(dataHome ?? string.Empty) ? dataHome : null,
+                DataHome = Xdg("XDG_DATA_HOME"),
+                ConfigHome = Xdg("XDG_CONFIG_HOME"),
+                CacheHome = Xdg("XDG_CACHE_HOME"),
             };
         }
 

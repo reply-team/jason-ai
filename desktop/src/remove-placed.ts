@@ -35,11 +35,11 @@ export const removeLabel = 'Remove What Jason Placed…';
 export const debPackage = 'jason-desktop';
 
 /**
- * Whether the act is offered: on Linux, where no uninstaller starts the application. Windows keeps its own, and macOS has
- * Uninstall Jason…, the one uninstall (`uninstall-door.ts`).
+ * Whether the act is offered: on no system. Linux's door is Uninstall Jason…, the one uninstall, as macOS's is
+ * (`uninstall-door.ts`), and Windows keeps its uninstaller.
  */
-export function removalOffered(platform: NodeJS.Platform): boolean {
-    return platform === 'linux';
+export function removalOffered(_platform: NodeJS.Platform): boolean {
+    return false;
 }
 
 /**

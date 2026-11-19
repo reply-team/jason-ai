@@ -482,7 +482,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const uninstall = offers.removal && uninstallOffered(process.platform) && version !== null && carried.outlives
         ? {
               scope: () => ({
-                  application: applicationFolder(process.platform, process.execPath),
+                  application: form?.form === 'appimage' ? form.file : form?.form === 'deb' ? packaged.replace(/\/resources\/bundle$/, '') : applicationFolder(process.platform, process.execPath),
+                  ...(form?.form === 'deb' || form?.form === 'appimage' ? { form: form.form } : {}),
                   dataDirectory: paths.data,
                   harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
                   output: uninstallOutput(tmpdir(), new Date()),

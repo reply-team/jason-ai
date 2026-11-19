@@ -1128,14 +1128,16 @@ removal takes them off too.
   deleting the data directory too, quits Jason and runs the same uninstall, which deletes Jason.app last and writes
   what it did to the file the dialog names. When Jason will not start, run
   `Jason.app/Contents/Resources/bundle/jason uninstall`.
-- **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
-  steps the Windows uninstaller took before the one uninstall: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
-  Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
-  files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
-  them. It last takes off an earlier demo's two folders, its data directory and its harness root, which are yours with `-demo`
-  after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
-  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since that demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
-  the application: `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
+- **Linux.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal: the
+  same one uninstall as on macOS. Jason quits, the runtime is stopped first (nothing more is taken off if it does not
+  stop), and for the deb the package `jason-desktop` is taken off next, by your system's own password dialog, so a
+  dismissed dialog takes nothing off; then Open Jason at Login, the runtime's start at logon, the `jason` command, the
+  skills Jason put in your agents' folders and, for an AppImage, its menu entry, its icons and the copies of its `jason`
+  go, the AppImage file last. The data directory stays unless you choose to delete it; the harness root always stays.
+  Removing it the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage) takes
+  the application and leaves your account's own files, as it does for any application; what they would start is made
+  harmless: the start at logon is skipped once its `jason` is gone, and the login and menu entries are hidden. `jason
+  uninstall` is the full clean.
 - **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is
   `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason` for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

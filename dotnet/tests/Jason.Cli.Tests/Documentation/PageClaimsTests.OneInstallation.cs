@@ -69,19 +69,19 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// On macOS and Windows the carried <c>jason uninstall</c> is the one uninstall. The install page, the README and the
-    /// handbook say so where they take Jason off, with its other doors, and no page sends a person on macOS to Remove What
-    /// Jason Placed, which is Linux's alone now, or to move Jason.app to the Trash. What the install page says the verb
-    /// refuses with, and what it takes off, is what the verb's own help says; which door each platform has is held to the
-    /// desktop's code by <c>desktop/test/uninstall-pages.test.ts</c>.
+    /// On macOS, Windows and Linux the carried <c>jason uninstall</c> is the one uninstall. The install page, the README and
+    /// the handbook say so where they take Jason off, with its other doors, on Linux with the password the deb's package
+    /// asks for first, and no page sends a person to Remove What Jason Placed, or to move Jason.app to the Trash. What the
+    /// install page says the verb refuses with, and what it takes off, is what the verb's own help says; which door each
+    /// platform has is held to the desktop's code by <c>desktop/test/uninstall-pages.test.ts</c>.
     /// </summary>
     [Fact]
-    public async Task The_pages_take_Jason_off_macOS_and_Windows_by_the_one_uninstall()
+    public async Task The_pages_take_Jason_off_every_system_by_the_one_uninstall()
     {
         var install = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
         Assert.Contains("On macOS and Windows this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed once.", install, StringComparison.Ordinal);
         Assert.Contains("Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.", install, StringComparison.Ordinal);
-        Assert.Contains("On Linux the desktop is taken off its own way, because it places things `jason uninstall` has no receipt for: choose Remove What Jason Placed… in the Jason menu first", install, StringComparison.Ordinal);
+        Assert.Contains("On Linux the one uninstall is the same: Uninstall Jason… in the Jason menu, or `jason uninstall`. For the deb your system asks for an administrator's password first, to take the package off; an AppImage goes with no password.", install, StringComparison.Ordinal);
         Assert.Contains($"it refuses with `{CliErrors.DesktopRunning}` before anything is removed", install, StringComparison.Ordinal);
 
         using var dir = new TempPaths();
@@ -89,7 +89,9 @@ public partial class PageClaimsTests
         await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
         var help = Flat(output.ToString());
         Assert.Contains($"refused before anything is removed while Jason Desktop is open ({CliErrors.DesktopRunning}): quit it first.", help, StringComparison.Ordinal);
-        Assert.Contains("on macOS and Windows, this takes Jason Desktop off as well, one uninstall from either door", help, StringComparison.Ordinal);
+        Assert.Contains("on macOS, Windows and Linux, this takes Jason Desktop off as well, one uninstall from either door", help, StringComparison.Ordinal);
+        Assert.Contains("from the deb, just after the runtime and before anything of this account's is removed: the package jason-desktop", help, StringComparison.Ordinal);
+        Assert.Contains("sudo apt purge jason-desktop", help, StringComparison.Ordinal);
         foreach (var taken in new[] { "Open Jason at Login", "the terminal command jason install placed", "An older command-line install of Jason", "the updater's cache" })
         {
             Assert.Contains(taken, help, StringComparison.Ordinal);
@@ -101,7 +103,7 @@ public partial class PageClaimsTests
 
         var readme = Flat(Page("README.md"));
         Assert.Contains("On macOS and Windows it takes Jason Desktop off with everything it placed, and it is also in Installed apps on Windows and in the Jason menu on macOS (Uninstall Jason…).", readme, StringComparison.Ordinal);
-        Assert.Contains("On macOS and Windows it comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS, or Installed apps on Windows; on Linux, choose Remove What Jason Placed… in its menu and then remove the application.", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows it comes off with the one uninstall, `jason uninstall` or Uninstall Jason… in its menu on macOS, or Installed apps on Windows;", readme, StringComparison.Ordinal);
 
         var handbook = Flat(Page("docs", "handbook.md"));
         Assert.Contains("On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed and an older command-line install", handbook, StringComparison.Ordinal);

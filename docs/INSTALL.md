@@ -827,9 +827,9 @@ terminal, Installed apps in Settings on Windows, or **Uninstall Jason…** in th
 with a box for the data directory too, quits Jason and runs the same uninstall. The data directory stays unless you say
 otherwise, with `--purge-data` or that box, and the harness root always stays.
 
-On Linux the desktop is taken off its own way, because it places things `jason uninstall` has no receipt for: choose
-Remove What Jason Placed… in the Jason menu first, then remove the application, `sudo apt remove jason-desktop` for
-the deb, or delete the AppImage file. The data directory, the harness root and the updater's cache stay.
+On Linux the one uninstall is the same: Uninstall Jason… in the Jason menu, or `jason uninstall`. For the deb your
+system asks for an administrator's password first, to take the package off; an AppImage goes with no password. The
+data directory and the harness root stay, unless `--purge-data` says otherwise for the first.
 
 [desktop.md](desktop.md) says what each takes off, what stays and what to do by hand when Jason will not start.
 

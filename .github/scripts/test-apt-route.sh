@@ -29,8 +29,11 @@
 #      apt-daily-upgrade unit runs, with the package's rule) leave the package where `apt-mark hold` holds it, and
 #      install the next version once it is not held; `jason update apply` then refuses with
 #      update_managed_by_package_manager, naming apt;
-#   5. the package purged, and the listing taken again: the same as before, but for /opt, which dpkg removes once it is
-#      empty when no installed package lists it.
+#   5. the one uninstall, `jason uninstall --purge-data --yes` in a terminal, whose package step sudo allows: the
+#      package purged and everything the account had of Jason gone, and the listing taken again: the same as before, but
+#      for /opt, which dpkg removes once it is empty when no installed package lists it, and the home's .net, the base
+#      folder .NET's single-file host makes for every such program of the account, whose folder of this build the
+#      uninstall takes.
 # Everything it set up for the run (the server, the host names, the certificate, the rule that keeps the automatic
 # updates to Jason's origin for the run) is taken back on its way out.
 set -euo pipefail
@@ -65,11 +68,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Every place the package, its scripts and apt write for it, as one sorted listing of kind and path, and dpkg's word
-# on the package.
+# Every place the package, its scripts and apt write for it, and the account's own (its home, which holds its
+# configuration, data and cache folders and its systemd user units, and Jason's data directory), as one sorted listing of
+# kind and path, and dpkg's word on the package.
+mkdir -p "$work/home"
 places=(/opt /usr/bin /usr/share/applications /usr/share/icons /etc/apt/sources.list.d /etc/apt/apt.conf.d /etc/default
   /usr/share/keyrings /etc/alternatives /var/lib/dpkg/alternatives /var/cache/apt/archives /var/lib/apt/lists
-  /etc/apparmor.d /var/cache/apparmor)
+  /etc/apparmor.d /var/cache/apparmor "$work/home" "$work/data")
 listing() {
   for place in "${places[@]}"; do
     if [ -e "$place" ]; then $SUDO find "$place" -printf '%y %p\n'; fi
@@ -136,7 +141,6 @@ curl -fsS -o /dev/null "https://get.jasonharness.ai/apt/Release" || fail "The st
 # directory and a harness root of the leg's, and the account's own folders under that home. First with no terminal
 # (setsid leaves it none) and no desktop session: refused, nothing installed. Then in a terminal (script gives it one),
 # where sudo asks for the password, which this account does not need.
-mkdir -p "$work/home"
 person=(env HOME="$work/home" XDG_DATA_HOME="$work/home/.local/share" XDG_CONFIG_HOME="$work/home/.config"
   JASON_DATA_DIR="$work/data" JASON_Harness__Root="$work/harness" JASON_Update__CheckEnabled=false)
 status=0
@@ -207,13 +211,17 @@ cat "$work/apply.json"
   || fail "jason update apply on the deb did not refuse with update_managed_by_package_manager, naming apt."
 echo "jason update apply on the deb refuses, naming apt."
 
-# 5. The purge, and the listing again.
+# 5. The one uninstall, in a terminal, where sudo takes the package off, and the listing again.
 $SUDO rm -f "$only_jason"
-$SUDO apt-get purge -y -q jason-desktop > "$work/purge.log" 2>&1 || { cat "$work/purge.log"; fail "apt-get did not purge jason-desktop."; }
+"${person[@]}" script -qec "/usr/bin/jason uninstall --purge-data --yes" /dev/null < /dev/null > "$work/uninstall.out" 2>&1 \
+  || { cat "$work/uninstall.out"; fail "jason uninstall --purge-data --yes ended non-zero."; }
+cat "$work/uninstall.out"
+dpkg-query -W jason-desktop > /dev/null 2>&1 && [ "$(dpkg-query -W -f='${db:Status-Abbrev}' jason-desktop)" != "un " ] \
+  && fail "jason uninstall left jason-desktop known to dpkg as $(dpkg-query -W -f='${db:Status-Abbrev}' jason-desktop)."
 listing > "$work/after"
 if ! diff "$work/before" "$work/after" > "$work/difference"; then
-  grep -vxE '[<>] d /opt|[0-9,]+[acd][0-9,]+|---' "$work/difference" > "$work/left" || true
+  grep -vxE "[<>] d /opt|> d $work/home/.net|[0-9,]+[acd][0-9,]+|---" "$work/difference" > "$work/left" || true
   cat "$work/difference"
-  [ ! -s "$work/left" ] || fail "The purge left the machine otherwise than before the install (above), besides /opt."
+  [ ! -s "$work/left" ] || fail "The uninstall left the machine otherwise than before the install (above), besides /opt and the home's .net."
 fi
-echo "Purged, the places the package and apt write list as they did before the install."
+echo "Uninstalled, the places the package, apt and the account write list as they did before the install."
