@@ -133,7 +133,7 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
         page.on('download', (download) => downloads.push(download.suggestedFilename()));
         const seen = watchNetwork(page, true);
 
-        const { url } = await jason.uiOpen();
+        const { url } = await jason.uiPair();
         await page.goto(url);
         // A plain tab, no desktop and nothing waiting, opens on the Demo by itself, in the frame a tab the desktop opened
         // draws too (never the desktop's window); nothing is pressed.

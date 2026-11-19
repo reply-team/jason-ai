@@ -234,12 +234,12 @@ interactive and business packs where your agent harness looks as well, which is 
 to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
 would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
-browser UI, the page `jason ui open` opens; a runtime works without it.
+browser UI, the build Jason Desktop draws; a runtime works without it.
 
-One question, answered check by check. It is one of twelve names in this CLI with no API operation behind
+One question, answered check by check. It is one of thirteen names in this CLI with no API operation behind
 it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
-`plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
-agent host, or a plain shell, in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+`plugin install`, which change this installation's files as those two do, `session open`, which starts your own
+agent host, or a plain shell, in a terminal, and `ui open`, which opens Jason Desktop — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 

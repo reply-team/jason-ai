@@ -27,25 +27,25 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// On macOS and Windows Jason Desktop is always there, so a browser tab <c>jason ui open</c> opens is not the person's
-    /// work because only the desktop draws this release's console, not because the desktop is missing: the skills that send
-    /// a person to see what waits say so in those words, and the catalog's line does too.
+    /// <c>jason ui open</c> opens Jason Desktop and never a browser, so the skills that send a person to see what waits
+    /// name it as the desktop's door and no tab it opens, and the catalog's line does too. Breaks if a skill teaches an
+    /// agent to hand the person a browser's link again.
     /// </summary>
     [Fact]
-    public void The_skills_say_a_tab_of_jason_ui_open_is_no_view_of_the_work_with_the_desktop_installed_or_not()
+    public void The_skills_say_jason_ui_open_opens_jason_desktop_and_never_a_browser()
     {
         foreach (var name in new[] { "operating-the-installation", "managed-campaign-work" })
         {
             var skill = Flattened(name);
             Assert.DoesNotContain("Without Jason Desktop", skill, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("whether Jason Desktop is installed or not", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("tab `jason ui open` opens", skill, StringComparison.Ordinal);
+            Assert.Contains("never opens a browser", skill, StringComparison.Ordinal);
         }
 
+        Assert.Contains("refuses with `desktop_not_installed`", Flattened("operating-the-installation"), StringComparison.Ordinal);
+
         var catalog = Regex.Replace(File.ReadAllText(SkillPack.Catalog()), @"\s+", " ");
-        Assert.Contains(
-            "opening the browser UI (this release's UI build draws its console only in Jason Desktop and in a tab the desktop opens itself, so a tab `jason ui open` opens shows the Demo, or, while something waits, one page of text that says so, whether Jason Desktop is installed or not, and neither is the person's work; a custom build under `ui/custom` is served first)",
-            catalog,
-            StringComparison.Ordinal);
+        Assert.Contains("opening Jason Desktop on what waits or on one item (`jason ui open`, which never opens a browser)", catalog, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -100,7 +100,7 @@ public partial class InteractiveSkillTests
         Assert.Contains($"refused with `{UpdateCodes.CarriedByDesktop}`", skill, StringComparison.Ordinal);
         Assert.Contains($"The deb's `jason` refuses with `{UpdateCodes.ManagedByPackageManager}`, since the system updates the package from Jason's apt repository", skill, StringComparison.Ordinal);
         Assert.Contains("A person who installs Jason Desktop on macOS or Windows by hand, from its disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it carries", skill, StringComparison.Ordinal);
-        Assert.Contains("Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download link, which is for Linux", skill, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop is already there, since it is the installation itself.", skill, StringComparison.Ordinal);
 
         // The likely cause the skill names is the one the verb's refusal gives.
         var carried = Regex.Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "CarriedUpdate.cs")), @"""\s*\+\s*""", string.Empty);

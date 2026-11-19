@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 
-// A tab no desktop opened, as `jason ui open` opens it: with nothing waiting it opens on the Demo; Live shows one page of
+// A tab no desktop opened, as the link `jason ui pair` prints opens it: with nothing waiting it opens on the Demo; Live shows one page of
 // text and the Demo | Live switch, never the console, at a wide window and at a phone's width.
 for (const size of [
     { name: 'wide', width: 1280, height: 800 },
@@ -11,7 +11,7 @@ for (const size of [
         jason,
     }) => {
         await page.setViewportSize({ width: size.width, height: size.height });
-        const { url } = await jason.uiOpen('--approval', 'apr_00000000000000000000000000');
+        const { url } = await jason.uiPair('--approval', 'apr_00000000000000000000000000');
         await page.goto(url);
         // Nothing waits, so the tab opens on the Demo by itself, and the address says so.
         await expect(page.locator('iframe.demo-frame')).toBeVisible();

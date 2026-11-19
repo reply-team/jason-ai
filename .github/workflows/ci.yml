@@ -2777,7 +2777,7 @@ jobs:
           npm run build
           npm run package
 
-      # The zip a person unzips into ~/.jason/ui/custom/ to try this build with jason ui open. Kept fourteen days where
+      # The zip a person unzips into ~/.jason/ui/custom/ to try this build with jason ui open --web. Kept fourteen days where
       # CI's other uploads keep three: those exist for the jobs of the same run, this one for a person trying the build
       # at their own pace.
       - uses: actions/upload-artifact@v7

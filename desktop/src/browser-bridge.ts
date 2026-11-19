@@ -531,8 +531,8 @@ export async function openTab(deps: TabDeps): Promise<string | null> {
         deps.log?.warn('bridge_tab_refused', { Why: 'closing' });
         return 'Jason Desktop is closing.';
     }
-    const open = await deps.cli.run(['ui', 'open', '--no-open']);
-    const link = open.exit === 0 ? pairingLink(open.stdout, origin) : null;
+    const pair = await deps.cli.run(['ui', 'pair']);
+    const link = pair.exit === 0 ? pairingLink(pair.stdout, origin) : null;
     if (link === null) {
         deps.log?.warn('bridge_tab_refused', { Why: 'no_link' });
         return "Jason's page could not be opened in a browser.";

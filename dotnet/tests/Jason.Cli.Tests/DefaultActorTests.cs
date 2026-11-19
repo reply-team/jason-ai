@@ -419,7 +419,7 @@ public class DefaultActorTests
         ["events", "signal", "--source", "evs_A"],
         ["subscription", "list"],
         ["subscription", "runs", "--kind", "campaign_created"],
-        ["ui", "open", "--no-open"],
+        ["ui", "pair"],
         ["ui", "tokens"],
         ["ui", "revoke", "uit_A"],
     ];
@@ -435,6 +435,7 @@ public class DefaultActorTests
         ["runtime autostart status"] = "reads this machine's logon registration and asks the runtime nothing",
         ["plugin install"] = "reads a release before it asks for a reload; PluginInstallCommandTests holds the reload's actor",
         ["ui install"] = "places a release's build and asks the runtime nothing",
+        ["ui open"] = "opens Jason Desktop and asks the runtime nothing; under --web, only with a build of one's own, it asks what ui pair asks; UiCommandsTests holds both",
         ["journal watch"] = "holds the journal's stream open until interrupted, only reads and sends no actor; JournalWatchTests holds what it prints",
         ["export"] = "writes this installation's files into an archive and asks the runtime only to stop and to start",
         ["import"] = "places an archive's files and asks the runtime to start and project.link per project folder, with the actor set as every verb sets it; ImportCommandTests holds the link's body",

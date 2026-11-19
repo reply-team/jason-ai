@@ -22,7 +22,7 @@ that a person needs.
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
 | Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
 | Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started, no folder of an installation made and no host name resolved |
-| Load the window | the link `jason ui open --no-open` prints |
+| Load the window | the link `jason ui pair` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |

@@ -105,11 +105,11 @@ namespace Jason.Cli;
 /// <see cref="Default()"/> names this platform's.
 /// </param>
 /// <param name="Desktop">
-/// Where the Jason desktop registered its own link scheme for this account, which a click on a toast reads to open the
-/// desktop rather than the browser UI — the eighth seam whose default is the refusal, for the reason
-/// <paramref name="Managers"/> gives: the registration is in this account's registry, and a test that read it would read
-/// the registry of whoever ran the suite. Null is "no desktop", which opens the browser UI; <see cref="Default()"/> names
-/// this account's on Windows, and nothing elsewhere.
+/// Where Jason Desktop registered its own link scheme for this account, which <c>jason ui open</c> and a click on a toast
+/// read before they hand it an address — the eighth seam whose default is the refusal, for the reason
+/// <paramref name="Managers"/> gives: the registration is in this account's registry, menu entries or Applications
+/// folders, and a test that read it would read those of whoever ran the suite. Null is "no desktop", which opens nothing;
+/// <see cref="Default()"/> names this account's on Windows, Linux and macOS.
 /// </param>
 /// <param name="Setup">
 /// The places <c>jason install</c> sets this machine up in — the home, the Path, the folders a terminal finds programs in —
@@ -156,7 +156,7 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             AccountName: AccountNameOf(() => Environment.UserName),
             Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
             Terminals: new Session.PlatformTerminalStarter(),
-            Desktop: OperatingSystem.IsWindows() ? new Link.WindowsDesktopRegistration() : null,
+            Desktop: Link.DesktopRegistrations.ForThisMachine(),
             Setup: SetupPlaces.ForThisMachine(),
             Moves: Update.MoveSystem.Instance,
             ToastSetting: OperatingSystem.IsWindows() ? new Status.WindowsToastSetting() : null);

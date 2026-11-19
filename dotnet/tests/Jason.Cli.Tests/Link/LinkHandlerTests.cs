@@ -11,8 +11,9 @@ using Jason.Contracts.Discovery;
 namespace Jason.Cli.Tests.Link;
 
 /// <summary>
-/// What a click on a <c>jason:</c> link does, from the side the shell starts: one argument, read against the link table,
-/// and the same <c>ui.open</c> a person's <c>jason ui open</c> sends. A link the table does not know asks nothing.
+/// What a click on a <c>jason:</c> link does, from the side the shell starts: one argument, read against the link table;
+/// a link that opens a page opens Jason Desktop, as <c>jason ui open</c> does, or nothing. A link the table does not know
+/// asks nothing.
 /// </summary>
 public sealed class LinkHandlerTests
 {
@@ -24,23 +25,27 @@ public sealed class LinkHandlerTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// Where no Jason Desktop is registered, a link that opens a page opens nothing — no browser either — asks the runtime
+    /// nothing, and ends refused, saying why on stderr, where a click's words go. Breaks if a browser's link comes back as
+    /// the fallback.
+    /// </summary>
     [Theory]
-    [InlineData("jason://attention", "{}")]
-    [InlineData("jason://attention/", "{}")]
-    [InlineData("JASON://Attention", "{}")]
-    [InlineData("jason://attention/approvals/" + Approval, "{\"approval_id\":\"" + Approval + "\"}")]
-    [InlineData("jason://attention/approvals/" + Approval + "/", "{\"approval_id\":\"" + Approval + "\"}")]
-    [InlineData("jason://attention/questions/" + Question, "{\"decision_id\":\"" + Question + "\"}")]
-    public async Task A_link_opens_the_ui_as_jason_ui_open_does(string link, string body)
+    [InlineData("jason://attention")]
+    [InlineData("JASON://Attention/")]
+    [InlineData("jason://attention/approvals/" + Approval)]
+    [InlineData("jason://attention/questions/" + Question)]
+    public async Task Without_jason_desktop_a_link_opens_nothing_and_says_why(string link)
     {
-        var opener = new RecordingOpener();
+        var opener = new HandingOpener();
         using var cli = new CliRun(Opened, opener: opener);
 
         var exit = await LinkHandler.RunAsync([link], cli.Environment, Ct);
 
-        Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.UiOpen, body);
-        Assert.Equal(["http://127.0.0.1:52766/ui/#/attention?t=abc"], opener.Urls);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(0, cli.Requests);
+        Assert.Empty(opener.Urls);
+        Assert.Equal(DesktopLinks.NotInstalled, cli.Error.ToString().Trim());
     }
 
     /// <summary>A link the table does not know is a usage error said in one line that never repeats it, and asks the runtime nothing.</summary>
@@ -76,22 +81,6 @@ public sealed class LinkHandlerTests
         Assert.Equal(ExitCodes.Usage, await LinkHandler.RunAsync(["jason://attention", "--human"], cli.Environment, Ct));
         Assert.Equal(ExitCodes.Usage, await LinkHandler.RunAsync([], cli.Environment, Ct));
         Assert.Equal(0, cli.Requests);
-    }
-
-    [Fact]
-    public async Task No_ui_installed_is_the_runtime_s_refusal_and_exits_1()
-    {
-        using var cli = new CliRun("{\"error\":{\"code\":\"ui_not_installed\",\"message\":\"No UI is installed.\",\"retryable\":false}}", status: System.Net.HttpStatusCode.NotFound);
-
-        Assert.Equal(ExitCodes.ApiError, await LinkHandler.RunAsync(["jason://attention"], cli.Environment, Ct));
-    }
-
-    [Fact]
-    public async Task No_runtime_exits_3_as_ui_open_does()
-    {
-        using var cli = new CliRun(descriptor: false);
-
-        Assert.Equal(ExitCodes.RuntimeUnavailable, await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval], cli.Environment, Ct));
     }
 
     /// <summary>
@@ -225,9 +214,9 @@ public sealed class LinkHandlerTests
     }
 
     /// <summary>
-    /// Where the desktop registered its own scheme for this account and the program it names is there, a link that opens
-    /// the UI opens the desktop instead: its address made from the parsed link, never from the link's text, handed to the
-    /// same opener the browser's address goes to, and the runtime asked nothing.
+    /// Where Jason Desktop registered its own scheme for this account and the program it names is there, a link that opens
+    /// a page opens the desktop: its address made from the parsed link, never from the link's text, handed to the system's
+    /// opener, and no runtime asked, so it opens with none running too.
     /// </summary>
     [Theory]
     [InlineData("jason://attention", "jason-desktop://attention")]
@@ -237,9 +226,9 @@ public sealed class LinkHandlerTests
     [InlineData("jason://attention/questions/" + Question, "jason-desktop://attention/questions/" + Question)]
     public async Task A_link_opens_the_desktop_where_it_is_registered_and_present(string link, string address)
     {
-        var opener = new HandingOpener(UrlHandOff.Handed);
-        using var cli = new CliRun(Opened, opener: opener);
-        var env = cli.Environment with { Desktop = new FakeRegistration(Quoted(Program(cli.Environment))) };
+        var opener = new HandingOpener();
+        using var cli = new CliRun(Opened, descriptor: false, opener: opener);
+        var env = cli.Environment with { Desktop = FakeRegistration.Present(cli.Environment) };
 
         var exit = await LinkHandler.RunAsync([link], env, Ct);
 
@@ -250,74 +239,26 @@ public sealed class LinkHandlerTests
         Assert.Single(cli.Error.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    /// <summary>The registration as Electron writes it for a path with nothing to quote is the desktop's too.</summary>
-    [Fact]
-    public async Task An_unquoted_program_path_is_read_as_the_desktop_s()
-    {
-        var opener = new HandingOpener(UrlHandOff.Handed);
-        using var cli = new CliRun(Opened, opener: opener);
-        var program = Path.Combine(cli.Environment.Paths.Root, "Jason.exe");
-        File.WriteAllText(program, "not a program");
-        var env = cli.Environment with { Desktop = new FakeRegistration(program + " -- \"%1\"") };
-
-        Assert.Equal(ExitCodes.Success, await LinkHandler.RunAsync(["jason://attention"], env, Ct));
-        Assert.Equal(["jason-desktop://attention"], opener.Urls);
-    }
-
     /// <summary>
-    /// No registration, a program that is gone, or a command that is not the desktop's form: the browser UI opens as it
-    /// always has, and nothing taken from the registry is started or handed on.
+    /// An opener that does not hand the desktop's address on — it did not start or it exited with a failure — opens
+    /// nothing else and ends refused, said by the failure's code; one still running at the wait's end may yet open the
+    /// desktop, so it is said and not refused. Breaks if a browser's link comes back as the fallback.
     /// </summary>
     [Theory]
-    [InlineData("none")]
-    [InlineData("gone")]
-    [InlineData("relative")]
-    [InlineData("empty")]
-    [InlineData("other-form")]
-    [InlineData("unclosed-quote")]
-    public async Task Without_the_desktop_registered_and_present_the_browser_ui_opens(string registration)
-    {
-        var opener = new HandingOpener(UrlHandOff.Handed);
-        using var cli = new CliRun(Opened, opener: opener);
-        var present = Program(cli.Environment);
-        var command = registration switch
-        {
-            "none" => null,
-            "gone" => Quoted(Path.Combine(cli.Environment.Paths.Root, "removed", "Jason.exe")),
-            "relative" => "\"Jason.exe\" -- \"%1\"",
-            "empty" => string.Empty,
-            "other-form" => "\"" + present + "\" --inspect \"%1\"",
-            _ => "\"" + present + " -- \"%1\"",
-        };
-        var env = cli.Environment with { Desktop = new FakeRegistration(command) };
-
-        var exit = await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval], env, Ct);
-
-        Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.UiOpen, "{\"approval_id\":\"" + Approval + "\"}");
-        Assert.Equal(["http://127.0.0.1:52766/ui/#/attention?t=abc"], opener.Urls);
-        Assert.DoesNotContain("desktop", cli.Error.ToString(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// An opener that does not hand the desktop's address on — it did not start, it exited with a failure, or it did not
-    /// finish in time — opens the browser UI as before, and says so on stderr by the failure's code.
-    /// </summary>
-    [Theory]
-    [InlineData(UrlHandOff.NotStarted, "opener_not_started")]
-    [InlineData(UrlHandOff.Failed, "opener_failed")]
-    [InlineData(UrlHandOff.TimedOut, "opener_timed_out")]
-    public async Task A_desktop_the_opener_could_not_reach_falls_back_to_the_browser_ui(UrlHandOff failure, string code)
+    [InlineData(UrlHandOff.NotStarted, "opener_not_started", ExitCodes.ApiError)]
+    [InlineData(UrlHandOff.Failed, "opener_failed", ExitCodes.ApiError)]
+    [InlineData(UrlHandOff.TimedOut, "opener_timed_out", ExitCodes.Success)]
+    public async Task A_desktop_the_opener_could_not_reach_is_said_by_its_code_and_nothing_else_opens(UrlHandOff failure, string code, int expected)
     {
         var opener = new HandingOpener(failure);
         using var cli = new CliRun(Opened, opener: opener);
-        var env = cli.Environment with { Desktop = new FakeRegistration(Quoted(Program(cli.Environment))) };
+        var env = cli.Environment with { Desktop = FakeRegistration.Present(cli.Environment) };
 
         var exit = await LinkHandler.RunAsync(["jason://attention/questions/" + Question], env, Ct);
 
-        Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal(["jason-desktop://attention/questions/" + Question, "http://127.0.0.1:52766/ui/#/attention?t=abc"], opener.Urls);
-        cli.AssertPosted(Operations.UiOpen, "{\"decision_id\":\"" + Question + "\"}");
+        Assert.Equal(expected, exit);
+        Assert.Equal(["jason-desktop://attention/questions/" + Question], opener.Urls);
+        Assert.Equal(0, cli.Requests);
         Assert.Contains(code, cli.Error.ToString(), StringComparison.Ordinal);
     }
 
@@ -328,47 +269,11 @@ public sealed class LinkHandlerTests
         using var run = new PromptRuntime(CopyPromptTests.Fixture("approval.get", "pending-with-preview"), CopyPromptTests.Fixture("campaign.get", "in-project-with-folder"));
         var clipboard = new RecordingClipboard();
         var baseline = run.Environment(clipboard);
-        var env = baseline with { Desktop = new FakeRegistration(Quoted(Program(baseline))) };
+        var env = baseline with { Desktop = FakeRegistration.Present(baseline) };
 
         Assert.Equal(ExitCodes.Success, await LinkHandler.RunAsync(["jason://attention/approvals/" + Approval + "/prompt"], env, Ct));
         Assert.Empty(run.Opener.Urls);
         Assert.Single(clipboard.Texts);
-    }
-
-    /// <summary>The desktop's program, made in a folder with a space, as an installation under the profile can be.</summary>
-    private static string Program(CliEnvironment env)
-    {
-        var program = Path.Combine(env.Paths.Root, "Jason Desktop", "Jason.exe");
-        Directory.CreateDirectory(Path.GetDirectoryName(program)!);
-        File.WriteAllText(program, "not a program");
-        return program;
-    }
-
-    /// <summary>The command as the desktop registers it: the quoted path, <c>--</c>, and the quoted address.</summary>
-    private static string Quoted(string program) => "\"" + program + "\" -- \"%1\"";
-
-    private sealed class FakeRegistration(string? command) : IDesktopRegistration
-    {
-        public string? Command() => command;
-    }
-
-    /// <summary>Hands the desktop's address on with the outcome it was given, and a browser's address as started.</summary>
-    private sealed class HandingOpener(UrlHandOff desktop) : IUrlOpener
-    {
-        public List<string> Urls { get; } = [];
-
-        public bool Open(string url)
-        {
-            Urls.Add(url);
-            return true;
-        }
-
-        public UrlHandOff HandOn(string url, TimeSpan wait)
-        {
-            Assert.True(wait > TimeSpan.Zero);
-            Urls.Add(url);
-            return desktop;
-        }
     }
 
     /// <summary>A runtime that answers the item's get and the campaign's, and refuses every other read.</summary>

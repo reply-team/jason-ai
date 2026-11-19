@@ -20,7 +20,7 @@ public static class UiRenderers
 
         if (tokens.Items.Count == 0)
         {
-            return "No browser is paired. `jason ui open` pairs one.";
+            return "No browser is paired. `jason ui pair` prints a link that pairs one.";
         }
 
         var table = new HumanTable("PAIRED", "BY", "LAST USED", "ID");

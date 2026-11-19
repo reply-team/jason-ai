@@ -1,5 +1,5 @@
 // The restart re-pair: when the runtime comes back at another origin, or as another process, the window pairs again
-// through `jason ui open --no-open` and loads the new link, and the IPC check follows the run file.
+// through `jason ui pair` and loads the new link, and the IPC check follows the run file.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -32,7 +32,7 @@ function scratch(t: { after(fn: () => void): void }) {
     return { root, runFile, read, write, gone: () => unlinkSync(runFile) };
 }
 
-/** A CLI whose `ui open --no-open` prints a link at the origin the run file names, as the real one does. */
+/** A CLI whose `ui pair` prints a link at the origin the run file names, as the real one does. */
 function pairingCli(read: () => string | null, exit = () => 0): Cli & { asked: string[][] } {
     const asked: string[][] = [];
     return {
@@ -54,7 +54,7 @@ test('the run file gives the runtime’s identity: its loopback origin and its p
     assert.equal(runIdentity('{'), null);
 });
 
-test('when the run file’s origin changes, the window pairs again through jason ui open --no-open and loads the new link', async (t) => {
+test('when the run file’s origin changes, the window pairs again through jason ui pair and loads the new link', async (t) => {
     const s = scratch(t);
     s.write(first, 100);
     const cli = pairingCli(s.read);
@@ -68,7 +68,7 @@ test('when the run file’s origin changes, the window pairs again through jason
 
     s.write(second, 101);
     assert.equal(await repairer.check(), 'repaired');
-    assert.deepEqual(cli.asked, [['ui', 'open', '--no-open']]);
+    assert.deepEqual(cli.asked, [['ui', 'pair']]);
     assert.deepEqual(loaded, [`${second}/ui/#pair=planted-pair-1`]);
     assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['window_repaired', { From: first, Origin: second }]]);
 

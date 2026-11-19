@@ -2,19 +2,24 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Human;
+using Jason.Cli.Link;
 using Jason.Cli.Skills;
 using Jason.Cli.Ui;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 
 namespace Jason.Cli.Commands;
 
 /// <summary>
-/// The <c>ui</c> verb group: the browser UI the runtime serves. Open it (a one-time link, paired once and then
-/// bookmarked), see which browsers are paired, and unpair one. Only <c>install</c> changes the installation's files: it
-/// places the release's build as the default UI, and it is the one verb here that is no operation.
+/// The <c>ui</c> verb group. <c>open</c> opens Jason Desktop at a place by the desktop's own link and asks the runtime
+/// nothing; <c>install</c> places the release's build, which Jason Desktop draws, and asks the runtime nothing either;
+/// <c>pair</c>, <c>tokens</c> and <c>revoke</c> are the runtime's three <c>ui</c> operations: a one-time link that pairs a
+/// page, the pages paired, and an unpairing. Jason Desktop's window pairs through <c>pair</c>, and so does a web UI of
+/// one's own, which <c>open --web</c> opens in a browser.
 /// </summary>
 public static class UiCommands
 {
@@ -23,9 +28,10 @@ public static class UiCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var ui = new Command("ui", "The browser UI: place this release's build, open it, see which browsers are paired with this runtime, and unpair one. This release's build draws its console in Jason Desktop and in a tab the desktop opens; any other tab opens on the demo, or, while something waits, shows where to get the desktop and what waits.");
+        var ui = new Command("ui", "Jason Desktop and the UI it draws: open Jason Desktop at what waits or at one item, place this release's UI build, and pair a page with this runtime, see which browsers are paired, and unpair one.");
         ui.Subcommands.Add(Install(env, actor));
         ui.Subcommands.Add(Open(env, actor));
+        ui.Subcommands.Add(Pair(env, actor));
         ui.Subcommands.Add(Tokens(env, actor));
         ui.Subcommands.Add(Revoke(env, actor));
         return ui;
@@ -93,34 +99,89 @@ public static class UiCommands
 
     private static Command Open(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("open", "Open the installed UI in your browser, whatever build it is, a build of your own included. The link pairs this browser once, within a minute; after that a bookmark of the page works. This release's build draws its console in Jason Desktop and in a tab the desktop opens; any other tab opens on the demo, or, while something waits, shows one page that says where to get Jason Desktop and what waits.");
-        var approval = new Option<string?>("--approval") { Description = "Open at the address of one approval, #/attention/approvals/<id>, as approval list shows its id." };
-        var question = new Option<string?>("--question") { Description = "Open at the address of one question, #/attention/questions/<id>, as decision list shows its id." };
-        var noOpen = new Option<bool>("--no-open") { Description = "Print the link and open nothing; for an agent handing it to a person." };
+        var command = new Command("open", "Open Jason Desktop at what waits, or at one approval or question, by the desktop's own jason-desktop: link; never a browser. It asks the runtime nothing. Where no Jason Desktop that takes its links is installed for this account it opens nothing and refuses with desktop_not_installed. Prints the address on stdout; exits 0 opened (or handed to the system and not yet answered, said on stderr), 1 refused, 2 usage, and never 3.");
+        var approval = new Option<string?>("--approval") { Description = "Open at one approval, by its id as approval list shows it." };
+        var question = new Option<string?>("--question") { Description = "Open at one question, by its id as decision list shows it." };
+        var noOpen = new Option<bool>("--no-open") { Description = "Print the address and open nothing; for an agent handing it to a person." };
+        var web = new Option<bool>("--web") { Description = "Open a web UI of your own instead, a build in the custom UI directory (ui/custom), in your browser: the link pairs that browser once, within a minute, as ui pair's does. Refused, asking and opening nothing, where no build of your own is installed." };
         var human = VerbOptions.Human();
         command.Options.Add(approval);
         command.Options.Add(question);
         command.Options.Add(noOpen);
+        command.Options.Add(web);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
-            var body = RequestBody.Empty()
-                .Set("approval_id", parseResult.GetValue(approval))
-                .Set("decision_id", parseResult.GetValue(question));
-            return RunOpenAsync(env, body, parseResult.GetValue(noOpen), parseResult.GetValue(human), cancellationToken);
+            var approvalId = parseResult.GetValue(approval);
+            var questionId = parseResult.GetValue(question);
+            if (Refused(approvalId, questionId) is { } usage)
+            {
+                env.Error.WriteLine(usage);
+                return Task.FromResult(ExitCodes.Usage);
+            }
+
+            if (parseResult.GetValue(web))
+            {
+                var body = RequestBody.Empty().Set("approval_id", approvalId).Set("decision_id", questionId);
+                return OpenWebAsync(env, body, parseResult.GetValue(noOpen), parseResult.GetValue(human), cancellationToken);
+            }
+
+            var target = approvalId is not null ? new AttentionTarget(AttentionAct.Open, AttentionKind.Approval, approvalId)
+                : questionId is not null ? new AttentionTarget(AttentionAct.Open, AttentionKind.Question, questionId)
+                : new AttentionTarget(AttentionAct.List, null, null);
+            return Task.FromResult(OpenDesktop(env, DesktopLinks.Address(target)!, parseResult.GetValue(noOpen), parseResult.GetValue(human)));
         });
 
         return command;
     }
 
     /// <summary>
-    /// The one verb that does something after the answer: it hands the link to the browser. Stdout stays the exact
-    /// response; whether a browser opened is said on stderr, where diagnostics go.
+    /// Why the options name no place the link table takes, or null: one place at most, and an id of its own kind in the
+    /// shape the runtime gives it, since the address is made from it and the runtime is not asked whether it is one.
     /// </summary>
-    internal static async Task<int> RunOpenAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
+    private static string? Refused(string? approvalId, string? questionId) =>
+        approvalId is not null && questionId is not null ? "Say one place: --approval or --question, not both."
+        : approvalId is not null && !PublicId.IsWellFormed(AttentionLinks.ApprovalPrefix, approvalId) ? $"--approval takes an approval's id, {AttentionLinks.ApprovalPrefix}_ and 26 letters and digits, as approval list shows it."
+        : questionId is not null && !PublicId.IsWellFormed(AttentionLinks.QuestionPrefix, questionId) ? $"--question takes a question's id, {AttentionLinks.QuestionPrefix}_ and 26 letters and digits, as decision list shows it."
+        : null;
+
+    /// <summary>
+    /// Jason Desktop at <paramref name="address"/>: the address on stdout where the desktop takes it, compact JSON or with
+    /// --human the address alone; where it does not, or the opener refused it, the refusal's envelope, as every local
+    /// refusal of the CLI's is said.
+    /// </summary>
+    private static int OpenDesktop(CliEnvironment env, string address, bool noOpen, bool human)
     {
+        if (DesktopLinks.Open(env, address, handOn: !noOpen) is { } refused)
+        {
+            env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, retryable: false));
+            env.Error.WriteLine(refused.Message);
+            return ExitCodes.ApiError;
+        }
+
+        env.Out.WriteLine(human ? address : JsonSerializer.Serialize(new DesktopAddress(address), JasonJson.Options));
+        return ExitCodes.Success;
+    }
+
+    /// <summary>
+    /// A web UI of one's own: only where a build is in the custom directory, as the runtime serves one (an index and a
+    /// manifest), the link <c>ui pair</c> prints handed to the browser. The release's own build is never opened in a browser,
+    /// so with none of one's own nothing is asked or opened. Stdout stays the exact response; whether a browser opened is
+    /// said on stderr.
+    /// </summary>
+    private static async Task<int> OpenWebAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
+    {
+        var custom = env.Paths.UiCustomDirectory;
+        if (!File.Exists(Path.Combine(custom, UiAssetLayout.IndexFile)) || !File.Exists(Path.Combine(custom, UiAssetLayout.ManifestFile)))
+        {
+            var message = $"No web UI of your own is installed ({custom}); Jason runs in Jason Desktop.";
+            env.Out.WriteLine(CliErrors.Serialize(CliErrors.CustomUiNotInstalled, message, retryable: false));
+            env.Error.WriteLine(message);
+            return ExitCodes.ApiError;
+        }
+
         var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
@@ -146,6 +207,32 @@ public static class UiCommands
             : $"Open this link in your browser within a minute (it works once): {opened.Url}");
         return ExitCodes.Success;
     }
+
+    /// <summary>
+    /// The runtime's <c>ui.open</c>: a link that pairs one page with this runtime, once, within a minute, printed and never
+    /// opened. Jason Desktop loads it into its own window, and a web UI of one's own is paired by it.
+    /// </summary>
+    private static Command Pair(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command("pair", "Print a link that pairs one page of the UI with this runtime, once, within a minute, and open nothing: Jason Desktop pairs its own window with it, and so does a web UI of your own.");
+        var approval = new Option<string?>("--approval") { Description = "Pair at the address of one approval, #/attention/approvals/<id>, as approval list shows its id." };
+        var question = new Option<string?>("--question") { Description = "Pair at the address of one question, #/attention/questions/<id>, as decision list shows its id." };
+        var human = VerbOptions.Human();
+        command.Options.Add(approval);
+        command.Options.Add(question);
+        command.Options.Add(human);
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
+            var body = RequestBody.Empty()
+                .Set("approval_id", parseResult.GetValue(approval))
+                .Set("decision_id", parseResult.GetValue(question));
+            return OperationRunner.RunAsync(env, Operations.UiOpen, body, new RunOptions(parseResult.GetValue(human), PairRendered), cancellationToken);
+        });
+        return command;
+    }
+
+    private static string? PairRendered(string json) => RenderText.Read<UiOpenResponse>(json) is { Url: not null } opened ? UiRenderers.Opened(opened) : null;
 
     private static Command Tokens(CliEnvironment env, Option<string?> actor)
     {
@@ -186,3 +273,6 @@ public static class UiCommands
         return command;
     }
 }
+
+/// <summary>What <c>ui open</c> prints: the Jason Desktop address it opened, or would open under <c>--no-open</c>.</summary>
+public sealed record DesktopAddress(string Address);

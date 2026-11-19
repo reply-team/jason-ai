@@ -63,7 +63,7 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 `jason runtime start` only when none is; a runtime that is already up is used as it is, and `jason runtime run` is never
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
-package it carries, once for each desktop version, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
+package it carries, once for each desktop version, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -232,7 +232,7 @@ them on.
   nothing of it lands outside `<data>`. The demo's page keeps nothing here: its session is in memory only. The window's page keeps its storage in memory only, so its pairing with the
   runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
   An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
-  window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
+  window loads, then removes what that page stored, so a browser you paired must be paired again
   once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
@@ -991,8 +991,9 @@ On Windows a click on one of Jason's notifications opens the desktop where it is
 command line handling the `jason://attention` link reads the desktop's registration under your account, never writes
 it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
 starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
-its program gone, or the hand-on failing, the browser UI opens as before, and the failure is said by its code
-([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing.
+its program gone, or the hand-on failing, nothing opens, and the failure is said by its code
+([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing. On every system
+`jason ui open` opens the desktop at the same addresses from a terminal or an agent's session.
 
 On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
 deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a

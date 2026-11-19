@@ -60,4 +60,17 @@ public class PlatformUrlOpenerTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    /// <summary>
+    /// On Linux nothing is handed to xdg-open outside a graphical session: with neither <c>DISPLAY</c> nor
+    /// <c>WAYLAND_DISPLAY</c> it never asks which program takes the address and goes straight to a list of text browsers.
+    /// Breaks if a session with no display can reach that list.
+    /// </summary>
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("", "", false)]
+    [InlineData(":0", null, true)]
+    [InlineData(null, "wayland-0", true)]
+    public void On_linux_an_address_is_handed_on_only_in_a_graphical_session(string? display, string? wayland, bool handed) =>
+        Assert.Equal(handed, PlatformUrlOpener.InGraphicalSession(display, wayland));
 }

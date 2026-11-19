@@ -32,7 +32,7 @@ test('the demo opens in the tab’s frame by itself, asks for nothing but its ow
         if (each.frame().parentFrame() !== null) asked.push(each.url());
     });
 
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     // No desktop and nothing waiting: the tab opens on the Demo by itself.
     await expect(page).toHaveURL(/#\/demo$/);

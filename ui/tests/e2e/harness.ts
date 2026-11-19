@@ -68,8 +68,8 @@ export class Jason {
         return `http://127.0.0.1:${this.port}`;
     }
 
-    async uiOpen(...args: string[]): Promise<{ url: string; expires_at: string }> {
-        const { stdout } = await this.jason('ui', 'open', '--no-open', ...args);
+    async uiPair(...args: string[]): Promise<{ url: string; expires_at: string }> {
+        const { stdout } = await this.jason('ui', 'pair', ...args);
         return JSON.parse(stdout) as { url: string; expires_at: string };
     }
 

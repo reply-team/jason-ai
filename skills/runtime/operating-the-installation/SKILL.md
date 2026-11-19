@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening Jason Desktop on what waits or unpairing a browser, and installing Jason or taking it off again.
 metadata:
   status: draft
 ---
@@ -34,34 +34,32 @@ running, not a runtime that is broken; start it. If it answers but reports a dat
 something is running under a different `JASON_DATA_DIR` than the one you are typing against, and the two will
 disagree about everything else you ask.
 
-## Showing the person the UI
+## Showing the person Jason Desktop
 
 ```
 jason ui open
+jason ui open --approval <id>
 jason ui open --no-open
 jason ui tokens
 jason ui revoke <token-id>
 ```
 
-`jason ui open` answers with a link into the browser UI and opens it in the person's default browser; `--no-open`
-prints the link alone, which is what you want from a session: hand the person the `url` and say it works once, within
-a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open at the
-address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
-this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
-where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
-`jason decision` commands. Where Jason was installed by its install script or Jason Desktop's own package, on macOS,
-Windows or Linux, Jason Desktop is already there, since it is the installation itself: name opening it, not the page's
-download link, which is for Linux, where a command-line install made by hand has no desktop.
+`jason ui open` opens Jason Desktop on **Needs you**, what waits, and `--approval <id>` or `--question <id>` on one
+item, by the desktop's own `jason-desktop:` link: it asks the runtime nothing, decides nothing and never opens a
+browser. Run it when the person asks to see what waits; `--no-open` prints the address instead. Where Jason was
+installed by its install script or Jason Desktop's own package, on macOS, Windows or Linux, Jason Desktop is already
+there, since it is the installation itself. Where it refuses with `desktop_not_installed`, no Jason Desktop that takes
+its links is installed for this account (a command-line install that has not moved into the desktop, or an AppImage on
+Linux): say so, as the refusal does.
 
-That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
-draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
-queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
-and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
+When they ask what happened, what is queued or what waits for them, name **Needs you** in Jason Desktop, which
+`jason ui open` opens, or `jason approval list` and `jason decision list` in a terminal, and
+`jason workitem list --campaign <campaign-id>` for the queue.
 
-If it fails with `ui_not_installed`, no UI build is in place, and the message names the fix: `jason ui install` places
-this release's build as `ui/default`, which is also the repair `jason status` prints. Run it, then `jason ui open`
-again. A build from source has no published UI, and the command says so: then say that a build is made from `ui/` as
-its README says and unzipped into `ui/custom`, and do not build anything yourself.
+If no UI build is in place, `jason ui install` places this release's build as `ui/default`, which is also the repair
+`jason status` prints; Jason Desktop runs it itself at its start. A build from source has no published UI, and the
+command says so: then say that a build is made from `ui/` as its README says and unzipped into `ui/custom`, and do not
+build anything yourself.
 
 `jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
 the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served,

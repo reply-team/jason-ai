@@ -687,7 +687,7 @@ test('the code rides in the link\'s fragment and nowhere else: not before the fr
 test('the tab is opened at the link the CLI printed, held to the runtime\'s origin and /ui/, with a code that pairs once', async (t) => {
     const r = await rig(t);
     const opened: string[] = [];
-    const cli = (url: string) => ({ run: async (args: readonly string[]) => (assert.deepEqual(args, ['ui', 'open', '--no-open']), { exit: 0, stdout: json({ url }), stderr: '' }) });
+    const cli = (url: string) => ({ run: async (args: readonly string[]) => (assert.deepEqual(args, ['ui', 'pair']), { exit: 0, stdout: json({ url }), stderr: '' }) });
     const deps = { origin: () => runtime, bridge: async () => r.bridge, open: async (link: string) => void opened.push(link) };
     assert.equal(await openTab({ ...deps, cli: cli(`${runtime}/ui/#/attention?t=TICKET`) }), null);
     const link = opened[0] ?? '';
