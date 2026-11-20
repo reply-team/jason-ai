@@ -28,7 +28,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// script refuses any other platform before it does anything else. <c>install.sh</c> has no such luck — the
 /// machine that runs this suite may have no <c>sh</c> at all, and the one Windows has is Git Bash, which the
 /// script refuses by name — so its rules here stay shape guards, and the ubuntu job is what runs it. What the two
-/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallNoticesTests"/>.
+/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallDesktopScriptTests"/>.
 /// </para>
 /// <para>
 /// The proof that a script installs a real archive and answers with the right version is the CI job that runs
