@@ -1,5 +1,5 @@
-import { signal } from '@preact/signals-react';
-import { act, argsOf, define } from './actions';
+import { computed, signal } from '@preact/signals-react';
+import { act, argsOf, define, parseArgs } from './actions';
 import { shownAgent } from './agent-place';
 import { campaigns } from './campaigns';
 import { html, type Html } from './html';
@@ -33,6 +33,32 @@ export function resetRecent(): void {
 /** Closes the filter's menu. */
 export function closeFilterMenu(): void {
     menuOpen.value = false;
+}
+
+/** The menu open on a row (`row-menu.tsx`): the row's conversation, its title, and where the menu stands in the window. */
+export interface RowMenuAt {
+    id: string;
+    title: string;
+    x: number;
+    y: number;
+}
+
+export const rowMenu = signal<RowMenuAt | null>(null);
+
+/** Closes the menu on a row. */
+export function closeRowMenu(): void {
+    rowMenu.value = null;
+}
+
+/** The row of the conversation, where it is drawn. */
+export function rowElement(id: string): HTMLElement | undefined {
+    const rows = document.querySelectorAll<HTMLElement>('.side .recent-row');
+    return [...rows].find((each) => parseArgs(each.dataset['args'])[0] === id);
+}
+
+/** Gives the focus to the row of the conversation, where it is drawn. */
+export function focusRow(id: string): void {
+    rowElement(id)?.focus();
 }
 
 const labels: Readonly<Record<RecentFilter, string>> = {
@@ -97,6 +123,7 @@ function agentsRow(id: string): boolean {
 }
 
 function rowView(row: RecentRow): Html {
+    const menu = rowMenu.value?.id === row.id;
     const said = [
         row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
         row.age === '' ? null : row.age,
@@ -105,12 +132,15 @@ function rowView(row: RecentRow): Html {
         .filter((each) => each !== null)
         .join(' · ');
     return html`<button
-        class="item recent-row"
+        class="item recent-row${menu ? ' menu-open' : ''}"
         type="button"
         aria-label="${row.title}"
         aria-description="${said}"
         ${row.id === currentChat.value || agentsRow(row.id) ? html`aria-current="true"` : null}
+        aria-haspopup="menu"
+        aria-expanded="${menu ? 'true' : 'false'}"
         ${act('side.chat', row.id)}
+        data-menu="side.rowmenu"
     >
         <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>
         <span class="rt">${row.title}</span>
@@ -140,8 +170,8 @@ function filterMenu(): Html {
         </div>`;
 }
 
-/** The header, the search box when it is open, and the list of conversations. */
-export function recentView(): Html {
+/** Every row of Recent, and the ones drawn now under the filter, the search and the paging. */
+const listed = computed(() => {
     const rows = recentRows({
         conversations: conversations.value,
         titles: (id) => chats.value[id]?.title,
@@ -150,7 +180,18 @@ export function recentView(): Html {
         ...needsInput(),
         now: clock.value,
     });
-    const { rows: shown, more } = shownRows(rows, filter.value, text.value, limit.value);
+    const drawn = shownRows(rows, filter.value, text.value, limit.value);
+    return { rows, shown: drawn.rows, more: drawn.more };
+});
+
+/** Whether the conversation's row is drawn now. */
+export function rowDrawn(id: string): boolean {
+    return listed.value.shown.some((each) => each.id === id);
+}
+
+/** The header, the search box when it is open, and the list of conversations. */
+export function recentView(): Html {
+    const { rows, shown, more } = listed.value;
     return html`<div class="recent">
             <span class="rl">${t('recent.title')}</span>
             <span class="rtools">
