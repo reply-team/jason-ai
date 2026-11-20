@@ -9,26 +9,35 @@ namespace Jason.Cli.Tests.Uninstall;
 /// <summary>
 /// macOS: the launchd job Squirrel.Mac submits for ShipIt when Jason Desktop installs an update, which launchd keeps loaded
 /// once ShipIt has ended. The one uninstall takes it out before ShipIt's cache, where launchd says it is loaded and not
-/// running, and says so; one not loaded is nothing to say. One running is an update being installed. Nothing the uninstall
-/// already refused with stands before that step: the application has quit for the swap, ShipIt runs from Squirrel's
-/// framework inside the bundle and not as the application, the looks for another jason match only this installation's
-/// image, and no update's lock or ledger is read. So the uninstall refuses with the update's own code, before anything is
-/// removed, and never ends ShipIt part-way.
+/// running, and says so; one not loaded is nothing to say. One running, or set to run, is an update being installed. Nothing
+/// the uninstall already refused with stands before that step: the application has quit for the swap, ShipIt runs from
+/// Squirrel's framework inside the bundle and not as the application, the looks for another jason match only this
+/// installation's image, and no update's lock or ledger is read. So the uninstall refuses with the update's own code, before
+/// anything is removed, and never ends ShipIt part-way: where ShipIt begins after that look, what it installs is left, and
+/// said.
 /// </summary>
 public sealed partial class UninstallCarriedTests
 {
+    /// <summary>What the refusal says to do, at a terminal and from the Jason menu.</summary>
+    private const string RunItAgain = "run it again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason… again.";
+
     private static readonly LaunchdJob ShipItInstalling = new(LaunchdJobState.Running, Pid: 6262);
 
+    /// <summary>
+    /// The look at the verb's start, the first line: a job that reads running, or set to run with no process of its own,
+    /// refuses before anything is removed, with the update's own code.
+    /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task On_macOS_an_update_being_installed_refuses_the_uninstall_before_anything_is_removed(bool human)
+    [InlineData(false, 6262)]
+    [InlineData(true, 6262)]
+    [InlineData(false, null)]
+    public async Task On_macOS_an_update_being_installed_refuses_the_uninstall_before_anything_is_removed(bool human, int? pid)
     {
         var executable = MacApplication();
         var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
         var shipIt = Plant(Path.Combine(Home, "Library", "Caches", DesktopRemoval.ShipItCacheName));
         var (env, output, remover) = Environment(MacPlaces(), executable);
-        remover.Jobs.Add(ShipItInstalling);
+        remover.Jobs.Add(new LaunchdJob(LaunchdJobState.Running, pid));
         var error = new StringWriter();
 
         var exit = await UninstallCommand.RunAsync(env with { Error = error }, new UninstallOptions(human, false, false, false, false), Ct);
@@ -41,8 +50,10 @@ public sealed partial class UninstallCarriedTests
             Assert.False(JsonDocument.Parse(output.ToString()).RootElement.GetProperty("error").GetProperty("retryable").GetBoolean());
         }
 
-        Assert.Contains($"ShipIt is installing an update of Jason Desktop (process 6262, the launchd job {DesktopRemoval.ShipItLabel})", said, StringComparison.Ordinal);
-        Assert.Contains("Wait for it to end, then run this again. Nothing was removed", said, StringComparison.Ordinal);
+        var process = pid is null ? string.Empty : $"process {pid}, ";
+        Assert.Contains($"ShipIt is installing an update of Jason Desktop ({process}the launchd job {DesktopRemoval.ShipItLabel})", said, StringComparison.Ordinal);
+        Assert.Contains($"so nothing was removed: {RunItAgain}", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason update status", said, StringComparison.Ordinal);
         Assert.Equal([DesktopRemoval.ShipItLabel], remover.LaunchdReads);
         Assert.Empty(remover.Calls);
         Assert.True(Directory.Exists(application), "the application was removed");
@@ -69,8 +80,9 @@ public sealed partial class UninstallCarriedTests
         Assert.Empty(remover.Calls);
     }
 
+    /// <summary>A dry run is never refused for it: it reads the job once, and its plan names the job it would take out.</summary>
     [Fact]
-    public async Task A_dry_run_with_an_update_being_installed_removes_nothing_and_asks_launchd_nothing()
+    public async Task A_dry_run_with_an_update_being_installed_removes_nothing_and_names_the_job_in_its_plan()
     {
         var executable = MacApplication();
         var (env, output, remover) = Environment(MacPlaces(), executable);
@@ -79,27 +91,35 @@ public sealed partial class UninstallCarriedTests
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
-        Assert.Empty(remover.LaunchdReads);
+        var desktop = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
+        Assert.Equal(DesktopRemoval.ShipItLabel, desktop.GetProperty("updater_job").GetString());
+        Assert.Equal([DesktopRemoval.ShipItLabel], remover.LaunchdReads);
         Assert.Empty(remover.Calls);
     }
 
     /// <summary>
-    /// The job at its step, read once before the uninstall begins and once at the step: one not loaded is nothing to say; one
-    /// loaded and not running is booted out of the login domain before ShipIt's cache goes, read again, and said gone, or
-    /// said still loaded with the command that takes it out; one that began running since is left, never ended part-way, and
-    /// said; and one launchd could not be asked about is left as it was, and said.
+    /// The job read when the plan is read, at its step, again after a take-out, and at the last look before the application
+    /// goes: one not loaded is nothing to say; one loaded and not running is booted out of the login domain before ShipIt's
+    /// cache goes, read again, and said gone, or said still loaded with the command that takes it out; one that runs at its
+    /// step is left, and so are ShipIt's cache, the application and its own state under ~/Library, each said kept, with the
+    /// problem saying that an update was being installed, what was left, and what to do; one that runs at the last look
+    /// leaves the application and its state, and is said; and one launchd could not be asked about is left as it was, and
+    /// said.
     /// </summary>
     [Theory]
-    [InlineData("not loaded", "absent", false, null)]
-    [InlineData("loaded, then gone", "loaded loaded absent", true, "done")]
-    [InlineData("still loaded after it", "loaded loaded loaded", true, "still")]
-    [InlineData("running at its step", "loaded running", false, "running")]
-    [InlineData("not read", "unread", false, "unread")]
-    public async Task On_macOS_the_updaters_job_is_taken_out_before_its_cache_where_it_is_not_running(string row, string reads, bool bootedOut, string? said)
+    [InlineData("not loaded", "absent", false, null, true, true)]
+    [InlineData("loaded, then gone", "loaded loaded absent", true, "done", true, true)]
+    [InlineData("still loaded after it", "loaded loaded loaded", true, "still", true, true)]
+    [InlineData("running at its step", "loaded running", false, "running", false, false)]
+    [InlineData("running at the last look", "loaded loaded absent running", true, "late", true, false)]
+    [InlineData("not read", "unread", false, "unread", true, true)]
+    public async Task On_macOS_the_updaters_job_is_taken_out_before_its_cache_where_it_is_not_running(
+        string row, string reads, bool bootedOut, string? said, bool cacheGoes, bool applicationGoes)
     {
         var executable = MacApplication();
         var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
         var shipIt = Plant(Path.Combine(Home, "Library", "Caches", DesktopRemoval.ShipItCacheName));
+        var state = Plant(Path.Combine(Home, "Library", "Saved Application State", DesktopRemoval.Identifier + ".savedState"));
         var (env, output, remover) = Environment(MacPlaces(), executable);
         foreach (var read in reads.Split(' '))
         {
@@ -116,20 +136,28 @@ public sealed partial class UninstallCarriedTests
 
         var report = JsonDocument.Parse(output.ToString()).RootElement;
         var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        var kept = report.GetProperty("kept").EnumerateArray().Select(line => line.GetString()!).ToList();
         var problems = report.GetProperty("problems").EnumerateArray().Select(line => line.GetString()!).ToList();
         var label = DesktopRemoval.ShipItLabel;
         var bootout = remover.Calls.IndexOf($"launchd.bootout {label}");
         Assert.True(bootout >= 0 == bootedOut, $"{row}: {string.Join(" | ", remover.Calls)}");
         Assert.True(exit == (said is null or "done" ? ExitCodes.Success : ExitCodes.ApiError), $"{row}: {output}");
-        Assert.False(Directory.Exists(shipIt), $"{row}: ShipIt's state is still there");
-        Assert.False(Directory.Exists(application), $"{row}: the application is still there");
+        Assert.True(Directory.Exists(shipIt) != cacheGoes, $"{row}: ShipIt's state {(cacheGoes ? "is still there" : "was removed")}");
+        Assert.True(Directory.Exists(application) != applicationGoes, $"{row}: the application {(applicationGoes ? "is still there" : "was removed")}");
+        Assert.True(Directory.Exists(state) != applicationGoes, $"{row}: the application's own state {(applicationGoes ? "is still there" : "was removed")}");
         if (bootedOut)
         {
             var cache = remover.Calls.IndexOf($"tree.remove {shipIt}");
-            Assert.True(cache > bootout && remover.Calls.IndexOf($"tree.remove {application}") > cache, $"{row}: {string.Join(" | ", remover.Calls)}");
+            Assert.True(cache > bootout, $"{row}: {string.Join(" | ", remover.Calls)}");
+        }
+
+        if (applicationGoes)
+        {
+            Assert.True(remover.Calls.IndexOf($"tree.remove {application}") > remover.Calls.IndexOf($"tree.remove {shipIt}"), $"{row}: {string.Join(" | ", remover.Calls)}");
         }
 
         var command = $"`launchctl bootout gui/$(id -u)/{label}`";
+        var again = $"Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason… again, or run `\"{executable}\" uninstall`; what is already gone is not an error the second time.";
         switch (said)
         {
             case null:
@@ -144,11 +172,46 @@ public sealed partial class UninstallCarriedTests
                 Assert.Contains($"The launchd job {label} is still loaded after `launchctl bootout`: {command} takes it out.", problems);
                 break;
             case "running":
-                Assert.Contains($"The launchd job {label} was left: ShipIt began installing an update of Jason Desktop (process 6262) while this ran, and an update is never ended part-way. Once it has ended, {command} takes the job out.", problems);
+                Assert.Equal(
+                    [$"An update of Jason Desktop was being installed by ShipIt (process 6262, the launchd job {label}), and an update is never ended part-way, so these were left: the job, ShipIt's state, the application and its own state under ~/Library. {again}"],
+                    problems);
+                Assert.Contains($"Kept {shipIt}, ShipIt's state: an update of Jason Desktop was being installed.", kept);
+                Assert.Contains($"Kept the application at {application} and its own state under ~/Library: an update of it was being installed.", kept);
+                break;
+            case "late":
+                Assert.Equal(
+                    [$"An update of Jason Desktop was being installed by ShipIt (process 6262, the launchd job {label}) when the application was to go, and an update is never ended part-way, so these were left: the application at {application} and its own state under ~/Library. {again}"],
+                    problems);
                 break;
             default:
                 Assert.Contains($"launchd could not be asked about the job {label} (did not answer within 10 seconds), so it was left as it was: `launchctl print gui/$(id -u)/{label}` says whether it is loaded, and {command} takes it out.", problems);
                 break;
         }
+    }
+
+    /// <summary>
+    /// What the problem says was left is what was: a job running at its step, set to run with no process of its own, where no
+    /// ShipIt state and no state of the application's under ~/Library were found, names the job and the application alone.
+    /// </summary>
+    [Fact]
+    public async Task On_macOS_an_update_being_installed_at_the_jobs_step_names_only_what_it_left()
+    {
+        var executable = MacApplication();
+        var application = ApplicationOf(executable);
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        remover.Jobs.Add(new LaunchdJob(LaunchdJobState.Loaded));
+        remover.Jobs.Add(new LaunchdJob(LaunchdJobState.Running));
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        var problem = Assert.Single(report.GetProperty("problems").EnumerateArray()).GetString()!;
+        Assert.StartsWith(
+            $"An update of Jason Desktop was being installed by ShipIt (the launchd job {DesktopRemoval.ShipItLabel}), and an update is never ended part-way, so these were left: the job and the application. ",
+            problem,
+            StringComparison.Ordinal);
+        Assert.Contains($"Kept the application at {application}: an update of it was being installed.", report.GetProperty("kept").EnumerateArray().Select(line => line.GetString()));
+        Assert.True(Directory.Exists(application), "the application was removed");
     }
 }
