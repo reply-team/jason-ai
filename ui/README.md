@@ -29,7 +29,7 @@ API fields, file names, test ids and fixtures keep `campaign`. The AI that runs 
 
 The page mounts the console in Jason Desktop's own window (`src/main.tsx`, chosen by `src/start.ts` once as the page
 loads); any other browser tab gets one sentence, that this is the place for a web interface of one's own and to ask
-one's AI how to build one (`src/own-place.ts`), and nothing else: it reads no pairing and asks the runtime nothing. The
+one's agent how to build one (`src/own-place.ts`), and nothing else: it reads no pairing and asks the runtime nothing. The
 console (`src/console/`) is a sidebar and one area that shows exactly one
 thing at a time, chosen from the sidebar's menu, its Recent or the palette: Start, one chat, what needs the person
 (approvals and questions), the agents, the journal's activity, Connect, which shows the AI hosts found on the computer,

@@ -15,7 +15,7 @@ instead, for an agent to hand to you). The link carries a ticket that pairs one 
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open at the address of one item, `#/attention/approvals/<id>` or
 `#/attention/questions/<id>`. The build of this release draws its console in Jason Desktop alone; in any other tab it
-draws one sentence, that this is the place for a web interface of your own and to ask your AI how to build one
+draws one sentence, that this is the place for a web interface of your own and to ask your agent how to build one
 ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom` draws whatever it draws.
 
 On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
@@ -517,7 +517,7 @@ follows it. Its **Notifications** section is [described below](#notifications-in
 
 **In a browser tab.** The console is drawn in Jason Desktop's own window alone. A browser tab at the runtime's `/ui/`,
 over the build of this release, draws one sentence and nothing else, whatever the address names: "This is the place for
-a web interface of your own. To build one, ask your AI how." It has no link, no Demo and no console, reads no pairing and
+a web interface of your own. To build one, ask your agent how." It has no link, no Demo and no console, reads no pairing and
 asks the runtime nothing. A build of your own in `ui/custom` is served there instead ([above](#where-the-page-comes-from)).
 
 ## Accounts

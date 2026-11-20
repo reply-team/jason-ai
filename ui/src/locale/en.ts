@@ -78,7 +78,7 @@ export const en = {
     'start.voice.body': 'Tell it who you are and how you write. It is optional and it can wait.',
     'start.voice.now': 'Set preferences now',
     'start.voice.later': 'Not now',
-    'ownPlace.message': 'This is the place for a web interface of your own. To build one, ask your AI how.',
+    'ownPlace.message': 'This is the place for a web interface of your own. To build one, ask your agent how.',
     'chat.queue.placeholder': 'Sent when this turn ends · Esc stops it',
     'chat.queue.send': 'Send when this turn ends',
     'chat.queue.sendTitle': 'Send when this turn ends (Esc stops the turn)',

@@ -16,7 +16,7 @@ describe('the page in a plain browser tab', () => {
 
         expect(element.children).toHaveLength(1);
         expect(element.textContent).toBe(
-            'This is the place for a web interface of your own. To build one, ask your AI how.',
+            'This is the place for a web interface of your own. To build one, ask your agent how.',
         );
         expect(element.querySelectorAll('a, button, input, iframe, nav')).toHaveLength(0);
         expect(document.documentElement.lang).toBe('en');

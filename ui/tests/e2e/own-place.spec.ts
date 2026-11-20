@@ -22,7 +22,7 @@ for (const size of [
 
         const message = page.locator('#app > p.own-place');
         await expect(message).toHaveText(
-            'This is the place for a web interface of your own. To build one, ask your AI how.',
+            'This is the place for a web interface of your own. To build one, ask your agent how.',
         );
         await expect(page.locator('#app')).toHaveText(await message.innerText());
         for (const selector of ['a', 'button', 'input', 'iframe', 'nav', '.jc-console'])
