@@ -118,7 +118,8 @@ function usePackagedDesktop(): boolean | null {
     const [packaged, setPackaged] = useState<boolean | null>(() => (itemReadable() ? null : false));
     useEffect(() => {
         const desktop = currentDesktop();
-        if (desktop === undefined || !itemReadable()) return;
+        if (desktop === undefined || !can('updates.item') || typeof earlier(desktop).updates?.item !== 'function')
+            return;
         let live = true;
         desktop.updates
             .item()
