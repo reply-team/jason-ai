@@ -360,8 +360,9 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
 /**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
  * `desktop` but the chat folder (the turns' configurations among them), the known ones whether they exist or not,
- * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
- * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
+ * refused to its file tools. Whether the host also applies these Read rules to a redirection's target or to a file
+ * command in Bash (`cat`, `head`) is not shown: no test of the real host has seen it, and a command an allow rule matches
+ * is never put to the permission model, so holding it is a hook's work, not these rules'. The permission model refuses
  * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
  * harness root) are refused whole, the folder and everything under it, with no entry left open.
  */

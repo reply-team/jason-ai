@@ -796,9 +796,10 @@ test('a command naming a place in the data directory is refused however it is sp
     }
 });
 
-test('a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string of the file is refused in Ask first and Auto-edit as a plain read of it is, and in Full access', () => {
+test('a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string: the model refuses it wherever it is asked; an allow-ruled form in Ask first and Auto-edit is not held by these rows', () => {
     // The shell opens the file, so the CLI's rule that a file option takes only standard input never sees a path: the
-    // model reads the command's text for the place, whichever door feeds it to the verb.
+    // model reads the command's text for the place, whichever door feeds it to the verb. A real Ask first or Auto-edit turn
+    // never asks the model about a form the host's allow rule matches, so these rows prove the model's answer, not the turn's.
     const fed = (verb: string, file: string): string[] => [
         `${verb} --value-file - < ${file}`,
         `${verb} < ${file}`,
