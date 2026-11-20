@@ -545,14 +545,17 @@ close_leg() {
 # a leg that never ended is closed, and so in the job's summary, that a leg's step and the job are bounded by what a run
 # measured. The job is timed from the start of the runner's worker that runs it, which is the job's own start, read from
 # how long ps says it has run ([[days-]hours:]minutes:seconds); where none is found, from the first leg's begin, and the
-# line that starts the job's clock says which.
+# line that starts the job's clock says which. The worker is Runner.Worker on every system, as the runner's listener
+# starts it, and an ancestor of this script; macOS's pgrep leaves its own ancestors out of what it matches unless -a is
+# given (pgrep(1): "By default, the current pgrep or pkill process and all of its ancestors are excluded"), so without
+# -a no worker was ever found on a Mac.
 start_leg_clock() {
     local now worker elapsed began from
     now="$(date +%s)"
     if [ ! -s "$OUT/job-began.txt" ]; then
         began="$now"
         from="this leg's begin: no runner's worker was found"
-        worker="$(pgrep -x Runner.Worker | head -n 1)" || worker=""
+        worker="$(pgrep -a -x Runner.Worker | head -n 1)" || worker=""
         if [ -n "$worker" ]; then
             elapsed="$(ps -o etime= -p "$worker" | awk '$1 ~ /^([0-9]+-)?([0-9]+:)?[0-9]+:[0-9]+$/ { n = split($1, part, /[-:]/); s = part[n] + 60 * part[n - 1]; if (n > 2) s += 3600 * part[n - 2]; if (n > 3) s += 86400 * part[n - 3]; print s }')" || elapsed=""
             case "$elapsed" in
@@ -1379,7 +1382,7 @@ from-one-installation)
     # it left; and the desktop's log and ShipIt's logs are kept in $OUT, as bundle-swap keeps the desktop's log, before the
     # uninstall the leg runs next takes them with the data directory and the caches.
     server=""
-    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; }; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; } || true; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
 
     # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.sh from its own
     # assets, which opens nothing, then a runtime started from the jason it carries. It is held to be the release its

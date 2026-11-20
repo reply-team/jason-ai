@@ -899,6 +899,28 @@ public static class InstallationRemovers
             Jason.Cli.Autostart.LaunchdJobs.TakeOut([[Jason.Cli.Autostart.LaunchdJobs.Launchctl, "unload", file]], label);
         }
 
+        public Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return Jason.Cli.Autostart.LaunchdJob.Absent;
+            }
+
+            return Jason.Cli.Installation.AccountDatabase.UserId() is { } account
+                ? Jason.Cli.Autostart.LaunchdJobs.Read(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label)
+                : new Jason.Cli.Autostart.LaunchdJob(Jason.Cli.Autostart.LaunchdJobState.Unread, Why: "this account's user id could not be read");
+        }
+
+        public void BootOutLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (OperatingSystem.IsMacOS() && Jason.Cli.Installation.AccountDatabase.UserId() is { } account)
+            {
+                Jason.Cli.Autostart.LaunchdJobs.BootOut(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label);
+            }
+        }
+
         public void RemoveExtractedLibraries(string directory)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(directory);

@@ -31,7 +31,8 @@ public sealed record LaunchdJob(LaunchdJobState State, int? Pid = null, string? 
 
 /// <summary>
 /// macOS: a LaunchAgent's job taken out of this account's launchd before its file goes, wherever an uninstall or a
-/// disable removes one, so no job is left loaded with its plist gone.
+/// disable removes one, so no job is left loaded with its plist gone; and a job submitted with no file, read and taken out
+/// the same way.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -118,12 +119,85 @@ internal static class LaunchdJobs
     /// <summary>The account's login domain, <c>gui/&lt;uid&gt;</c>, where a job its applications submit is loaded.</summary>
     public static string LoginDomain(uint userId) => $"gui/{userId.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
-    /// <summary>The job <paramref name="label"/> in <paramref name="domain"/>, as <c>launchctl print</c> answers.</summary>
-    public static LaunchdJob Read(string domain, string label, BoundedRun? run = null) => LaunchdJob.Absent;
+    /// <summary>
+    /// The job <paramref name="label"/> in <paramref name="domain"/>, as <c>launchctl print &lt;domain&gt;/&lt;label&gt;</c>
+    /// answers, waited for <see cref="Limit"/> at most: absent where it answers other than 0, as the release proof reads a
+    /// job; running where the job's own <c>state</c> is <c>running</c> or it names the job's process; loaded where its state
+    /// is any other; and unread where launchctl could not be started, did not answer in time, or named no state of the job's
+    /// own.
+    /// </summary>
+    /// <remarks>
+    /// The job's own properties are the lines one step in from its first line, whether a tab or spaces make the step; a
+    /// nested dictionary's, one step further in, are never the job's.
+    /// </remarks>
+    public static LaunchdJob Read(string domain, string label, BoundedRun? run = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
 
-    /// <summary>Takes the job <paramref name="label"/> out of <paramref name="domain"/>.</summary>
+        run ??= AutostartRegistrars.Run;
+        string printed;
+        try
+        {
+            var (exit, output, _) = run([Launchctl, "print", $"{domain}/{label}"], Limit);
+            if (exit != 0)
+            {
+                return LaunchdJob.Absent;
+            }
+
+            printed = output;
+        }
+        catch (AutostartException unread)
+        {
+            return new LaunchdJob(LaunchdJobState.Unread, Why: unread.Message);
+        }
+
+        string? step = null;
+        string? state = null;
+        int? pid = null;
+        foreach (var line in printed.ReplaceLineEndings("\n").Split('\n').Skip(1))
+        {
+            var text = line.TrimStart(' ', '\t');
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            step ??= line[..(line.Length - text.Length)];
+            if (!string.Equals(line[..(line.Length - text.Length)], step, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (text.StartsWith("state = ", StringComparison.Ordinal))
+            {
+                state ??= text["state = ".Length..].Trim();
+            }
+            else if (text.StartsWith("pid = ", StringComparison.Ordinal)
+                && int.TryParse(text["pid = ".Length..].Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+            {
+                pid ??= id;
+            }
+        }
+
+        return state is null
+            ? new LaunchdJob(LaunchdJobState.Unread, Why: "launchctl print named no state of the job's own")
+            : state == "running" || pid is not null
+                ? new LaunchdJob(LaunchdJobState.Running, pid)
+                : new LaunchdJob(LaunchdJobState.Loaded);
+    }
+
+    /// <summary>
+    /// Takes the job <paramref name="label"/> out of <paramref name="domain"/>: <c>launchctl bootout &lt;domain&gt;/&lt;label&gt;</c>,
+    /// then by its label, through <see cref="TakeOut"/>, the one routine that takes a LaunchAgent's job out. Nothing it is
+    /// answered is an error.
+    /// </summary>
     public static void BootOut(string domain, string label, BoundedRun? run = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+
+        TakeOut([[Launchctl, "bootout", $"{domain}/{label}"]], label, run);
     }
 
     /// <summary>

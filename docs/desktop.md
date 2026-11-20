@@ -1160,9 +1160,11 @@ removal takes them off too.
   of it is under way, it says so, takes nothing off, and the uninstaller removes nothing.
 - **macOS.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal with
   Jason quit. Either is the one uninstall, with the Windows uninstall's steps and, just before the application, the
-  application's own state under `~/Library` and Squirrel's update state. The menu item asks first, with a box for
-  deleting the data directory too, quits Jason and runs the same uninstall, which deletes Jason.app last and writes
-  what it did to the file the dialog names. When Jason will not start, run
+  application's own state under `~/Library` and Squirrel's update state. It takes out the job Squirrel leaves loaded
+  in launchd after an update, `ai.jasonharness.desktop.ShipIt`, too, and while that job is still installing an update
+  it refuses with `update_in_progress` and takes nothing off: wait for the update to end, then run it again. The menu
+  item asks first, with a box for deleting the data directory too, quits Jason and runs the same uninstall, which
+  deletes Jason.app last and writes what it did to the file the dialog names. When Jason will not start, run
   `Jason.app/Contents/Resources/bundle/jason uninstall`.
 - **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   steps the Windows uninstaller took before the one uninstall: it stops the runtime first, going no further when it does not stop, turns off Open Jason at

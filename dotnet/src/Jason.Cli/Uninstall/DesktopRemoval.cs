@@ -839,6 +839,49 @@ public static partial class DesktopRemoval
         }
     }
 
+    /// <summary>
+    /// macOS, before the updater's caches: the launchd job Squirrel.Mac submits for ShipIt when the application installs an
+    /// update (<see cref="ShipItLabel"/>), which launchd keeps loaded once ShipIt has ended. Read at this step, and taken out
+    /// of this account's login domain only where launchd says it is loaded and not running, then read again: gone, it is
+    /// said done; still there, it is a problem with the command that takes it out. One running is an update being installed,
+    /// begun since the uninstall's own look, and is left, never ended part-way, and said; one launchd could not be asked
+    /// about is left as it was, and said. One not loaded is nothing to say.
+    /// </summary>
+    public static void TakeOutUpdaterJob(CliEnvironment env, SetupPlaces places, List<string> done, List<string> problems)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(places);
+        if (places.Platform is not SetupSystem.MacOs)
+        {
+            return;
+        }
+
+        var takeOut = $"`launchctl bootout gui/$(id -u)/{ShipItLabel}`";
+        var job = env.Removes!.ReadLaunchdJob(ShipItLabel);
+        switch (job.State)
+        {
+            case Autostart.LaunchdJobState.Absent:
+                return;
+            case Autostart.LaunchdJobState.Running:
+                var process = job.Pid is { } pid ? string.Create(CultureInfo.InvariantCulture, $" (process {pid})") : string.Empty;
+                problems.Add($"The launchd job {ShipItLabel} was left: ShipIt began installing an update of Jason Desktop{process} while this ran, and an update is never ended part-way. Once it has ended, {takeOut} takes the job out.");
+                return;
+            case Autostart.LaunchdJobState.Unread:
+                problems.Add($"launchd could not be asked about the job {ShipItLabel} ({job.Why?.TrimEnd('.')}), so it was left as it was: `launchctl print gui/$(id -u)/{ShipItLabel}` says whether it is loaded, and {takeOut} takes it out.");
+                return;
+        }
+
+        env.Removes!.BootOutLaunchdJob(ShipItLabel);
+        if (env.Removes!.ReadLaunchdJob(ShipItLabel).State is Autostart.LaunchdJobState.Absent)
+        {
+            done.Add($"Took the launchd job {ShipItLabel}, which Squirrel submits for ShipIt when Jason Desktop installs an update, out of launchd.");
+        }
+        else
+        {
+            problems.Add($"The launchd job {ShipItLabel} is still loaded after `launchctl bootout`: {takeOut} takes it out.");
+        }
+    }
+
     /// <summary>The demo's marked folders and the updater's caches.</summary>
     public static void RemoveDemoAndCaches(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> problems)
     {

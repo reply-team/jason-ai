@@ -184,6 +184,7 @@ public static class UninstallRunner
             if (desktop is not null && places is not null)
             {
                 DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
+                DesktopRemoval.TakeOutUpdaterJob(env, places, done, problems);
                 DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
             }
             else
