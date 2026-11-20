@@ -118,6 +118,62 @@ public partial class ChatWordsTests
         Assert.True(found.Count == 0, "These sentences say a command the CLI has does not exist:\n" + string.Join('\n', found));
     }
 
+    /// <summary>
+    /// The person's word has one form in the chat's instructions, and the CLI takes it: rules 11, 13 and 19 name the person
+    /// as Jason's first paragraph names them, <c>--actor human:&lt;account&gt;</c>, with their words as the reason, both after
+    /// the verb, which is where the chat's permission model looks for options; and every <c>jason</c> command a sentence
+    /// giving that form names is a verb that takes <c>--reason</c>. A form a verb did not take would fail the act the person
+    /// asked for, and one taught as "<c>--actor</c> naming them" left the chat to guess the name.
+    /// </summary>
+    [Fact]
+    public void The_instructions_give_the_persons_word_one_form_the_cli_takes()
+    {
+        const string form = "with `--actor human:<account>` as Jason's first paragraph names them and `--reason \"<their words>\"`, both after the verb";
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-instructions.md");
+        var text = File.ReadAllText(file);
+        foreach (var number in new[] { 11, 13, 19 })
+        {
+            var rule = Assert.Single(text.ReplaceLineEndings("\n").Split('\n'), line => line.StartsWith($"{number}. ", StringComparison.Ordinal));
+            Assert.True(rule.Contains(form, StringComparison.Ordinal), $"Rule {number} does not give the person's word its form: {rule}");
+        }
+
+        Assert.DoesNotContain("`--actor` naming them", text, StringComparison.Ordinal);
+
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var checkedVerbs = new List<string>();
+        var found = new List<string>();
+        foreach (var sentence in Sentences(file).Where(sentence => sentence.Contains(form, StringComparison.Ordinal)))
+        {
+            foreach (Match named in JasonCommand().Matches(sentence))
+            {
+                Command verb = root;
+                var path = new List<string>();
+                foreach (var word in named.Groups["words"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (verb.Subcommands.FirstOrDefault(sub => sub.Name == word) is not { } below)
+                    {
+                        break;
+                    }
+
+                    verb = below;
+                    path.Add(word);
+                }
+
+                checkedVerbs.Add(string.Join(' ', path));
+                if (path.Count < 2 || verb.Options.All(option => option.Name != "--reason"))
+                {
+                    found.Add($"`{named.Value}` is no verb that takes --reason: \"{sentence}\"");
+                }
+            }
+        }
+
+        Assert.True(found.Count == 0, "The chat's instructions give --reason to what takes none:\n" + string.Join('\n', found));
+        Assert.Equal(
+            ["approval approve", "approval reject", "approval unset-standing", "decision answer", "preference set", "preference set"],
+            checkedVerbs.Order(StringComparer.Ordinal));
+    }
+
     /// <summary>The chat's instructions and every skill under <c>skills/</c>, the business pack's among them.</summary>
     private static List<string> Pages()
     {
@@ -239,4 +295,7 @@ public partial class ChatWordsTests
 
     [GeneratedRegex(@"\bthe whole (?<noun>[a-z]+) vocabulary\b")]
     private static partial Regex WholeVocabulary();
+
+    [GeneratedRegex(@"`jason (?<words>[^`]+)`")]
+    private static partial Regex JasonCommand();
 }
