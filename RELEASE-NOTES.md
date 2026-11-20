@@ -43,8 +43,8 @@ message go without your approval.
   started that way would, with PowerShell among its tools. Jason's check before each tool use refuses three kinds
   alone, each by a sentence that names the `jason` command that does what was asked: Jason's settings and run files;
   its data directory outside the conversation's folder; and what Jason itself sets for the turn, meaning its variables
-  and its permission tool. On Windows a share named by `localhost`, a `127.x.x.x` address, `::1` or this
-  computer's own host name is read as the drive it shares. Everything else runs, and what Claude Code still asks about
+  and its permission tool. On Windows, a command or a path that names a share of this computer by `localhost`, a
+  `127.x.x.x` address, `::1` or the computer's own host name is read as the drive it shares. Everything else runs, and what Claude Code still asks about
   in its bypass mode is a card, "Full access asks about this one". Where the bypass is not available (a setting of
   yours or an administrator's turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or
   under sudo, or a policy filtered Jason's check out), the chat says "Full access is not available here" once, with the
@@ -52,7 +52,8 @@ message go without your approval.
   2.1.322 on, Ask first and Auto-edit carry the same check; below it, a plain `jason` command that ran with no card still
   does, and one fed the settings or the run file is refused.
 - **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
-  `config.toml`, as Codex does in a terminal: Codex acts with no questions and outside any sandbox. In its other modes a
+  `config.toml`, as Codex does in a terminal: Codex acts with no questions and with no sandbox, and none of Jason's own
+  refusals holds there. In its other modes a
   Codex chat stays in Codex's read-only sandbox and reads and proposes, since Codex cannot ask before it acts; the menu
   says so. If an administrator's requirement forbids running with no sandbox, Codex refuses the turn or runs a narrower
   sandbox, and the chat says which.
@@ -76,10 +77,6 @@ message go without your approval.
   to act as. It archives the campaigns you name, or all of them, without asking which first, names each with its id and
   the count, and says once that an archive cannot be undone. It lifts a contact's opt-out only when you asked for that
   verdict on that reply, and then says whose. The skills no longer say the chat cannot do what it now does on your word.
-- **A conversation as a file.** Type `/export <file name>` in the message box, for example `/export notes.md`, and the
-  chat writes the conversation's words, yours and the AI's, to a new Markdown file: in the campaign's folder for a
-  campaign's chat, and in the harness root for any other. It takes a bare file name, never writes over a file that is
-  already there, and starts no turn.
 - **New chat, the Feed and Accounts have rows of their own.** In the console's left column, New chat is a button
   directly under "New GTM agent", and in Live the Feed stands under "Needs you" and Accounts below it, as in the Demo. A
   chat that belongs to no agent says so in one line at its top, "Chat · no agent".
@@ -98,9 +95,8 @@ message go without your approval.
 
 ## Upgrading from 0.49.0
 
-- **Jason Desktop takes this release by its own update.** A published 0.49.0 takes it by its own
-  `jason update apply`, or by Check for Updates… in Jason Desktop, on Windows and on an Apple silicon Mac, with signed
-  packages.
+- **0.49.0 takes this release by its own update.** A published 0.49.0 takes it by its own `jason update apply`, on
+  Windows and on an Apple silicon Mac, with signed packages.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
   in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
   again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
