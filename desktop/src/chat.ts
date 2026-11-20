@@ -546,6 +546,12 @@ export class Chat {
     #closed = false;
     /** The naming run that runs now, its stop and its folder; null while none runs. */
     #namingNow: { stop: AbortController; folder: string } | null = null;
+    /**
+     * How many times the person chose a mode for each conversation, by conversation id, counting every call of
+     * `setMode`, a choice of the mode it is in and one refused included: a choice of Full access that waited on the
+     * host's version is given only when no other choice came meanwhile.
+     */
+    #choices = new Map<string, number>();
     /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
@@ -784,6 +790,9 @@ export class Chat {
      */
     async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
+        // Every choice counts, whatever it is: the latest one the person made is the one that stands.
+        const choice = (this.#choices.get(conversation.id) ?? 0) + 1;
+        this.#choices.set(conversation.id, choice);
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
         const before = this.#modeOf(conversation);
         if (mode === before) return this.#summaryOf(conversation);
@@ -799,8 +808,9 @@ export class Chat {
             if (program !== 'claude') throw new ChatRefused(notAHost);
             const below = fullAccessSentence(await this.#claudeVersion());
             if (below !== null) throw new ChatRefused(below);
-            // A conversation removed or a window closed meanwhile is given nothing, and a choice made meanwhile stands.
-            if (this.#closed || this.#conversations.get(conversation.id) !== conversation || this.#modeOf(conversation) !== before) {
+            // A conversation removed or a window closed meanwhile is given nothing, and a choice made meanwhile stands, even
+            // one that left the chat in the mode it was in, as does a step down the desktop took.
+            if (this.#closed || this.#conversations.get(conversation.id) !== conversation || this.#choices.get(conversation.id) !== choice || this.#modeOf(conversation) !== before) {
                 return this.#summaryOf(conversation);
             }
         }
@@ -812,7 +822,8 @@ export class Chat {
      * Puts a conversation in a mode, keeps it on its record, and says so to its page and to the log. A change to a mode
      * narrower than the running turn's stops that turn, unless the caller stops it in its own words (`stopTurn` false).
      * Nothing enters Auto-edit here but the person's choice from the menu (`setMode`): Plan only's approval of a plan goes
-     * to Ask first.
+     * to Ask first. Only the person's choice widens the mode the record keeps; a step down the desktop takes on its own
+     * only ever narrows it (`#stepDown`).
      */
     #changeMode(conversation: Conversation, to: ChatMode, stopTurn: boolean): void {
         const from = this.#modeOf(conversation);
@@ -836,6 +847,15 @@ export class Chat {
             running.process?.stop();
             running.checking?.abort();
         }
+    }
+
+    /**
+     * A step down the desktop takes on its own, never the person's choice: it only ever narrows the mode the record keeps,
+     * so a narrower mode the person chose meanwhile, Plan only say, stands. The caller stops the turn in its own words.
+     */
+    #stepDown(conversation: Conversation, to: ChatMode): void {
+        if (breadth[to] >= breadth[this.#modeOf(conversation)]) return;
+        this.#changeMode(conversation, to, false);
     }
 
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
@@ -892,6 +912,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
+        this.#choices.delete(conversation.id);
         if (conversation.folder === 'own') endConversationFolder(this.#options.paths.chats, this.#fullFolders(), conversation.id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
     }
 
@@ -1794,12 +1815,14 @@ export class Chat {
                     // In Full access every tool use passes the turn's hook first. One whose result comes back unseen by
                     // it ran, or was refused, without the hook: the first tool that runs unchecked ends the turn, and the
                     // chat goes back to Ask first, on its record too, since a check a policy filtered out would miss every
-                    // later turn as well. EndConversation is the one tool Claude Code fires no hook for.
-                    if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
+                    // later turn as well. EndConversation is the one tool Claude Code fires no hook for. A turn already
+                    // stopped, by a choice of the person's say, takes no step: what its host says on its way out counts
+                    // for nothing.
+                    if (running.stopped || running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#options.unchecked?.();
                     stopFor(unguardedSentence);
-                    this.#changeMode(conversation, 'ask_first', false);
+                    this.#stepDown(conversation, 'ask_first');
                     return;
                 }
                 if (line.kind === 'session') {

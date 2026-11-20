@@ -8,11 +8,13 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
+import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
 import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
+import type { Programs } from '../src/programs.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -223,6 +225,79 @@ test('a tool that ran without the hook stops the Full access turn and puts the c
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.deepEqual(r.changes.at(-1), ['full_access', 'ask_first']);
     assert.equal(r.unchecked, 1, 'the stop is said to the log by its own word');
+});
+
+test('a tool the hook never saw, said while a Full access turn is stopped for Plan only, leaves the chat in Plan only: the step back to Ask first only ever narrows, and a stopped turn takes none', async (t) => {
+    // A host that says one more tool as it is stopped, which ran without the hook: what a host may still print on its way out.
+    const late = [
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_late', name: 'Bash', input: { command: 'git status' } }] } }),
+        JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_late', content: 'ok', is_error: false }] } }),
+    ];
+    const r = rig(t, {
+        chat: {
+            startHost: (launch, args, options) => {
+                const host = startHost(launch, args, options);
+                return {
+                    stop: () => {
+                        for (const line of late) options.onLine(line);
+                        host.stop();
+                    },
+                    exited: host.exited,
+                    stderrTail: () => host.stderrTail(),
+                };
+            },
+        },
+    });
+    const { id } = await r.chat.create();
+    const go = join(r.b.root, 'go');
+    plan(r, [{ say: 'working' }, { hold: go }, { say: 'never shown' }]);
+    const ended = r.until(id, (event) => event.kind === 'done');
+    await r.chat.send(id, 'go', claude);
+    await r.until(id, (event) => event.kind === 'text' && event.text === 'working');
+    await r.chat.setMode(id, 'plan_only');
+    await ended;
+    writeFileSync(go, '');
+    assert.equal(r.chat.modeNow(id), 'plan_only');
+    assert.equal(r.again().open(id).mode, 'plan_only', 'on the record too');
+    assert.deepEqual(r.changes, [['full_access', 'plan_only']], 'no step to Ask first after the person\'s choice');
+    assert.equal(r.unchecked, 0, 'a tool said by a stopped turn is not one that ran unchecked');
+});
+
+test('Full access chosen while the host\'s version is read is not given once another choice came meanwhile, even a choice that left the chat in the mode it was in', async (t) => {
+    let open: () => void = () => {};
+    const gate: { held: Promise<void> | null } = { held: null };
+    let real: Pick<Programs, 'run'> | undefined;
+    const r = rig(t, {
+        chat: {
+            programs: {
+                run: async (name, args, options) => {
+                    if (gate.held !== null && args[0] === '--version') await gate.held;
+                    return (real as Pick<Programs, 'run'>).run(name, args, options);
+                },
+            },
+        },
+    });
+    real = r.b.programs;
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'hello', claude);
+    for (const between of [['plan_only', 'ask_first'], ['ask_first']] as const) {
+        gate.held = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        const full = r.chat.setMode(id, 'full_access', 'claude');
+        for (const mode of between) await r.chat.setMode(id, mode);
+        gate.held = null;
+        open();
+        assert.equal((await full).mode, 'ask_first', `after ${between.join(', then ')}: Full access answers the mode the chat is in`);
+        assert.equal(r.chat.modeNow(id), 'ask_first');
+        assert.equal(r.again().open(id).mode, 'ask_first', 'on the record too');
+    }
+    assert.deepEqual(r.changes, [
+        ['full_access', 'ask_first'],
+        ['ask_first', 'plan_only'],
+        ['plan_only', 'ask_first'],
+    ]);
 });
 
 // The hook's three answers through whole turns: allow runs, deny refuses, ask is a card on the page.
