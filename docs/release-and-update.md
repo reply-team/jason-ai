@@ -166,7 +166,9 @@ application by hand, which leaves the data directory as the newer version left i
 keeps there is the AppImage file itself. The deb is updated by the system, which keeps no previous version: going back
 from it is installing the previous release's `jason-desktop-linux-x64.deb` again with `sudo apt install
 --allow-downgrades` and holding it there with `sudo apt-mark hold jason-desktop`, or the next update installs the newer
-one again (§7, "Going back").
+one again (§7, "Going back"). A release before 0.49.1 carries no key for Jason's apt source, which its install keeps, so
+going back to one starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`;
+otherwise every `apt update` reports the source.
 
 **Taking the desktop off.** On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which
 carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
@@ -175,7 +177,9 @@ Jason… in the Jason menu on macOS and Linux: what Jason placed, then the appli
 says otherwise, and the harness root always. On Linux the deb's package goes first, purged by apt with an administrator's
 password asked once, and nothing of the account's goes when it is refused; an AppImage's file goes last. The system's own
 removal (`sudo apt purge jason-desktop`, App Center, deleting the AppImage) takes the application and leaves the
-account's own files, as it does for any application, and what they would start is skipped once its file is gone.
+account's own files, as it does for any application. For the deb, the runtime's start at logon is skipped once its
+`jason` is gone; an AppImage's copy of `jason` under the data directory stays, so `jason` still answers and the runtime
+still starts at sign-in until `jason uninstall`; the login and menu entries are hidden either way.
 [desktop.md](desktop.md) lists what to take off by hand for a Jason that will not start.
 
 **The apt repository's index is published beside the deb, from 0.49.1 on:** `Packages`, `Release`, `InRelease` and
@@ -626,14 +630,21 @@ update apply --finish` still runs, as the application's start runs it once apt h
 check` names `sudo apt update && sudo apt upgrade`. Where the system installed a new version under a running window,
 which looks at the package's `version.json` once a minute, the update item reads **Restart Jason and Its Runtime to
 Finish the Update to <version>** and one notice says so; the item, or a click on the notice, stops the runtime the old
-version runs and starts Jason again, whose start finishes the update. Otherwise the item reads **Updates Come Through the
-Package**. `jason status`'s optional `update` check says when updates cannot arrive — Jason's apt source gone or turned
-off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
-Software — and when the package is a version this installation was not set up for yet, which Jason Desktop's start
-finishes: it runs `jason install` and the finishing step, and only once both completed records the version it set up
-for. So the check names that start and no command, since the finishing step alone records nothing; in a window already
-open, the restart item where the package changed under it, and otherwise **Put Back jason and the Skills…** under
-Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
+version runs and starts Jason again, whose start finishes the update. Where the system installed it while no window was
+open, the next start that finds the runtime this application's `jason` started still running the earlier version offers
+the same item and notice, and restarts nothing by itself: a restart ends a running turn, so the person chooses when; that
+item, or `jason runtime restart`, brings the runtime to the new version. The install line run over an older package is
+the same case: it leaves such a runtime running and names the two. Otherwise the item reads **Updates Come Through the
+Package**, and the system screen names no update item: where the runtime is newer it names Software Updater or `sudo apt
+update && sudo apt upgrade`, as does the UI's System screen in the window when a newer release is out. `jason status`'s
+optional `update` check says when updates cannot arrive — Jason's apt source gone or turned off, as a release upgrade of
+Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other Software — and when the package
+is a version this installation was not set up for yet: Jason Desktop's start sets it up, running `jason install` and the
+finishing step, and only once both completed records the version it set up for, and where the runtime still runs the
+earlier version it offers the restart item, as `jason runtime restart` brings that runtime up. So the check names that
+start, the item and `jason runtime restart`, and no command for the set-up, since the finishing step alone records
+nothing; in a window already open, the restart item where the package changed under it, and otherwise **Put Back jason
+and the Skills…** under Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;
@@ -895,7 +906,9 @@ under `~/.jason/desktop/rollback/<version>/`) back in the place of the applicati
 for an AppImage the copy is the AppImage file, put back in the place of the file. A record that names another `jason`'s
 file is refused with `update_carried_by_desktop`, naming that `jason`'s own rollback. The `jason` the deb carries
 refuses a rollback with `update_managed_by_package_manager` and names the previous release's package, installed again
-with `sudo apt install --allow-downgrades` and held with `sudo apt-mark hold jason-desktop` (above).
+with `sudo apt install --allow-downgrades` and held with `sudo apt-mark hold jason-desktop` (above), and first, for a
+release before 0.49.1, `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`: such a release's package carries no key
+for Jason's apt source, and installing it keeps the source and takes the key.
 
 You will usually be typing `jason update rollback` from the PATH, which means the executable being replaced is
 the one running the command. That is expected and it works — the file is renamed out of the way rather than
@@ -1027,7 +1040,7 @@ a code on its own tells nobody what to do next.
 | `update_in_progress` | an earlier carried `jason update apply` handed Jason Desktop's installer this update — the record at `kept`, or its recorded request given the go or answered `installing` — less than the install's ten-minute wait ago (a request whose files are written in the future, by a clock set back since, counts as older than the wait), and the application is not the new version yet: Jason Desktop is not asked again and nothing is changed, and once the application is the new version `jason update apply` finishes the update; a run that carries such an update on after that wait asks again, and never puts back a record it did not begin. Or a *different* version is already in flight, or, run as the `jason` Jason Desktop carries, another `jason update apply` or `jason update rollback` of this data directory holds the update's lock, `<data>/update/update.lock`, which each part of an update takes while it acts and keeps while the next part runs as its child (below), and which `jason install` takes for its machine setup and refuses with this code while an update holds it; where `jason install` holds it, an update beside it and a second `jason install` refuse with `install_in_progress` instead. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
-| `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, or on Linux this is the `jason` Jason Desktop's deb carries, a package the system updates, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade (for the deb `sudo apt update && sudo apt upgrade`), `jason runtime start`; for the deb's rollback, the previous release's package installed again with `sudo apt install --allow-downgrades` and held with `sudo apt-mark hold jason-desktop` between the two |
+| `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, or on Linux this is the `jason` Jason Desktop's deb carries, a package the system updates, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade (for the deb `sudo apt update && sudo apt upgrade`), `jason runtime start`; for the deb's rollback, the previous release's package installed again with `sudo apt install --allow-downgrades` and held with `sudo apt-mark hold jason-desktop` between the two, after `sudo rm /etc/apt/sources.list.d/jason-desktop.sources` for a release before 0.49.1 |
 | `update_carried_by_desktop` | this `jason` is the one the desktop application carries, known by the `version.json` beside it (§6), and there is no Jason Desktop to hand the update to — the application is not where this `jason` says — or the update recorded names such a file other than this one, so the file is the application's and not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message names the desktop's Check for Updates, which updates the application and its `jason` together. On Linux `jason update apply` refuses with it too, before anything is read, from a terminal with no display (an ssh session, a service), since the Jason Desktop it starts needs one; the message names Jason Desktop's update item, or a terminal of the desktop |
 | `update_refused_by_desktop` | a carried `jason` handed the update to Jason Desktop and the Desktop refused it: its reason and its sentence are the message, with the version its feed offered where it read one. Nothing was installed, a `jason` is at the carried path (on Windows put back there first), the record that stood before is put back, and the runtime is as it was found. Retryable where the reason is one that passes: `busy`, `window_open`, `check_failed`, `download_failed`, `runtime_not_stopped`, `timed_out`, `go_timed_out`, `go_there` |
 | `update_desktop_unanswered` | a carried `jason` handed the update to Jason Desktop and had no answer: the application could not be started, its start ended with no request file naming an end, a running window that took the request named none within the wait, a file of the request's id was there before the request was made, or a go of the request's id was there before the verb made one. A `jason` is at the carried path (on Windows put back there first), the record that stood is put back and the runtime is as it was found; retryable |

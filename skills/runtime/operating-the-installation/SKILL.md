@@ -437,10 +437,12 @@ command again only on their word. On Linux an AppImage's `jason` hands the updat
 `update_managed_by_package_manager`, since the system updates the package from Jason's apt repository: Software Updater
 offers a new version and installs it when the person says so, Ubuntu's automatic updates leave it alone, and
 `sudo apt update && sudo apt upgrade`, typed by the person between `jason runtime stop` and `jason runtime start` as the
-message prints, installs it; after either, opening Jason Desktop finishes the update, its start running `jason install`
-and `jason update apply --finish`, and `jason status`'s `update` check says so until it has. `jason update apply
---finish` typed alone brings the plugins, the skills and the UI up to the version, and the check still says the update is
-not finished.
+message prints, installs it; after either, opening Jason Desktop sets the installation up for it, its start running
+`jason install` and `jason update apply --finish`, and `jason status`'s `update` check says so until it has. Where the
+runtime still runs the earlier version, that start offers Restart Jason and Its Runtime to Finish the Update in its menu
+and restarts nothing by itself, since a restart ends a running turn: tell the person, who chooses when, or run
+`jason runtime restart` only on their word. `jason update apply --finish` typed alone brings the plugins, the skills and
+the UI up to the version, and the check still says the update is not finished.
 
 **A command-line install moving into Jason Desktop.** On macOS, Windows and Linux, `jason update apply` typed into a
 command-line install of an earlier version updates it and then moves it into Jason Desktop: it installs the application,

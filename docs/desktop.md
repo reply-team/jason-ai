@@ -1086,7 +1086,10 @@ repository, which the package adds: Software Updater offers a new version and in
 update && sudo apt upgrade` does, and Ubuntu's automatic updates leave it alone. There the item says "Updates Come Through the Package"; where the system
 installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
 `<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
-ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. `sudo apt-mark hold jason-desktop`
+ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. Where the system
+installed it while no window was open and the runtime still runs the earlier version, the next start of Jason Desktop
+offers the same item and notice; it never restarts the runtime by itself, and `jason runtime restart` in a terminal brings
+the runtime up too; `jason status` names it until then. `sudo apt-mark hold jason-desktop`
 stops its updates. `jason status` says when Jason's apt source is gone or turned off, as a release upgrade of Ubuntu turns
 it off: turn it on again in Software & Updates, Other Software.
 
@@ -1111,7 +1114,9 @@ refuses it with `data_newer` before it changes the database, and the starting pa
 own words, which say to update, and offers no going back. A kept version before 0.49.0 has no such check. That puts
 back the previous application and the Jason it carried;
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
-update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
+update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`,
+after `sudo rm /etc/apt/sources.list.d/jason-desktop.sources` where that release is before 0.49.1, whose package carries
+no key for Jason's apt source.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
 A data directory that a newer Jason laid out in a way this one does not know, or whose layout stamp `layout.json` cannot
 be read, is refused instead: the starting page says so in `jason runtime start`'s own words, offers no going back, and no
@@ -1153,9 +1158,10 @@ version's demo made (see [the demo](#the-demo)) are not your data: the removal t
   skills Jason put in your agents' folders and, for an AppImage, its menu entry, its icons and the copies of its `jason`
   go, the AppImage file last. The data directory stays unless you choose to delete it; the harness root always stays.
   Removing it the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage) takes
-  the application and leaves your account's own files, as it does for any application; what they would start is made
-  harmless: the start at logon is skipped once its `jason` is gone, and the login and menu entries are hidden. `jason
-  uninstall` is the full clean.
+  the application and leaves your account's own files, as it does for any application. For the deb, the runtime's start
+  at logon is skipped once its `jason` is gone. For an AppImage it is not: the copy of its `jason` under the data
+  directory stays, so `jason` still answers in a terminal and the runtime still starts at sign-in until `jason
+  uninstall`. Either way the login and menu entries are hidden. `jason uninstall` is the full clean.
 - **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is
   `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason` for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

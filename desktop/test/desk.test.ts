@@ -294,15 +294,33 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     // ends a running turn.
     const restart = "if (act === 'restart') {\n            const moved = this.deps.packageMoved?.() ?? null;\n            if (!byKey) this.deps.restart?.();\n            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());\n            return;\n        }";
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
-    assert.ok(main.includes('        restart: () => void restartPackage(),\n'));
+    assert.ok(main.includes('        restart: () => void restartIfOwed(),\n'));
     // Once at a time, the item and the notice alike (`restartOnce`).
     assert.ok(main.includes('const restartPackage = restartOnce(packageRestart);'));
     // The notice is held for as long as the window runs: one nothing refers to is collected, and its click with it, so a
     // click on it restarted nothing.
     assert.ok(main.includes('    let packageNotice: Notification | null = null;\n'));
     assert.ok(main.includes('packageNotice = new Notification({'));
-    assert.ok(main.includes("packageNotice.on('click', () => void restartPackage());"));
+    assert.ok(main.includes("packageNotice.on('click', () => void restartIfOwed());"));
     assert.equal(main.includes('const notice = new Notification('), false, 'no notice held by a local alone');
+    // The same offer, item and notice, from the window's watch and from a start that finds this application's runtime of an
+    // older build, which the system updated while no window was open; once, and never a restart of its own.
+    assert.ok(main.includes("const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged), { version: runtimeVersion, ours: runtimeIsOurs }) : null);"));
+    assert.ok(main.includes("if (form?.form === 'deb') watchFile(join(packaged, 'version.json'), { interval: 60_000 }, offerPackageRestart);"));
+    const started = main.indexOf('if (started.versionsDiffer) runtimeIsOurs = ');
+    assert.ok(started > 0 && main.indexOf('        offerPackageRestart();\n', started) > started, 'offered once the start knows whose runtime it found');
+    assert.equal(main.split('offerPackageRestart()').length - 1, 1, 'offered at the start alone, besides the watch');
+    // A press reads the runtime again first, and restarts only where the restart is still owed: after `jason runtime restart`
+    // in a terminal the runtime is already this build's, and a restart would end a running turn for nothing. A re-pair with
+    // a runtime started anew reads it too, so the item goes. Catches the offer standing, and acting, once it is done.
+    const owed = main.slice(main.indexOf('const restartIfOwed = async () => {'), main.indexOf('};', main.indexOf('const restartIfOwed = async () => {')));
+    assert.ok(owed.includes("if (form?.form === 'deb') await readRuntimeAgain().catch(() => undefined);"), owed);
+    assert.ok(owed.includes('if (packageMoved() !== null) await restartPackage();'), owed);
+    assert.equal(main.split('restartPackage()').length - 1, 1, 'restarted only where still owed');
+    assert.equal(main.split('restartIfOwed()').length - 1, 2, 'by the item and the notice alone');
+    // A runtime that does not answer leaves the offer standing: a hung old build is the one the restart is for.
+    assert.ok(main.includes("runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout) ?? runtimeVersion;"));
+    assert.ok(main.includes("paired: () => {\n            begin();\n            if (form?.form === 'deb') void readRuntimeAgain().catch(() => undefined);\n        },"));
     // Its runtime stopped, the window goes quiet before the relaunch, as an update's install makes it.
     assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,\n        relaunch: () => {\n            quitting = true;\n            repairer.stop();\n            modeDeps.relaunch();\n        },'));
     // What a check the person asked for found: asked from the menu, the tray or the key, whose menu closes or shows no

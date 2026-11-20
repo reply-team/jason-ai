@@ -34,11 +34,14 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
 
     /// <summary>
     /// The deb's jason refuses `jason update apply` and `rollback` with update_managed_by_package_manager before anything is
-    /// read or staged, naming the commands that do it through apt; nothing is made under the data directory.
+    /// read or staged, naming the commands that do it through apt; nothing is made under the data directory. The rollback's
+    /// steps begin, for a release before 0.49.1, whose package carries no key for Jason's apt source, with that source taken
+    /// off: catches a downgrade that leaves every later `apt update` reporting the source.
     /// </summary>
     [Theory]
     [InlineData("apply", "sudo apt update && sudo apt upgrade")]
     [InlineData("rollback", "sudo apt install --allow-downgrades ./jason-desktop-linux-x64.deb")]
+    [InlineData("rollback", "For a release before 0.49.1, whose package carries no key for Jason's apt source, that source is taken off first, or every `apt update` reports it:\n  sudo rm /etc/apt/sources.list.d/jason-desktop.sources   (only for a release before 0.49.1)\n  jason runtime stop\n")]
     public async Task On_linux_the_deb_s_jason_leaves_its_update_to_apt_and_says_how(string verb, string named)
     {
         var resources = Path.Combine(_tree.Paths.Root, "opt", "Jason", "resources");
@@ -58,6 +61,31 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
         Assert.Equal(UpdateCodes.ManagedByPackageManager, refusal.Code);
         Assert.Contains(named, refusal.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(_data.Paths.Root, "update")), "the refusal made the update's folder");
+    }
+
+    /// <summary>
+    /// The help of `jason update apply` and `rollback` says what the two rows above and the no-display row below hold: a
+    /// command-line install moves into Jason Desktop on Linux too, the deb's jason refuses with
+    /// update_managed_by_package_manager, and an AppImage's hands the update over. Catches a verb's contract, which an agent
+    /// reads, still stating the Linux of an earlier release.
+    /// </summary>
+    [Fact]
+    public void The_help_of_apply_and_rollback_states_linux_as_these_rows_hold_it()
+    {
+        var update = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, _data.Paths))
+            .Subcommands.Single(command => command.Name == "update");
+        var apply = update.Subcommands.Single(command => command.Name == "apply").Description ?? string.Empty;
+        var rollback = update.Subcommands.Single(command => command.Name == "rollback").Description ?? string.Empty;
+
+        Assert.Contains("On macOS, Windows and Linux a command-line install updated to 0.49 or later is then moved into Jason Desktop", apply, StringComparison.Ordinal);
+        Assert.Contains("not_applicable on a system that is none of the three", apply, StringComparison.Ordinal);
+        Assert.Contains("On Linux the deb's jason is refused with update_managed_by_package_manager", apply, StringComparison.Ordinal);
+        Assert.Contains("an AppImage's jason hands the update to Jason Desktop", apply, StringComparison.Ordinal);
+        Assert.Contains("refused with update_carried_by_desktop from a terminal with no display", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("not_applicable on Linux", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("On Linux, or where", apply, StringComparison.Ordinal);
+        Assert.Contains("on Linux the deb's jason refuses with update_managed_by_package_manager", rollback, StringComparison.Ordinal);
+        Assert.DoesNotContain("on Linux it is refused with update_carried_by_desktop", rollback, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -65,11 +65,15 @@ public sealed class UpdateDebTests : IDisposable
             return;
         }
 
-        // The act it names is Jason Desktop's start, or in an open window the item that restarts it or the one that runs its
-        // set-up again, each by the label the desktop gives it in the menu it is in, less the closing ellipsis, which a console
-        // writes as a control byte on some code pages; the check passes once a start has written its record for the package's
-        // version. `jason update apply --finish` alone writes none, so it is not the repair.
-        Assert.Contains("Open Jason Desktop, whose start finishes it", update.Fact, StringComparison.Ordinal);
+        // The act it names is Jason Desktop's start, which sets the installation up, and the restart item that start offers
+        // where the runtime still runs the earlier build, or `jason runtime restart`, which brings the runtime up and nothing
+        // else; in an open window the item that restarts it or the one that runs its set-up again, each by the label the
+        // desktop gives it in the menu it is in, less the closing ellipsis, which a console writes as a control byte on some
+        // code pages. The check passes once a start has written its record for the package's version. `jason update apply
+        // --finish` alone writes none, so it is not the repair. Catches the check saying that opening Jason Desktop finishes
+        // an update whose runtime still runs the earlier build.
+        Assert.Contains("Open Jason Desktop: its start sets this installation up for 0.34.0, and where the runtime still runs the earlier build it offers Restart Jason and Its Runtime to Finish the Update to 0.34.0 in its Jason menu, which restarts the runtime on it, as `jason runtime restart` does.", update.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("whose start finishes it", update.Fact, StringComparison.Ordinal);
         Assert.Contains("label: `Restart Jason and Its Runtime to Finish the Update to ${moved}`", DesktopSource("updates.ts"), StringComparison.Ordinal);
         Assert.Contains("Restart Jason and Its Runtime to Finish the Update to 0.34.0", update.Fact, StringComparison.Ordinal);
         Assert.Contains("export const putBackLabel = 'Put Back jason and the Skills…';", DesktopSource("machine-setup.ts"), StringComparison.Ordinal);

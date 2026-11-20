@@ -60,15 +60,23 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
 - **The deb's updates are offered, and Ubuntu's automatic updates leave them alone.** They come with the system's, from
   Jason's apt repository: on Ubuntu, Software Updater offers a new version and installs it when you say so, as
   `sudo apt update && sudo apt upgrade` does in a terminal, and `sudo apt-mark hold jason-desktop` stops them. The deb's
-  `jason update apply` and `jason update rollback` install nothing and print apt's commands instead. Where the system
+  `jason update apply` and `jason update rollback` install nothing and print apt's commands instead. Going back from the
+  deb to 0.49.0 or earlier starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`:
+  those releases' packages carry no key for Jason's apt source, and without it every `apt update` reports the source. Where the system
   replaced Jason under its open window, the update item reads
   `Restart Jason and Its Runtime to Finish the Update to <version>` and one notice says so; the item, or a click on the
   notice, stops the runtime the old version runs, which ends a running turn and the work in progress, and starts Jason
-  again, whose start finishes the update.
+  again, whose start finishes the update. Where the system updated Jason while no window was open and the runtime still
+  runs the earlier version, the next start of Jason Desktop offers the same item and notice, and restarts nothing by
+  itself; `jason runtime restart` in a terminal brings the runtime up too, and so the install line says when it is run
+  over an older package. On the deb no sentence names Check for Updates, which it has no item for: where the runtime is
+  newer, or a newer release is out, Jason Desktop and its System screen name Software Updater or
+  `sudo apt update && sudo apt upgrade`.
 - **`jason status` says when the deb's updates cannot arrive, or are not finished.** A release upgrade of Ubuntu turns
   Jason's apt source off, as it turns off every third-party source; `jason status`'s `update` check says when the source
   is off or gone, and Software & Updates → Other Software turns it on again. The same check says when the system
-  installed a version this installation is not set up for yet, which opening Jason Desktop finishes.
+  installed a version this installation is not set up for yet: opening Jason Desktop sets it up, and where the runtime
+  still runs the earlier version, its restart item, or `jason runtime restart`, brings the runtime up.
 - **An AppImage updates itself.** Its update item, or `jason update apply` in a terminal, updates Jason Desktop and the
   `jason` it carries together, as on macOS and Windows. The update replaces the file where it is, so you need to be able
   to write to its folder, and keeps the previous file under `~/.jason/desktop/rollback/<version>/`. Jason Desktop needs
@@ -81,8 +89,10 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
   is removed, and where that is refused nothing of yours goes; an AppImage goes with no password, with its menu entry,
   its icons and its copies of `jason`. It keeps the data directory unless you add `--purge-data`, and the harness root
   always. Removed the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage),
-  the application goes and your account's own files stay: the start at logon is skipped once its `jason` is gone, and
-  the login and menu entries are hidden. `jason uninstall` is the whole removal.
+  the application goes and your account's own files stay. For the deb, the runtime's start at logon is skipped once its
+  `jason` is gone; an AppImage's copy of `jason` under `~/.jason` stays, so `jason` still answers and the runtime still
+  starts at sign-in until `jason uninstall`. The login and menu entries are hidden either way. `jason uninstall` is the
+  whole removal.
   [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#taking-it-off) says what each
   takes off.
 - **A command-line install moves into Jason Desktop on Linux too.** `jason update apply` in a command-line install of an
@@ -103,6 +113,10 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
 - **A runtime started from Jason Desktop on Linux no longer holds the application's files open.** The runtime Jason
   Desktop starts no longer inherits the application's open files, so after an AppImage's window closes, its runtime no
   longer keeps the AppImage mounted.
+- **On Windows, a browser or a terminal the CLI opens no longer holds what `jason` was handed.** A link the CLI opens and
+  the terminal `jason session open` starts no longer inherit the handles the CLI holds as inheritable, its standard
+  streams among them, as the runtime it starts already did not: a script or an agent that runs `jason` with its output
+  captured no longer waits for that browser or terminal to close before its read ends.
 
 ## Upgrading from 0.49.0
 

@@ -611,7 +611,7 @@ test('a start that failed says where the replaced version is only after an updat
     const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
     for (const platform of ['win32', 'darwin', 'linux'] as const) {
         assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
-        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
 });
@@ -751,6 +751,20 @@ test('the deb has moved when its version.json names another version than the win
     assert.equal(packageMovedTo({ form: 'deb' }, null, '0.49.2'), null, 'a window that knows no version of its own');
     assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.1', '0.49.2'), null, 'an AppImage updates itself');
     assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
+});
+
+test('the deb has moved too when the system updated it while no window was open and the runtime this application started still runs the older build', () => {
+    // The start that finds it offers the same restart as a window open at the update: without it the window says nothing
+    // the deb can do, and the runtime runs the older build until a person restarts it by hand.
+    const older = { version: '0.49.1', ours: true };
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', older), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2-rc.1', ours: true }), '0.49.2', 'a candidate before its release');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.3', older), '0.49.3', 'the package moved again under the window: its version');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.1', ours: false }), null, "another installation's runtime, which a restart of this one does not bring up");
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2+14315ba2', ours: true }), null, 'the same build');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.3', ours: true }), null, 'a newer runtime, which a restart from this build would start older');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: null, ours: true }), null, 'no runtime answered');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.2', '0.49.2', older), null, 'an AppImage updates itself');
 });
 
 test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
@@ -936,15 +950,25 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
             ruled,
         ].join(' '),
     );
+    // A release before 0.49.1 carries no key for Jason's apt source, which its install keeps: the source goes first, or every
+    // apt update reports it. Catches a way back that leaves the system's updates failing.
     assert.equal(
-        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
             'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
-            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo rm /etc/apt/sources.list.d/jason-desktop.sources, since that release carries no key for Jason\'s apt source, then sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
+    for (const version of ['0.49.1', '0.49.2-rc.1', '0.50.0']) {
+        assert.ok(
+            keptNotice('The runtime did not start.', { release: previousRelease(version), file: debFile, version }, '/opt/Jason', 'linux').includes(
+                'and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ),
+            version,
+        );
+    }
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {

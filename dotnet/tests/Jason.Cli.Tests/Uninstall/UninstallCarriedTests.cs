@@ -1820,9 +1820,13 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var processes = new FakeProcessControl();
         processes.RunningPids.Add(RuntimeVerbs.Pid);
         var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
+        var registeredAtThePurge = false;
         remover.Purges = _ =>
         {
             // As apt does: the package's files go, the jason this runs as among them.
+            registeredAtThePurge = registrar.State.Registered;
             Directory.Delete(places.DebApplication, recursive: true);
             return new PackageRun(true, 0, string.Empty);
         };
@@ -1836,6 +1840,11 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var purged = log.Steps.IndexOf("package.purge");
         var firstOfTheAccounts = log.Steps.FindIndex(step => step is "file.remove" or "tree.remove" or "directory.remove_if_empty");
         Assert.True(stopped >= 0 && purged > stopped && firstOfTheAccounts > purged, string.Join(" | ", log.Steps));
+
+        // The runtime's start at logon is the account's too: taken only once the package is off, as on macOS after the stop.
+        // Catches a dismissed password dialog that leaves no runtime starting at the next sign-in.
+        Assert.True(registeredAtThePurge, "the runtime's start at logon was taken before the package's removal was granted");
+        Assert.Equal(1, registrar.Removals);
         // apt is waited for longer than the package lock it is told to wait for, so its own answer comes first.
         Assert.True(remover.PurgeBounds.Single() > Jason.Cli.Tests.Update.CommandLineMoveLinuxTests.LockWait(MoveSystem.PurgeArguments(DesktopRemoval.DebPackage)), $"the purge was waited for {remover.PurgeBounds.Single()}");
         foreach (var gone in new[] { atLogin, wrapper, skill })
@@ -1846,6 +1855,49 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.False(Directory.Exists(updater), "the updater's cache is still there");
         Assert.False(File.Exists(_dir.Paths.StartOwedFile), "a start is owed after the installation went");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
+    }
+
+    /// <summary>
+    /// From the deb, a start at logon that cannot be taken away once the package is off ends nothing: what the purge took is
+    /// gone with this account's `jason`, so a refusal naming `jason runtime autostart disable` would leave the rest with no
+    /// command to take it off. The rest goes, and the report names the unit and the commands that take it off by hand; the
+    /// unit itself starts nothing, its program gone. Catches an uninstall that stops half done after the package.
+    /// </summary>
+    [Fact]
+    public async Task From_the_deb_a_start_at_logon_that_cannot_be_taken_after_the_package_is_named_and_the_rest_goes()
+    {
+        var places = LinuxPlaces();
+        var carried = Deb(places);
+        var (atLogin, wrapper, skill, updater) = PlantForTheDeb(places, carried);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
+        remover.Purges = _ =>
+        {
+            Directory.Delete(places.DebApplication, recursive: true);
+            registrar.Refuses = new Jason.Cli.Autostart.AutostartException(Jason.Cli.Autostart.AutostartCodes.Refused, "systemctl could not be run, made up.");
+            return new PackageRun(true, 0, string.Empty);
+        };
+        env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
+
+        await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("refusal_code").ValueKind);
+        var problems = string.Join(" | ", report.GetProperty("problems").EnumerateArray().Select(problem => problem.GetString()));
+        Assert.Contains("systemctl could not be run, made up.", problems, StringComparison.Ordinal);
+        Assert.Contains("systemctl --user disable jason.service", problems, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason runtime autostart disable", problems, StringComparison.Ordinal);
+        foreach (var gone in new[] { atLogin, wrapper, skill })
+        {
+            Assert.False(File.Exists(gone), $"{gone} is still there");
+        }
+
+        Assert.False(Directory.Exists(updater), "the updater's cache is still there");
     }
 
     [Theory]
@@ -1869,6 +1921,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
             return new FakeProcessHandle(5151);
         };
         var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
         remover.Purges = _ => new PackageRun(asked, code, said);
         env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
 
@@ -1879,6 +1933,13 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.Equal(CliErrors.UninstallRefused, report.GetProperty("refusal_code").GetString());
         Assert.Contains("sudo apt purge jason-desktop", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         Assert.Equal(["package.purge jason-desktop"], remover.Calls);
+
+        // The runtime's start at logon stays with the rest, and the refusal says nothing of it having gone: catches the next
+        // sign-in starting no runtime after a dismissed dialog.
+        Assert.Equal(0, registrar.Removals);
+        Assert.True(registrar.State.Registered, $"{row}: the runtime's start at logon went");
+        Assert.Contains("Nothing of this account's was removed, the runtime's start at logon included.", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("already been taken away", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         foreach (var stays in new[] { atLogin, wrapper, skill, carried })
         {
             Assert.True(File.Exists(stays), $"{row}: {stays} went");

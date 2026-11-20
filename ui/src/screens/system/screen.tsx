@@ -98,15 +98,56 @@ function useUpdateKey(): string | null {
     return key;
 }
 
+/** The labels of the deb's update item, whose updates come with the system's and which has no Check for Updates. */
+const packageItemLabel = 'Updates Come Through the Package';
+const packageRestartLabel = 'Restart Jason and Its Runtime to Finish the Update to ';
+
+/** Whether this page can read the desktop's update item: in its own window, from a desktop that has one. */
+function itemReadable(): boolean {
+    const desktop = currentDesktop();
+    return desktop !== undefined && can('updates.item') && typeof earlier(desktop).updates?.item === 'function';
+}
+
+/**
+ * Whether the desktop's update item is the deb's, read from the item it shows (`updates.item`): the system updates that
+ * desktop and the jason it carries. Null until the item has answered, so neither sentence is drawn before it is known.
+ * False in a tab, where the item cannot be read, where it cannot be read at all, and from a desktop of an earlier
+ * version, which has no such item, so the sentence stays as it was.
+ */
+function usePackagedDesktop(): boolean | null {
+    const [packaged, setPackaged] = useState<boolean | null>(() => (itemReadable() ? null : false));
+    useEffect(() => {
+        const desktop = currentDesktop();
+        if (desktop === undefined || !can('updates.item') || typeof earlier(desktop).updates?.item !== 'function')
+            return;
+        let live = true;
+        desktop.updates
+            .item()
+            .then((answer) => {
+                const label = answer.item?.label ?? '';
+                if (live) setPackaged(label === packageItemLabel || label.startsWith(packageRestartLabel));
+            })
+            .catch(() => {
+                if (live) setPackaged(false);
+            });
+        return () => {
+            live = false;
+        };
+    }, []);
+    return packaged;
+}
+
 export function SystemScreen() {
     const api = useApi();
     const updateKey = useUpdateKey();
+    const packaged = usePackagedDesktop();
     useEffect(() => {
         void store.load(api);
     }, [api]);
     const now = new Date();
     const info = store.info.value;
     const ui = info?.ui;
+    const inWindow = placeKind() === 'window' && currentDesktop() !== undefined;
     return (
         <div className="main single">
             <div className="list" style={{ borderRight: 0 }}>
@@ -118,7 +159,12 @@ export function SystemScreen() {
                 {info?.update?.available && (
                     <Notice>
                         Jason {info.update.version} is available.{' '}
-                        {placeKind() === 'window' && currentDesktop() ? (
+                        {inWindow && packaged === null ? null : inWindow && packaged ? (
+                            <>
+                                Your system updates Jason Desktop and the jason it carries: Software Updater offers it,
+                                as <code>sudo apt update && sudo apt upgrade</code> does in a terminal.
+                            </>
+                        ) : inWindow ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
                                 desktop&apos;s Jason menu, or in the menu of its icon in the tray

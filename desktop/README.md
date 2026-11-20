@@ -820,8 +820,13 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
   running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
   (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
-  it, then a relaunch, whose machine set-up finishes that update. If a version the deb's updater recorded does
-  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. An AppImage
+  it, then a relaunch, whose machine set-up finishes that update. A start that finds the runtime this application's own
+  `jason` started still running an older build, the system having updated the package while no window was open, offers
+  the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
+  the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
+  or the system's update where the runtime is newer. If a version the deb's updater recorded does
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
   replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
   update apply`. The updater's cache is
   `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
