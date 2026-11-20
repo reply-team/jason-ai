@@ -66,13 +66,14 @@ public sealed class UpdateDebTests : IDisposable
         }
 
         // The act it names is Jason Desktop's start, or in an open window the item that restarts it or the one that runs its
-        // set-up again, each by the label the desktop gives it in the menu it is in; the check passes once a start has written
-        // its record for the package's version. `jason update apply --finish` alone writes none, so it is not the repair.
+        // set-up again, each by the label the desktop gives it in the menu it is in, less the closing ellipsis, which a console
+        // writes as a control byte on some code pages; the check passes once a start has written its record for the package's
+        // version. `jason update apply --finish` alone writes none, so it is not the repair.
         Assert.Contains("Open Jason Desktop, whose start finishes it", update.Fact, StringComparison.Ordinal);
         Assert.Contains("label: `Restart Jason and Its Runtime to Finish the Update to ${moved}`", DesktopSource("updates.ts"), StringComparison.Ordinal);
         Assert.Contains("Restart Jason and Its Runtime to Finish the Update to 0.34.0", update.Fact, StringComparison.Ordinal);
         Assert.Contains("export const putBackLabel = 'Put Back jason and the Skills…';", DesktopSource("machine-setup.ts"), StringComparison.Ordinal);
-        Assert.Contains("Command Line, Put Back jason and the Skills…", update.Fact, StringComparison.Ordinal);
+        Assert.Contains("Put Back jason and the Skills under Command Line", update.Fact, StringComparison.Ordinal);
         var desk = DesktopSource("desk.ts");
         Assert.Contains("{ label: 'Jason', submenu: jason },", desk, StringComparison.Ordinal);
         Assert.Contains("            ...this.updateItems(false),\n            ...this.commandItems(),\n", desk, StringComparison.Ordinal);

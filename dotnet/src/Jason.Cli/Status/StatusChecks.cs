@@ -537,7 +537,7 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Command Line, Put Back jason and the Skills…, which runs that set-up again.",
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
                 null);
         }
 
