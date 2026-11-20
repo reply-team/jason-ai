@@ -11,7 +11,7 @@ import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
-import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
+import { claudeTurnSettings, codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
 import { codexAutoEdit, codexFullAccess, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
@@ -1213,7 +1213,8 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
     for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] satisfies ChatMode[]) {
         const r = rig(t);
         const { id } = await r.chat.create();
-        if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+        // A new chat starts in Full access, so every mode is chosen, Ask first among them.
+        await r.chat.setMode(id, mode, 'claude');
         await r.turn(id, 'hello', claude);
         const args = r.hosts()[0]?.args ?? [];
         const rules = (name: string) => {
@@ -1223,6 +1224,11 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
         };
         const allowed = rules('--allowedTools');
         const disallowed = rules('--disallowedTools');
+        // The turn ran in the mode the row names: Ask first and Auto-edit take the turn settings, Plan only its own, Full
+        // access the turn's settings file.
+        const settings = rules('--settings')[0];
+        assert.equal(settings, mode === 'plan_only' ? planTurnSettings : mode === 'full_access' ? settings : claudeTurnSettings, `${mode}: the turn ran in it`);
+        if (mode === 'full_access') assert.ok(settings !== claudeTurnSettings && settings !== planTurnSettings, 'full_access: the turn ran in it');
         for (const form of personsWordForms) {
             assert.equal(allowed.includes(`Bash(jason ${form}:*)`), mode !== 'plan_only', `${mode}: ${form} allowed`);
             if (mode !== 'plan_only') assert.ok(!disallowed.includes(`Bash(jason ${form}:*)`), `${mode}: ${form} is no deny rule`);
@@ -1236,12 +1242,19 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
 test('every turn, on either host and in every mode, carries the chat\'s variable, and only a Plan only turn carries JASON_CONFINED', async (t) => {
     for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] satisfies ChatMode[]) {
         for (const host of ['claude', 'codex']) {
-            if (host === 'codex' && (mode === 'auto_edit' || mode === 'full_access')) continue;
+            if (host === 'codex' && mode === 'auto_edit') continue;
             const r = rig(t, { env: { JASON_CONFINED: '1', jason_chat_turn: '' } });
             const { id } = await r.chat.create();
-            if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+            // Every mode is chosen, Ask first among them: a new chat starts in Full access. On Codex a Full access record runs
+            // its turn in Ask first, which still carries the chat's variable and not JASON_CONFINED.
+            await r.chat.setMode(id, mode, 'claude');
             await r.turn(id, 'hello', { host });
             const env = r.hosts()[0]?.env ?? {};
+            if (host === 'claude') {
+                const args = r.hosts()[0]?.args ?? [];
+                const settings = args[args.indexOf('--settings') + 1];
+                assert.equal(settings === claudeTurnSettings, mode === 'ask_first' || mode === 'auto_edit', `${host} ${mode}: the turn ran in it`);
+            }
             const named = (name: string) => Object.entries(env).filter(([each]) => each.toUpperCase() === name);
             assert.deepEqual(named('JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], `${host} ${mode}`);
             assert.deepEqual(named('JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], `${host} ${mode}`);
