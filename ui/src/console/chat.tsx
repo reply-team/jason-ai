@@ -62,6 +62,7 @@ import {
     planLine,
     codexPlanLine,
     planModeMoved,
+    removedFolder,
     joined,
     queued,
     said,
@@ -1805,6 +1806,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         {underHead
                             ? 'Remove this conversation? Only the chat goes: its record leaves this computer, and the AI host keeps its own transcript of it. The agent stays as it is, and keeps working if it is running. Pausing it is in its header; archiving it is at the end of its Settings tab.'
                             : 'Remove this conversation? Its record goes from this computer; the AI host keeps its own transcript of it.'}
+                        {conversations.value.find((each) => each.id === chatId)?.ownFolder === true
+                            ? ` ${removedFolder}`
+                            : null}
                     </div>
                     <div className="crow">
                         <button ref={keepButton} className="btn sm" type="button" onClick={keep}>

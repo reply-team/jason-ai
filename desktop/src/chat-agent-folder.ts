@@ -13,7 +13,7 @@
 // chat folder (`ownConversationFolder`).
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** The memory files a host reads in the chat folder beside the two the desktop writes, which it never writes. */
@@ -143,16 +143,27 @@ export function ownAgentFolder(chat: string, records: string, remove: (path: str
     return changed;
 }
 
-/** Copies the regular files and folders below `from` into `to`; a link or anything else is not copied. */
-function copyOwn(from: string, to: string): void {
+/**
+ * Copies the regular files and folders below `from` into `to`; a link or anything else is not copied. Nothing is written
+ * through what stands at a name in `to`: a folder is entered only when it is a real folder, and anything else there, a
+ * link or a junction included, is removed as itself and a folder made in its place; a file is removed as itself, a hard
+ * link included, and copied to a name nothing holds.
+ */
+export function copyOwn(from: string, to: string): void {
     for (const name of readdirSync(from)) {
         const source = join(from, name);
+        const target = join(to, name);
         const stat = lstatSync(source);
         if (stat.isDirectory()) {
-            mkdirSync(join(to, name), { recursive: true });
-            copyOwn(source, join(to, name));
+            const there = kind(target);
+            if (there !== 'folder') {
+                if (there !== null) removed(target);
+                mkdirSync(target);
+            }
+            copyOwn(source, target);
         } else if (stat.isFile()) {
-            copyFileSync(source, join(to, name));
+            removed(target);
+            copyFileSync(source, target, constants.COPYFILE_EXCL);
         }
     }
 }
@@ -182,8 +193,7 @@ export function ownConversationFolder(chats: string, folder: string, chat: strin
         for (const host of skillsFolders) {
             const skills = join(chat, host.folder, 'skills');
             if (kind(skills) !== 'folder') continue;
-            mkdirSync(join(folder, host.folder, 'skills'), { recursive: true });
-            copyOwn(skills, join(folder, host.folder, 'skills'));
+            copyOwn(skills, realSkillsFolder(folder, host));
         }
     } catch (error) {
         throw new AgentFolderUnowned((error as NodeJS.ErrnoException | null)?.code);

@@ -69,7 +69,7 @@ test('a record is written and read back field for field, and nothing is left bes
     });
     writeConversation(folder, kept);
     assert.deepEqual(readdirSync(folder), [`${kept.id}.json`]);
-    assert.deepEqual(readConversations(folder), { kept: [kept], unreadable: 0 });
+    assert.deepEqual(readConversations(folder), { kept: [kept], unreadable: 0, listed: true });
     if (process.platform !== 'win32') assert.equal(statSync(join(folder, `${kept.id}.json`)).mode & 0o777, 0o600, 'readable by this account alone');
 });
 
@@ -96,7 +96,7 @@ test('a link at a record\'s name is replaced by a regular file, and what it name
         t.skip(`this platform made no link here (${(error as NodeJS.ErrnoException).code})`);
         return;
     }
-    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 1 }, 'a link is never read as a record');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 1, listed: true }, 'a link is never read as a record');
     writeConversation(folder, kept);
     assert.ok(lstatSync(join(folder, `${kept.id}.json`)).isFile());
     assert.equal(readFileSync(elsewhere, 'utf8'), 'not the desktop\'s\n');
@@ -112,7 +112,17 @@ test('a conversations folder that is a link to another folder is refused, and no
     symlinkSync(elsewhere, folder, 'junction');
     assert.throws(() => writeConversation(folder, record()), (error) => error instanceof ConversationUnwritten && error.code === 'ENOTDIR');
     assert.deepEqual(readdirSync(elsewhere), []);
-    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0 }, 'nor is it read');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false }, 'nor is it read, nor listed');
+});
+
+test('a conversations folder that is not there, or is no folder, is not listed: nothing in it is known, so no folder is said to be no record\'s', (t) => {
+    const { folder } = folderOf(t);
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false }, 'not there');
+    writeFileSync(folder, 'not a folder');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false }, 'a file');
+    rmSync(folder);
+    mkdirSync(folder);
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: true }, 'an empty folder is listed, with nothing in it');
 });
 
 test('a file that is not a record is counted, never read as one, and left byte for byte as it was', (t) => {
@@ -130,7 +140,7 @@ test('a file that is not a record is counted, never read as one, and left byte f
         'notes.txt': 'not a record, and not counted',
     };
     for (const [name, text] of Object.entries(planted)) writeFileSync(join(folder, name), text);
-    assert.deepEqual(readConversations(folder), { kept: [good], unreadable: 5 });
+    assert.deepEqual(readConversations(folder), { kept: [good], unreadable: 5, listed: true });
     for (const [name, text] of Object.entries(planted)) assert.equal(readFileSync(join(folder, name), 'utf8'), text, name);
 });
 

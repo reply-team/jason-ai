@@ -30,11 +30,11 @@
  * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
-import { endedNameShape, moveLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
+import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
 import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
@@ -180,6 +180,11 @@ export interface ConversationSummary {
     running: boolean;
     /** The conversation's access mode, as the desktop holds it now. */
     mode: ChatMode;
+    /**
+     * Present, and true, when its turns run in a folder of its own (`folder: 'own'` on its record), which removing it
+     * moves to the ended place, kept seven days.
+     */
+    ownFolder?: true;
 }
 
 /**
@@ -246,7 +251,10 @@ export interface ChatOptions {
     openFolder?(path: string): void | Promise<void>;
     /** Starts a turn's host; absent, `startHost`. A row gives one whose exit it lets through when it chooses. */
     startHost?: typeof startHost;
-    /** Said when a grant's folder an earlier desktop left could not be moved to the ended place or swept, by the system's error code. */
+    /**
+     * Said when a folder could not be moved to the ended place or swept, by the system's error code: a grant's folder an
+     * earlier desktop left, or a conversation's own folder.
+     */
     fullFolderFailed?(step: 'move' | 'sweep', code: string): void;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
@@ -569,12 +577,12 @@ export class Chat {
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
         // The standing choice of Full access an earlier desktop kept, and its mark of a take-back owed, mean nothing now:
-        // every chat starts in Full access with no box. Both are removed, and neither ever changes a mode.
+        // every chat starts in Full access with no box. Both files are unlinked, and neither ever changes a mode.
         for (const left of [options.paths.fullAccess, join(dirname(options.paths.fullAccess), 'full-access-taken-back')]) {
             try {
-                rmSync(left, { force: true });
+                unlinkSync(left);
             } catch {
-                // Left for the next start; nothing reads it.
+                // Not there, or left for the next start; nothing reads it.
             }
         }
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
@@ -600,8 +608,9 @@ export class Chat {
             ...(options.decided ? { decided: options.decided } : {}),
             ...(options.answerWindowMs !== undefined ? { timeoutMs: options.answerWindowMs } : {}),
         });
-        this.#sweepAtStart();
-        this.#sweepOwnFolders();
+        // A conversation's own folder no record names is known only once every record was read: one that cannot be read
+        // names no folder.
+        this.#sweepAtStart(read.listed && read.unreadable === 0 ? new Set(read.kept.map((each) => each.id)) : null);
         // A desktop left running sweeps each day too, so an ended folder goes within a day of its seven days, start or no
         // start.
         this.#daily = setInterval(() => this.#sweepLater(), options.sweepEveryMs ?? sweepEveryMs);
@@ -619,18 +628,22 @@ export class Chat {
 
     /**
      * A grant's folder an earlier desktop left is a leftover (no grant is made now): it moves to the ended place, its
-     * seven days counted from now, and the conversation it was for is told so once, when it is opened. Then the ended
-     * place is swept, off the send path and bounded; a failure leaves the folder and says a code, and a turn is never
-     * refused for it.
+     * seven days counted from now, and the conversation it was for is told so once, when it is opened. So does a
+     * conversation's own folder that no record names, when `recorded` names every record (a removal that found the folder
+     * held by a terminal leaves it for a start); while a record cannot be read, `recorded` is null and no such folder
+     * moves. Then the ended place is swept, off the send path and bounded; a failure leaves the folder where it is and
+     * says a code, and a turn is never refused for it.
      */
-    #sweepAtStart(): void {
+    #sweepAtStart(recorded: ReadonlySet<string> | null): void {
+        const said = (code: string) => this.#options.fullFolderFailed?.('move', code);
         try {
-            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), (code) => this.#options.fullFolderFailed?.('move', code))) {
+            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), said)) {
                 if (each.conversation !== null && conversationIdShape.test(each.conversation)) this.#movedAtStart.set(each.conversation, each.name);
             }
         } catch {
             // Nothing to move.
         }
+        if (recorded !== null) moveOwnLeftovers(this.#options.paths.chats, this.#fullFolders(), recorded, this.#now(), said);
         this.#sweepLater();
     }
 
@@ -649,30 +662,6 @@ export class Chat {
     #folderOf(conversation: Conversation): string {
         const { paths } = this.#options;
         return conversation.folder === 'own' ? join(paths.chats, conversation.id) : paths.chat;
-    }
-
-    /**
-     * At a start, a conversation's own folder that no kept conversation names is one whose removal failed while a host
-     * still held it: it is removed now. A name that is no conversation's id is left alone, and a failure is the next
-     * start's.
-     */
-    #sweepOwnFolders(): void {
-        let names: string[];
-        try {
-            names = readdirSync(this.#options.paths.chats);
-        } catch {
-            return;
-        }
-        for (const name of names) if (conversationIdShape.test(name) && !this.#kept.has(name)) this.#removeOwnFolder(name);
-    }
-
-    /** Removes a conversation's own folder and what is in it, a link as a link; a failure is the next start's (`#sweepOwnFolders`). */
-    #removeOwnFolder(id: string): void {
-        try {
-            rmSync(join(this.#options.paths.chats, id), { recursive: true, force: true });
-        } catch {
-            // A host still holds it.
-        }
     }
 
     /** The Open folder button of that notice: opens the ended folder of that name, and no other path. */
@@ -765,6 +754,7 @@ export class Chat {
             updatedAt: conversation.updated_at,
             running: this.#running.has(conversation.id),
             mode: this.#modeOf(conversation),
+            ...(conversation.folder === 'own' ? { ownFolder: true as const } : {}),
         };
     }
 
@@ -884,8 +874,10 @@ export class Chat {
     }
 
     /**
-     * Removes a conversation's record, and its own folder with what its turns left there; the host's own transcript stays
-     * the host's. One whose turn runs is refused.
+     * Removes a conversation's record, and moves its own folder, with what its turns left there, to the ended place, where
+     * the sweep removes it seven days later; the host's own transcript stays the host's. A folder that cannot be moved now
+     * (a terminal "Continue in" opened holds it, on Windows) stays where it is, nothing in it removed, for a later start to
+     * move. One whose turn runs is refused.
      */
     remove(id: unknown): void {
         const conversation = this.#own(id);
@@ -900,7 +892,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
-        if (conversation.folder === 'own') this.#removeOwnFolder(conversation.id);
+        if (conversation.folder === 'own') endConversationFolder(this.#options.paths.chats, this.#fullFolders(), conversation.id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
     }
 
     /**

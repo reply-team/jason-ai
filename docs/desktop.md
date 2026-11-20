@@ -212,8 +212,10 @@ them on.
   a Demo desktop are separate instances, so a click on Jason's icon while the switch is starting the other may bring the
   one that is quitting forward; the start the switch asked for then only brings its own window forward.
 - `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder, where every turn of it runs, in every
-  mode. It is made at the conversation's first turn and removed with the conversation, and before each turn the desktop
-  places in it the skills and the instructions the shared folder below holds.
+  mode. It is made at the conversation's first turn, and before each turn the desktop places in it the skills and the
+  instructions the shared folder below holds. When you remove the conversation, its folder moves to
+  `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed; one a terminal still holds stays where
+  it is until a later start of the desktop moves it.
 - `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier version of the desktop
   made still run. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
@@ -695,8 +697,9 @@ one, and **…** with the conversation's acts. The move is the agent page's own 
 says before a start how many people the agent holds and how its messages go; it shows from the moment a set-up chat
 becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
 turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
-conversation's record from this computer after one question, saying that the agent stays as it is; the host keeps its
-own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
+conversation's record from this computer after one question, saying that the agent stays as it is and, for a
+conversation with a folder of its own, that the files in it go seven days later and where they are until then; the host
+keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,

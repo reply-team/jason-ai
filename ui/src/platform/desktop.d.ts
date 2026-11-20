@@ -193,6 +193,13 @@ export interface DesktopConversation {
      * from `chat.setMode`'s answer and from `mode` events, never from what the page asked for.
      */
     mode: DesktopChatMode;
+    /**
+     * Present, and true, when its turns run in a folder of its own, `<data>/desktop/chats/<id>/`: removing the
+     * conversation moves that folder to `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed.
+     * Absent for a conversation an earlier desktop made, whose turns run in the shared chat folder, and from an earlier
+     * desktop.
+     */
+    ownFolder?: true;
 }
 
 /**

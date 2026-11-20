@@ -3,20 +3,24 @@
 // restart, choosing Full access takes the mode off the record, a standing choice an earlier desktop left changes no mode
 // and is gone once the desktop has started, and the Feed opens in Full access too, by one named constant, and offers every
 // mode. Then one folder per conversation: every turn of a new conversation runs in its own folder beside the chat folder,
-// under `chats`, in every mode and on every host, with the instruction files and the recorded skills there, goes with the
-// conversation, and is where a terminal continues it; a conversation an earlier desktop made, whose record names no
-// folder, keeps running and is continued in the shared chat folder; nothing is made for a grant of Full access.
+// under `chats`, in every mode and on every host, with the instruction files and the recorded skills there, moves to the
+// ended place when the conversation is removed, or at a start when every record was read and none names it, and is where
+// a terminal continues it; a conversation an earlier desktop made, whose record names no folder, keeps running and is
+// continued in the shared chat folder; nothing is made for a grant of Full access. A console of an earlier version that
+// names a host when it makes a chat is answered.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { newConversationId } from '../src/chat-conversations.ts';
+import { registerChat } from '../src/chat-ipc.ts';
 import { readFence } from '../src/chat-deny.ts';
 import * as chatModes from '../src/chat-modes.ts';
 import { type ChatMode } from '../src/chat-modes.ts';
+import type { SenderFrame } from '../src/ipc.ts';
 import { OpenIn, type OpenInDeps } from '../src/open-in.ts';
 import { continueFlags } from '../src/open-in-terminal.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
@@ -265,6 +269,23 @@ test('the Feed\'s menu offers every mode as any chat\'s does: Auto-edit and Full
     assert.equal(r.boxes, 0, 'no box asked before Full access');
 });
 
+test('a console of an earlier version that names a host when it makes a chat is answered with the chat, in Full access: the host is ignored, never refused', async (t) => {
+    const r = rig(t);
+    const origin = 'http://127.0.0.1:41234';
+    const listeners = new Map<string, (event: { senderFrame: SenderFrame | null }, ...args: unknown[]) => unknown>();
+    registerChat({ handle: (channel, listener) => void listeners.set(channel, listener) }, r.chat, () => origin, () => {});
+    const page = { senderFrame: { url: `${origin}/ui/#/chat`, parent: null } };
+    for (const host of ['claude', 'codex', 'no-such-host']) {
+        const answer = (await listeners.get('jason:chat.create')?.(page, undefined, host)) as { id?: string; mode?: string; refused?: string };
+        assert.equal(answer.refused, undefined, `${host}: answered, not refused`);
+        assert.equal(answer.mode, 'full_access', host);
+        assert.equal(r.chat.open(answer.id).mode, 'full_access', `${host}: the chat made`);
+        // The chat itself, called as an earlier desktop's own handler called it: the host after the campaign.
+        const made = await (r.chat.create as (...args: unknown[]) => Promise<{ mode: string }>)(null, host);
+        assert.equal(made.mode, 'full_access', `${host}: made when the chat itself is given a host`);
+    }
+});
+
 // The folder: one per conversation made from now on.
 
 test('every turn of a new conversation runs in its own folder beside the chat folder, under chats, in every mode and on Codex too', async (t) => {
@@ -355,17 +376,111 @@ test('no folder above a new conversation\'s own, up to the data directory, carri
     for (const file of ['CLAUDE.md', 'AGENTS.md']) assert.ok(textOf(join(own, file)) === fence.instructions, `${file} in the conversation's own folder holds the instruction text`);
 });
 
-test('removing a conversation removes its folder, and leaves the chat folder and every other conversation\'s', async (t) => {
+test('removing a conversation moves its folder to the ended place, where the sweep takes it after seven days, and leaves the chat folder and every other conversation\'s', async (t) => {
     const r = rig(t);
     const one = await r.chat.create();
     const two = await r.chat.create();
     await r.turn(one.id, 'hello', claude);
     await r.turn(two.id, 'hello', claude);
+    put(join(ownFolder(r, one.id), 'made-by-the-agent.txt'), 'the agent\'s file');
     assert.ok(existsSync(ownFolder(r, one.id)), 'its folder is there while the conversation is kept');
+    const before = Date.now();
     r.chat.remove(one.id);
-    await settled(() => !existsSync(ownFolder(r, one.id)), 'its folder goes with it');
+    assert.equal(existsSync(ownFolder(r, one.id)), false, 'its folder goes with it at once');
+    const [ended, ...more] = entriesOf(r.b.paths.chatFullEnded);
+    assert.deepEqual(more, [], 'one folder in the ended place');
+    const parts = /^(conv_[0-9A-HJKMNP-TV-Z]{26})-([0-9]+)$/.exec(ended ?? '');
+    assert.equal(parts?.[1], one.id, `the ended folder is named with the conversation's id: ${ended}`);
+    assert.ok(Number(parts?.[2]) >= before && Number(parts?.[2]) <= Date.now(), 'and the moment it moved');
+    assert.equal(textOf(join(r.b.paths.chatFullEnded, ended ?? '', 'made-by-the-agent.txt')), 'the agent\'s file', 'with everything in it');
     assert.ok(existsSync(ownFolder(r, two.id)));
     assert.ok(existsSync(join(r.b.paths.chat, 'CLAUDE.md')));
+});
+
+test('a conversation\'s folder that cannot be moved when the conversation is removed stays where it is with everything in it, and the next start moves it', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    put(join(ownFolder(r, id), 'made-by-the-agent.txt'), 'the agent\'s file');
+    // A file where the ended place should be makes the move fail, as a terminal "Continue in" opened there does on Windows.
+    put(r.b.paths.chatFullEnded, 'in the way');
+    r.chat.remove(id);
+    assert.equal(existsSync(join(r.b.paths.conversations, `${id}.json`)), false, 'the record is gone');
+    assert.equal(textOf(join(ownFolder(r, id), 'made-by-the-agent.txt')), 'the agent\'s file', 'the folder stays, nothing in it deleted');
+    rmSync(r.b.paths.chatFullEnded);
+    r.restart();
+    assert.equal(existsSync(ownFolder(r, id)), false, 'the next start moves it');
+    const [ended] = entriesOf(r.b.paths.chatFullEnded);
+    assert.equal(textOf(join(r.b.paths.chatFullEnded, ended ?? '', 'made-by-the-agent.txt')), 'the agent\'s file');
+});
+
+test('at a start, a conversation\'s folder that no record names is moved to the ended place, and every folder a record names stays', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    const orphan = newConversationId();
+    put(join(ownFolder(r, orphan), 'made-by-the-agent.txt'), 'the agent\'s file');
+    put(join(dirname(ownFolder(r, orphan)), 'not-a-conversation', 'kept.txt'), 'not the desktop\'s');
+    r.restart();
+    assert.equal(existsSync(ownFolder(r, orphan)), false, 'moved');
+    const [ended, ...more] = entriesOf(r.b.paths.chatFullEnded);
+    assert.deepEqual(more, []);
+    assert.ok(ended?.startsWith(`${orphan}-`), `named with its id: ${ended}`);
+    assert.equal(textOf(join(r.b.paths.chatFullEnded, ended ?? '', 'made-by-the-agent.txt')), 'the agent\'s file', 'with everything in it');
+    assert.ok(existsSync(ownFolder(r, id)), 'the kept conversation\'s folder stays');
+    assert.ok(existsSync(join(dirname(ownFolder(r, orphan)), 'not-a-conversation', 'kept.txt')), 'a name that is no conversation\'s stays');
+});
+
+test('at a start, while a record cannot be read, no folder is moved: not the folder of the record that cannot be read, nor one no record names', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    put(join(ownFolder(r, id), 'made-by-the-agent.txt'), 'the agent\'s file');
+    // A record a crash cut short: its name is there, its text is no record.
+    writeFileSync(join(r.b.paths.conversations, `${id}.json`), '{"id":"');
+    const orphan = newConversationId();
+    put(join(ownFolder(r, orphan), 'made-by-the-agent.txt'), 'another file');
+    r.restart();
+    assert.equal(textOf(join(ownFolder(r, id), 'made-by-the-agent.txt')), 'the agent\'s file', 'the folder of the record that cannot be read stays');
+    assert.equal(textOf(join(ownFolder(r, orphan), 'made-by-the-agent.txt')), 'another file', 'so does one no record names');
+    assert.deepEqual(entriesOf(r.b.paths.chatFullEnded), []);
+});
+
+test('at a start, a conversations\' folder that cannot be listed keeps every conversation\'s folder', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    const orphan = newConversationId();
+    put(join(ownFolder(r, orphan), 'made-by-the-agent.txt'), 'another file');
+    // The records' folder is not a folder: nothing in it can be listed.
+    rmSync(r.b.paths.conversations, { recursive: true });
+    put(r.b.paths.conversations, 'not a folder');
+    r.restart();
+    assert.ok(existsSync(ownFolder(r, id)), 'the folder a lost record named stays');
+    assert.ok(existsSync(ownFolder(r, orphan)), 'and one no record names');
+    assert.deepEqual(entriesOf(r.b.paths.chatFullEnded), []);
+});
+
+test('a conversations\' folders place that is a link: nothing it names is moved at a start or at a removal, and no turn starts there', async (t) => {
+    const r = rig(t);
+    const one = await r.chat.create();
+    const two = await r.chat.create();
+    await r.turn(one.id, 'hello', claude);
+    await r.turn(two.id, 'hello', claude);
+    const chats = dirname(ownFolder(r, one.id));
+    const outside = join(r.b.root, 'outside');
+    renameSync(chats, outside);
+    const orphan = newConversationId();
+    put(join(outside, orphan, 'precious.txt'), 'mine');
+    symlinkSync(outside, chats, 'junction');
+    r.restart();
+    assert.equal(textOf(join(outside, orphan, 'precious.txt')), 'mine', 'a start moves nothing out of it');
+    r.chat.remove(one.id);
+    assert.ok(existsSync(join(outside, one.id)), 'a removal moves nothing out of it');
+    assert.deepEqual(entriesOf(r.b.paths.chatFullEnded), []);
+    const said = await r.turn(two.id, 'again', claude);
+    assert.ok(said.some((event) => event.kind === 'done' && typeof event.error === 'string'), `the turn is refused: ${JSON.stringify(said)}`);
+    assert.equal(r.hosts().length, 2, 'no host is started for it');
 });
 
 test('a conversation an earlier desktop made, whose record names no folder, keeps running in the shared chat folder in every mode and resumes its session there', async (t) => {

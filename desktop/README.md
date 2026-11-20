@@ -124,9 +124,13 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
   start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
 - `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder (`folder: 'own'` on its record), where
-  every turn of it runs, in every mode. It is made at the conversation's first turn and removed with the conversation;
-  one that no record names is removed at start. Before each turn the desktop copies the recorded skills of the shared
-  folder into it and writes the instruction files there.
+  every turn of it runs, in every mode. It is made at the conversation's first turn. Removing the conversation moves it,
+  one rename, to `chat-full-ended/<conversation id>-<moment>/`, where the sweep removes it seven days later; so does a
+  start, for a folder no record names, but only when every record could be read: a record that cannot be read names no
+  folder, and then none moves. A folder that cannot be moved, one a terminal holds on Windows, stays where it is, nothing
+  in it removed, for a later start; nothing is moved out of a `chats` that is a link or a junction, and no turn starts in
+  one. Before each turn the desktop copies the recorded skills of the shared folder into it, removing whatever stands at
+  a name there, a link included, before it writes, and writes the instruction files there.
 - `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier desktop made (no
   `folder` on its record) still run; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
@@ -203,8 +207,8 @@ A campaign has one conversation, found when it is opened and made at the person'
 page asks for `create` then, never when it only draws the agent's Chat), and the chat may hold any number of set-up
 chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
 it is about, its title, the session each agent host named for it (and, beside it in `plain_sessions`, whether the last
-turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex outside Full access:
-only such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
+turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex in any mode: only
+such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
 markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
 its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
 and at the end of each turn. It is kept within 2 MB: each text of an entry is cut to 128 KB, keeping its end after a

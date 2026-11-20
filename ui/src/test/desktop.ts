@@ -335,6 +335,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         updatedAt,
         running,
         mode,
+        ownFolder,
     }: DesktopConversationRecord): DesktopConversation => ({
         id,
         campaignId,
@@ -343,6 +344,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         updatedAt,
         running,
         mode,
+        ...(ownFolder === true ? { ownFolder } : {}),
     });
     const keep = (record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord => {
         const full: DesktopConversationRecord = {
@@ -517,8 +519,15 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 if (existing) return summaryOf(existing);
                 const id = `conv_01JD${String(++made).padStart(22, '0')}`;
                 const title = campaign === null ? 'New chat' : (names.get(campaign) ?? campaign);
-                // As the desktop makes every new chat: in Full access.
-                const record = keep({ id, campaignId: campaign, title, updatedAt: now(), mode: 'full_access' });
+                // As the desktop makes every new chat: in Full access, with a folder of its own.
+                const record = keep({
+                    id,
+                    campaignId: campaign,
+                    title,
+                    updatedAt: now(),
+                    mode: 'full_access',
+                    ownFolder: true,
+                });
                 // Made and never sent to: the window's that made it, not yet listed.
                 listed.delete(id);
                 return summaryOf(record);
@@ -597,7 +606,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             }),
             openFolder: answering('chat.openFolder', (name) => {
                 // As the desktop does: only the name of a folder it keeps is opened.
-                return typeof name === 'string' && /^[0-9A-HJKMNP-TV-Z]{26}-[0-9]{10,16}$/.test(name)
+                return typeof name === 'string' && /^(?:conv_)?[0-9A-HJKMNP-TV-Z]{26}-[0-9]{10,16}$/.test(name)
                     ? null
                     : { refused: 'That is not a folder the desktop keeps.' };
             }),

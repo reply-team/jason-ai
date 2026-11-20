@@ -485,6 +485,34 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(within(listed()).queryByRole('button', { name: 'Go' })).toBeNull());
     });
 
+    it('asks before removing a conversation with a folder of its own, saying its files go seven days later and where they are until then; one an earlier desktop made names no folder', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', title: 'Own folder', ownFolder: true });
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', title: 'Shared folder' });
+        renderConsole(desktop);
+        for (const [id, title, own] of [
+            ['conv_01JDKEPT0000000000000000B1', 'Own folder', true],
+            ['conv_01JDKEPT0000000000000000B2', 'Shared folder', false],
+        ] as const) {
+            await waitFor(() => within(listed()).getByRole('button', { name: title }));
+            fireEvent.click(within(listed()).getByRole('button', { name: title }));
+            await waitFor(() => expect(calls(desktop, 'chat.open').map((each) => each.args[0])).toContain(id));
+            const pane = shownPane()!;
+            await waitFor(() =>
+                expect(within(pane).getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', false),
+            );
+            fireEvent.click(within(pane).getByRole('button', { name: 'Remove' }));
+            const asking = within(pane).getByRole('alertdialog', { name: 'Remove this conversation?' });
+            expect(asking.textContent).toContain('the AI host keeps its own transcript of it');
+            if (own)
+                expect(asking.textContent).toContain(
+                    "The files in its folder go seven days later; until then they are in Jason's data directory, under desktop/chat-full-ended.",
+                );
+            else expect(asking.textContent).not.toMatch(/folder|seven days|chat-full-ended/);
+            fireEvent.click(within(asking).getByRole('button', { name: 'Keep it' }));
+        }
+    });
+
     it('keeps Start fresh and Remove from a turn that runs, and says a refusal in the desktop’s words', async () => {
         const desktop = chatDesktop();
         renderConsole(desktop);

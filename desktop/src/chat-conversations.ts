@@ -450,14 +450,18 @@ function ownFolder(folder: string): void {
     if (!isFolder) throw new ConversationUnwritten('ENOTDIR');
 }
 
-/** The records in the folder, and how many files there could not be read as one; nothing there is changed. */
-export function readConversations(folder: string): { kept: Conversation[]; unreadable: number } {
+/**
+ * The records in the folder, how many files there could not be read as one, and whether the folder could be listed at
+ * all: one that is not there, is no folder or is a link is not, and then nothing is known of what it would hold. Nothing
+ * there is changed.
+ */
+export function readConversations(folder: string): { kept: Conversation[]; unreadable: number; listed: boolean } {
     let names: string[];
     try {
-        if (!lstatSync(folder).isDirectory()) return { kept: [], unreadable: 0 };
+        if (!lstatSync(folder).isDirectory()) return { kept: [], unreadable: 0, listed: false };
         names = readdirSync(folder);
     } catch {
-        return { kept: [], unreadable: 0 };
+        return { kept: [], unreadable: 0, listed: false };
     }
     const kept: Conversation[] = [];
     let unreadable = 0;
@@ -475,7 +479,7 @@ export function readConversations(folder: string): { kept: Conversation[]; unrea
         if (record === null) unreadable++;
         else kept.push(record);
     }
-    return { kept, unreadable };
+    return { kept, unreadable, listed: true };
 }
 
 /** Writes the record to a new file beside its name, readable by this account alone, and renames it over the name. */
