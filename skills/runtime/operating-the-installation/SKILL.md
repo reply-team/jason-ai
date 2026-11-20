@@ -49,7 +49,7 @@ item, by the desktop's own `jason-desktop:` link: it asks the runtime nothing, d
 browser. Run it when the person asks to see what waits; `--no-open` prints the address instead. Where Jason was
 installed by its install script or Jason Desktop's own package, on macOS, Windows or Linux, Jason Desktop is already
 there, since it is the installation itself. Where it refuses with `desktop_not_installed`, no Jason Desktop that takes
-its links is installed for this account (a command-line install that has not moved into the desktop, or an AppImage on
+its links is installed for this account (a command-line install still waiting to move into the desktop, or an AppImage on
 Linux): say so, as the refusal does.
 
 When they ask what happened, what is queued or what waits for them, name **Needs you** in Jason Desktop, which

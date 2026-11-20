@@ -13,8 +13,8 @@ jason ui open
 opens Jason Desktop on what waits, by the desktop's own `jason-desktop:` link; `--approval <id>` and `--question <id>`
 open it at one item, and `--no-open` prints the address instead, for an agent to hand to you. It asks the runtime
 nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
-command-line install that has not moved into the desktop, or an AppImage, whose menu entry declares no link), it opens
-nothing and refuses with `desktop_not_installed`.
+command-line install still waiting to move into the desktop, or an AppImage, whose menu entry declares no link), it
+opens nothing and refuses with `desktop_not_installed`.
 
 A page of the UI is paired with `jason ui pair`, which prints a link that pairs one page, once, within 60 seconds, and
 opens nothing; Jason Desktop pairs its own window with it. `jason ui pair --approval <id>` and `--question <id>` pair at
