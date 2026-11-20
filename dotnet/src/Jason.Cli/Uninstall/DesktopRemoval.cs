@@ -654,14 +654,11 @@ public static partial class DesktopRemoval
     }
 
     /// <summary>
-    /// <c>&lt;data&gt;/desktop/machine-setup.json</c>: the version and the place Jason Desktop's start last set the machine up
-    /// for, which a start of that version from that place reads as done (<c>desktop/src/machine-setup.ts</c>).
+    /// <c>&lt;data&gt;/desktop/machine-setup.json</c> under <paramref name="dataRoot"/>: the version and the place Jason Desktop's
+    /// start last set the machine up for, which a start of that version from that place reads as done
+    /// (<c>desktop/src/machine-setup.ts</c>). A file of the desktop's own folder, as <see cref="AppImageCopy.BundlesUnder"/> is.
     /// </summary>
-    public static string SetupRecordFile(JasonPaths paths)
-    {
-        ArgumentNullException.ThrowIfNull(paths);
-        return Path.Combine(paths.Root, "desktop", "machine-setup.json");
-    }
+    public static string SetupRecordUnder(string dataRoot) => Path.Combine(dataRoot, "desktop", "machine-setup.json");
 
     /// <summary>Linux: Open Jason at Login's XDG autostart entry, under <c>XDG_CONFIG_HOME</c>, <c>~/.config</c> by default (<c>desktop/src/login-item.ts</c>).</summary>
     public static string AutostartEntryFile(SetupPlaces places)

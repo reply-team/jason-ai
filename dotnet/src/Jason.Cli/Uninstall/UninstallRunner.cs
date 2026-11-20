@@ -229,7 +229,7 @@ public static class UninstallRunner
             // The record of the machine set-up Jason Desktop's start ran, where the data is kept, once what that set-up placed
             // is taken off: a later start of the same version from the same place would read it as done and place nothing
             // again. A purge takes it with the rest.
-            var setupRecord = DesktopRemoval.SetupRecordFile(env.Paths);
+            var setupRecord = DesktopRemoval.SetupRecordUnder(env.Paths.Root);
             if (!purge && desktop is not null && File.Exists(setupRecord))
             {
                 try

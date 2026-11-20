@@ -526,7 +526,7 @@ internal static partial class StatusChecks
         string? setUpFor = null;
         try
         {
-            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordFile(env.Paths)));
+            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordUnder(env.Paths.Root)));
             setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
         }
         catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
