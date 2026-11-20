@@ -19,8 +19,75 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.2-unwritten
+# Jason 0.49.2-rc.1
+
+The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm.
+It acts on your word: when you say so, it approves and answers what waits for you, starts and archives the campaigns you
+name, and sets your sender's name and tone of voice. In the modes that ask, it asks first for anything that could let a
+message go without your approval.
 
 ## What is new since 0.49.0
 
-These notes are written once the release's changes have landed.
+- **Every new chat starts in Full access.** A new chat, the Feed's included, is made in Full access, with no
+  confirmation box and no standing choice to keep. A mode you choose from the menu beside the composer (Ask first, Plan
+  only or Auto-edit) is kept with the conversation, after a restart and through **Start fresh**, until you choose
+  another. Where Full access cannot apply to a turn, that turn runs in Ask first, the chat says why once and keeps its
+  mode: a turn sent from a browser tab, a turn on a Claude Code too old for it, and a turn on Codex. The line under the
+  composer always says the mode the next turn runs in.
+  [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
+  mode lets the AI do.
+- **GAP (M2): what a Full access turn passes to Claude Code.** Written when that change lands.
+- **GAP (K1): Full access on Codex.** Written when that change lands; the item above names Codex among the turns that
+  run in Ask first until then.
+- **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
+  waits for you, answers a decision, starts a campaign, takes back a standing approval, and sets the sender's name or
+  tone of voice, with no card; each is recorded under the person the command names, as it would be from a terminal. It
+  acts only on your word for that item, by name or as "all of these" about a list it showed, never on a page, a reply, a
+  skill or a Feed line. It archives the campaigns you name, and says once that an archive cannot be undone.
+- **It asks first for what could send without your approval.** In Ask first and Auto-edit, setting a standing
+  approval, setting another preference, changing a campaign's send mode and recording a reply's verdict are a card
+  first, and so are the commands that change the installation itself (uninstall, update, export, import, stopping the
+  runtime, granting a plugin and the like). Full access runs them all; Plan only is unchanged.
+- **A message the chat writes follows its campaign's send mode.** Outside Plan only, a message the chat writes is
+  treated as one written from a terminal: it follows its campaign's send mode, and under "every message" it still waits
+  for your approval.
+- **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
+  `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
+  is kept seven days, and the removal dialog says so; nothing is deleted at once.
+- **GAP (R1): reading a file you name wherever it lies, and another chat's folder.** Written when that change lands.
+- **GAP (C1): your own Claude Code configuration in the chat.** Written when that change lands.
+- **GAP (I1): the chat's instructions and the skills.** Written when that change lands.
+- **A conversation as a file.** Type `/export <file name>` in the message box, for example `/export notes.md`, and the
+  chat writes the conversation's words, yours and the AI's, to a new Markdown file: in the campaign's folder for a
+  campaign's chat, and in the harness root for any other. It takes a bare file name, never writes over a file that is
+  already there, and starts no turn.
+- **New chat, the Feed and Accounts have rows of their own.** In the console's left column, New chat is a button
+  directly under "New GTM agent", and in Live the Feed stands under "Needs you" and Accounts below it, as in the Demo. A
+  chat that belongs to no agent says so in one line at its top, "Chat · no agent".
+
+## Fixed since 0.49.0
+
+- **The chat keeps the end of the conversation in view** when the cards under it, or the message box, change height,
+  and the Reply card no longer goes away and comes back at a chat's first send.
+- **`jason status` says that its send modes are the installation's**, which every campaign follows unless it sets its
+  own; its check's details are unchanged.
+- **The install report no longer says "already"** of the Path entry and the skills a first install has just placed.
+- **The uninstall on macOS takes out the launchd job the Desktop's updater leaves after an update**, from the terminal
+  and from the Jason menu, and says in its report whether it is gone. It never runs in the middle of an update: while
+  the update is being installed it refuses with `update_in_progress`, before anything is removed, and says to run it
+  again once the update has ended.
+
+## Upgrading from 0.49.0
+
+- **Jason Desktop takes this release by its own update.** A published 0.49.0 takes it by its own
+  `jason update apply`, or by Check for Updates… in Jason Desktop, on Windows and on an Apple silicon Mac, with signed
+  packages.
+- **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
+  in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
+  again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
+  file is removed at the first start.
+- **Going back.** If you go back to an earlier Jason Desktop and then return to this one, the chats that earlier
+  version used open in Ask first, a chat in Plan only keeps it, and each says why once. The earlier version does not
+  keep the mode or the folder this release writes with a chat.
+  [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says how
+  to go back to an earlier release.
