@@ -41,9 +41,9 @@ message go without your approval.
   mode lets the AI do.
 - **Full access is Claude Code's own bypass.** A turn in Full access runs Claude Code in its bypass mode, as a terminal
   started that way would, with PowerShell among its tools. Jason's check before each tool use refuses three kinds
-  alone, each by a sentence that names the `jason` command that does what was asked: the installation's settings and
-  run files; its data directory outside the conversation's own folder; and what Jason itself sets for the turn, its
-  variables and its permission tool. On Windows a share named by `localhost`, a `127.x.x.x` address, `::1` or this
+  alone, each by a sentence that names the `jason` command that does what was asked: Jason's settings and run files;
+  its data directory outside the conversation's folder; and what Jason itself sets for the turn, meaning its variables
+  and its permission tool. On Windows a share named by `localhost`, a `127.x.x.x` address, `::1` or this
   computer's own host name is read as the drive it shares. Everything else runs, and what Claude Code still asks about
   in its bypass mode is a card, "Full access asks about this one". Where the bypass is not available (a setting of
   yours or an administrator's turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or
