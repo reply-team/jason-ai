@@ -223,9 +223,11 @@ desktop does not narrow, so it may read the records.
 Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
 a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
 start that finds records with no `shape` takes each as it is, one with no `mode` in Full access, writes it again with
-its shape and then writes `conversations-stamped`, only once every one of them was written again: a start that could
-not write one writes no file, at no later write either, so the next start is a first start again. With no record at all,
-the first record written writes that file first, and a start that finds the file lost is a first start again. From then on a record with no `shape` is one an
+its shape and then writes `conversations-stamped`, only once every one of them was written again and only where the
+folder was listed and every file in it read: a start that could not write one, list the folder or read a file in it
+writes no file, at no later write either, so the next start is a first start again. With no record at all in a folder
+that was listed, the first record written writes that file first; a first start that found no folder writes it at the
+next start, which lists the folder the first made. A start that finds the file lost is a first start again. From then on a record with no `shape` is one an
 earlier desktop wrote last: it opens in Ask first, unless it is in Plan only, says why once when it is opened, and is
 then written again with its mode and its shape. A record with no `folder` whose `chats/<id>/` stands as a folder is
 that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
@@ -340,13 +342,20 @@ Each conversation has a mode, chosen from the menu beside the composer (`chat.se
 applies to the turns a person starts by sending, from the next one on.
 
 - **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
-  (below). Claude Code starts in its own default mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
+  (below). Claude Code starts with `--permission-mode default`, named every time so that no `defaultMode` of a settings
+  file decides it (`permissionModes`); what the permission model does not settle is a card. From Claude Code's floor of
+  Full access on, the turn carries Full access's hook as well, which answers a refusal of the three kinds or nothing
+  (below), so a command an allow rule lets run with no card, one fed the settings file by a redirection say, is refused
+  before it runs. Codex runs in its read-only sandbox, as always.
 - **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
-  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), as
+  page. Every deny rule stays. It carries no hook: no verb of `chat-plan-list.txt` takes a request on standard input,
+  which the CLI's tests hold (`DesktopDenyListTests`), so a redirection into one is neither stored nor printed back;
+  every other command is refused already; and a redirection's target meets the host's own rules for the data directory
+  (`dataRules`), which every mode carries. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), as
   Ask first and Auto-edit are, so it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
   the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
@@ -354,14 +363,16 @@ applies to the turns a person starts by sending, from the next one on.
   Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
-- **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly.
+- **Full access** is Claude Code's own bypass mode: the AI runs commands and changes files on this computer without
+  asking, except the three kinds Jason refuses (below).
   It is the mode of every new chat, the Feed's included (`feedDefaultMode`), and asks for no confirmation: a record with
   no `mode` is in Full access, and choosing it from the menu clears the field. The `full-access.json` and
   `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
   them. It is refused where it cannot apply: on Codex, and on a Claude Code older than 2.1.322 or whose version cannot
   be read, the menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that
-  is sent to Codex, runs on a Claude Code below that floor, comes from a browser tab, or is sent while Full access is not
-  offered runs in Ask first; the chat says why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
+  is sent to Codex, runs on a Claude Code below that floor, comes from a browser tab, is sent while Full access is not
+  offered, or meets a Claude Code whose bypass mode is not available (below) runs in Ask first; the chat says why once a
+  run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
   mode a turn on it does not run as itself, from the window and from a tab, the mode it runs in and the sentence why,
   decided by the rule the turn itself runs by (`turnMode`), with Claude Code's version read at that listing. The page
   draws that mode, the line under the composer and the menu's check, with the sentence under the composer, and never
@@ -369,34 +380,41 @@ applies to the turns a person starts by sending, from the next one on.
   A choice from the menu is of the chat's own mode, the one checked included, so Ask first chosen on Codex stays the
   chat's on Claude Code. The setup keeps the version its last listing read (`handedClaudeVersion`); a turn whose own read
   finds Claude Code at the floor where that listing found it below or could not read it runs in Full access, asks the
-  page to read the hosts again (`setup.changed`) and says so once per conversation (`fullAccessCurrent`).
-- **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
-  program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
-  `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
-  `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in `allowedHttpHookUrls`, so no project file
-  can switch the hook off or filter it. The hook posts each tool use to the turn's loopback endpoint, behind the turn's
-  secret, and the desktop answers by one judgement (`fullAccessJudgement`), which the broker shares for the few calls
-  Claude Code still asks about under bypass:
-  - **refused** where the permission model refuses, or where a file being written shows what it refuses;
-  - **held**, a card titled "Full access asks about this one", wherever Ask first would have
-    shown a card because the model cannot rule the act out or the act would change what an agent loads: a `jason` that
-    is not the program of a plain `jason <verb>` (handed to `xargs`, inside an interpreter's one-liner or a list literal,
-    behind a variable or an expansion), `eval`, a script piped into a shell or an interpreter, a search variable, a
-    guarded name (a person's memory files in a campaign's or a project's folder, a folder's marker, a repository's
-    hooks, the files Claude Code reads MCP servers from), a `claude mcp` or `codex mcp` command, a local file named
-    jason, a `~` or a glob that could expand into the data directory, and every call of a tool of the person's own MCP
-    server; and, of what the host still asks about, a deletion;
-  - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
-    task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
-    the folders.
-- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what the AI loads, is
-  a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
-  deletion on a critical path, and a tool the hook never saw, are cards too. A held card offers no "Always", and an
-  earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
-- **What Ask first refuses is refused in Full access, with no card.** Every `reply` command is refused there but its exact
-  no-card forms.
-- **PowerShell is not a tool of the chat.** The judgement would still hold any PowerShell command that reached it, behind
-  a switch that is off (`powerShellRunsInFullAccess` in `src/chat-modes.ts`).
+  page to read the hosts again (`setup.changed`) and says so once per conversation (`fullAccessCurrent`); a listing that
+  finds Claude Code across the floor from the last one, either way, asks the same (`setup.changed`), and so does a turn
+  that finds it below the floor where the listing found it at it.
+- **How Full access runs.** Claude Code starts with `--permission-mode bypassPermissions`. Anthropic says a Bash rule
+  "isn't a security boundary around the program", so every deny rule is passed as in Ask first, and the turn's settings,
+  in a file under `<data>/desktop/turns/` beside its MCP file and removed with it (`hookedSettings`), add a `PreToolUse`
+  HTTP hook on every tool with `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in
+  `allowedHttpHookUrls`, so no project file can switch the hook off or filter it. The hook posts each tool use to the
+  turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
+  judgement (`fullAccessJudgement`), the same in every mode the hook rides:
+  - **refused**, with no card, for three kinds alone, each by a sentence that says what the chat does not open and names
+    the `jason` verb that does the act, never that it cannot: the installation's settings files and run file, under
+    every layout (`settingsRefusal`); its data directory outside the turn's folder (`dataRefusal`), and in a demo run the
+    person's own installation (`personsRefusal`); and Jason's own variables, `JASON_CONFINED` and `JASON_CHAT_TURN`
+    (`confinedRefusal`), `JASON_ATTEMPT_ID` (`attemptRefusal`) and where the shell finds a program (`lookupRefusal`).
+    Each is read in a command as written, over its normalised forms and, where every word is literal, over the words
+    the literal reading resolves; in a file tool's path by every route a path can take; in the text a writer tool would
+    put in a file; and in every string of an MCP tool's input. In the shared chat folder a write of the chat's own names
+    is refused too (`ChatScope.shared`). A judgement that fails refuses;
+  - **nothing** for everything else, the deny list's verbs, PowerShell and a command Jason does not read literally
+    among them: the host's own mode and rules decide it.
+- **What Claude Code still asks about in its bypass mode is a card.** It reaches the permission tool, which refuses the
+  three kinds first and makes anything else a card titled "Full access asks about this one" (`askedCard`), why
+  `host_asked`; it waits thirty minutes, then is not run and the turn goes on, and "Allow for this chat" works on it as
+  in Ask first. A card kept on a record from an earlier desktop may carry an older reason, which the page still says.
+- **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
+  alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
+- **When the bypass is not available.** The turn runs in Ask first and the chat says why once, in one shape, "Full
+  access is not available here: <why>" (`bypassSentences`), and the record keeps Full access: the desktop runs as root
+  (`getuid`), under which Claude Code refuses the mode; Claude Code's settings turn it off
+  (`disableBypassPermissionsMode`, the person's own or an administrator's), which its init line shows by naming the
+  default mode, so the turn is judged as Ask first's from its first request; Claude Code refuses the mode before it
+  starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn starts
+  again at once with Ask first's settings; or a tool ran that the hook never saw (below). The first cause stands, in
+  memory, until the desktop starts again, and every later turn of a Full access chat runs in Ask first meanwhile.
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
@@ -426,13 +444,14 @@ applies to the turns a person starts by sending, from the next one on.
   environment may act on another installation than the one this window shows, so it is refused in every mode; an `env`
   elsewhere in a command list is not.
 - **The chat's own names, by every route.** The chat's instructions, its `.claude`, `.agents` and `.codex` folders and its
-  `.mcp.json` directly in the chat folder are refused in every mode to a shell command as to the file tools, and the
-  host is denied edits of them (`chatRules`).
+  `.mcp.json` directly in the chat folder are refused to a shell command as to the file tools, and the host is denied
+  edits of them (`chatRules`): in the shared chat folder in every mode, and in a conversation's own folder in every mode
+  but Full access, where the folder is the conversation's own and is put right again before the next turn.
 - **The files and commands that add an MCP server are a card each time.** A write of `.mcp.json` anywhere else, or of
   `.claude.json` anywhere (Claude Code keeps the user's and the local scopes' servers there), is a guarded name's card,
   and so is a command that runs `claude` or `codex` with the word `mcp` after it (`claude mcp add`, `codex mcp add`,
   through any folder or `npx` package name, and as the shell would read a re-spelled word). None is covered by "Allow
-  for this chat", and Full access holds each.
+  for this chat", and Full access runs each.
 - **A tool of the person's own MCP server is a card each time.** No such server reaches a turn in this version; the
   fence stands anyway. A tool named `mcp__<server>__<tool>` of any server but the chat's own is judged before the
   command check, so an argument named `command` or `file_path` is never read as a shell command or a file tool's path:
@@ -441,7 +460,8 @@ applies to the turns a person starts by sending, from the next one on.
   (4,000 characters) is refused, and so is one any of whose strings, at any depth and the keys of its objects among
   them, is refused when read as a command's text: in Plan only a deny-list verb or operation, plainly or re-spelled; `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`,
   the data directory's variable or the data directory in any spelling, the settings file and the run file included.
-  "Allow for this chat" is never offered for it, Plan only refuses it, and Full access holds it on every call.
+  "Allow for this chat" is never offered for it, Plan only refuses it, and Full access runs it, refusing one whose input
+  names the three kinds.
 - **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,
   under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install`
   writes of each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills'
@@ -462,14 +482,19 @@ applies to the turns a person starts by sending, from the next one on.
   `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
-- **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first, on its record too: that tool has already run. So does one a turn already stopped, by Stop or by
-  a change of mode, still says on its way out; the step only ever narrows, so a narrower mode chosen meanwhile stands. **The limit:** the refusals read what a command's text and a tool's
-  input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account.
+- **When the hook did not run.** In Full access the first tool that runs without the hook having seen its use stops the
+  turn, that tool having already run, and the bypass is taken as not available (above): the record keeps Full access,
+  and later turns run in Ask first until the desktop starts again. One a turn already stopped, by Stop or by a change of
+  mode, still says on its way out is taken the same way, and that turn ends with no word of a mode. In Ask first and
+  Auto-edit the turn runs on, the cards and the host's own rules deciding as before, and the chat says once per
+  conversation that Jason's refusals could not stand in front of them (`hookFilteredSentence`). **The limit:** the
+  refusals read what a command's text and a tool's input show; they are not a sandbox, and a program the agent writes
+  and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
-  byte for byte: no `--permission-mode`, no `acceptEdits`, no `defaultMode` and no hook; the permission tool alone
-  decides, and the broker uses `autoEditJudgement` in place of `judge` for a turn started in it. That judgement returns
+  byte for byte: `--permission-mode default`, no `acceptEdits` and no `defaultMode`, and the same hook from the floor of
+  Full access on; the permission tool decides what the hook leaves, and the broker uses `autoEditJudgement` in place of
+  `judge` for a turn started in it. That judgement returns
   `judge`'s result unchanged unless `judge` says ask, the tool is `Bash`, and the literal reading (`readLiteral`, with
   `~` held) is a run of the six commands joined by `&&`, `;`, `||` or new lines, each named bare, with nothing piped in
   or redirected and no folder of its own; then it allows. Every option is read wherever it stands before `--`, since
@@ -523,8 +548,8 @@ applies to the turns a person starts by sending, from the next one on.
   - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
     turn. The Feed takes the modes as any chat does.
 - The log says each change of mode by its two modes (`chat_mode_changed`), the mode of each turn started and of each
-  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in Full access), a request the hook held (`chat_request_held`), and a turn
-  stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`); never a conversation's id or title, a
+  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in the turn's mode), and a
+  turn stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`); never a conversation's id or title, a
   command, a path or a person's words.
 
 ## Models and effort
