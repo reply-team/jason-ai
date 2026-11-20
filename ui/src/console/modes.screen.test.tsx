@@ -97,7 +97,7 @@ describe('a chat’s access mode', () => {
         await waitFor(() => expect(line()).not.toBeNull());
         // In the console's form: the mode's name, a dot and what it does, with no link; the menu beside it changes it.
         expect(line()!.textContent).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that reach Jason's own settings, data or variables",
         );
         expect(within(line()!.parentElement!).queryByRole('button')).toBeNull();
         expect(value()).toBe('full_access');

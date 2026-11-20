@@ -53,7 +53,8 @@ export const modeSays: Readonly<Record<DesktopChatMode, string>> = {
     ask_first: 'Asks on a card before anything Jason does not settle itself.',
     plan_only: 'Reads and proposes, and changes nothing.',
     auto_edit: "Works on files in the chat's own folder without asking; everything else is as in Ask first.",
-    full_access: 'Runs commands on this computer without asking, except those Jason cannot read.',
+    full_access:
+        "Runs commands on this computer without asking, except those that reach Jason's own settings, data or variables.",
 };
 
 type Mark = keyof typeof accessMarks;
