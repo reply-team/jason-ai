@@ -401,9 +401,11 @@ shows it as it was built. It is not an installation and has nothing to do with t
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
 writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
 Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
-reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply` is
-refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, before anything is checked, so nothing is
-stopped, kept or downloaded: leave the demo or quit the desktop, then run it again) and loads nothing but the application's own files,
+reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply`
+reads the feed first: where the feed offers nothing newer the answer is the ordinary one, `update_up_to_date`, and where
+it offers a newer version it is refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, and nothing
+is stopped, kept or downloaded; leave the demo or quit the desktop, then run it again) and loads nothing but the
+application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
 
@@ -1108,8 +1110,10 @@ runtime that does not stop, or a run file that cannot be read, leaves the update
 started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
-`<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+`<data>/desktop/rollback/<version>/`, and while that copy is there the Jason menu and the tray's show an unclickable line,
+"The previous version `<v>` is kept.", until the next update replaces the copy. The menus name no folder: the copy is
+under `<data>/desktop/rollback/<version>/`, and a start that failed and an update that was not installed name its folder
+again where you need it. The copy is the folder as it is, the
 application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
 installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
 version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing

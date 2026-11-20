@@ -28,6 +28,12 @@ export const barMarks = {
 
 const lines = (paths: readonly string[]): Html => html`${paths.map((each) => html`<path d="${each}" />`)}`;
 
+// Copy code's marks: two sheets, the one in front whole and the one behind showing at its corner. Once copied the front
+// sheet holds a check, and when the copy failed a cross; each is named for a stylesheet, which colours it.
+const sheets = html`<rect x="9" y="9" width="12" height="12" rx="2" /><path
+        d="M15 9V5a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2h4"
+    />`;
+
 // The console's line icons: paths on a 24-unit grid, stroked in the current colour. Needs you is a check in a circle,
 // Settings a cog and Recent's filter two sliders, as the console's look draws them.
 const icons = {
@@ -69,6 +75,9 @@ const icons = {
     stop: html`<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />`,
     chat: html`<path d="M4 5h16v11H9l-5 4z" />`,
     theme: html`<circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 010 18z" fill="currentColor" />`,
+    copy: sheets,
+    copied: html`${sheets}<path class="chat-md-tick" d="M12.5 15l2 2 4-4" />`,
+    notCopied: html`${sheets}<path class="chat-md-cross" d="M13 13l5 5M18 13l-5 5" />`,
     globe: html`<circle cx="12" cy="12" r="9" /><path
             d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"
         />`,
