@@ -236,6 +236,13 @@ export interface ChatOptions {
     dataNamed: boolean;
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
+    /**
+     * This account's name as the operating system gives it, which the main process reads (`os.userInfo().username`) and
+     * the carried `jason` writes a person's acts under (`Environment.UserName`): every turn's header names the person by it,
+     * and asks the chat to ask where it is null, not read. Absent, as in a row about something else, the header says
+     * nothing of the person.
+     */
+    account?: string | null;
     cli: Cli;
     /** The program runner, which reads Claude Code's version before each turn on it. */
     programs: Pick<Programs, 'run'>;
@@ -1791,7 +1798,7 @@ export class Chat {
         const held = digestsOf(memory);
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
         const headFor = (resumed: string | undefined): string =>
-            [header(about), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
+            [header(about, this.#options.account), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
         // Every turn of a conversation runs in its folder, in every mode and on every host: its own, or the shared chat
         // folder for one an earlier desktop made.
         const own = conversation.folder === 'own';

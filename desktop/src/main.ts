@@ -9,7 +9,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeThem
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
@@ -103,6 +103,19 @@ function bundleVersion(bundle: string): string | null {
     try {
         const raw = JSON.parse(readFileSync(join(bundle, 'version.json'), 'utf8')) as { version?: unknown };
         return typeof raw.version === 'string' && raw.version !== '' ? raw.version : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * This account's name as the operating system gives it, the one the carried `jason` writes a person's acts under
+ * (`Environment.UserName` reads the same account): the chat's header names the person by it. Null where the system
+ * gives none.
+ */
+function accountName(): string | null {
+    try {
+        return userInfo().username || null;
     } catch {
         return null;
     }
@@ -620,6 +633,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundle,
         dataNamed,
         bundleVersion: version,
+        account: accountName(),
         cli,
         programs,
         models: () => models.lists(),

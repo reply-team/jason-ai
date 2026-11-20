@@ -53,7 +53,7 @@ Send one message that holds the plan: the goal, who Jason will look for, the cha
 ("short, plain, in your name"), and the state of the channels. Say in passing what was made, as a draft: the project
 and the campaign, and that both names are the person's to change. Say once, as a fact and never as a question, how messages go: "Every message
 waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who
-have; in Jason Desktop that is Settings, \"How messages go\", and anywhere else tell me when you want it." It is a
+have: tell me when you want it, or in Jason Desktop set it in Settings, \"How messages go\"." It is a
 statement the person need not answer, and it is said in this message only. End it with exactly: "Say what to change, or say go." It
 carries no list of questions and uses no question tool; only when the person asks to change something do you use the
 question tool, with the recommended choice first.
@@ -97,14 +97,14 @@ from the campaign that exists: the brief and the goals go into its context, and 
 start the campaign:
 
 ```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason "the plan agreed with the person"
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason 'the plan agreed with the person'
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-In the chat of Jason Desktop you cannot start the campaign: starting it is the person's own act. There, once the plan
-is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's
-chat, and never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on
-their go, as above.
+In the chat of Jason Desktop, too, you start the campaign on the person's word: once the plan is agreed and its work is
+queued, say once that it is ready and ask whether to start it, run `jason campaign start` when they say go, and never
+say it has started until `jason campaign get` answers the status `active`; where the chat's mode only reads and
+proposes, you do not start it: say that this mode does not. Elsewhere you start it on their go, as above.
 
 Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it: step 3 has said the fact, once. The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
@@ -114,5 +114,5 @@ guided check of the wiring; say so if you want it."
 - Never ask for a preference. A preference is set only on the person's own word, never written from what you assume
   or already know of them; you may say "I take it you are ..., tell me if not". Do not remind them of preferences
   while sends are manual; the one sentence of step 3 on how messages go is a fact, said once, and is not a reminder. In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named
-  to write as, and that they set it in Settings under "Your name and tone"; a missing tone is said once too, as theirs
-  to add there.
+  to write as, and that they can tell you or set it in Settings under "Your name and tone"; a missing tone is said once
+  too, as theirs to give.

@@ -101,7 +101,7 @@ Work reaches a role as a work item of kind `ai_role` that names it, and two thin
 its role skill tells it the role exists and what it is for, and a person or agent by hand:
 
 ```
-jason workitem create <campaign-id> --kind ai_role --role <name> --reason "<why this work>"
+jason workitem create <campaign-id> --kind ai_role --role <name> --reason 'the person asked to see the new role work'
 ```
 
 So say to the person that the new role runs when the manager is told to use it, or when they create its work, and offer
@@ -115,7 +115,7 @@ A plugin is a package: a directory named by its id with `plugin.yaml`, `main.js`
 or copy it into the plugins folder, then load it:
 
 ```
-jason plugin reload --reason "<what was added or changed>"
+jason plugin reload --reason 'added the plugin the person asked for'
 jason plugin list --human
 ```
 
