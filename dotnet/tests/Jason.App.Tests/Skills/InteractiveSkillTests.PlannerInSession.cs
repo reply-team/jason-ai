@@ -481,8 +481,15 @@ public partial class InteractiveSkillTests
             kept.Add(line);
         }
 
-        return CraftBlockText().Replace(string.Join('\n', kept), " ");
+        // The form of the person's word in the chat is rule 13 of the chat's instructions, given where each skill sets or
+        // runs an act on that word; quoting the chat's own rule is not copying a sibling's.
+        var prose = Regex.Replace(CraftBlockText().Replace(string.Join('\n', kept), " "), @"\s+", " ");
+        return ChatsForm().Replace(prose, " ");
     }
+
+    /// <summary>The form of the person's word that rule 13 of the chat's instructions gives, as a skill quotes it.</summary>
+    [GeneratedRegex(@"with `--actor human:<account>` as Jason's first paragraph names them and `--reason '\.\.\.'` in your own words(?: \([^)]*\))?, at the end of the command")]
+    private static partial Regex ChatsForm();
 
     /// <summary>Every run of eight consecutive words, lower-cased, punctuation and emphasis dropped.</summary>
     private static HashSet<string> Runs(string prose)

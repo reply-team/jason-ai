@@ -180,7 +180,8 @@ test('the header names the person by this account, as the actor the carried jaso
     assert.ok(header({ campaign: null }, `${'a'.repeat(99)}\u{1F600}`).includes('could not read'), 'an emoji is two units, and no letter');
     // Any other character, a name that cannot stand on one line as the system gives it, or none, is never given or changed:
     // the chat is told to ask, since a record that goes wrong silently is worse than one question.
-    const ask = "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word.";
+    // The ask sentence says to ask once more for a name the person gives back that holds another character, O'Brien say.
+    const ask = "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word, and where the name they give holds a character other than a letter, a digit, a dot, an underscore, a hyphen or a space, ask once for it written with those alone.";
     for (const unusable of [null, '', ' ada', 'ada ', 'ada\n', 'a\u202eb', 'a\u200bb', 'a'.repeat(101), 'a$(x)', 'Jo$hn', 'a`b', "O'Brien", 'a"b', 'a;b', 'a\\b', 42 as unknown as string]) {
         const said = header({ campaign: null }, unusable);
         assert.ok(said.startsWith(`Jason, not the person, wrote this first paragraph. ${ask} This conversation `), JSON.stringify(unusable));

@@ -100,7 +100,7 @@ function personSentence(account: unknown): string {
         account.trim() === account &&
         nameCharacters.test(account);
     if (!usable) {
-        return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word.";
+        return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word, and where the name they give holds a character other than a letter, a digit, a dot, an underscore, a hyphen or a space, ask once for it written with those alone.";
     }
     const actor = `human:${account}`;
     return account.includes(' ')

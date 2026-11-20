@@ -233,15 +233,15 @@ is invisible to Jason: a toast sent then goes to the notification center without
 
 ## Where the person's files live
 
-What the person tells Jason about their business in their own words is kept in plain files under one folder, the
-harness root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another
-folder as an absolute path; `jason runtime status` says which root is in force. Move it only when the person asks:
-move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it:
-`jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the
-project by the marker there. Nothing moves by itself, and a campaign created in a project not linked again is
-refused until it is. In the chat of Jason Desktop you run `jason project link` with `--path` when the person asks for it,
-since the chat works in a folder of its own, and Jason shows it to them first in Ask first and Auto-edit; in Plan only
-you do not run it: say that this mode does not.
+What the person tells Jason about their business in their own words is kept in plain files under one folder, the harness
+root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another folder as an
+absolute path; `jason runtime status` says which root is in force. Move it only when the person asks: move the folder,
+set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run
+inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.
+Nothing moves by itself, and a campaign created in a project not linked again is refused until it is. In the chat of
+Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder
+of its own; where the chat's mode asks first, Jason shows it to them first, and where it only reads and proposes, you do
+not run it: say that this mode does not.
 
 ## The plugins it has loaded and where work goes
 
@@ -251,7 +251,7 @@ campaign. The two are separate: installing a plugin makes an operation *possible
 
 ```
 jason plugin list --human
-jason plugin reload --reason "installed my plugin"
+jason plugin reload --reason 'installed my plugin'
 ```
 
 `jason plugin list` prints the active snapshot: every plugin with its digest, the capabilities it was granted,
@@ -371,7 +371,7 @@ or no route bound the account. Jason says it once, in a notification and in the 
 the person asks:
 
 ```
-jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason "read the weeks the runtime was off"
+jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason 'read the weeks the runtime was off'
 ```
 
 Ask first, and run it on the person's yes, with their words as the reason. It reads and sends nothing, and leaves the

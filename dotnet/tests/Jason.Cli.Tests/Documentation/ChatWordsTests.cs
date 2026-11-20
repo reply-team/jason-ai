@@ -35,7 +35,7 @@ public partial class ChatWordsTests
     public void No_page_the_chat_reads_says_an_act_is_the_persons_alone_or_sends_them_to_the_window_for_one()
     {
         var pages = Pages(runtimePack: true);
-        Assert.True(pages.Count > 15, $"Only {pages.Count} pages were read, so this guard read less than the chat does.");
+        Assert.True(pages.Count > 8, $"Only {pages.Count} pages were read, so this guard read less than the chat does.");
 
         var found = new List<string>();
         foreach (var page in pages)
@@ -131,14 +131,14 @@ public partial class ChatWordsTests
     [Fact]
     public void The_instructions_give_the_persons_word_one_form_the_cli_takes()
     {
-        const string form = "with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words, at the end of the command";
-        Assert.Matches(@"^[\p{L}\p{N} .,:-]+$", Regex.Match(form, "--reason '(?<reason>[^']*)'").Groups["reason"].Value);
+        const string form = "with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words";
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-instructions.md");
         var text = File.ReadAllText(file);
         foreach (var number in new[] { 11, 12, 13, 19 })
         {
             var rule = Assert.Single(text.ReplaceLineEndings("\n").Split('\n'), line => line.StartsWith($"{number}. ", StringComparison.Ordinal));
-            Assert.True(rule.Contains(form, StringComparison.Ordinal), $"Rule {number} does not give the person's word its form: {rule}");
+            var whole = form + (number == 13 ? "" : " (the reason of rule 13)") + ", at the end of the command";
+            Assert.True(rule.Contains(whole, StringComparison.Ordinal), $"Rule {number} does not give the person's word its form: {rule}");
         }
 
         Assert.DoesNotContain("`--actor` naming them", text, StringComparison.Ordinal);
@@ -180,17 +180,62 @@ public partial class ChatWordsTests
 
     /// <summary>
     /// The chat's instructions and every skill under <c>skills/</c>, the business pack's among them; or, for what the chat
-    /// is taught about the acts it runs, the runtime pack alone, the one the chat loads.
+    /// is taught about the acts it runs, the runtime pack the chat loads alone, without the roles' skills, which the roles
+    /// read and the chat does not.
     /// </summary>
     private static List<string> Pages(bool runtimePack = false)
     {
         var root = RepositoryRoot();
+        var roles = Path.Combine(root, "skills", "runtime", "roles") + Path.DirectorySeparatorChar;
         return
         [
             Path.Combine(root, "desktop", "chat-instructions.md"),
             .. Directory.EnumerateFiles(runtimePack ? Path.Combine(root, "skills", "runtime") : Path.Combine(root, "skills"), "SKILL.md", SearchOption.AllDirectories)
+                .Where(file => !runtimePack || !file.StartsWith(roles, StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal),
         ];
+    }
+
+    /// <summary>
+    /// A reason the chat writes is its own short line, in single quotes and of letters, digits, spaces and <c>. , : -</c>
+    /// alone, since text from outside never goes into a command and a reason is journaled; so every reason the chat is
+    /// shown, in its instructions and in the skills it loads, an example's in a fenced block among them, is one: rule 13's
+    /// example, every <c>--reason</c> a sentence or a printed command gives, and never <c>"&lt;their words&gt;"</c>.
+    /// </summary>
+    [Fact]
+    public void Every_reason_the_chat_is_shown_is_its_own_short_line_in_single_quotes()
+    {
+        var pages = Pages(runtimePack: true);
+        var rule13 = Assert.Single(File.ReadAllLines(pages[0]), line => line.StartsWith("13. ", StringComparison.Ordinal));
+        var example = Regex.Match(rule13, "such as '(?<reason>[^']*)'").Groups["reason"].Value;
+        Assert.Matches(@"^[\p{L}\p{N} .,:-]+$", example);
+        Assert.NotEqual("...", example);
+
+        var found = new List<string>();
+        var single = 0;
+        foreach (var page in pages)
+        {
+            var text = File.ReadAllText(page).ReplaceLineEndings(" ");
+            foreach (Match reason in Regex.Matches(text, @"--reason (?<quote>[""'])(?<reason>.*?)\k<quote>"))
+            {
+                if (reason.Groups["quote"].Value != "'" || !Regex.IsMatch(reason.Groups["reason"].Value, @"^[\p{L}\p{N} .,:-]+$"))
+                {
+                    found.Add($"{Shown(page)}: {reason.Value}");
+                }
+                else
+                {
+                    single++;
+                }
+            }
+
+            if (text.Contains("<their words>", StringComparison.Ordinal))
+            {
+                found.Add($"{Shown(page)}: <their words>");
+            }
+        }
+
+        Assert.True(found.Count == 0, "These reasons are not the chat's own short line in single quotes:\n" + string.Join('\n', found));
+        Assert.True(single > 20, $"Only {single} reasons were read, so this guard read less than the chat does.");
     }
 
     /// <summary>
@@ -286,10 +331,10 @@ public partial class ChatWordsTests
     [GeneratedRegex(@"\bSettings\b.*\b(?:Your name and tone|How messages go)\b")]
     private static partial Regex SettingsFor();
 
-    [GeneratedRegex(@"\bPlan only\b")]
+    [GeneratedRegex(@"\bPlan only\b|\bonly reads and proposes\b")]
     private static partial Regex PlanOnly();
 
-    [GeneratedRegex(@"\bPlan only\b|\btell (?:you|me)\b")]
+    [GeneratedRegex(@"\bPlan only\b|\bonly reads and proposes\b|\btell (?:you|me)\b")]
     private static partial Regex PlanOnlyOrTellTheChat();
 
     [GeneratedRegex(@"\b[Tt]here is no `jason (?<path>[a-z][a-z-]*(?: [a-z][a-z-]*)*)`")]

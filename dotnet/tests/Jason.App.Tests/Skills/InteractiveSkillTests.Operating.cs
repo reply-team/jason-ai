@@ -17,7 +17,7 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
         Assert.Contains("Move it only when the person asks: move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing moves by itself", skill, StringComparison.Ordinal);
-        Assert.Contains("In the chat of Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder of its own, and Jason shows it to them first in Ask first and Auto-edit; in Plan only you do not run it: say that this mode does not.", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder of its own; where the chat's mode asks first, Jason shows it to them first, and where it only reads and proposes, you do not run it: say that this mode does not.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>How every place that brings a session to a stop points at the one rule for it.</summary>

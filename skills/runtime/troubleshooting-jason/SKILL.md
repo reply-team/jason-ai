@@ -292,7 +292,7 @@ repair while the wait holds: do not cancel it to unstick it, and do not create i
 decides it has waited enough, they end the wait themselves, and the item is started again with what is there:
 
 ```
-jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the replies in are enough to decide"
+jason workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the replies in are enough to decide'
 ```
 
 **A park on a provider block has a repair, and it is the person's.** Its `wait` names the block under `blocked_by` —
@@ -314,7 +314,7 @@ releases everything it held. Where the person knows the cause is gone, they clea
 themselves, under their own name, and the next scan releases what it held:
 
 ```
-jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the card on the account was renewed"
+jason block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the card on the account was renewed'
 ```
 
 A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a
@@ -399,7 +399,7 @@ state 12: the same work goes through as a new item only once the provider offers
 snapshot is swapped whole, or the old one is kept and the reason is printed.
 
 ```
-jason plugin reload --reason "the package was updated"
+jason plugin reload --reason 'the package was updated'
 ```
 
 **Restarting the runtime**, when the process itself is the problem rather than anything in it. What that does

@@ -720,7 +720,7 @@ public partial class InteractiveSkillTests
         Assert.True(
             resumes.Count == 1
                 && resumes[0].StartsWith("jason workitem resume wi_", StringComparison.Ordinal)
-                && Regex.IsMatch(resumes[0], @" --actor human:\S+ --reason (""[^""]*""|'[^']*')$"),
+                && Regex.IsMatch(resumes[0], @" --actor human:\S+ --reason '[^']*'$"),
             $"The managed path prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person, its "
             + "options at the end of the command, where a host's rule for the verb still matches.");
     }

@@ -97,14 +97,14 @@ from the campaign that exists: the brief and the goals go into its context, and 
 start the campaign:
 
 ```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason "the plan agreed with the person"
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason 'the plan agreed with the person'
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 In the chat of Jason Desktop, too, you start the campaign on the person's word: once the plan is agreed and its work is
 queued, say once that it is ready and ask whether to start it, run `jason campaign start` when they say go, and never
-say it has started until `jason campaign get` answers the status `active`; in Plan only you do not start it: say that
-this mode does not. Elsewhere you start it on their go, as above.
+say it has started until `jason campaign get` answers the status `active`; where the chat's mode only reads and
+proposes, you do not start it: say that this mode does not. Elsewhere you start it on their go, as above.
 
 Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it: step 3 has said the fact, once. The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
