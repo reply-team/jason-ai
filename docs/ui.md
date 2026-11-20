@@ -15,8 +15,9 @@ open it at one item, and `--no-open` prints the address instead, for an agent to
 nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
 command-line install still waiting to move into the desktop), it opens nothing and refuses with `desktop_not_installed`.
 On Linux it opens the desktop only where xdg-open would start it for the scheme: where your account's own default for
-`jason-desktop:` links names another program, or a menu cache names an entry that is gone, it opens nothing and refuses
-with `desktop_links_elsewhere`, naming the entry or the cache and the command that gives the links back. Outside GNOME
+`jason-desktop:` links names another program, a menu cache names an entry that is gone, or Jason Desktop's entry starts an
+AppImage by a quoted path (its folder's path holds a space or a quote), it opens nothing and refuses with
+`desktop_links_elsewhere`, saying which and what gives the links back. Outside GNOME
 and KDE, xdg-open runs the desktop it starts until that window closes, so a `jason ui open` that starts it says after ten
 seconds that it handed the address on (`opener_timed_out`) and ends 0: the desktop opens all the same.
 

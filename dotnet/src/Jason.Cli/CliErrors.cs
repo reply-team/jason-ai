@@ -169,7 +169,7 @@ public static class CliErrors
 
     /// <summary>
     /// <c>ui open</c> and a click: Jason Desktop is installed for this account, and the system would hand its link to
-    /// another program, or to an entry that is gone, so nothing was opened.
+    /// another program or an entry that is gone, or could not start Jason Desktop's entry, so nothing was opened.
     /// </summary>
     public const string DesktopLinksElsewhere = "desktop_links_elsewhere";
 

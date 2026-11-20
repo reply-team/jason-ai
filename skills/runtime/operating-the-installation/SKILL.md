@@ -52,8 +52,8 @@ installed by its install script or Jason Desktop's own package, on macOS, Window
 there, since it is the installation itself. Where it refuses with `desktop_not_installed`, no Jason Desktop that takes
 its links is installed for this account (a command-line install still waiting to move into the desktop): say so, as the
 refusal does. Where it refuses with `desktop_links_elsewhere`, on Linux, Jason Desktop is installed and the system would
-hand its link to another program, or to a menu entry that is gone: say what the refusal says, with the command it names
-for the person to run.
+hand its link to another program or a menu entry that is gone, or could not start its entry: say what the refusal says,
+with what it names for the person to do.
 
 When they ask what happened, what is queued or what waits for them, name **Needs you** in Jason Desktop, which
 `jason ui open` opens, or `jason approval list` and `jason decision list` in a terminal, and

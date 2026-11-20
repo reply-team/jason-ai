@@ -115,13 +115,31 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
     public DesktopRefusal? Elsewhere()
     {
         var resolved = Resolve();
-        if (resolved.Id is not { } id || (resolved.Runs is { } runs && Ours(runs) is not null) || Declared() is not { } jason)
+        if (resolved.Runs is { } runs && Ours(runs) is not null)
         {
             return null;
         }
 
+        if (Declared() is not { } jason)
+        {
+            // An entry of Jason's whose program only a quoted path reaches: installed, and still no taker of its links here.
+            return Quoted() is { } quoted
+                ? new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: Jason Desktop's menu entry {quoted.Entry} starts {quoted.Program} by a quoted path, which xdg-open outside GNOME and KDE cannot start; with the AppImage in a folder whose path holds no space or quote, the install line writes an entry that can.")
+                : null;
+        }
+
+        if (resolved.Id is not { } id)
+        {
+            return null;
+        }
+
+        // `xdg-mime default` writes the config home's plain mimeapps.list, which a desktop's own list there comes before.
+        var back = resolved.Source is { } source && Path.GetFileName(source).EndsWith("-mimeapps.list", StringComparison.Ordinal)
+            && string.Equals(Path.GetDirectoryName(source), places.ConfigHome, StringComparison.Ordinal)
+                ? $"its {Type} line in that file, changed to {jason} or taken out, gives them back to it."
+                : $"xdg-mime default {jason} {Type} gives them back to it.";
         return resolved.Runs is not null
-            ? new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: this account opens jason-desktop: links with {id} ({resolved.Source}), not with Jason Desktop; xdg-mime default {jason} {Type} gives them back to it.")
+            ? new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: this account opens jason-desktop: links with {id} ({resolved.Source}), not with Jason Desktop; {back}")
             : new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: {resolved.Source} names {id} for jason-desktop: links, and no menu entry of that name starts a program here; " + (Path.GetFileName(resolved.Source) is "mimeinfo.cache" ? $"update-desktop-database {Path.GetDirectoryName(resolved.Source)} writes it again." : $"xdg-mime default {jason} {Type} gives them to Jason Desktop."));
     }
 
@@ -249,8 +267,46 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
 
         var word = exec.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
         return ProgramLookup.IsPath(word)
-            ? (Path.IsPathFullyQualified(word) && File.Exists(word) ? word : null)
+            ? (Path.IsPathFullyQualified(word) && Runnable(word) ? word : null)
             : ProgramLookup.FullPathOf(word, search);
+    }
+
+    /// <summary>
+    /// Whether <c>command -v</c> takes a file as a program: one that is there and that may be run. A file with no execute bit
+    /// — a download a browser saved — is no program to xdg-open, which then hands the address to a browser.
+    /// </summary>
+    private static bool Runnable(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            return OperatingSystem.IsWindows() || (File.GetUnixFileMode(path) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Jason Desktop's entry in every way but its program's path, which is quoted, and that program; null where none is.</summary>
+    private (string Entry, string Program)? Quoted()
+    {
+        foreach (var entry in places.Data.SelectMany(data => Entries(Path.Combine(data, "applications"))))
+        {
+            if (Value(entry, "MimeType") is { } types && types.Split(';').Contains(Type, StringComparer.Ordinal)
+                && Value(entry, "Exec") is { } exec && exec.StartsWith('"') && exec.EndsWith("\" -- %U", StringComparison.Ordinal)
+                && Text(entry) is { } text && Uninstall.DesktopRemoval.DesktopEntryProgram(text) is { } program
+                && Path.IsPathFullyQualified(program) && Runnable(program))
+            {
+                return (entry, program);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The program an entry starts in the desktop's own form, or null: it declares the scheme, and its <c>Exec</c> is a bare full path and <c>-- %U</c>.</summary>
@@ -263,7 +319,7 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
         }
 
         var program = exec[..^Tail.Length];
-        return program.Length > 0 && !program.Contains(' ', StringComparison.Ordinal) && !program.Contains('"', StringComparison.Ordinal) && Path.IsPathFullyQualified(program) && File.Exists(program) ? program : null;
+        return program.Length > 0 && !program.Contains(' ', StringComparison.Ordinal) && !program.Contains('"', StringComparison.Ordinal) && Path.IsPathFullyQualified(program) && Runnable(program) ? program : null;
     }
 
     /// <summary>Jason Desktop's entry by name, where one in its own form is in an <c>applications</c> folder at all; null where none is.</summary>

@@ -55,7 +55,8 @@ public sealed class DesktopRegistrationTests : IDisposable
     /// else the entry of highest <c>InitialPreference</c> that declares the type), found as xdg-open finds it, starting its
     /// program, and in the desktop's own form: <c>MimeType</c> declaring the scheme and <c>Exec=&lt;bare full path&gt; -- %U</c>.
     /// Breaks if a scan of entries is trusted where xdg-open would run another program, or nothing and then a browser: an
-    /// account default naming another program, a stale cache line, a quoted <c>Exec</c> xdg-open cannot start.
+    /// account default naming another program, a stale cache line, a quoted <c>Exec</c> xdg-open cannot start, a program
+    /// with no execute bit, which <c>command -v</c> refuses.
     /// </summary>
     [Theory]
     [InlineData("deb", "deb", null)]
@@ -70,15 +71,16 @@ public sealed class DesktopRegistrationTests : IDisposable
     [InlineData("stale-cache", null, CliErrors.DesktopLinksElsewhere)]
     [InlineData("defaults-list-first", null, CliErrors.DesktopLinksElsewhere)]
     [InlineData("higher-preference", null, CliErrors.DesktopLinksElsewhere)]
-    [InlineData("quoted", null, CliErrors.DesktopNotInstalled)]
+    [InlineData("quoted", null, CliErrors.DesktopLinksElsewhere)]
+    [InlineData("not-executable", null, CliErrors.DesktopNotInstalled)]
     [InlineData("no-scheme", null, CliErrors.DesktopNotInstalled)]
     [InlineData("gone", null, CliErrors.DesktopNotInstalled)]
     [InlineData("none", null, CliErrors.DesktopNotInstalled)]
     public void On_linux_the_desktop_is_what_xdg_open_would_run_for_the_scheme(string state, string? runs, string? refusal)
     {
         var xdg = new FakeXdg(Root);
-        var deb = Program(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
-        var appImage = Program(Path.Combine(Root, "home", "Applications", "jason-desktop-linux-x64.AppImage"));
+        var deb = Executable(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
+        var appImage = Executable(Path.Combine(Root, "home", "Applications", "jason-desktop-linux-x64.AppImage"));
         Executable(Path.Combine(xdg.Bin, "firefox"));
         const string DebEntry = "jason-desktop-app.desktop";
         const string AppImageEntry = "jason-desktop.desktop";
@@ -128,6 +130,10 @@ public sealed class DesktopRegistrationTests : IDisposable
             case "quoted":
                 xdg.Own(AppImageEntry, Entry($"Exec=\"{appImage}\" -- %U", "MimeType=x-scheme-handler/jason-desktop;")).OwnCache(AppImageEntry);
                 break;
+            case "not-executable":
+                xdg.Own(AppImageEntry, appImageText).OwnCache(AppImageEntry);
+                NotExecutable(appImage);
+                break;
             case "no-scheme":
                 xdg.Own(AppImageEntry, Entry($"Exec={appImage} %U"));
                 break;
@@ -155,7 +161,7 @@ public sealed class DesktopRegistrationTests : IDisposable
     [Fact]
     public void On_linux_links_that_go_elsewhere_are_refused_in_words_that_say_where_and_how_back()
     {
-        var deb = Program(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
+        var deb = Executable(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
         var other = new FakeXdg(Root);
         Executable(Path.Combine(other.Bin, "firefox"));
         other.System("jason-desktop-app.desktop", Entry($"Exec={deb} -- %U", "MimeType=x-scheme-handler/jason-desktop;")).SystemCache("jason-desktop-app.desktop")
@@ -174,6 +180,34 @@ public sealed class DesktopRegistrationTests : IDisposable
         Assert.Equal(
             $"Nothing was opened: {Path.Combine(other.DataHome, "applications", "mimeinfo.cache")} names removed.desktop for jason-desktop: links, and no menu entry of that name starts a program here; update-desktop-database {Path.Combine(other.DataHome, "applications")} writes it again.",
             stale.Message);
+
+        // A desktop's own list comes before the account's plain one, which is all `xdg-mime default` writes: its line is named.
+        File.Delete(Path.Combine(other.DataHome, "applications", "mimeinfo.cache"));
+        other.Default(other.ConfigHome, "other.desktop", "hyprland-");
+        var ownList = DesktopLinks.Absent(other.Reader("Hyprland"))!;
+
+        Assert.Equal(
+            $"Nothing was opened: this account opens jason-desktop: links with other.desktop ({Path.Combine(other.ConfigHome, "hyprland-mimeapps.list")}), not with Jason Desktop; its x-scheme-handler/jason-desktop line in that file, changed to jason-desktop-app.desktop or taken out, gives them back to it.",
+            ownList.Message);
+    }
+
+    /// <summary>
+    /// Jason Desktop's menu entry that starts its program by a quoted path — an AppImage in a folder whose path holds a space
+    /// or a quote — is refused in words that say so and what to do, never as a Jason Desktop that is not installed.
+    /// </summary>
+    [Fact]
+    public void On_linux_an_entry_xdg_open_cannot_start_for_its_quoted_path_is_refused_in_its_own_words()
+    {
+        var xdg = new FakeXdg(Root);
+        var appImage = Executable(Path.Combine(Root, "home", "My Apps", "jason-desktop-linux-x64.AppImage"));
+        xdg.Own("jason-desktop.desktop", Entry($"Exec=\"{appImage}\" -- %U", "MimeType=x-scheme-handler/jason-desktop;")).OwnCache("jason-desktop.desktop");
+
+        var refused = DesktopLinks.Absent(xdg.Reader(string.Empty))!;
+
+        Assert.Equal(CliErrors.DesktopLinksElsewhere, refused.Code);
+        Assert.Equal(
+            $"Nothing was opened: Jason Desktop's menu entry {Path.Combine(xdg.DataHome, "applications", "jason-desktop.desktop")} starts {appImage} by a quoted path, which xdg-open outside GNOME and KDE cannot start; with the AppImage in a folder whose path holds no space or quote, the install line writes an entry that can.",
+            refused.Message);
     }
 
     /// <summary>An XDG tree under the run's folder: the account's config and data homes, one config and one data dir, and a search path.</summary>
@@ -234,12 +268,23 @@ public sealed class DesktopRegistrationTests : IDisposable
         "[Desktop Entry]\nName=Jason\nType=Application\n" + string.Concat(lines.Select(line => line + "\n"));
 
     /// <summary>A program a search path finds, as <c>command -v</c> finds one: a file that may be run.</summary>
-    private static void Executable(string path)
+    private static string Executable(string path)
     {
         Program(path);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return path;
+    }
+
+    /// <summary>A file that may not be run: a download a browser saved, which <c>command -v</c> refuses.</summary>
+    private static void NotExecutable(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
         }
     }
 
