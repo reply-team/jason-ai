@@ -898,27 +898,24 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test; and, for each noun with a verb on that list, its help, exactly
+  every time, held to the real tree by a test; outside Plan only, seven verbs of a person's word as well, which you
+  ask for in your own words: `approval approve`, `approval reject`, `approval set-standing`, `decision answer`,
+  `preference set`, `preference unset` and `campaign start`; and, for each noun with a verb on that list, its help, exactly
   `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
   itself stays refused, as is every `jason` that starts with an option.
-- **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
-  everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
+- **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
+  letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
   subscription), everything that changes the installation, follows it without end or carries it off the machine
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `install`, `ui`, `session`,
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
-  `notification disable`). **`role add` and `project link` are
-  typed in a terminal**: a role's
-  entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
-  its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):
-  starting is what lets its queued work run, so you press Start or Resume at the top of the agent's chat or on its
-  page. **So is archiving one** (`campaign archive`), which you do at the bottom of the agent's Settings tab: no verb
-  undoes an archive, and it cancels the agent's open work but a search's stop, with each item's approval whether still
-  asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.
-  Pausing an agent, adding someone to the do-not-contact register, cancelling work and recording a verdict on a reply
-  are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused too.
-  Also refused: any `reply` command
+  `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
+  names an operation these verbs call is refused there too. In every other mode none of them is refused: the seven
+  verbs of a person's word above run with no card, and every other one is a card in Ask first and Auto-edit and runs in
+  Full access, as any `jason` command that no allowed verb begins does. Pausing an agent, adding someone to the
+  do-not-contact register, cancelling work and recording a verdict on a reply are the AI's, since each stops reaching a
+  person. In every mode, refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
   names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
@@ -934,7 +931,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
+  whose texts would be refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
   does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
@@ -953,28 +950,14 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **The agent runs nothing in the background**: every command it starts finishes inside the turn, and it is told to say
   what to click in Jason rather than tell you to run a command.
 
-What the desktop claims is only what its tests prove: the listed commands are refused by the host's tool fence and by
-the desktop, and the listed operations are not callable through the allowed tools. The agent holds the machine user's
+What the desktop claims is only what its tests prove: in Plan only the listed commands are refused by the host's tool
+fence and by the desktop, and the listed operations are not callable through the allowed tools. The agent holds the machine user's
 rights, as every UI token does; there is one level of trust.
 
 Under the chat, these things differ from a terminal:
 
-- **A file option takes standard input only.** Every host's turn runs `jason` with `JASON_CONFINED=1`, under which the
-  options that read a file into a request (`--file`, `--value-file`, `--note-file`, `--result-file`) take only `-`, so
-  the content comes on standard input: `--file - < contacts.json` or a here-document, and for long content a file in the
-  chat folder given as `--file - < file`. The reason is that `jason` opens such a file itself, which the host's file rules
-  never see.
-- **The person's own words and the installation's changes are refused.** The same `JASON_CONFINED=1` makes `jason` refuse, locally
-  before any request, exit 1 and one sentence, every command of the deny list's command half: approving, rejecting,
-  answering and the rest of a person's own word, starting an agent, archiving one, and the commands that change the
-  installation. Inside the desktop's chat a decision is given in the page, or in a terminal, where the variable is not
-  set, and an agent is archived at the bottom of its own Settings tab. No attempt id in the
-  environment lifts the refusal: a role's own work never carries the variable, because the runtime drops it from what it
-  launches. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and an
-  attempt id in the environment is a claim, not a proof. The deny list's command lines are written from the CLI's one
-  table of these commands.
-- **The provider check names a program, never a path.** `jason status --provider-cli <program>` runs a bare name found on
-  the search path, and a name with a directory in it is neither looked up nor started; run a path from a terminal.
+- **Nothing of `jason` is confined.** No turn sets `JASON_CONFINED`, so the `jason` a turn runs refuses none of its
+  commands and reads a file an option names as it does in a terminal; what the chat runs is the mode's to say, above.
 - **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
   every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
   by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
