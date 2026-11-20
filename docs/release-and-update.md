@@ -61,7 +61,7 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at the tag, at the archive's root |
 | `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at the tag, at the archive's root |
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at the tag, at the archive's root |
-| `jason-ui.zip` | the browser UI's package: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
+| `jason-ui.zip` | the UI's package, the build Jason Desktop draws: `ui/` built at the tag, with the release's version in its `manifest.json`; `jason ui install` places it |
 | `jason-skills.zip` | the skills' package: `skills/` at the tag, under `skills/`, and a `source.json` naming the repository, the tag and its commit; `jason skills install` deploys from it when it is given no `--source` |
 | `jason-desktop-windows-x64-setup.exe` | the desktop's Windows installer, signed, carrying this release's signed `jason.exe` |
 | `jason-desktop-windows-x64-setup.exe.blockmap` | the installer's block map, from which the Windows desktop's updater downloads only what changed |
@@ -112,7 +112,7 @@ leaves in place. ntfy, Slack and Telegram are published the same way from 0.32.0
 `jason-plugin-slack.zip` and `jason-plugin-telegram.zip`, each placed by `jason plugin install <id>`. Any other plugin
 is installed as `docs/plugins.md` §4 says.
 
-**The browser UI is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
+**The UI Jason Desktop draws is published the same way, as `jason-ui.zip`:** `ui/` built once per release at the tag, with the
 release's version in its `manifest.json`, and listed in `checksums.txt` but not in the manifest. It is built at the
 tag rather than taken from CI, whose zip carries a development version and expires. `jason ui install` places it:
 it downloads the package from the release this build was published as, holds it to its line in `checksums.txt`, to

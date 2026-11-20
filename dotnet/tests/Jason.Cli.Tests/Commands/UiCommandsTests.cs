@@ -314,4 +314,27 @@ public class UiCommandsTests
         using var both = new CliRun();
         Assert.Equal(ExitCodes.Usage, await both.RunAsync("ui", "revoke", "uit_1", "--all"));
     }
+
+    /// <summary>
+    /// The noun's own words and those of the pairing verbs name a page, never a browser: Jason Desktop's window holds a
+    /// token as a web page of one's own does, and the release opens no browser of its own. Breaks if the help of the noun,
+    /// of tokens, of revoke or of revoke --all promises a browser again.
+    /// </summary>
+    [Fact]
+    public void The_pairing_words_name_a_page_and_no_browser()
+    {
+        using var cli = new CliRun(descriptor: false);
+        var ui = Jason.Cli.Commands.UiCommands.Build(cli.Environment, ActorOption.Create());
+        var revoke = ui.Subcommands.Single(each => each.Name == "revoke");
+        string?[] words =
+        [
+            ui.Description,
+            ui.Subcommands.Single(each => each.Name == "tokens").Description,
+            revoke.Description,
+            revoke.Options.Single(each => each.Name == "--all").Description,
+        ];
+
+        Assert.All(words, each => Assert.DoesNotContain("browser", each, StringComparison.OrdinalIgnoreCase));
+        Assert.All(words, each => Assert.Contains("page", each, StringComparison.Ordinal));
+    }
 }

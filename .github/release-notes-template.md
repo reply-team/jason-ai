@@ -31,7 +31,7 @@ at this version and released only after its tests passed.
 | `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at `v{{version}}`, which `jason plugin install ntfy` places in `~/.jason/plugins/ntfy` |
 | `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at `v{{version}}`, which `jason plugin install slack` places in `~/.jason/plugins/slack` |
 | `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |
-| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
+| `jason-ui.zip` | the UI's package, the build Jason Desktop draws: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |
 | `jason-skills.zip` | the skills' package: `skills/` at `v{{version}}` and a `source.json` naming the tag and its commit, which `jason skills install` deploys when it is given no `--source` |
 | `jason-desktop-windows-x64-setup.exe` | Jason Desktop for Windows on x64: the installer, signed |
 | `jason-desktop-windows-x64-setup.exe.blockmap` | what the Windows desktop's updater reads to download only the parts of the installer that changed |

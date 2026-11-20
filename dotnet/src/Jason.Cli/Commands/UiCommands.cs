@@ -28,7 +28,7 @@ public static class UiCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var ui = new Command("ui", "Jason Desktop and the UI it draws: open Jason Desktop at what waits or at one item, place this release's UI build, and pair a page with this runtime, see which browsers are paired, and unpair one.");
+        var ui = new Command("ui", "Jason Desktop and the UI it draws: open Jason Desktop at what waits or at one item, place this release's UI build, and pair a page with this runtime, see which pages are paired, and unpair one.");
         ui.Subcommands.Add(Install(env, actor));
         ui.Subcommands.Add(Open(env, actor));
         ui.Subcommands.Add(Pair(env, actor));
@@ -259,7 +259,7 @@ public static class UiCommands
 
     private static Command Tokens(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("tokens", "The browsers paired with this runtime: when each paired and when it was last used.");
+        var command = new Command("tokens", "The pages paired with this runtime, Jason Desktop's window among them: when each paired and when it was last used.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
@@ -272,9 +272,9 @@ public static class UiCommands
 
     private static Command Revoke(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("revoke", "Unpair a browser: its token stops working from the next request on.");
+        var command = new Command("revoke", "Unpair a page: its token stops working from the next request on.");
         var id = new Argument<string?>("token-id") { Description = "The token, as ui tokens shows it.", Arity = ArgumentArity.ZeroOrOne };
-        var all = new Option<bool>("--all") { Description = "Every paired browser, including the one you are reading this in." };
+        var all = new Option<bool>("--all") { Description = "Every paired page, Jason Desktop's window included." };
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(all);

@@ -1,8 +1,8 @@
 # Jason UI
 
-The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One more client of the Runtime API
-(`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired once with
-`jason ui pair`, then bookmarked. Nothing in the runtime knows a screen exists.
+The UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/` and Jason Desktop draws in its window. One more client
+of the Runtime API (`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired by
+the link `jason ui pair` prints, which the desktop loads at each start. Nothing in the runtime knows a screen exists.
 
 ## Build
 
@@ -13,14 +13,15 @@ has no licence file, and the package step refuses notices that leave out a packa
 dependency, and a directory other than `assets/`.
 
 The brand files are the mark, the two wordmarks and the app icons under `desktop/`; the small `Alpha` label beside the wordmark
-is text in the page, in the browser and in the desktop alike, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
+is text in the page, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
 
 ## Where it lands
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build: the release's own, which `jason ui install` places (a release builds
 `ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
-`jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open --web`; `jason status` says which build is served. Delete `custom/` to go back.
+`jason-ui.zip` into `~/.jason/ui/custom/` and start Jason Desktop, whose window draws whatever the runtime serves;
+`jason status` says which build is served. Delete `custom/` to go back.
 
 ## One console
 
@@ -55,19 +56,20 @@ control in that markup carries `data-action` and its arguments, answered by one 
 an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses; and
 the tag refuses text inside a tag, where it could add an attribute of its own. A repaint keeps the control a person is
 in focused, with its selection. The
-classic screens in the area take the browser's stylesheet, scoped under `.harness` when the build runs
+classic screens in the area take their own stylesheet (`src/styles/`), scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
 **Words and theme.** The page's words are in `src/locale/en.ts`, one table read through `t()`. The theme
 (light, dark, or the system's) is chosen under Settings; light is what an installation that has chosen nothing meets.
-The choice is kept in this browser and never sent to the runtime; inside the desktop it is also told to the desktop, which
-keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the page's.
+The choice is told to the desktop, which keeps it so its window and starting page open in the same theme before the
+page loads, and never sent to the runtime. The document's `lang` is `en`. The console's own words are English in this release: the table serves the page's.
 
 ## Dev loop
 
 A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `dist/` linked as that directory's
 `ui/custom/` (a symbolic link on Linux and macOS, a junction on Windows), `npm run dev` rebuilding `dist/` on every
-change, and `jason ui open --web` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
+change, and Jason Desktop started on that data directory (`npm run dev` in `desktop/`, with the same `JASON_DATA_DIR`),
+whose window draws `dist/`; in a browser tab the build draws its one sentence and nothing else. The build writes the `manifest.json` the runtime asks of a directory before it serves
 it, so `dist/` is served as it stands. No hot reload, and no dev-only origin allowance in the runtime.
 
 ## Screens and their pieces

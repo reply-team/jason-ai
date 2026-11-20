@@ -14,8 +14,8 @@ repository is for changing Jason.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
-- `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
-  `ui/README.md` says how it is built and tested.
+- `ui/` — the UI Jason Desktop draws: a React client of the Runtime API, which the runtime serves, built into the release
+  asset `jason-ui.zip`; `ui/README.md` says how it is built and tested.
 - `desktop/` — Jason Desktop, an Electron window onto the installation the CLI uses. A release publishes from it the
   Windows installer, a disk image and an update archive for each Mac architecture, a deb and an AppImage for Linux on x64,
   the update feeds and the block maps; `desktop/README.md` says how it is built and tested, and `docs/desktop.md` is its
@@ -302,7 +302,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   guard over every message template the runtime writes and by a run of the real executable that reads
   its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
   reads them without the runtime; `jason doctor` carries a bounded slice of them.
-- Everything in the repository is written in English, with one exception: the translations of the browser UI's words
+- Everything in the repository is written in English, with one exception: the translations of the UI's words
   under `ui/src/locale/`, each language beside the English file it translates.
 
 ## Working style

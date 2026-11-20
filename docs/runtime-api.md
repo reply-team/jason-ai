@@ -6,7 +6,7 @@ of your own that calls the runtime — a script, a report, a calculator that run
 reads what Jason holds and writes back what it worked out. On this page a *plugin* is always the first kind and a
 *program* always the second.
 
-The Runtime API is what the command line, the browser UI and the roles Jason starts all call, and a program calls the
+The Runtime API is what the command line, Jason Desktop and the roles Jason starts all call, and a program calls the
 same API with the same rights. This page describes everything about it that is open in this version, and nothing more.
 That is not much yet, and asking for more is welcome.
 
@@ -64,8 +64,9 @@ descriptor, a file only the account that owns the installation can read, and to 
 
 The token is the whole authority. Whatever the API does, the token allows: there are no scopes, no key per program and
 no read-only token in this version. A program that holds it can do everything the account that owns the installation
-can do with `jason`, including deciding work that reaches real people. The one other holder is a browser paired with
-`jason ui pair`, which is given a token of its own with the same rights ([docs/ui.md](ui.md)).
+can do with `jason`, including deciding work that reaches real people. The one other holder is a page paired with
+`jason ui pair`, Jason Desktop's window or a web page of your own, which is given a token of its own with the same rights
+([docs/ui.md](ui.md)).
 
 One credential is narrower than the token, and never a person's: a **handler capability**. The runtime mints one for a
 plugin's handler for a single invocation and hands it only to the plugin-host running that invocation, which makes
@@ -83,7 +84,7 @@ So a program keeps three rules:
 - It sends the token nowhere but the descriptor's `base_url`.
 
 A request without the header, with a header that does not begin `Bearer `, or with a token that is neither the current
-capability token nor a paired browser's is answered `401`, with `WWW-Authenticate: Bearer` and this body:
+capability token nor a paired page's is answered `401`, with `WWW-Authenticate: Bearer` and this body:
 
 ```json
 {"error":{"code":"unauthorized","message":"A valid capability token is required: Authorization: Bearer <token> from the runtime descriptor.","retryable":false}}
@@ -156,7 +157,7 @@ so in one line on stderr, naming the variable and never its value.
   `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
-  write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
+  write is `human:<this account's name>`, the name Jason Desktop writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume`, `workitem.review` and
   `report.submit` take no such default: given no actor, the CLI refuses all twelve itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
@@ -708,7 +709,7 @@ interrupted.
 - **The token** goes in the `Authorization: Bearer` header, as on every operation. A browser's WebSocket cannot set a
   header, so on this route, and on no other, the token may instead come as one more subprotocol the upgrade offers,
   `jason.bearer.<token>`; the runtime never answers with it, and never writes it to a log. Either the capability token
-  or a paired browser's UI token opens the stream. Any other upgrade is refused before it becomes a WebSocket: `401`
+  or a paired page's UI token opens the stream. Any other upgrade is refused before it becomes a WebSocket: `401`
   with no token, or an unknown or revoked one, and `403` with the code `operation_not_granted` with a plugin handler's
   capability in the header, which opens its own operations alone. A `jason.bearer.` subprotocol sent to any other route
   counts for nothing: without the header, that request is answered `401` too.
@@ -764,7 +765,7 @@ interrupted.
 
 ## Where a program's own pages can live
 
-The runtime serves one browser build under `/ui/` at its address: the one in `ui/custom/` under the data directory when
+The runtime serves one build of the UI under `/ui/` at its address: the one in `ui/custom/` under the data directory when
 that directory holds a build, else the release's own in `ui/default/`. A build is an `index.html` and, beside it, a
 `manifest.json` that holds exactly `version` and `api_version`: the build's version and the API version it was built
 for. A manifest with any other member makes the directory not a build, and the release's UI is served instead.
@@ -777,10 +778,12 @@ where a build keeps content the UI does not trust and every answer carries a pol
 ([docs/ui.md](ui.md), "Files the UI does not trust"); and the runtime reads the directory at every request, so a build
 placed there is served at once and deleting it brings the release's back.
 
-A build in `ui/custom/` is served instead of the release's UI, not beside it. Its pages pair as the release's do. The
+A build in `ui/custom/` is served instead of the release's UI, not beside it, to Jason Desktop's window too, which then
+draws it in place of the release's. Its pages pair as the release's do. The
 link `jason ui pair` prints carries a ticket, good for 60 seconds and for one use. The page trades it at
 `POST /ui/session`, with the body `{"ticket":"…"}` and the runtime's own address as its `Origin`, and is answered with
-a UI token and the token's id; it presents that token as a bearer from then on ([docs/ui.md](ui.md)).
+a UI token and the token's id; it presents that token as a bearer from then on
+([docs/ui.md](ui.md#a-web-interface-of-your-own)).
 
 ## What is stable
 
@@ -797,5 +800,5 @@ What is not open in this version:
 - **No users.** One runtime serves the one account that owns the installation, and every caller acts with that
   account's authority.
 - **No scoped token.** There is no token narrower than the capability token: none read-only, none for one campaign,
-  none for one program. A paired browser's token is no narrower either, and unlike the capability token it is kept
+  none for one program. A paired page's token is no narrower either, and unlike the capability token it is kept
   across restarts until `ui.revoke` revokes it.

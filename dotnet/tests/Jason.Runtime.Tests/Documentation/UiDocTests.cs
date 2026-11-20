@@ -72,4 +72,40 @@ public class UiDocTests
         var section = page[start..(end < 0 ? page.Length : end)];
         Assert.DoesNotContain("demo", section, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// The door for a web interface of one's own is said in one section, and said as the code keeps it: the verbs that pair
+    /// and open such a page, the exchange's route, codes and answer, where the build goes, and the sentence the release's
+    /// build draws in a tab with none. Breaks if the door changes and the section still describes the old one, or if the
+    /// section goes.
+    /// </summary>
+    [Fact]
+    public void The_section_on_a_web_interface_of_ones_own_states_the_door_as_the_code_keeps_it()
+    {
+        var page = Page();
+        var start = page.IndexOf("## A web interface of your own", StringComparison.Ordinal);
+        Assert.True(start >= 0, "docs/ui.md has no section on a web interface of your own");
+        var end = page.IndexOf(" ## ", start + 4, StringComparison.Ordinal);
+        var section = page[start..(end < 0 ? page.Length : end)];
+
+        Assert.Contains("`jason ui pair`", section, StringComparison.Ordinal);
+        Assert.Contains("`jason ui open --web`", section, StringComparison.Ordinal);
+        Assert.Contains("`--web --no-open`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Jason.Cli.CliErrors.CustomUiNotInstalled}`, exit {Jason.Cli.ExitCodes.ApiError}", section, StringComparison.Ordinal);
+        Assert.Contains($"`http://127.0.0.1:<port>{UiPaths.Prefix}/#/attention?t=<ticket>`", section, StringComparison.Ordinal);
+        Assert.Contains("`<data>/ui/custom/`", section, StringComparison.Ordinal);
+        Assert.Contains($"`POST {UiPaths.Door}`", section, StringComparison.Ordinal);
+        Assert.Contains($"{(int)UiTickets.Lifetime.TotalSeconds} seconds", section, StringComparison.Ordinal);
+        Assert.Contains("`ticket_invalid`", section, StringComparison.Ordinal);
+        Assert.Contains("`origin_refused`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Jason.Contracts.Api.Streams.BearerSubProtocolPrefix}<token>`", section, StringComparison.Ordinal);
+
+        var answer = System.Text.Json.JsonSerializer.SerializeToNode(new Jason.Contracts.Api.UiSessionResponse("t", "i", "a", "v", "n"), Jason.Contracts.Json.JasonJson.Options)!.AsObject();
+        Assert.All(answer.Select(member => member.Key), member => Assert.Contains($"`{member}`", section, StringComparison.Ordinal));
+
+        var locale = File.ReadAllText(Path.Combine(RepositoryTree.Root(), "ui", "src", "locale", "en.ts"));
+        var sentence = System.Text.RegularExpressions.Regex.Match(locale, @"'ownPlace\.message':\s*'(?<words>[^']+)'");
+        Assert.True(sentence.Success, "ui/src/locale/en.ts has no ownPlace.message");
+        Assert.Contains($"\"{sentence.Groups["words"].Value}\"", section, StringComparison.Ordinal);
+    }
 }

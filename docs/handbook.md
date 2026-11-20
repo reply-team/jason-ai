@@ -154,7 +154,7 @@ that writes it; the CLI, a pure client of the runtime's loopback API; and the pl
 which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. What a person, an agent or a
 plugin author needs is here:
 [docs/philosophy.md](philosophy.md) for what Jason is and who it is for, [docs/INSTALL.md](INSTALL.md),
-[docs/plugins.md](plugins.md), [docs/ui.md](ui.md) for the browser UI, the contracts under
+[docs/plugins.md](plugins.md), [docs/ui.md](ui.md) for Jason Desktop's screens, the contracts under
 [docs/contracts/](contracts/README.md), and the skills under [`skills/`](../skills).
 
 ## Repository layout
@@ -165,10 +165,10 @@ plugin author needs is here:
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | What Jason is and who it is for, the install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
+| `docs/` | What Jason is and who it is for, the install manual, the wiring check, the plugin author's guide, Jason Desktop and its screens, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `examples/` | Cases of Jason applied to outbound work, one folder each, and the template a case is written from |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
-| `ui/` | The browser UI the runtime serves: a React client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
+| `ui/` | The UI the runtime serves and Jason Desktop draws: a React client of the Runtime API; `npm run package` builds it into `jason-ui.zip`, which each release attaches and `jason ui install` places |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is here too, under `dotnet/`: the runtime, its CLI and its plugin host in C#, with their tests.
@@ -234,7 +234,7 @@ interactive and business packs where your agent harness looks as well, which is 
 to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
 would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
-browser UI, the build Jason Desktop draws; a runtime works without it.
+UI, the build Jason Desktop draws; a runtime works without it.
 
 One question, answered check by check. It is one of thirteen names in this CLI with no API operation behind
 it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "The browser UI the Jason runtime serves: one more client of its API.",
+  "description": "The UI the Jason runtime serves and Jason Desktop draws: one more client of its API.",
   "license": "MIT",
   "scripts": {
     "dev": "vite build --watch",
