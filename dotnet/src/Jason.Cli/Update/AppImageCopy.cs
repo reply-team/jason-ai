@@ -21,6 +21,9 @@ internal static class AppImageCopy
     /// <summary>How long one reading of the file by its own runtime is given.</summary>
     public static readonly TimeSpan ExtractWait = TimeSpan.FromMinutes(2);
 
+    /// <summary>The name of the jason the file carries and each copy holds: a Linux program's, whatever system reads the path.</summary>
+    private const string CarriedName = "jason";
+
     /// <summary>The folder of the copies, from a copy's jason: <c>&lt;data&gt;/desktop/bundle</c>.</summary>
     public static string BundlesOf(string copiedExecutable) =>
         Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(copiedExecutable))!)!;
@@ -55,7 +58,7 @@ internal static class AppImageCopy
     public static string BundlesUnder(string dataRoot) => Path.Combine(dataRoot, "desktop", "bundle");
 
     /// <summary>The copy's jason for a version, under the copies' folder.</summary>
-    public static string CopyOf(string bundles, SemanticVersion version) => Path.Combine(bundles, version.ToString(), ReleaseAssets.ExecutableName);
+    public static string CopyOf(string bundles, SemanticVersion version) => Path.Combine(bundles, version.ToString(), CarriedName);
 
     /// <summary>Whether the copy's jason for a version is there and its version.json names that version.</summary>
     public static bool Holds(string bundles, SemanticVersion version) =>
@@ -96,7 +99,7 @@ internal static class AppImageCopy
             }
 
             var read = Path.Combine(reading, "squashfs-root", "resources", "bundle");
-            var named = CarriedExecutable.Of(Path.Combine(read, ReleaseAssets.ExecutableName));
+            var named = CarriedExecutable.Of(Path.Combine(read, CarriedName));
             if (named is null || !SemanticVersion.TryParse(named.Version, out var carries) || carries != version || Directory.Exists(Path.GetDirectoryName(CopyOf(bundles, version))))
             {
                 return Holds(bundles, version);

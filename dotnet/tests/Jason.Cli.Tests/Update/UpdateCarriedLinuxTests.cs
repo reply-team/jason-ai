@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Text.Json;
 using Jason.Cli.Commands;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
@@ -72,7 +73,7 @@ public sealed class UpdateCarriedLinuxTests : IDisposable
             CarriedUpdate.ApplicationOf(copy, SetupSystem.Linux));
 
         var kept = Path.Combine(_tree.Paths.Root, "elsewhere", "Jason.AppImage");
-        File.WriteAllText(Path.Combine(_data.Paths.Root, "desktop", "appimage.json"), $"{{\"file\":\"{kept}\"}}\n");
+        File.WriteAllText(Path.Combine(_data.Paths.Root, "desktop", "appimage.json"), JsonSerializer.Serialize(new { file = kept }) + "\n");
         Assert.Equal(kept, CarriedUpdate.ApplicationOf(copy, SetupSystem.Linux));
         Assert.Equal(kept, CarriedUpdate.ApplicationFolderOf(copy, SetupSystem.Linux));
 

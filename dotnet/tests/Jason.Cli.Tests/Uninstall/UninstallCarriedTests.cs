@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
@@ -1752,6 +1753,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
     [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
     public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge, bool linePlace, string folder)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows() && folder.Contains('"', StringComparison.Ordinal), "Windows names no folder with a quote.");
         var places = LinuxPlaces();
         var (copy, file) = AppImage(linePlace, folder);
         var bin = places.LocalBin;
@@ -2075,13 +2077,21 @@ public sealed partial class UninstallCarriedTests : IDisposable
             Plant(Path.Combine(XdgCache, "jason-desktop-updater")));
 
     /// <summary>
-    /// Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting a launcher whose path needs
-    /// no escape; or, for one that does, its TryExec and quoted Exec values as given, spelled by the test.
+    /// Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting <paramref name="launcher"/>,
+    /// spelled as <c>autostartEntry</c> spells it (<c>desktop/src/login-item.ts</c>): TryExec with each backslash doubled,
+    /// and Exec's quoted argument with a double quote, a backtick, a dollar sign and a backslash each escaped, that escape's
+    /// backslash doubled too. A launcher under a Windows test home holds backslashes.
     /// </summary>
-    private string OpenAtLoginEntry(string launcher, string? execValue = null) =>
+    private string OpenAtLoginEntry(string launcher) =>
+        OpenAtLoginEntry(
+            launcher.Replace(@"\", @"\\", StringComparison.Ordinal),
+            "\"" + Regex.Replace(launcher, """["`$\\]""", found => @"\\" + (found.Value == @"\" ? @"\\" : found.Value)) + "\"");
+
+    /// <summary>Open Jason at Login with its TryExec and quoted Exec values as the test spells them.</summary>
+    private string OpenAtLoginEntry(string tryExec, string exec) =>
         Written(
             Path.Combine(XdgConfig, "autostart", DesktopRemoval.Identifier + ".desktop"),
-            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec={execValue ?? $"\"{launcher}\""} --opened-at-login\n");
+            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={tryExec}\nExec={exec} --opened-at-login\n");
 
     /// <summary>A runtime that goes when asked: its descriptor, then its process.</summary>
     private FakeHandler StopsWhenAsked(StepLog log, FakeProcessControl processes) => new(_ =>
