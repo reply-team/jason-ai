@@ -777,7 +777,8 @@ terminal while Jason Desktop is open, it refuses with `desktop_running` before a
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no
 receipt, so it is removed by nobody — including this. The rest of the installation goes by rule, in a fixed
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
-registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
+registered for it — so a logon part-way through cannot start what is going (on macOS just after the runtime, and on
+Linux for the deb just after its package, so a password not given leaves it in place); then the runtime, and if it will not
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
 registration — the AppUserModelID key the toast was shown under, the two entries Windows made for it at the
 first toast, and the `jason:` link where its command names this executable — after the runtime, so its next toast

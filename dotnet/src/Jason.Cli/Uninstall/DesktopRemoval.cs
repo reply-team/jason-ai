@@ -1303,18 +1303,17 @@ public static partial class DesktopRemoval
 
     /// <summary>
     /// Linux, the deb: the package purged (<see cref="IInstallationRemover.PurgePackageAsync"/>), once the runtime has stopped and
-    /// before anything of this account's is removed, so a password not given removes nothing. Null where it went; else the
-    /// refusal, which ends the uninstall: why, in the words of sudo, pkexec and apt, the logon registration where it was already
-    /// taken away (<paramref name="registrationTaken"/>), and the way by hand; and the runtime it stopped started again
-    /// (<see cref="StartOwedAgainAsync"/>), except after a run still going at its bound, which may yet be taking off the files
-    /// that runtime would run from.
+    /// before anything of this account's is removed, the runtime's start at logon included, so a password not given removes
+    /// nothing. Null where it went; else the refusal, which ends the uninstall: why, in the words of sudo, pkexec and apt, and
+    /// the way by hand; and the runtime it stopped started again (<see cref="StartOwedAgainAsync"/>), except after a run still
+    /// going at its bound, which may yet be taking off the files that runtime would run from.
     /// </summary>
-    public static async Task<RemovalRefused?> PurgePackageAsync(CliEnvironment env, DesktopPlan plan, UninstallOptions options, bool registrationTaken, List<string> done, List<string> problems, CancellationToken cancellationToken)
+    public static async Task<RemovalRefused?> PurgePackageAsync(CliEnvironment env, DesktopPlan plan, UninstallOptions options, List<string> done, List<string> problems, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
 
-        var refused = await PurgeAsync(env, plan, registrationTaken, done, cancellationToken).ConfigureAwait(false);
+        var refused = await PurgeAsync(env, plan, done, cancellationToken).ConfigureAwait(false);
         if (refused is { Unended: false })
         {
             await StartOwedAgainAsync(env, options, done, problems, cancellationToken).ConfigureAwait(false);
@@ -1323,7 +1322,7 @@ public static partial class DesktopRemoval
         return refused?.Refusal;
     }
 
-    private static async Task<(RemovalRefused Refusal, bool Unended)?> PurgeAsync(CliEnvironment env, DesktopPlan plan, bool registrationTaken, List<string> done, CancellationToken cancellationToken)
+    private static async Task<(RemovalRefused Refusal, bool Unended)?> PurgeAsync(CliEnvironment env, DesktopPlan plan, List<string> done, CancellationToken cancellationToken)
     {
         PackageRun run;
         try
@@ -1332,7 +1331,7 @@ public static partial class DesktopRemoval
         }
         catch (Exception unstarted) when (unstarted is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
-            return (PackageStays(registrationTaken, $"apt could not be started to take Jason Desktop's package off ({unstarted.Message}).", "Take it off with `sudo apt purge jason-desktop`, then delete what this account keeps by hand, or run `jason uninstall` again once apt runs."), false);
+            return (PackageStays($"apt could not be started to take Jason Desktop's package off ({unstarted.Message}).", "Take it off with `sudo apt purge jason-desktop`, then delete what this account keeps by hand, or run `jason uninstall` again once apt runs."), false);
         }
 
         if (run.ExitCode == 0)
@@ -1350,27 +1349,22 @@ public static partial class DesktopRemoval
         if (run.Refusal is AptRefusal.Unended)
         {
             return (PackageStays(
-                registrationTaken,
                 string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {PurgeWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet take Jason Desktop's package off, so the runtime this uninstall stopped was not started again from the files apt may be taking away."),
                 "Once apt has ended: where the package stayed, run `jason uninstall` again, or an administrator takes it off with `sudo apt purge jason-desktop`, and Jason Desktop's next start or `jason runtime start` starts the runtime meanwhile; where apt took it off, `jason` went with it, and what this account keeps, which the plan above lists, is deleted by hand, or by installing Jason again and running `jason uninstall`."), true);
         }
 
         return (run.Refusal switch
         {
-            AptRefusal.NoPassword => PackageStays(registrationTaken, "Jason Desktop is a system package here, and taking it off needs an administrator's password, which was not given.", "Run `jason uninstall` again to be asked again; where this account is not an administrator, an administrator of this computer can type theirs, " + ByHand),
-            AptRefusal.NoSession => PackageStays(registrationTaken, "Jason Desktop is a system package here, which needs an administrator's password to take off, and this session cannot ask for one.", "Run `jason uninstall` in a terminal of your desktop, " + ByHand),
-            AptRefusal.DialogFailed => PackageStays(registrationTaken, "The system's password dialog failed, so Jason Desktop's package was not taken off.", "Sign out and back in, or restart, then run `jason uninstall` again, " + ByHand),
-            AptRefusal.LockHeld => PackageStays(registrationTaken, "Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop's package was not taken off.", "Run `jason uninstall` again in a few minutes, " + ByHand),
-            _ => PackageStays(registrationTaken, string.Create(CultureInfo.InvariantCulture, $"apt did not take Jason Desktop's package off: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}."), "`sudo dpkg --configure -a` finishes a package left half configured, and `sudo apt purge jason-desktop` takes it off; then run `jason uninstall` again where it is still there."),
+            AptRefusal.NoPassword => PackageStays("Jason Desktop is a system package here, and taking it off needs an administrator's password, which was not given.", "Run `jason uninstall` again to be asked again; where this account is not an administrator, an administrator of this computer can type theirs, " + ByHand),
+            AptRefusal.NoSession => PackageStays("Jason Desktop is a system package here, which needs an administrator's password to take off, and this session cannot ask for one.", "Run `jason uninstall` in a terminal of your desktop, " + ByHand),
+            AptRefusal.DialogFailed => PackageStays("The system's password dialog failed, so Jason Desktop's package was not taken off.", "Sign out and back in, or restart, then run `jason uninstall` again, " + ByHand),
+            AptRefusal.LockHeld => PackageStays("Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop's package was not taken off.", "Run `jason uninstall` again in a few minutes, " + ByHand),
+            _ => PackageStays(string.Create(CultureInfo.InvariantCulture, $"apt did not take Jason Desktop's package off: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}."), "`sudo dpkg --configure -a` finishes a package left half configured, and `sudo apt purge jason-desktop` takes it off; then run `jason uninstall` again where it is still there."),
         }, false);
     }
 
-    private static RemovalRefused PackageStays(bool registrationTaken, string why, string what) =>
-        new(
-            CliErrors.UninstallRefused,
-            $"{why} Nothing of this account's was removed"
-            + (registrationTaken ? ", except the logon registration, which had already been taken away and which `jason runtime autostart enable` puts back. " : ". ")
-            + what);
+    private static RemovalRefused PackageStays(string why, string what) =>
+        new(CliErrors.UninstallRefused, $"{why} Nothing of this account's was removed, the runtime's start at logon included. {what}");
 
     /// <summary>How long a runtime started again is given to answer: <c>jason runtime start</c>'s own wait.</summary>
     private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(30);

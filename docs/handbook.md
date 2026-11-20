@@ -364,7 +364,8 @@ asks for an administrator's password first, to take the package off.
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else — a skill you copied into a harness by hand has no
 receipt, so it is removed by nobody, including this. The rest goes by rule, in a fixed order: the logon
-registration first, so a logon part-way through cannot start what is going; then the runtime, and if it will
+registration first, so a logon part-way through cannot start what is going (on macOS just after the runtime, and for the
+deb just after its package, so a password not given leaves it in place); then the runtime, and if it will
 not stop, nothing after that is removed; then the recorded skills; then the PATH entry, only where the
 installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an
 upgrade left beside it; then the executable, its notice files, its install directory and the native libraries it

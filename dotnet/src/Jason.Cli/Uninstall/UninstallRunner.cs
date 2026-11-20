@@ -37,7 +37,8 @@ public sealed record UninstallReport(
 /// <remarks>
 /// <para>
 /// The order is the safety property rather than a tidiness one. The logon registration goes <b>first</b>, so
-/// that a logon part-way through cannot start the thing being removed. The runtime goes second, and a runtime
+/// that a logon part-way through cannot start the thing being removed; on macOS just after the stop, and from the deb just
+/// after the package, each for the reason step 1 gives. The runtime goes second, and a runtime
 /// that will not stop ends the whole verb: deleting a binary out from under a live process is how a machine
 /// ends up with neither a working installation nor a clean one.
 /// </para>
@@ -107,20 +108,25 @@ public static class UninstallRunner
                 done.Add("A jason of this installation was running when this began, with no runtime answering; it ended by itself before anything was removed.");
             }
 
-            // 1. The registration, first — except on macOS, where it comes after the stop. There the registration is a
-            // job loaded in launchd, and taking it out (`launchctl unload`, `launchctl remove`) ends the process launchd
-            // started at login: the runtime itself, with no drain. The job has RunAtLoad and no KeepAlive, so launchd
-            // does not start a runtime that stopped, and a login of an account already logged in loads nothing again:
-            // between the stop and the take-out nothing starts it.
-            var registrationAfterTheStop = RuntimeAutostartCommands.Registrar(env).Platform is AutostartPlatform.MacOs;
-            if (!registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
-            {
-                return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
-            }
-
             var desktop = plan.Desktop;
             var places = env.Setup;
             var purges = desktop is { ApplicationFate: ApplicationFates.Purged };
+
+            // 1. The registration, first — except on macOS, where it comes after the stop, and on Linux from the deb, where it
+            // comes after the package. On macOS the registration is a job loaded in launchd, and taking it out (`launchctl
+            // unload`, `launchctl remove`) ends the process launchd started at login: the runtime itself, with no drain. The
+            // job has RunAtLoad and no KeepAlive, so launchd does not start a runtime that stopped, and a login of an account
+            // already logged in loads nothing again: between the stop and the take-out nothing starts it. The deb's purge asks
+            // for a password that may not be given, and a refusal must leave the account's start at logon as it found it; a
+            // systemd user unit taken out later starts nothing meanwhile, for the same reason.
+            var registrationAt = RuntimeAutostartCommands.Registrar(env).Platform is AutostartPlatform.MacOs
+                ? RegistrationAt.AfterTheStop
+                : purges ? RegistrationAt.AfterThePackage : RegistrationAt.First;
+            var registrationAfterTheStop = registrationAt is not RegistrationAt.First;
+            if (registrationAt is RegistrationAt.First && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
+            }
 
             // 2. The runtime, and only then. Where a package is to be purged, stopped on the installation's behalf: a package
             // that stays starts it again by the note that stop leaves.
@@ -137,15 +143,15 @@ public static class UninstallRunner
             }
 
             // On macOS the registration now, with the runtime stopped: its file is unloaded before it goes.
-            if (registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
+            if (registrationAt is RegistrationAt.AfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAfterTheStop.Code, refusedAfterTheStop.Message);
             }
 
-            // On Linux from the deb, the package, while nothing of this account's is yet removed: a password not given then removes
-            // nothing, and the runtime stopped above starts again, unless apt may still be at work. The demo's runtime runs the
-            // jason apt deletes, so it is stopped first; and every assembly the steps after the purge need is loaded before it,
-            // since it deletes this process's file.
+            // On Linux from the deb, the package, while nothing of this account's is yet removed, the runtime's start at logon
+            // included: a password not given then removes nothing, and the runtime stopped above starts again, unless apt may
+            // still be at work. The demo's runtime runs the jason apt deletes, so it is stopped first; and every assembly the
+            // steps after the purge need is loaded before it, since it deletes this process's file.
             var demoStopped = false;
             if (purges)
             {
@@ -156,10 +162,16 @@ public static class UninstallRunner
 
                 demoStopped = true;
                 Update.AssemblyWarmUp.Run();
-                if (await DesktopRemoval.PurgePackageAsync(env, desktop!, options, done.Contains(RegistrationRemovedLine), done, problems, cancellationToken).ConfigureAwait(false) is { } refusedAtPackage)
+                if (await DesktopRemoval.PurgePackageAsync(env, desktop!, options, done, problems, cancellationToken).ConfigureAwait(false) is { } refusedAtPackage)
                 {
                     return new UninstallReport(plan, done, kept, problems, refusedAtPackage.Code, refusedAtPackage.Message);
                 }
+            }
+
+            // And from the deb, the registration now, with the package off.
+            if (registrationAt is RegistrationAt.AfterThePackage && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterThePackage)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAfterThePackage.Code, refusedAfterThePackage.Message);
             }
 
             // And the application's own start at sign-in, only now, so a runtime that will not stop leaves it where it was
@@ -260,6 +272,14 @@ public static class UninstallRunner
 
     /// <summary>What the report says when step 1 took away the logon registration.</summary>
     private const string RegistrationRemovedLine = "Removed the logon registration.";
+
+    /// <summary>Where in the order the runtime's start at logon is taken away.</summary>
+    private enum RegistrationAt
+    {
+        First,
+        AfterTheStop,
+        AfterThePackage,
+    }
 
     /// <summary>What the report says when step 1 took away the Windows task 0.1.0 registered for this account.</summary>
     private static readonly string LegacyRemovedLine =
