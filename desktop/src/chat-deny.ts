@@ -1,13 +1,15 @@
 // The fence around the chat agent's jason commands, three files beside the desktop's package, read by the desktop at each
 // turn and by the CLI's tests, and a fourth file beside them: the instruction text the chat folder carries for the hosts.
-// The deny list names the jason commands the agent never runs (the verbs that are a person's own word and the verbs that
-// change the installation) and the Runtime API operations those verbs call. The allow list names the verbs it runs
-// without asking: every verb of the CLI the deny list does not cover, written from the CLI's command tree by its tests.
-// Any other jason command goes to the person's card. The plan list names the allow list's verbs that change nothing,
+// The deny list names the jason commands a chat in Plan only never runs (the verbs that are a person's own word and the
+// verbs that change the installation) and the Runtime API operations those verbs call; outside Plan only it refuses
+// nothing, its verbs of a person's word run as the allow list's do, and the rest are the mode's (`modeFence`). The allow
+// list names the verbs it runs without asking: every verb of the CLI the deny list does not cover, written from the
+// CLI's command tree by its tests. Any other jason command goes to the person's card. The plan list names the allow list's verbs that change nothing,
 // the only jason commands a chat in Plan only runs, written by the same tests from a declaration of each verb.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ChatMode } from './chat-modes.ts';
 
 /** The deny list's file, relative to the desktop's application directory. */
 export const denyListFile = 'chat-deny-list.txt';
@@ -131,6 +133,27 @@ function readIfThere(file: string): string | null {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
         throw error;
     }
+}
+
+/**
+ * The deny list's verbs that are a person's own word and that a chat outside Plan only runs with no card, as the allow
+ * list's verbs are run: the host's own rule lets each through (`modeFence`). A person asks for these in the chat in their
+ * own words, so the chat does them: a preference set or unset, an approval approved or rejected, a standing approval set,
+ * a question answered, and a campaign started. They stay on the deny list, which Plan only still reads.
+ */
+export const personsWordVerbs: readonly string[] = ['preference set', 'preference unset', 'approval approve', 'approval reject', 'approval set-standing', 'decision answer', 'campaign start'];
+
+/**
+ * The fence one turn runs under in its mode. Plan only: the fence as it is read, every command and operation of the deny
+ * list refused. Every other mode: no command or operation of the deny list is refused, since the jason a chat runs is no
+ * longer confined and the person's own word in the chat is theirs. The verbs of a person's word (`personsWordVerbs`) join
+ * the allow list and run with no card; every other command of the deny list goes to the person as any jason command the
+ * host does not run by itself does: a card in Ask first and Auto-edit, and in Full access what Full access does with such
+ * a card.
+ */
+export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
+    if (mode === 'plan_only') return fence;
+    return { ...fence, commands: [], operations: [], allowed: [...fence.allowed, ...personsWordVerbs] };
 }
 
 /**

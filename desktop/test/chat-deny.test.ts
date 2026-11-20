@@ -3,7 +3,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, helpNouns, helpRules, instructionsFile, parsePlanList, parseAllowList, parseDenyList, planListFile, readFence } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, helpNouns, helpRules, instructionsFile, modeFence, parsePlanList, parseAllowList, parseDenyList, personsWordVerbs, planListFile, readFence } from '../src/chat-deny.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
 
 const desktop = join(import.meta.dirname, '..');
 const list = parseDenyList(readFileSync(join(desktop, denyListFile), 'utf8'));
@@ -181,4 +182,35 @@ test('rule 18 of the chat\'s instructions names exactly the nouns whose help run
     assert.deepEqual([...listed.matchAll(/`([a-z-]+)`/g)].map((match) => match[1]), helpNouns(fence.allowed, fence.reads));
     assert.match(rule, /run `jason <noun> --help`, exactly those three words with nothing after them/);
     assert.match(rule, /`jason --help` itself is refused\./);
+});
+
+test('the verbs a person\'s word runs with no card outside Plan only are exactly seven, each on the deny list and none on the allow list or the plan list', () => {
+    const fence = readFence(desktop);
+    assert.deepEqual([...personsWordVerbs].sort(), ['approval approve', 'approval reject', 'approval set-standing', 'campaign start', 'decision answer', 'preference set', 'preference unset']);
+    for (const verb of personsWordVerbs) {
+        assert.ok(entries.includes(verb), `${verb} stays on the deny list, which Plan only and the CLI's table still read`);
+        assert.ok(!fence.allowed.includes(verb) && !fence.reads.includes(verb), verb);
+    }
+});
+
+test('Plan only runs under the fence as it is read: every command and operation of the deny list refused, the plan list its only reads', () => {
+    const fence = readFence(desktop);
+    assert.deepEqual(modeFence(fence, 'plan_only'), fence);
+});
+
+test('outside Plan only no command or operation of the deny list is refused: the person\'s-word verbs join the allow list, and every other one is left to the mode', () => {
+    const fence = readFence(desktop);
+    for (const mode of ['ask_first', 'auto_edit', 'full_access'] satisfies ChatMode[]) {
+        const turn = modeFence(fence, mode);
+        assert.deepEqual(turn.commands, [], mode);
+        assert.deepEqual(turn.operations, [], mode);
+        assert.deepEqual(turn.allowed, [...fence.allowed, ...personsWordVerbs], mode);
+        assert.deepEqual(turn.reads, fence.reads, mode);
+        assert.equal(turn.instructions, fence.instructions, mode);
+        for (const verb of ['uninstall', 'update', 'export', 'import', 'runtime', 'plugin grant', 'plugin revoke', 'route set', 'route unset', 'suppression remove', 'campaign archive', 'approval unset-standing']) {
+            assert.ok(!turn.allowed.includes(verb), `${verb} is no verb the host runs by itself in ${mode}`);
+        }
+        assert.deepEqual(denyRules(turn.commands), ['Bash(jason -*)'], `${mode}: a jason command that starts with an option is still refused by the host`);
+    }
+    assert.deepEqual(fence.commands, entries, 'the fence as read is left as it was');
 });

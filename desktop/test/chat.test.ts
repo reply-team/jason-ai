@@ -171,7 +171,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');
     const fence = flagValues(host.args, '--disallowedTools');
-    assert.ok(fence.includes('Bash(jason approval approve:*)') && fence.includes('Bash(jason -*)'), fence.join(' '));
+    assert.ok(fence.includes('Bash(jason -*)') && !fence.some((rule) => rule.startsWith('Bash(jason approval')), fence.join(' '));
     assert.ok(fence.some((rule) => rule.endsWith('/config/**)')) && fence.some((rule) => rule.endsWith('/logs/**)')), 'the data directory outside the chat is fenced off');
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
@@ -213,7 +213,7 @@ test('the host of either kind is started with the harness\'s label for reply-cli
 
 test('a request the model settles makes no card, and the host reads the answer', async (t) => {
     const r = rig(t);
-    plan(r, [{ ask: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }, { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } }]);
+    plan(r, [{ ask: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }, { ask: { tool: 'Bash', input: { command: 'jason --actor human:me runtime stop' } } }]);
     const said = await r.turn('c1', words, { host: 'claude' });
     assert.ok(!kinds(said).includes('permission'), JSON.stringify(said));
     const answers = texts(said).filter((text) => text.startsWith('decision'));

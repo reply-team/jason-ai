@@ -9,7 +9,7 @@ import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { cutMark } from '../src/chat-conversations.ts';
-import { readFence } from '../src/chat-deny.ts';
+import { personsWordVerbs, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
 import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
@@ -187,19 +187,21 @@ test('a Full access turn starts Claude Code in its default mode, with every deny
     const settings = flag(args, '--settings') ?? '';
     assert.match(settings, /turn-[0-9a-f]{24}\.settings\.json$/);
     assert.ok(settings.startsWith(r.b.paths.turns));
-    for (const rule of ['Bash(jason approval approve:*)', 'Bash(jason -*)', 'Bash(*JASON_CONFINED*)']) assert.ok(args.includes(rule), rule);
+    const rest = args.slice(args.indexOf('--disallowedTools') + 1);
+    const disallowed = rest.slice(0, rest.findIndex((arg) => arg.startsWith('--')));
+    for (const rule of ['Bash(jason -*)', 'Bash(*JASON_CONFINED*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), rule);
     assert.ok(!existsSync(settings), 'the settings file goes with the turn');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
     assert.deepEqual(r.started, ['full_access']);
 });
 
-test('under Full access a deny-list command is refused by the hook through a whole turn, and the chat stays in Full access', async (t) => {
+test('under Full access a refused command is refused by the hook through a whole turn, and the chat stays in Full access', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
     plan(r, [
-        { use: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } },
-        { use: { tool: 'Write', input: { file_path: join(r.b.paths.chat, 'go.sh'), content: 'jason decision answer dec_1 --option a' } } },
+        { use: { tool: 'Bash', input: { command: 'jason --actor human:me approval approve apr_1' } } },
+        { use: { tool: 'Write', input: { file_path: join(r.b.paths.chat, 'go.sh'), content: 'JASON_ATTEMPT_ID=att_1 jason decision answer dec_1 --option a' } } },
         { use: { tool: 'Read', input: { file_path: join(r.b.paths.turns, 'turn-0123456789abcdef01234567.mcp.json') } } },
     ]);
     const said = await r.turn(id, 'approve it', claude);
@@ -249,7 +251,7 @@ test('in a Full access turn the hook\'s allow runs with no card, its deny refuse
     await r.chat.setMode(id, 'full_access', 'claude');
     plan(r, [
         { use: { tool: 'Bash', input: { command: 'git status' } } },
-        { use: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } },
+        { use: { tool: 'Bash', input: { command: 'jason --actor human:me approval approve apr_1' } } },
         { use: { tool: 'Bash', input: { command: 'ls *.md' } } },
         { use: { tool: 'Bash', input: { command: 'cat notes/*.txt' } } },
     ]);
@@ -663,7 +665,7 @@ test('in an Auto-edit turn a file command in the chat folder runs with no card, 
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'auto_edit', 'claude');
-    plan(r, [{ ask: { tool: 'Bash', input: { command: 'mkdir -p notes && touch notes/plan.md' } } }, { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } }]);
+    plan(r, [{ ask: { tool: 'Bash', input: { command: 'mkdir -p notes && touch notes/plan.md' } } }, { ask: { tool: 'Bash', input: { command: 'jason --actor human:me runtime stop' } } }]);
     const said = await r.turn(id, 'make a notes folder', claude);
     const decisions = texts(said).filter((text) => text.startsWith('decision '));
     assert.equal(decisions[0], 'decision allow');
@@ -1089,4 +1091,66 @@ test('a Codex turn, from whichever mode the chat was in, runs read-only with no 
         assert.ok(!args.some((arg) => arg.includes(r.b.paths.data)), `${mode}: no argument names the data directory`);
         assert.equal(r.chat.open(id).mode, mode === 'plan_only' ? 'plan_only' : 'ask_first', mode);
     }
+});
+
+// What a person's word and the installation's verbs are, mode by mode: the chat's jason is no longer confined, so outside
+// Plan only nothing of the deny list is refused. The seven verbs of a person's word run as the allow list's verbs do, by
+// the host's own rule; every other command of the list is the person's card in Ask first and Auto-edit, and runs in Full
+// access; Plan only keeps every refusal it had.
+
+const installationVerbs = ['jason uninstall', 'jason update apply', 'jason export out.zip', 'jason import in.zip', 'jason runtime stop', 'jason plugin grant reply --http api.example.com',
+    'jason plugin revoke reply --env REPLY_TOKEN', 'jason route set message.send reply', 'jason route unset message.send', 'jason suppression remove ada@example.com', 'jason campaign archive cmp_1', 'jason approval unset-standing cmp_1 interested'];
+
+test('outside Plan only a turn lets the host run the seven verbs of a person\'s word with no card and is denied none of the deny list; Plan only keeps every refusal', async (t) => {
+    for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] satisfies ChatMode[]) {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+        await r.turn(id, 'hello', claude);
+        const args = r.hosts()[0]?.args ?? [];
+        const rules = (name: string) => {
+            const rest = args.slice(args.indexOf(name) + 1);
+            const end = rest.findIndex((arg) => arg.startsWith('--'));
+            return end < 0 ? rest : rest.slice(0, end);
+        };
+        const allowed = rules('--allowedTools');
+        const disallowed = rules('--disallowedTools');
+        for (const verb of personsWordVerbs) {
+            assert.equal(allowed.includes(`Bash(jason ${verb}:*)`), mode !== 'plan_only', `${mode}: ${verb} allowed`);
+            assert.equal(disallowed.includes(`Bash(jason ${verb}:*)`), mode === 'plan_only', `${mode}: ${verb} denied`);
+        }
+        for (const entry of fence.commands) assert.equal(disallowed.includes(`Bash(jason ${entry}:*)`), mode === 'plan_only', `${mode}: ${entry}`);
+        assert.ok(disallowed.includes('Bash(jason -*)'), `${mode}: a jason that starts with an option is refused in every mode`);
+    }
+});
+
+test('in Ask first and Auto-edit each installation verb is the person\'s card, never a refusal; in Plan only each is refused with no card', async (t) => {
+    for (const mode of ['ask_first', 'auto_edit'] satisfies ChatMode[]) {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+        plan(r, installationVerbs.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
+        const said = await answered(r, id, installationVerbs.map(() => false));
+        assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), installationVerbs.map((command) => `Run a command: ${command}`), mode);
+        assert.ok(!texts(said).some((text) => text.includes('person\'s own act')), `${mode}: ${JSON.stringify(texts(said))}`);
+    }
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    plan(r, installationVerbs.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
+    const said = await r.turn(id, 'tidy up', claude);
+    assert.deepEqual(cards(said), [], 'Plan only shows no card');
+    assert.deepEqual(texts(said).filter((text) => text.startsWith('decision ')), installationVerbs.map(() => 'decision deny: That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.'));
+});
+
+test('in a Full access turn the verbs of a person\'s word and the installation\'s verbs run with no refusal and no card, campaign archive among them', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    const commands = ['jason campaign archive cmp_1', 'jason approval approve apr_1', 'jason decision answer dec_1 --option a', 'jason preference set tone short', 'jason campaign start cmp_1', 'jason uninstall'];
+    plan(r, commands.map((command) => ({ use: { tool: 'Bash', input: { command } } })));
+    const said = await r.turn(id, 'archive them all', claude);
+    assert.deepEqual(texts(said).filter((text) => text.startsWith('tool ')), commands.map(() => 'tool ran'));
+    assert.deepEqual(cards(said), []);
+    assert.deepEqual(done(said), { kind: 'done', error: null });
 });
