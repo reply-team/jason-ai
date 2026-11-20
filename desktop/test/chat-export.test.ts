@@ -1,0 +1,294 @@
+// `/export <file name>` in a chat: caught before a turn is built, it writes the conversation's words, the person's and
+// the AI's, as Markdown into the campaign's folder for a campaign's chat and the harness root otherwise, and says where.
+// It never writes over anything, never follows a link at the name, takes a bare file name alone, and is refused while a
+// turn runs. Any other leading word that begins with `/` goes to the host as before.
+
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { Chat, type ChatEvent } from '../src/chat.ts';
+import { readFence } from '../src/chat-deny.ts';
+import { readConversations, writeConversation, type Conversation, type KeptEntry } from '../src/chat-conversations.ts';
+import { exportName, exportText, nameRefusal } from '../src/chat-export.ts';
+import { bench, outsideStandIn, placeSandboxFiles, type Bench } from './harness.ts';
+
+const fence = readFence(join(import.meta.dirname, '..'));
+const at = '2026-11-19T12:00:00.000Z';
+
+interface Rig {
+    b: Bench;
+    chat: Chat;
+    events: Map<string, ChatEvent[]>;
+    /** Sends and waits for the send's `done`; what was said meanwhile. */
+    send(chatId: string, text: string): Promise<ChatEvent[]>;
+    until(chatId: string, take: (event: ChatEvent) => boolean): Promise<ChatEvent>;
+    hosts(): number;
+}
+
+const words: KeptEntry[] = [
+    { kind: 'user', text: 'Who should we write to first?' },
+    { kind: 'step', text: 'Ran jason campaign get', detail: 'C:\\Users\\someone\\.jason\\desktop\\turns\\x' },
+    { kind: 'permission', title: 'Run a command', detail: 'jason campaign start cmp_01ABC', answer: 'allow' },
+    { kind: 'text', text: 'Start with the **three** who replied last spring.', at },
+    { kind: 'error', text: 'The host stopped.' },
+    { kind: 'user', text: 'Thanks.' },
+    { kind: 'text', text: 'You are welcome.', at },
+];
+
+function conversation(id: string, campaign: string | null, entries: KeptEntry[] = words): Conversation {
+    return { id, campaign_id: campaign, title: campaign === null ? 'Planning the spring list' : 'Spring', created_at: at, updated_at: at, sessions: {}, entries, dropped: 0 };
+}
+
+const campaignChat = 'conv_01JA0000000000000000000001';
+const setupChat = 'conv_01JA0000000000000000000002';
+const emptyChat = 'conv_01JA0000000000000000000003';
+
+function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
+    const removals: (() => void)[] = [];
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'] });
+    placeSandboxFiles(b);
+    mkdirSync(b.paths.conversations, { recursive: true });
+    writeConversation(b.paths.conversations, conversation(campaignChat, 'cmp_01ABC'));
+    writeConversation(b.paths.conversations, conversation(setupChat, null));
+    writeConversation(b.paths.conversations, conversation(emptyChat, null, []));
+    const events = new Map<string, ChatEvent[]>();
+    const waiters: { chatId: string; take: (event: ChatEvent) => boolean; resolve: (event: ChatEvent) => void }[] = [];
+    const chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bundle'),
+        dataNamed: true,
+        bundleVersion: null,
+        cli: b.cli,
+        programs: b.programs,
+        keyFor: () => undefined,
+        fence: () => fence,
+        sandboxOutside: outsideStandIn,
+        now: () => Date.parse(at),
+        emit(chatId, event) {
+            const said = events.get(chatId) ?? [];
+            said.push(event);
+            events.set(chatId, said);
+            for (const waiter of [...waiters]) {
+                if (waiter.chatId === chatId && waiter.take(event)) {
+                    waiters.splice(waiters.indexOf(waiter), 1);
+                    waiter.resolve(event);
+                }
+            }
+        },
+    });
+    t.after(async () => {
+        chat.closeAll();
+        const until = Date.now() + 10_000;
+        while (Date.now() < until && [...events.keys()].some((id) => chat.isRunning(id))) await new Promise((resolve) => setTimeout(resolve, 50));
+        await chat.idle();
+        for (const remove of removals) remove();
+    });
+    const until = (chatId: string, take: (event: ChatEvent) => boolean) =>
+        new Promise<ChatEvent>((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error(`chat ${chatId} never said what was waited for; it said ${JSON.stringify(events.get(chatId) ?? [])}`)), 20_000);
+            waiters.push({ chatId, take, resolve: (event) => { clearTimeout(timer); resolve(event); } });
+        });
+    return {
+        b,
+        chat,
+        events,
+        until,
+        async send(chatId, text) {
+            const from = events.get(chatId)?.length ?? 0;
+            const done = until(chatId, (event) => event.kind === 'done');
+            await chat.send(chatId, text, { host: 'claude' });
+            await done;
+            return (events.get(chatId) ?? []).slice(from);
+        },
+        hosts: () => b.record().filter((each) => (each.name === 'claude' || each.name === 'codex') && each.args[0] !== '--version').length,
+    };
+}
+
+/** A campaign folder and a harness root of the rig's own, as the stub runtime reports them. */
+function places(r: Rig): { campaign: string; root: string } {
+    const campaign = join(r.b.root, 'harness', 'campaigns', 'spring');
+    const root = join(r.b.root, 'harness');
+    mkdirSync(campaign, { recursive: true });
+    r.b.env.STUB_CAMPAIGN_FOLDER = campaign;
+    r.b.env.STUB_HARNESS_ROOT = root;
+    return { campaign, root };
+}
+
+const expected = [
+    '# Planning the spring list',
+    '',
+    `Written by Jason Desktop at ${at}.`,
+    '',
+    '## You',
+    '',
+    'Who should we write to first?',
+    '',
+    '## AI',
+    '',
+    'Start with the **three** who replied last spring.',
+    '',
+    '## You',
+    '',
+    'Thanks.',
+    '',
+    '## AI',
+    '',
+    'You are welcome.',
+    '',
+].join('\n');
+
+// ---- What a message is, and what is written -------------------------------------------------------------------------
+
+test('a message is an export only when its first word is /export alone', () => {
+    assert.equal(exportName('/export notes.md'), 'notes.md');
+    assert.equal(exportName('  /export   my notes.md  '), 'my notes.md');
+    assert.equal(exportName('/export'), '');
+    assert.equal(exportName('/export\tnotes.md'), 'notes.md');
+    for (const other of ['/exports notes.md', '/Export notes.md', 'export notes.md', '/compact', '/review /export x.md', 'please /export x.md']) {
+        assert.equal(exportName(other), null, other);
+    }
+});
+
+test('a name is taken only as a bare file name: no folder, no parent, no drive, nothing a system cannot hold', () => {
+    for (const bare of ['notes.md', 'my notes.md', 'Spring – week 1.md', 'notes', '.notes.md', 'a..b.md']) assert.equal(nameRefusal(bare), null, bare);
+    const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in this chat’s folder.';
+    for (const path of ['../notes.md', 'sub/notes.md', 'sub\\notes.md', '/tmp/notes.md', 'C:\\notes.md', 'C:notes.md', '..', '.', '\\\\server\\share\\x.md']) {
+        assert.equal(nameRefusal(path), withFolder, path);
+    }
+    const notAName = 'That is not a file name the desktop writes.';
+    for (const bad of ['no<te>s.md', 'a|b.md', 'what?.md', 'star*.md', 'quote".md', 'line\nbreak.md', 'nul\u0000.md', 'trailing.', 'trailing ', 'CON', 'con.md', 'NUL.txt', 'com1.md', 'LPT9', 'x'.repeat(256)]) {
+        assert.equal(nameRefusal(bad), notAName, JSON.stringify(bad));
+    }
+    assert.equal(nameRefusal(''), 'Name the file to write, such as /export notes.md.');
+});
+
+test('the text is the title, the moment, and the person’s and the AI’s words in order: no step, card, error or path', () => {
+    const text = exportText(conversation(setupChat, null), new Date(at));
+    assert.equal(text, expected);
+    for (const hidden of ['Ran jason', 'turns', 'campaign start', 'The host stopped', setupChat]) assert.equal(text.includes(hidden), false, hidden);
+});
+
+test('a record that dropped its oldest entries says so where they were', () => {
+    const text = exportText({ ...conversation(setupChat, null, [{ kind: 'user', text: 'Hi' }]), dropped: 3 }, new Date(at));
+    assert.equal(
+        text,
+        ['# Planning the spring list', '', `Written by Jason Desktop at ${at}.`, '', 'The earliest messages of this conversation were no longer kept.', '', '## You', '', 'Hi', ''].join('\n'),
+    );
+});
+
+// ---- The chat -------------------------------------------------------------------------------------------------------
+
+test('a campaign’s chat writes a bare name into the campaign’s folder, says where, and starts no turn', async (t) => {
+    const r = rig(t);
+    const { campaign } = places(r);
+    const said = await r.send(campaignChat, '/export spring.md');
+    const path = join(campaign, 'spring.md');
+    assert.deepEqual(said, [{ kind: 'notice', text: `Written: ${path}` }, { kind: 'done', error: null }]);
+    assert.equal(readFileSync(path, 'utf8'), expected.replace('# Planning the spring list', '# Spring'));
+    assert.equal(r.hosts(), 0, 'no host was started');
+    // The export is no part of the conversation: its record is as it was.
+    const kept = readConversations(r.b.paths.conversations).kept.find((each) => each.id === campaignChat);
+    assert.deepEqual(kept?.entries, words);
+});
+
+test('a chat about no campaign writes a bare name into the harness root', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const said = await r.send(setupChat, '/export plan notes.md');
+    const path = join(root, 'plan notes.md');
+    assert.deepEqual(said, [{ kind: 'notice', text: `Written: ${path}` }, { kind: 'done', error: null }]);
+    assert.equal(readFileSync(path, 'utf8'), expected);
+    assert.equal(r.hosts(), 0);
+});
+
+test('a file already there is never written over, and nothing is written', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const path = join(root, 'notes.md');
+    writeFileSync(path, 'the person’s own');
+    const said = await r.send(setupChat, '/export notes.md');
+    assert.deepEqual(said, [{ kind: 'done', error: `A file of that name is already there, and the desktop never writes over a file: ${path}` }]);
+    assert.equal(readFileSync(path, 'utf8'), 'the person’s own');
+    assert.equal(r.hosts(), 0);
+});
+
+test('a link at the name is not followed: it is refused as a file already there, and what it names is not made', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const outside = join(r.b.root, 'outside.md');
+    const link = join(root, 'linked.md');
+    // A file link where the account may make one; else, on Windows, a junction, which any account may make.
+    try {
+        symlinkSync(outside, link, 'file');
+    } catch {
+        try {
+            symlinkSync(outside, link, 'junction');
+        } catch {
+            t.skip('this account cannot make a link here');
+            return;
+        }
+    }
+    const said = await r.send(setupChat, '/export linked.md');
+    assert.deepEqual(said, [{ kind: 'done', error: `A file of that name is already there, and the desktop never writes over a file: ${link}` }]);
+    assert.equal(existsSync(outside), false, 'the link was not followed');
+});
+
+test('a name with a folder in it is refused and nothing is written anywhere', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const before = readdirSync(root);
+    for (const name of ['../escape.md', 'campaigns/spring/x.md', join(r.b.root, 'abs.md')]) {
+        const said = await r.send(setupChat, `/export ${name}`);
+        assert.deepEqual(said, [{ kind: 'done', error: 'Give a file name alone, such as notes.md, with no folder in it: the file is written in this chat’s folder.' }], name);
+    }
+    assert.deepEqual(readdirSync(root), before);
+    assert.equal(existsSync(join(r.b.root, 'escape.md')), false);
+    assert.equal(existsSync(join(r.b.root, 'abs.md')), false);
+    assert.equal(r.hosts(), 0);
+});
+
+test('an export is refused while a turn of the chat runs, and writes nothing', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ wait: join(r.b.root, 'host.pid') }]);
+    await r.chat.send(setupChat, 'Wait', { host: 'claude' });
+    const refused = r.until(setupChat, (event) => event.kind === 'done' && event.error !== null);
+    await r.chat.send(setupChat, '/export during.md', { host: 'claude' });
+    assert.deepEqual(await refused, { kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' });
+    assert.equal(existsSync(join(root, 'during.md')), false);
+    const done = r.until(setupChat, (event) => event.kind === 'done' && event.error === null);
+    r.chat.stop(setupChat);
+    await done;
+});
+
+test('a folder the runtime does not name, or that is not on this disk, is said and nothing is written', async (t) => {
+    const r = rig(t);
+    // No harness root reported, and a campaign with no folder.
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: 'The harness root is not known, so the file has nowhere to go.' }]);
+    assert.deepEqual(await r.send(campaignChat, '/export x.md'), [{ kind: 'done', error: 'The folder of this chat’s campaign is not known, so the file has nowhere to go.' }]);
+    r.b.env.STUB_HARNESS_ROOT = join(r.b.root, 'not-there');
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: 'The harness root is not known, so the file has nowhere to go.' }]);
+    assert.equal(existsSync(join(r.b.root, 'not-there')), false);
+});
+
+test('an export of a chat with nothing said yet, or with no name, is refused', async (t) => {
+    const r = rig(t);
+    places(r);
+    assert.deepEqual(await r.send(emptyChat, '/export x.md'), [{ kind: 'done', error: 'This conversation has nothing to write yet.' }]);
+    assert.deepEqual(await r.send(setupChat, '/export'), [{ kind: 'done', error: 'Name the file to write, such as /export notes.md.' }]);
+});
+
+test('any other word that begins with a slash goes to the host as before', async (t) => {
+    const r = rig(t);
+    places(r);
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([]);
+    for (const text of ['/exports x.md', '/compact']) {
+        const said = await r.send(setupChat, text);
+        assert.equal(said.at(-1)?.kind, 'done');
+    }
+    assert.equal(r.hosts(), 2, 'each went to the host');
+    const kept = readConversations(r.b.paths.conversations).kept.find((each) => each.id === setupChat);
+    assert.deepEqual(kept?.entries.filter((each) => each.kind === 'user').slice(-2), [{ kind: 'user', text: '/exports x.md' }, { kind: 'user', text: '/compact' }]);
+});

@@ -53,6 +53,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
+import { ExportRefused, exportConversation, exportName } from './chat-export.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
 import { readMemoryFile, readMemoryWithin } from './chat-memory-files.ts';
@@ -1408,6 +1409,9 @@ export class Chat {
         if (this.#running.has(conversation.id)) return refuse(busy);
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
+        // `/export <file name>` writes the conversation to a file and starts no turn (`chat-export.ts`).
+        const exported = exportName(text);
+        if (exported !== null) return this.#export(conversation, chatId, exported);
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
         if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
@@ -1461,6 +1465,22 @@ export class Chat {
             this.#setupTurns.delete(conversation.id);
             if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned || error instanceof SandboxUnproven) refuse(error.message);
             else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    /**
+     * Writes the conversation's words to a new file named `name`: in the campaign's folder for a campaign's chat, in the
+     * harness root otherwise, as the runtime reports them. Says where, or why not, and starts no turn.
+     */
+    async #export(conversation: Conversation, chatId: string, name: string): Promise<void> {
+        const folderOf = async () =>
+            conversation.campaign_id === null ? ((await this.#rootPlace())?.folder ?? null) : ((await this.#readCampaign(conversation.campaign_id, false)).about.campaign?.folder ?? null);
+        try {
+            const said = await exportConversation(conversation, name, folderOf, new Date(this.#now()));
+            this.#options.emit(chatId, { kind: 'notice', text: said });
+            this.#options.emit(chatId, { kind: 'done', error: null });
+        } catch (error) {
+            this.#options.emit(chatId, { kind: 'done', error: error instanceof ExportRefused ? error.message : `The file could not be written: ${error instanceof Error ? error.message : String(error)}` });
         }
     }
 
