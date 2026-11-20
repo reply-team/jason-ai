@@ -1,21 +1,19 @@
-// A Full access grant's own folder, and the bounded sweep that removes it seven days after Full access ended: a link in
-// it is unlinked and never walked, a folder swapped after it was looked at is not entered, a failure leaves the folder
-// and says a code, and a pass takes only as many entries as it is given.
+// The folder of a Full access grant an earlier desktop left, which no desktop makes now: moved to the ended place, and the
+// bounded sweep that removes it seven days after the move: a link in it is unlinked and never walked, a folder swapped
+// after it was looked at is not entered, a failure leaves the folder and says a code, and a pass takes only as many
+// entries as it is given.
 
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { skillsFolders } from '../src/chat-agent-folder.ts';
 import {
     endGrantFolder,
     endedName,
     endedNameShape,
     grantIdShape,
     keptMs,
-    makeGrantFolder,
     moveLeftovers,
     newGrantId,
     sweepEnded,
@@ -31,10 +29,12 @@ function rig(t: { after(fn: () => void): void }) {
     const root = mkdtempSync(join(tmpdir(), 'jason-full-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const folders: FullFolders = { full: join(root, 'chat-full'), ended: join(root, 'chat-full-ended'), records: join(root, 'chat-full-records') };
-    const chat = join(root, 'chat');
-    const records = join(root, 'skills-records');
-    mkdirSync(chat);
-    return { root, folders, chat, records };
+    return { root, folders };
+}
+
+/** A grant's folder as an earlier desktop left it. */
+function left(folders: FullFolders, id: string): void {
+    mkdirSync(join(folders.full, id), { recursive: true });
 }
 
 function put(path: string, text = 'x'): void {
@@ -49,9 +49,6 @@ function ended(folders: FullFolders, at: number, id = newGrantId(at)): string {
     return path;
 }
 
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
-const [claude] = skillsFolders as [(typeof skillsFolders)[number]];
-
 test('a grant id is 26 characters, and an ended name is the id, a dash and the moment it moved', () => {
     const id = newGrantId(t0);
     assert.match(id, grantIdShape);
@@ -59,26 +56,12 @@ test('a grant id is 26 characters, and an ended name is the id, a dash and the m
     assert.deepEqual(endedNameShape.exec(endedName(id, t0))?.slice(1), [id, String(t0)]);
 });
 
-test('a grant\'s folder is its own, below the grants\' place, with the recorded skills in it and nothing the records do not name', (t) => {
-    const { folders, chat, records } = rig(t);
-    put(join(chat, claude.folder, 'skills', 'campaign-planning', 'SKILL.md'), 'plan well');
-    put(join(chat, claude.folder, 'skills', 'planted', 'SKILL.md'), 'not recorded');
-    put(join(records, claude.record), JSON.stringify({ version: 1, packs: [{ files: [{ path: 'campaign-planning/SKILL.md', sha256: sha('plan well') }] }] }));
-    const id = newGrantId(t0);
-    const folder = makeGrantFolder(folders, id, chat, records);
-    assert.equal(folder, join(folders.full, id));
-    assert.equal(readFileSync(join(folder, claude.folder, 'skills', 'campaign-planning', 'SKILL.md'), 'utf8'), 'plan well');
-    assert.ok(!existsSync(join(folder, claude.folder, 'skills', 'planted')), 'a skill nobody recorded is not copied in');
-    assert.ok(existsSync(join(chat, claude.folder, 'skills', 'planted')), 'the chat folder is left as it was');
-    assert.throws(() => makeGrantFolder(folders, id, chat, records), { name: 'GrantFolderUnmade' }, 'a folder is made once, for one grant');
-});
-
 test('ending a grant moves its folder to the ended place at once, named with the moment, and the other grants\' folders stay', (t) => {
-    const { folders, chat, records } = rig(t);
+    const { folders } = rig(t);
     const one = newGrantId(t0);
     const two = newGrantId(t0 + 1);
-    makeGrantFolder(folders, one, chat, records);
-    makeGrantFolder(folders, two, chat, records);
+    left(folders, one);
+    left(folders, two);
     put(join(folders.full, one, 'work.txt'), 'the agent\'s file');
     const name = endGrantFolder(folders, one, t0 + 5);
     assert.equal(name, `${one}-${t0 + 5}`);
@@ -88,9 +71,9 @@ test('ending a grant moves its folder to the ended place at once, named with the
 });
 
 test('a folder that cannot be moved is left and a code said; the next start moves every leftover, its seven days counted from then', (t) => {
-    const { folders, chat, records } = rig(t);
+    const { folders } = rig(t);
     const id = newGrantId(t0);
-    makeGrantFolder(folders, id, chat, records);
+    left(folders, id);
     mkdirSync(folders.ended, { recursive: true });
     // A file where the ended place should be makes the move fail.
     rmSync(folders.ended, { recursive: true });

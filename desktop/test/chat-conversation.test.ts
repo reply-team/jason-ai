@@ -148,6 +148,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
     const r = rig(t);
     plan(r, [{ say: 'Here it is.' }, { use: { tool: 'Read', input: { file_path: '/x/notes.md' } } }, { ask: { tool: 'Bash', input: { command: 'git status' } } }]);
     const chat = await r.chat.create();
+    // In Ask first, where the command is a card the person answers.
+    await r.chat.setMode(chat.id, 'ask_first');
     const done = r.until(chat.id, (event) => event.kind === 'done');
     const card = r.until(chat.id, (event) => event.kind === 'permission');
     await r.chat.send(chat.id, 'Show me <b>everything</b>', { host: 'claude' });

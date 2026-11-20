@@ -44,8 +44,6 @@ export const invokeChannels = {
     'chat.openFolder': 'jason:chat.openFolder',
     'chat.feed': 'jason:chat.feed',
     'chat.cardRefused': 'jason:chat.cardRefused',
-    'fullAccess.standing': 'jason:fullAccess.standing',
-    'fullAccess.takeBack': 'jason:fullAccess.takeBack',
     'openIn.targets': 'jason:openIn.targets',
     'openIn.open': 'jason:openIn.open',
     'openIn.continueChat': 'jason:openIn.continueChat',
@@ -60,7 +58,6 @@ export const eventChannels = {
     'chat.event': 'jason:chat.event',
     'setup.changed': 'jason:setup.changed',
     'links.open': 'jason:links.open',
-    'fullAccess.changed': 'jason:fullAccess.changed',
     'mode.preparing': 'jason:mode.preparing',
     'updates.changed': 'jason:updates.changed',
 } as const;

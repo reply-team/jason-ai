@@ -237,7 +237,7 @@ test('a standing choice of Full access an earlier desktop left is gone once the 
     const chat = r.restart();
     await settled(() => !existsSync(r.b.paths.fullAccess), 'the file is gone once the desktop has started');
     assert.equal(chat.open(planned).mode, 'plan_only');
-    assert.equal((await chat.create(undefined, 'claude')).mode, 'full_access', 'a new chat is in Full access, whatever the file said of new chats');
+    assert.equal((await chat.create()).mode, 'full_access', 'a new chat is in Full access, whatever the file said of new chats');
 });
 
 test('the Feed opens in Full access as every chat does, its default one named constant: made new, after a restart, and in its first turn', async (t) => {

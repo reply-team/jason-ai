@@ -2,9 +2,12 @@
 // (`chat.create`) or kept; a test names its conversations instead ('c1', 'chat-a'), and the first send under a name makes
 // that name's conversation, the campaign's when the send names one (`campaignId`, as `chat.create` takes it), else a
 // set-up chat. Every later call under the name goes to that conversation, and its events come back under the name. A
-// value that is no test name ('', '../x', 42) goes to the desktop as it is, so it is refused as any other would be.
+// value that is no test name ('', '../x', 42) goes to the desktop as it is, so it is refused as any other would be. A
+// test that names a mode has each conversation put in it once made, as a person who chose it from the menu; one that names
+// none leaves each in the mode the desktop made it in.
 
 import type { Chat } from '../src/chat.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
 
 const testName = /^[a-z][a-z0-9-]{0,30}$/;
 
@@ -12,9 +15,11 @@ export class NamedChat {
     readonly #chat: () => Chat;
     readonly #ids = new Map<string, string>();
     readonly #names = new Map<string, string>();
+    readonly #mode: ChatMode | undefined;
 
-    constructor(chat: () => Chat) {
+    constructor(chat: () => Chat, options: { mode?: ChatMode } = {}) {
         this.#chat = chat;
+        this.#mode = options.mode;
     }
 
     /** The desktop's id behind a name; anything else as it is. */
@@ -32,6 +37,7 @@ export class NamedChat {
         const known = this.#ids.get(name);
         if (known !== undefined) return known;
         const made = await this.#chat().create(campaignId);
+        if (this.#mode !== undefined && made.mode !== this.#mode) await this.#chat().setMode(made.id, this.#mode, 'claude');
         this.#ids.set(name, made.id);
         this.#names.set(made.id, name);
         return made.id;

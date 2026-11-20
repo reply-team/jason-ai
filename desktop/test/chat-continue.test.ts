@@ -123,7 +123,6 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
         keyFor: (id) => keys[id],
         fence: () => fence,
         sandboxOutside: outsideStandIn,
-        confirmFullAccess: async () => true,
         fullAccessOffered: true,
         emit(id, event) {
             const said = events.get(id) ?? [];
@@ -166,7 +165,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
 }
 
 for (const host of ['claude', 'codex'] as const) {
-    test(`a plain ${host} turn marks the session it named, and the chat offers that session to continue`, async (t) => {
+    test(`a plain ${host} turn marks the session it named, and the chat offers that session to continue in the conversation's own folder`, async (t) => {
         const r = rig(t);
         const { id } = await r.chat.create();
         await r.turn(id, 'Hello', { host });
@@ -174,7 +173,7 @@ for (const host of ['claude', 'codex'] as const) {
         const session = kept.sessions[host];
         assert.ok(session !== undefined);
         assert.deepEqual(kept.plain_sessions, [host]);
-        assert.deepEqual(r.chat.continuable(id), { host, session, running: false });
+        assert.deepEqual(r.chat.continuable(id), { host, session, running: false, folder: join(r.b.paths.chats, id) });
     });
 }
 

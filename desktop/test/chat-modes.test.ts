@@ -1,6 +1,6 @@
 // A chat's access modes, short of a whole turn: what each mode starts Claude Code with, the Full access turn's hook file,
-// the confirmation's words and the floor, what the broker answers in each mode, and the refusals that must hold under Full
-// access, each driven through the hook's own endpoint as Claude Code calls it.
+// the floor, what the broker answers in each mode, and the refusals that must hold under Full access, each driven through
+// the hook's own endpoint as Claude Code calls it.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, readFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -125,32 +125,10 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });
 
-test('the confirmation says in plain words what Full access does, whose risk it is and what it cannot see; Cancel is focused and Escape cancels', () => {
-    const dialog = fullAccessDialog();
-    assert.equal(dialog.message, 'Give this chat full access?');
-    assert.equal(
-        dialog.detail,
-        'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
-            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run. ' +
-            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving. " +
-            'The risk is yours. ' +
-            'This time, Full access lasts until you change it or close Jason. ' +
-            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too. ' +
-            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
-    );
-    assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
-    assert.equal(dialog.defaultId, 2);
-    assert.equal(dialog.cancelId, 2);
-});
-
-test('a tool that ran unchecked takes Always back as well, and says so only where Always stood', () => {
+test('a tool that ran unchecked turns Full access off, and the turn\'s end says why and how to go on', () => {
     assert.equal(
         unguardedSentence,
         'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
-    );
-    assert.equal(
-        unguardedStandingSentence,
-        'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
     );
 });
 

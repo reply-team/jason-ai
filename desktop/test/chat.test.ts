@@ -58,7 +58,8 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     const started: { host: string; resumed: boolean }[] = [];
     const keys: Record<string, string> = {};
     options.before?.(b);
-    const named: NamedChat = new NamedChat(() => chat);
+    // Each conversation is put in Ask first, the mode whose cards these rows read; the default is chat-mode-default's.
+    const named: NamedChat = new NamedChat(() => chat, { mode: 'ask_first' });
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -154,7 +155,7 @@ async function settle(check: () => boolean, ms = 10_000): Promise<boolean> {
     return check();
 }
 
-test('a turn with nothing to ask starts Claude Code in the chat folder with the words on stdin, and ends with no error', async (t) => {
+test('a turn with nothing to ask starts Claude Code in the conversation\'s own folder with the words on stdin, and ends with no error', async (t) => {
     const r = rig(t);
     const said = await r.turn('c1', words, { host: 'claude' });
     assert.deepEqual(kinds(said), ['text', 'done']);
@@ -165,7 +166,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     assert.ok(host);
     assert.equal(host.stdin, asked(words));
     assert.ok(host.args.every((arg) => !arg.includes(words)), 'the words are never on the command line');
-    assert.ok(same(host.cwd, r.b.paths.chat), `started in ${host.cwd}`);
+    assert.ok(same(host.cwd, join(r.b.paths.chats, r.chat.idOf('c1') as string)), `started in ${host.cwd}`);
     for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
     assert.ok(!host.args.includes('--bare'));
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
@@ -176,9 +177,10 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'settings.json', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'settings.json', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to and its folder');
     assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
     assert.deepEqual(readdirSync(r.b.paths.chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'the turn writes nothing into the chat folder but the instruction text');
+    assert.deepEqual(readdirSync(join(r.b.paths.chats, r.chat.idOf('c1') as string)).sort(), ['AGENTS.md', 'CLAUDE.md'], 'nor into its own folder');
     assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
     assert.deepEqual(r.started, [{ host: 'claude', resumed: false }]);
     assert.equal(r.ended.length, 1);
@@ -213,7 +215,9 @@ test('the host of either kind is started with the harness\'s label for reply-cli
 
 test('a request the model settles makes no card, and the host reads the answer', async (t) => {
     const r = rig(t);
-    plan(r, [{ ask: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }, { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } }]);
+    // A file in the folder the turn runs in, the conversation's own.
+    const own = join(r.b.paths.chats, await r.chat.made('c1'));
+    plan(r, [{ ask: { tool: 'Read', input: { file_path: join(own, 'notes.md') } } }, { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_1' } } }]);
     const said = await r.turn('c1', words, { host: 'claude' });
     assert.ok(!kinds(said).includes('permission'), JSON.stringify(said));
     const answers = texts(said).filter((text) => text.startsWith('decision'));
@@ -338,10 +342,10 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
     assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
     assert.equal(first?.stdin, asked(words));
-    assert.ok(same(first?.cwd ?? '', r.b.paths.chat));
+    assert.ok(same(first?.cwd ?? '', join(r.b.paths.chats, r.chat.idOf('c1') as string)));
     // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
     await r.chat.idle();
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'settings.json', 'turns'], 'a Codex turn writes no turn file');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'settings.json', 'turns'], 'a Codex turn writes no turn file');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
@@ -1264,7 +1268,7 @@ test('the chat folder carries the instruction text as CLAUDE.md and AGENTS.md, b
     rmSync(r.b.paths.chat, { recursive: true });
     await r.turn('c2', words, { host: 'codex' });
     assert.ok(sameBytes(r.b.paths.chat), 'after a Codex turn');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'conversations', 'settings.json'], 'nothing beside the chat folder but the conversations and the settings');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'chats', 'conversations', 'settings.json'], 'nothing beside the chat folder but the conversations\' own folders, their records and the settings');
 });
 
 test('an instruction file that was changed or deleted is written again before the next turn', async (t) => {
@@ -1278,7 +1282,7 @@ test('an instruction file that was changed or deleted is written again before th
     assert.ok(sameBytes(r.b.paths.chat));
 });
 
-test('the instruction text is written nowhere but the chat folder: never into a folder a turn adds, nor the harness root', async (t) => {
+test('the instruction text is written nowhere but the chat folder and a conversation\'s own: never into a folder a turn adds, nor the harness root', async (t) => {
     const r = rig(t);
     const campaign = join(r.b.root, 'harness-copy', 'campaign');
     const project = join(r.b.root, 'harness-copy', 'project');

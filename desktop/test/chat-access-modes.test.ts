@@ -1,6 +1,6 @@
-// A chat's access modes through whole turns against stub hosts: where the mode is kept and where it is not, the
-// confirmation Full access waits for, what each mode starts the host with, the hook a Full access turn is checked by, and
-// every way the desktop puts a chat back to Ask first.
+// A chat's access modes through whole turns against stub hosts: where the mode is kept, what each mode starts the host
+// with, the hook a Full access turn is checked by, the turns that run in Ask first while the chat keeps its mode, and every
+// way the desktop puts a chat back to Ask first.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
@@ -339,6 +339,7 @@ test('a Full access turn starts its host with HOME set to the folder its judgeme
 test('an Ask first turn\'s host environment keeps HOME as the desktop\'s own environment has it', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
     await r.turn(id, 'hello', claude);
     assert.equal(homeOf(r.hosts()[0]), undefined);
 });
@@ -346,6 +347,7 @@ test('an Ask first turn\'s host environment keeps HOME as the desktop\'s own env
 test('in Ask first and in Plan only a tool result the desktop has no hook for is no reason to stop', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
     plan(r, [{ unhooked: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }]);
     assert.deepEqual(done(await r.turn(id, 'go', claude)), { kind: 'done', error: null });
     await r.chat.setMode(id, 'plan_only');
@@ -480,7 +482,7 @@ test('the log hears each change of mode by its two modes, and each turn\'s mode'
     await r.turn(id, 'hello', claude);
     await r.chat.setMode(id, 'ask_first');
     assert.deepEqual(r.changes, [
-        ['ask_first', 'plan_only'],
+        ['full_access', 'plan_only'],
         ['plan_only', 'full_access'],
         ['full_access', 'ask_first'],
     ]);
@@ -502,18 +504,18 @@ test('no turn starts without a person\'s send: a set-up chat\'s naming run in Fu
     assert.deepEqual(r.started, ['full_access'], 'one turn, the one the person sent');
 });
 
-test('Full access is refused when it is chosen, before any confirmation, where it cannot apply', async (t) => {
+test('Full access is refused when it is chosen where it cannot apply, and the chat keeps the mode it was in', async (t) => {
     const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
     t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
     writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.290 (Claude Code)' }));
     const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
     const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
     await assert.rejects(r.chat.setMode(id, 'full_access', 'codex'), { message: 'Full access runs on Claude Code only.' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'codex-api-key'), { message: 'Full access runs on Claude Code only.' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: fullAccessSentence('2.1.290') ?? '' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'gemini'), /not an AI host/);
     await assert.rejects(r.chat.setMode(id, 'full_access'), /not an AI host/);
-    assert.equal(r.confirms, 0, 'no confirmation is shown for a mode that cannot apply');
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal((await r.chat.setMode(id, 'plan_only', 'codex')).mode, 'plan_only', 'the other modes apply on any host');
 });
@@ -626,7 +628,7 @@ test('a line the Feed takes starts no turn, in any mode the Feed may be in: Full
 
 test('the desktop as shipped starts every new chat, a set-up chat or a campaign\'s, in Full access from its first moment, with no box, and its first turn runs in it', async (t) => {
     const r = rig(t, { confirm: false });
-    const setUp = await r.chat.create(undefined, 'claude');
+    const setUp = await r.chat.create();
     assert.equal(setUp.mode, 'full_access', 'the summary the page draws first says Full access');
     const campaign = await r.chat.create('cmp_01ABC');
     assert.equal(campaign.mode, 'full_access', 'with no host named too');
@@ -638,28 +640,30 @@ test('the desktop as shipped starts every new chat, a set-up chat or a campaign\
     assert.equal(existsSync(r.b.paths.fullAccess), false, 'nothing of a standing choice is written');
 });
 
-test('with the switch off Full access is refused before any confirmation, and a chat never runs in it', async (t) => {
+test('with the switch off Full access is refused when it is chosen, and a turn of a chat in it runs in Ask first', async (t) => {
     assert.equal(fullAccessOffered, true, 'the desktop offers it');
     const r = rig(t, { chat: { fullAccessOffered: false } });
     const { id } = await r.chat.create();
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: 'Full access is not in this version yet.' });
-    assert.equal(r.confirms, 0);
+    const said = await r.turn(id, 'hello', claude);
+    assert.deepEqual(r.started, ['ask_first'], 'a new chat\'s turn runs in Ask first');
+    assert.ok(notices(said).some((text) => text.includes(fullAccessNotYet)), JSON.stringify(notices(said)));
+    await r.chat.setMode(id, 'ask_first');
+    await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: fullAccessNotYet });
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal((await r.chat.setMode(id, 'plan_only', 'claude')).mode, 'plan_only', 'Plan only is offered');
     await r.turn(id, 'hello', claude);
-    assert.deepEqual(r.started, ['plan_only']);
+    assert.deepEqual(r.started, ['ask_first', 'plan_only']);
 });
 
 // Auto-edit: Ask first with the six file commands in the chat folder run with no card; no box, no record, no hook.
 
-test('Auto-edit is given with no box and no standing choice, and its turn starts Claude Code exactly as Ask first\'s', async (t) => {
+test('Auto-edit is given with no box, and its turn starts Claude Code exactly as Ask first\'s', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
     assert.equal(r.confirms, 0, 'no confirmation is shown');
-    assert.equal(existsSync(r.b.paths.fullAccess), false, 'nothing of the standing choice is written');
     assert.deepEqual(modes(r.events.get(id) ?? []), ['auto_edit']);
-    assert.deepEqual(r.changes, [['ask_first', 'auto_edit']]);
+    assert.deepEqual(r.changes, [['full_access', 'auto_edit']]);
     await r.turn(id, 'hello', claude);
     const edited = r.hosts()[0]?.args ?? [];
     assert.equal(flag(edited, '--permission-mode'), undefined);
@@ -672,19 +676,6 @@ test('Auto-edit is given with no box and no standing choice, and its turn starts
     // The two turns differ only by the turn's own file and the session resumed.
     const without = (args: string[]) => args.filter((arg, at) => !arg.endsWith('.mcp.json') && arg !== '--resume' && args[at - 1] !== '--resume');
     assert.deepEqual(without(edited), without(asked));
-});
-
-test('an existing standing choice of Full access is neither read as Auto-edit nor touched by it', async (t) => {
-    const r = rig(t);
-    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
-    const kept = JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } });
-    writeFileSync(r.b.paths.fullAccess, kept);
-    const { id } = await r.chat.create();
-    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
-    await r.chat.setMode(id, 'ask_first');
-    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
-    assert.equal(readFileSync(r.b.paths.fullAccess, 'utf8'), kept);
-    assert.equal(r.confirms, 0);
 });
 
 test('in an Auto-edit turn a file command in the chat folder runs with no card, and anything else is Ask first\'s', async (t) => {
@@ -778,16 +769,6 @@ test('leaving Auto-edit for Ask first while its turn runs stops that turn; a cha
     await r.chat.setMode(id, 'ask_first');
     assert.equal(await endsSoon(second.ended), 'ended');
     assert.deepEqual(r.started, ['auto_edit', 'auto_edit']);
-});
-
-test('the standing choice of Full access with new chats never starts a chat in Auto-edit', async (t) => {
-    const r = rig(t, { chat: { fullAccessOffered: true } });
-    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
-    writeFileSync(r.b.paths.fullAccess, JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } }));
-    for (const host of ['claude', 'codex', undefined]) {
-        const made = await r.chat.create(undefined, host);
-        assert.notEqual(made.mode, 'auto_edit', String(host));
-    }
 });
 
 // Plan only's plan as a card: which words are a plan, when they stop being one, and the go the card sends, which names
@@ -891,13 +872,10 @@ test('an earlier plan is no plan once a later turn ended, nor after Start fresh,
     assert.equal(r.again().open(id).mode, 'full_access');
 });
 
-test('approving a plan lands in Ask first with the standing choice in force: no box, the choice untouched, never Full access or Auto-edit', async (t) => {
-    const r = rig(t, { chat: { fullAccessOffered: true } });
-    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
-    const kept = JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } });
-    writeFileSync(r.b.paths.fullAccess, kept);
-    const { id } = await r.chat.create(undefined, 'claude');
-    assert.equal(r.chat.open(id).mode, 'full_access', 'the standing choice started the chat in Full access');
+test('approving a plan of a chat that was in Full access lands in Ask first, on its record too: never Full access or Auto-edit', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    assert.equal(r.chat.open(id).mode, 'full_access', 'a new chat is in Full access');
     await r.chat.setMode(id, 'plan_only');
     plan(r, [{ say: 'A plan' }]);
     assert.deepEqual(done(await r.turn(id, 'plan', claude)), { kind: 'done', error: null, plan: true });
@@ -906,9 +884,8 @@ test('approving a plan lands in Ask first with the standing choice in force: no 
     plan(r, []);
     assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: null });
     assert.deepEqual(r.started.slice(-2), ['plan_only', 'ask_first']);
-    assert.equal(r.confirms, 0);
-    assert.equal(readFileSync(r.b.paths.fullAccess, 'utf8'), kept);
     assert.equal(r.chat.open(id).mode, 'ask_first');
+    assert.equal(recordOf(r, id).mode, 'ask_first');
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), undefined, "Ask first's own turn");
 });
 
@@ -926,50 +903,6 @@ test('a go that names the mode it was approved for is refused, before any host s
     await r.chat.setMode(id, 'ask_first');
     assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: null });
     assert.deepEqual(r.started, ['ask_first']);
-});
-
-test('a Full access box answered from the menu while the approval is pending never lets the go run in Full access', async (t) => {
-    // The person answers the box only when the test says: the approval and the go come in between.
-    let answer: (yes: boolean) => void = () => undefined;
-    let shown: () => void = () => undefined;
-    const asked = () => new Promise<void>((resolve) => (shown = resolve));
-    const r = rig(t, {
-        chat: {
-            confirmFullAccess: () =>
-                new Promise<boolean>((resolve) => {
-                    answer = resolve;
-                    shown();
-                }),
-        },
-    });
-    const { id } = await r.chat.create();
-    await r.chat.setMode(id, 'plan_only');
-    await r.turn(id, 'plan', claude);
-
-    // The box answered first, then the go: the go is refused, and nothing runs in Full access.
-    const open = asked();
-    const box = r.chat.setMode(id, 'full_access', 'claude');
-    await open;
-    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
-    answer(true);
-    assert.equal((await box).mode, 'full_access');
-    assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: planModeMoved });
-    assert.deepEqual(r.started, ['plan_only']);
-
-    // The go first, then the box: the go's turn runs in Ask first, the mode it was read in, whatever the box says after.
-    await r.chat.setMode(id, 'plan_only');
-    await r.turn(id, 'plan', claude);
-    const reopened = asked();
-    const later = r.chat.setMode(id, 'full_access', 'claude');
-    await reopened;
-    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
-    plan(r, [{ sleep: 300 }]);
-    const ran = r.turn(id, go, { host: 'claude', mode: 'ask_first' });
-    await r.until(id, (event) => event.kind === 'text' && event.text.startsWith('heard'));
-    answer(true);
-    assert.equal((await later).mode, 'full_access');
-    assert.deepEqual(done(await ran), { kind: 'done', error: null });
-    assert.deepEqual(r.started, ['plan_only', 'plan_only', 'ask_first']);
 });
 
 test('a plan too long to keep whole is no plan: its end says no plan and nothing is marked, in memory or on the record', async (t) => {
@@ -1046,7 +979,7 @@ for (const mode of fenceModes) {
     test(`in ${mode} a Claude Code turn starts with Read and Edit of setup/ and layout.json refused by the host's own rules, whether they exist or not`, async (t) => {
         const r = rig(t);
         const { id } = await r.chat.create();
-        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
         await r.turn(id, 'hello', claude);
         assert.deepEqual(r.started, [mode]);
         const args = r.hosts()[0]?.args ?? [];
@@ -1060,7 +993,7 @@ for (const mode of fenceModes) {
     test(`in ${mode} both layouts' settings files, the secrets file, setup/, the stamp and the run file are refused with no card, by a file tool or a command, however the path is spelled`, async (t) => {
         const r = rig(t);
         const { id } = await r.chat.create();
-        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
         const paths = [...fenced.map((place) => join(r.b.paths.data, ...place.split('/'))), ...respelled(r.b.paths.data)];
         const uses = paths.flatMap(usesOf);
         plan(r, uses.map((use) => stepOf(mode, use)));
@@ -1090,7 +1023,7 @@ test('a settings file whose folder is a link out of the data directory is refuse
             symlinkSync(elsewhere, join(r.b.paths.data, name), process.platform === 'win32' ? 'junction' : 'dir');
         }
         const { id } = await r.chat.create();
-        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
         const files = ['setup/settings.json', 'config/settings.json', 'config/secrets.json'].map((file) => join(r.b.paths.data, ...file.split('/')));
         plan(r, files.map((file) => stepOf(mode, { tool: 'Read', input: { file_path: file } })));
         const first = r.until(id, (event) => event.kind === 'permission' || event.kind === 'done');
@@ -1104,14 +1037,14 @@ test('a settings file whose folder is a link out of the data directory is refuse
 
 // Codex has no fence of the desktop's, and needs none for setup/: every Codex turn runs in Codex's own read-only sandbox,
 // which names no path and so holds every folder alike, the data directory and setup/ in it among them; no mode gives a
-// Codex turn more, since Full access and Auto-edit run on Claude Code only and a chat in either goes back to Ask first
-// when it is sent to Codex. What that sandbox does not do is keep a Codex command from reading: it reads setup/ and the
+// Codex turn more, since Full access and Auto-edit run on Claude Code only and a turn of a chat in either runs in Ask
+// first when it is sent to Codex, the chat keeping its mode. What that sandbox does not do is keep a Codex command from reading: it reads setup/ and the
 // secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line under the composer too.
 test('a Codex turn, from whichever mode the chat was in, runs read-only with no folder added and no way to write: setup/ is held as every folder is', async (t) => {
     for (const mode of fenceModes) {
         const r = rig(t);
         const { id } = await r.chat.create();
-        if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+        await r.chat.setMode(id, mode, 'claude');
         const said = await r.turn(id, 'change the copywriter', { host: 'codex' });
         assert.ok(endedWell(said), mode);
         const args = r.hosts()[0]?.args ?? [];
@@ -1123,6 +1056,6 @@ test('a Codex turn, from whichever mode the chat was in, runs read-only with no 
         }
         assert.ok(!args.some((arg) => /sandbox_workspace_write|writable_roots|sandbox_mode/.test(arg)), `${mode}: no setting widens the sandbox`);
         assert.ok(!args.some((arg) => arg.includes(r.b.paths.data)), `${mode}: no argument names the data directory`);
-        assert.equal(r.chat.open(id).mode, mode === 'plan_only' ? 'plan_only' : 'ask_first', mode);
+        assert.equal(r.chat.open(id).mode, mode, mode);
     }
 });

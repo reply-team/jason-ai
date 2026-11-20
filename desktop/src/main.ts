@@ -15,7 +15,6 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
-import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { restoreAtStart } from './carried-restore.ts';
 import { cliAt, startJasonAlone, type Cli } from './cli.ts';
@@ -631,31 +630,17 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => toPage('chat.event', chatId, event),
-        // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
-        // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
-        // it. With no window there is no one to ask.
-        confirmFullAccess: async () => {
-            const parent = current;
-            if (parent === null) return null;
-            const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
-            return fullAccessAnswer(response, checkboxChecked);
-        },
         ...turns,
         started: (host, resumed, mode) => {
             turns.started(host, resumed, mode);
             roles.atTurn(host);
-        },
-        // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
-        standingChanged: (standing, why) => {
-            turns.standingChanged(standing, why);
-            toPage('fullAccess.changed', standing);
         },
     });
     registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
-    // in this run's chat folder, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
+    // in the folder its turns run in, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
     // which this run is. Each application the menu offers is drawn with its own icon where one can be read: the pixels are
     // read here, by the system on Windows and from the bundle's own files on macOS, and kept for the run in memory only.
     const icons = new IconReader({

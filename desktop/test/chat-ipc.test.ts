@@ -29,8 +29,6 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             openEndedFolder: async (...args) => void calls.push(['openEndedFolder', ...args]),
             feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
             cardRefused: (...args) => (calls.push(['cardRefused', ...args]), null),
-            fullAccessStanding: (...args: unknown[]) => (calls.push(['fullAccessStanding', ...args]), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true }),
-            takeBackFullAccess: (...args: unknown[]) => (calls.push(['takeBackFullAccess', ...args]), null),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -38,7 +36,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its sixteen calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its fourteen calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
@@ -55,8 +53,6 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
         'jason:chat.send',
         'jason:chat.setMode',
         'jason:chat.stop',
-        'jason:fullAccess.standing',
-        'jason:fullAccess.takeBack',
     ]);
     const page = { senderFrame: { url: `${origin}/ui/#/chat`, parent: null } };
     await listeners.get('jason:chat.send')?.(page, 'c1', 'hello', { host: 'claude' });
@@ -73,15 +69,13 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
     await listeners.get('jason:chat.openFolder')?.(page, 'name-1');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.equal(await listeners.get('jason:chat.cardRefused')?.(page, 'conv_1', 'choice', 'schema'), null);
-    assert.deepEqual(listeners.get('jason:fullAccess.standing')?.(page, 'planted'), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
-    assert.equal(await listeners.get('jason:fullAccess.takeBack')?.(page, { always: true, newChats: true }), null);
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
         ['answer', 'c1', 'r1', { allow: true, always: false }],
         ['list'],
         ['open', 'conv_1'],
-        ['create', 'cmp_1', 'claude'],
+        ['create', 'cmp_1'],
         ['remove', 'conv_1'],
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
@@ -90,14 +84,12 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
         ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
         ['cardRefused', 'conv_1', 'choice', 'schema'],
-        ['fullAccessStanding'],
-        ['takeBackFullAccess'],
-    ], 'the standing choice\'s two calls pass nothing the page sends');
+    ], 'a chat is made for the campaign named alone, whatever else the page sends');
 });
 
-test('no channel of the page gives the standing choice of Full access: the page reads it and takes it back', () => {
+test('no channel of the page reads, gives or takes back a standing choice of Full access: there is none', () => {
     const { listeners } = registered();
-    assert.deepEqual([...listeners.keys()].filter((channel) => /fullaccess|standing/i.test(channel)).sort(), ['jason:fullAccess.standing', 'jason:fullAccess.takeBack']);
+    assert.deepEqual([...listeners.keys()].filter((channel) => /fullaccess|standing/i.test(channel)), []);
 });
 
 test('a chat call from another origin or a subframe never reaches the chat', () => {
@@ -107,7 +99,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 32);
+    assert.equal(refusals.length, 28);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 

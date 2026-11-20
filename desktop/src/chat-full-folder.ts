@@ -1,14 +1,13 @@
-// The folder a Full access grant works in. Each confirmation makes `<data>/desktop/chat-full/<id>/`: its top is owned by
-// the desktop as the chat folder's is (`ownAgentFolder`), the recorded skills are copied in, and the Full access turns of
-// that one conversation run there and nothing else does. When the grant ends the folder moves, at once, to
-// `<data>/desktop/chat-full-ended/<id>-<moment>/`, the moment in its name being when it moved, and is kept seven days.
-// A bounded sweep removes it after that: it walks by `lstat`, never follows a link, checks that a folder it is about to
-// enter is the one it looked at, stops after a number of entries it is given and takes up again at the next pass. A
-// failure leaves the folder and says a code; nothing here ever refuses a turn.
+// The folders an earlier desktop made for each Full access grant, `<data>/desktop/chat-full/<id>/`, which no desktop makes
+// now: every turn of a conversation runs in the conversation's own folder instead (`ownConversationFolder`). For one
+// release a start still moves each one left there to `<data>/desktop/chat-full-ended/<id>-<moment>/`, the moment in its
+// name being when it moved, and keeps it seven days. A bounded sweep removes it after that: it walks by `lstat`, never
+// follows a link, checks that a folder it is about to enter is the one it looked at, stops after a number of entries it
+// is given and takes up again at the next pass. A failure leaves the folder and says a code; nothing here ever refuses a
+// turn.
 
-import { copyFileSync, lstatSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, writeFileSync, type BigIntStats } from 'node:fs';
+import { lstatSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, type BigIntStats } from 'node:fs';
 import { join } from 'node:path';
-import { ownAgentFolder, skillsFolders } from './chat-agent-folder.ts';
 import { newConversationId } from './chat-conversations.ts';
 
 /** How long an ended grant's folder is kept, from the moment it moved. */
@@ -34,66 +33,6 @@ export interface FullFolders {
     ended: string;
     /** `<data>/desktop/chat-full-records/`: the grant-to-conversation records, which no turn reads or writes. */
     records: string;
-}
-
-/** A grant's folder could not be made: the system's error code, never its text or a path. */
-export class GrantFolderUnmade extends Error {
-    readonly code: string;
-
-    constructor(code: unknown) {
-        super('The folder for Full access could not be made, so Full access was not given.');
-        this.name = 'GrantFolderUnmade';
-        this.code = typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : 'unknown';
-    }
-}
-
-/** Copies the regular files and folders below `from` into `to`; a link or anything else is not copied. */
-function copyOwn(from: string, to: string): void {
-    for (const name of readdirSync(from)) {
-        const source = join(from, name);
-        const stat = lstatSync(source);
-        if (stat.isDirectory()) {
-            mkdirSync(join(to, name), { recursive: true });
-            copyOwn(source, join(to, name));
-        } else if (stat.isFile()) {
-            copyFileSync(source, join(to, name));
-        }
-    }
-}
-
-/**
- * Makes a grant's folder, with the recorded skills in it. The chat folder's skills folders are read as they stand (every
- * turn puts them right first), copied, and the copy put right against the records as the chat folder's top is, so only
- * what the desktop recorded, with the bytes recorded, is there. Returns the folder's path.
- */
-export function makeGrantFolder(folders: FullFolders, id: string, chat: string, records: string, conversation?: string): string {
-    if (!grantIdShape.test(id)) throw new Error('That is not a grant id the desktop made.');
-    const folder = join(folders.full, id);
-    try {
-        mkdirSync(folders.full, { recursive: true, mode: 0o700 });
-        mkdirSync(folder);
-        if (conversation !== undefined) {
-            mkdirSync(folders.records, { recursive: true, mode: 0o700 });
-            writeFileSync(recordOf(folders, id), conversation, { mode: 0o600 });
-        }
-        for (const host of skillsFolders) {
-            const skills = join(chat, host.folder, 'skills');
-            let stat;
-            try {
-                stat = lstatSync(skills);
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-                throw error;
-            }
-            if (!stat.isDirectory()) continue;
-            mkdirSync(join(folder, host.folder, 'skills'), { recursive: true });
-            copyOwn(skills, join(folder, host.folder, 'skills'));
-        }
-        ownAgentFolder(folder, records);
-    } catch (error) {
-        throw new GrantFolderUnmade((error as NodeJS.ErrnoException | null)?.code);
-    }
-    return folder;
 }
 
 /** The name an ended folder has: the grant's id and the moment it moved. */

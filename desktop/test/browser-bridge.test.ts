@@ -1,6 +1,6 @@
 // The bridge a browser tab reaches the desktop's chat through, against made-up handlers and against the real chat: the
 // checks every request meets before anything is read, the pairing a one-time code opens, the one table of members, the
-// rules Full access and Ask first hold a tab to, the events a session reads, and the bridge's life.
+// rules each mode holds a tab to, the events a session reads, and the bridge's life.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -12,8 +12,6 @@ import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, autoEditElsewhe
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { registerChat } from '../src/chat-ipc.ts';
-import { fullAccessConsent } from '../src/chat-modes.ts';
-import { writeStanding } from '../src/full-access-standing.ts';
 import { invokeChannels, withMembers, type Handler, type InvokeMember, type IpcRegistrar } from '../src/ipc.ts';
 import { isOwnPage } from '../src/descriptor.ts';
 import { fileLogger, holesOf, templates } from '../src/log.ts';
@@ -240,16 +238,16 @@ test('past four live sessions the oldest is ended: its secret is refused and its
 
 // --- one table ---------------------------------------------------------------------------------------------------------
 
-const table: InvokeMember[] = ['mode.get', 'theme.get', 'fullAccess.standing', 'setup.status', 'chat.list', 'chat.open', 'chat.create', 'chat.send', 'chat.stop', 'chat.rename'];
+const table: InvokeMember[] = ['mode.get', 'theme.get', 'setup.status', 'chat.list', 'chat.open', 'chat.create', 'chat.send', 'chat.stop', 'chat.rename'];
 
-test('the table is exactly the six reads and the four acts', () => {
+test('the table is exactly the five reads and the four acts', () => {
     assert.deepEqual([...bridgeMembers].sort(), [...table].sort());
 });
 
 const outside = (Object.keys(invokeChannels) as InvokeMember[]).filter((member) => !table.includes(member));
 
 test('every member the design names as outside the table is outside it', () => {
-    for (const member of ['chat.answer', 'chat.setMode', 'chat.feed', 'chat.remove', 'chat.restart', 'chat.attach', 'chat.openFolder', 'mode.set', 'theme.set', 'dailyTrends.get', 'dailyTrends.set', 'updates.item', 'updates.press', 'fullAccess.takeBack', 'openIn.targets', 'openIn.open', 'openIn.continueChat', 'links.take', 'pairing.paired'] as const) {
+    for (const member of ['chat.answer', 'chat.setMode', 'chat.feed', 'chat.remove', 'chat.restart', 'chat.attach', 'chat.openFolder', 'mode.set', 'theme.set', 'dailyTrends.get', 'dailyTrends.set', 'updates.item', 'updates.press', 'openIn.targets', 'openIn.open', 'openIn.continueChat', 'links.take', 'pairing.paired'] as const) {
         assert.ok(outside.includes(member), member);
     }
     for (const member of outside.filter((each) => each.startsWith('setup.') && each !== 'setup.status')) assert.ok(!bridgeMembers.includes(member), member);
@@ -327,14 +325,17 @@ test('a handler that throws is answered 500 with its message, and a refusal it a
 
 // --- chat.send and chat.create ---------------------------------------------------------------------------------------
 
-test('chat.send to a chat in Full access is handed to the very send handler, as a send to a chat in Ask first is', async (t) => {
+test('chat.send to a chat in Full access is handed to the very send handler, as a send to a chat in Ask first is, marked as a tab\'s', async (t) => {
     const r = await rig(t, { listed: () => [{ id: 'cht_full', mode: 'full_access' }] });
     const secret = await r.pair();
     const answer = await r.call(secret, 'chat.send', ['cht_full', 'hello', { host: 'claude' }]);
     assert.equal(answer.status, 200);
     assert.equal(refusedIn(answer), undefined, `the send is not refused: ${answer.body}`);
-    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args.slice(0, 2)), [['cht_full', 'hello']]);
+    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [['cht_full', 'hello', { host: 'claude', mode: 'full_access', fromTab: true }]]);
     assert.deepEqual(refusals(r), [], 'nothing was refused');
+    // The mark is the bridge's: a tab that says otherwise is marked all the same.
+    await r.call(secret, 'chat.send', ['cht_full', 'again', { host: 'claude', fromTab: false }]);
+    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').at(-1)?.args, ['cht_full', 'again', { host: 'claude', mode: 'full_access', fromTab: true }]);
 });
 
 test('a tab sends to a chat in Ask first, Plan only or Full access: Auto-edit and any other mode are refused, each by name', async (t) => {
@@ -364,11 +365,11 @@ test('a tab sends to a chat in Ask first, Plan only or Full access: Auto-edit an
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude' }]);
     await r.call(secret, 'chat.send', ['cht_full', 'hello', { host: 'claude' }]);
     const handed = r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args);
-    assert.deepEqual(handed.slice(0, 2), [
-        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
-        ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
+    assert.deepEqual(handed, [
+        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first', fromTab: true }],
+        ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only', fromTab: true }],
+        ['cht_full', 'hello', { host: 'claude', mode: 'full_access', fromTab: true }],
     ]);
-    assert.deepEqual(handed.slice(2).map((args) => args.slice(0, 2)), [['cht_full', 'hello']], 'the send to a chat in Full access is handled');
 });
 
 test('chat.send is held to the chat\'s own mode: a tab naming another is refused, and one naming none sends in the mode the chat has', async (t) => {
@@ -382,8 +383,8 @@ test('chat.send is held to the chat\'s own mode: a tab naming another is refused
     await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }]);
     assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [
-        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
-        ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
+        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first', fromTab: true }],
+        ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only', fromTab: true }],
     ]);
 });
 
@@ -410,7 +411,6 @@ function realChat(t: { after(fn: () => void | Promise<void>): void }) {
         fullAccessOffered: true,
         emit: (id, event) => void events.set(id, [...(events.get(id) ?? []), event]),
         started: (_host, _resumed, mode) => void started.push(mode),
-        confirmFullAccess: async () => ({ always: true, newChats: false }),
     });
     const ipc: IpcRegistrar = { handle: () => undefined };
     const seam = withMembers(ipc);
@@ -433,22 +433,18 @@ async function turnsEnded(real: ReturnType<typeof realChat>, id: string, count: 
 
 const noticesOf = (events: ChatEvent[] | undefined) => (events ?? []).flatMap((event) => (event.kind === 'notice' ? [event.text] : []));
 
-test('chat.create under a standing Full access for new chats makes an Ask first chat, whatever host the tab names', async (t) => {
+test('chat.create from a tab makes a chat as the window\'s own create does, in Full access, whatever host the tab names', async (t) => {
     const real = realChat(t);
-    writeStanding(real.b.paths.fullAccess, 'claude', { consent: fullAccessConsent, givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
-    // The window's own create is in Full access under this standing choice: the control.
-    assert.equal((await real.chat.create(undefined, 'claude')).mode, 'full_access');
     const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
     const secret = await r.pair();
-    const made = JSON.parse((await r.call(secret, 'chat.create', [null, 'claude'])).body) as { result: { id: string; mode: string } };
-    assert.equal(made.result.mode, 'ask_first');
-    assert.equal(real.chat.open(made.result.id).mode, 'ask_first');
+    const made = JSON.parse((await r.call(secret, 'chat.create', [null, 'codex'])).body) as { result: { id: string; mode: string } };
+    assert.equal(made.result.mode, 'full_access');
+    assert.equal(real.chat.open(made.result.id).mode, 'full_access');
 });
 
 test('the chat\'s own check is the second line: a send read as Ask first while the chat is in Full access is refused by the chat', async (t) => {
     const real = realChat(t);
-    writeStanding(real.b.paths.fullAccess, 'claude', { consent: fullAccessConsent, givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
-    const full = await real.chat.create(undefined, 'claude');
+    const full = await real.chat.create();
     assert.equal(full.mode, 'full_access');
     // The bridge's read is stood in by one that is behind the chat: as if the window chose Full access between the two.
     const r = await rig(t, { members: real.members, modeOf: () => 'ask_first' });
@@ -463,7 +459,7 @@ test('the chat\'s own check is the second line: a send read as Ask first while t
 
 test('a tab\'s send to a chat in Full access runs that turn in Ask first: the chat is told so once, its record keeps no mode, and the window\'s next turn is in Full access', async (t) => {
     const real = realChat(t);
-    const made = await real.chat.create(undefined, 'claude');
+    const made = await real.chat.create();
     await real.chat.setMode(made.id, 'full_access', 'claude');
     assert.equal(real.chat.modeNow(made.id), 'full_access');
     assert.ok(!real.chat.list().some((each) => each.id === made.id), 'made in the window and never sent to: not yet kept');
@@ -500,8 +496,8 @@ test('the mode a send is held to is read by id, kept or not, keeping nothing; an
     const real = realChat(t);
     assert.equal(real.chat.modeNow('cht_nobody'), null);
     assert.equal(real.chat.modeNow(42), null);
-    const made = await real.chat.create(undefined, 'claude');
-    assert.equal(real.chat.modeNow(made.id), 'ask_first');
+    const made = await real.chat.create();
+    assert.equal(real.chat.modeNow(made.id), 'full_access');
     assert.ok(!real.chat.list().some((each) => each.id === made.id), 'reading the mode keeps nothing');
 });
 
@@ -565,16 +561,14 @@ test('events reach a session as JSON lines of channel and arguments, addressed b
     const stream = await openStream(r.bridge.port, secret);
     const event = { kind: 'text', text: 'Hello' };
     r.bridge.publish('chat.event', ['cht_a', event]);
-    r.bridge.publish('fullAccess.changed', [null]);
     r.bridge.publish('setup.changed', []);
     const got: unknown[] = [];
-    while (got.length < 3) {
+    while (got.length < 2) {
         const line = await stream.next();
         if (!(typeof line === 'object' && line !== null && 'heartbeat' in line)) got.push(line);
     }
     assert.deepEqual(got, [
         { channel: 'chat.event', args: ['cht_a', event] },
-        { channel: 'fullAccess.changed', args: [null] },
         { channel: 'setup.changed', args: [] },
     ]);
     let beat: unknown;
@@ -740,13 +734,13 @@ test('no file the bridge writes, its log among them, holds the code or the secre
     t.after(() => rmSync(folder, { recursive: true, force: true }));
     const log = fileLogger(join(folder, 'logs'));
     const calls: Rig['calls'] = [];
-    const bridge = await BrowserBridge.open({ origin: () => runtime, members: recording(calls, () => []), modeOf: () => 'full_access', log });
+    const bridge = await BrowserBridge.open({ origin: () => runtime, members: recording(calls, () => []), modeOf: () => 'auto_edit', log });
     t.after(() => bridge.close());
     const code = bridge.mint();
     const secret = (JSON.parse((await ask(bridge.port, { path: '/pair', headers: fromPage, body: json({ code }) })).body) as { secret: string }).secret;
     const words = 'a message only the person typed';
     const bearer = { ...fromPage, authorization: `Bearer ${secret}` };
-    await ask(bridge.port, { headers: bearer, body: json({ member: 'chat.send', args: ['cht_full', words, {}] }) });
+    await ask(bridge.port, { headers: bearer, body: json({ member: 'chat.send', args: ['cht_auto', words, {}] }) });
     await ask(bridge.port, { headers: bearer, body: json({ member: words, args: [] }) });
     await ask(bridge.port, { headers: { ...bearer, host: 'evil.example' }, body: json({ member: 'chat.list', args: [] }) });
     await ask(bridge.port, { path: '/pair', headers: fromPage, body: json({ code }) });

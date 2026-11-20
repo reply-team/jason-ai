@@ -7,9 +7,7 @@
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
  * fresh session; how each naming run of a set-up chat ended, as one closed word; each change of a conversation's mode, by
  * the two modes, and the mode of each turn started and of each request settled; a request Full access held, by the
- * literal reading's closed reason, or none; each change of the standing choice of Full access, by why it changed (one of
- * three words) and whether new chats start in it, never when it was given, and its file's error code when it could not
- * be written; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
+ * literal reading's closed reason, or none; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
  * inside, a closed word each; each card the AI asked for that the page did not draw, by its kind (one of six, or unknown)
  * and why (one of four), never what it held. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
@@ -23,7 +21,7 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed' | 'standingChanged' | 'standingUnwritten' | 'sandboxChecked' | 'cardRefused';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed' | 'sandboxChecked' | 'cardRefused';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -45,13 +43,6 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         modeChanged: (from, to) => log.info('chat_mode_changed', { From: from, To: to }),
         unchecked: () => log.warn('chat_turn_stopped', { Cause: 'unchecked_tool' }),
         fullFolderFailed: (step, code) => log.warn('chat_full_folder_failed', { Step: step, Code: code }),
-        // A tool that ran unchecked taking the standing choice back is a warning; the person's own acts are not.
-        standingChanged: (standing, why) => {
-            const fields = { Cause: why, Standing: standing !== null, NewChats: standing?.newChats ?? false };
-            if (why === 'unchecked') log.warn('chat_full_access_standing', fields);
-            else log.info('chat_full_access_standing', fields);
-        },
-        standingUnwritten: (code) => log.warn('chat_full_access_standing_unwritten', { Code: code }),
         sandboxChecked: (answer, settings) => log.info('chat_sandbox_checked', { Answer: answer, Settings: settings }),
         cardRefused: (kind, failure) => log.info('chat_card_refused', { Kind: kind, Failure: failure }),
     };

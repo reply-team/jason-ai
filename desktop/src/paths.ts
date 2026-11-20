@@ -21,11 +21,20 @@ export interface DesktopPaths {
      * of its folder that a chat turn is refused (`knownDesktopEntries`).
      */
     demoStartOver: string;
-    /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
+    /**
+     * `<data>/desktop/full-access.json`: the standing choice of Full access an earlier desktop kept, with its mark of a
+     * take-back owed beside it; no desktop writes or reads it now, and each start removes both.
+     */
     fullAccess: string;
-    /** `<data>/desktop/chat/`: the chat's working folder. */
+    /** `<data>/desktop/chat/`: the chat's shared folder, where the skills are deployed and an earlier desktop's conversations run. */
     chat: string;
-    /** `<data>/desktop/chat-full/`: one folder per Full access grant, `<id>/` in it, where that conversation's Full access turns run. */
+    /**
+     * `<data>/desktop/chats/`: one folder per conversation, `<id>/` in it, where every turn of that conversation runs. It
+     * stands beside the chat folder and never inside it, since Claude Code reads the memory files of the folders above its
+     * working folder: one inside the chat folder would load the shared instructions twice.
+     */
+    chats: string;
+    /** `<data>/desktop/chat-full/`: the folders an earlier desktop made for each Full access grant; none is made now, and a start moves what is left to the ended place. */
     chatFull: string;
     /** `<data>/desktop/chat-full-ended/`: the grants' folders after Full access ended, kept seven days and then removed (`chat-full-folder.ts`). */
     chatFullEnded: string;
@@ -102,6 +111,7 @@ export function desktopPaths(data: string): DesktopPaths {
         demoStartOver: join(desktop, 'demo-start-over'),
         fullAccess: join(desktop, 'full-access.json'),
         chat: join(desktop, 'chat'),
+        chats: join(desktop, 'chats'),
         chatFull: join(desktop, 'chat-full'),
         chatFullEnded: join(desktop, 'chat-full-ended'),
         chatFullRecords: join(desktop, 'chat-full-records'),
