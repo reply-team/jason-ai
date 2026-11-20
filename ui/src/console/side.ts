@@ -16,11 +16,12 @@ import { closeFilterMenu, recentView } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent with its caret's menu (an agent, or an
-// account connected), the button under them that makes a chat about no agent, Search, the Feed, Needs you with the number of what waits, People, Agents, Accounts, More (the screens
-// with no row of their own), the conversations under "Recent", and Settings in the foot. The menu and Recent scroll
-// between the buttons and the foot, so Settings stays at the foot of the window. Live draws the essentials alone: the
-// brand, the two buttons, Search, Needs you, Recent and Settings. The rows left out are only not drawn: each page keeps
-// its route and its code, and Search finds every page in both modes. Demo draws the whole list.
+// account connected), the button under them that makes a chat about no agent, Search, Dashboard, Needs you with the
+// number of what waits, the Feed, People, Agents, Accounts, More (the screens with no row of their own), the
+// conversations under "Recent", and Settings in the foot. The menu and Recent scroll between the buttons and the foot,
+// so Settings stays at the foot of the window. Live draws the essentials alone: the brand, the two buttons, Search,
+// Needs you, the Feed, Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code,
+// and Search finds every page in both modes. Demo draws the whole list.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -233,19 +234,6 @@ export function sideView(): Html {
                     ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
                 </button>
                 ${
-                    !full || feed === null
-                        ? null
-                        : html`<button
-                              class="item"
-                              type="button"
-                              ${feed === currentChat.value ? html`aria-current="true"` : null}
-                              ${act('side.feed')}
-                          >
-                              ${svg('pulse', 15)}<span>Feed</span>
-                              ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
-                          </button>`
-                }
-                ${
                     full
                         ? html`<button
                               class="item"
@@ -261,6 +249,19 @@ export function sideView(): Html {
                     ${svg('needs', 15)}<span>Needs you</span>
                     ${count.n > 0 ? html`<span class="count" aria-label="${countWords(count)} waiting">${countWords(count)}</span>` : null}
                 </button>
+                ${
+                    feed === null
+                        ? null
+                        : html`<button
+                              class="item"
+                              type="button"
+                              ${feed === currentChat.value ? html`aria-current="true"` : null}
+                              ${act('side.feed')}
+                          >
+                              ${svg('pulse', 15)}<span>Feed</span>
+                              ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
+                          </button>`
+                }
                 ${full ? pageRow('people', 'People', 'people') : null}
                 ${
                     full

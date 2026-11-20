@@ -17,7 +17,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
-import { chats, conversations, here } from './state';
+import { chats, conversations, feedId, feedUnseen, here } from './state';
 
 // The sidebar: the button that makes an agent and its caret's menu, the button under them that makes a chat, the rows in
 // their order, the number on Needs you,
@@ -61,6 +61,7 @@ const more = () => side().getByRole('button', { name: 'More' });
 
 beforeEach(() => {
     mode.value = 'live';
+    feedUnseen.value = false;
     chats.value = {};
     conversations.value = [];
     attention.loaded.value = false;
@@ -73,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('the sidebar in Live', () => {
-    it('draws the brand, New GTM agent, New chat, Search, Needs you with its count, Recent and Settings, and nothing else', async () => {
+    it('draws the brand, New GTM agent, New chat, Search, Needs you with its count, the Feed, Recent and Settings, and nothing else', async () => {
         renderConsole(stubDesktop(), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         await waitFor(() => expect(attention.loaded.value).toBe(true));
@@ -92,11 +93,28 @@ describe('the sidebar in Live', () => {
                     .querySelector('.count')?.textContent,
             ).toBe('4'),
         );
-        expect(names()).toEqual(['SearchCtrl K', 'Needs you']);
-        for (const gone of ['Feed', 'Dashboard', 'People', 'Agents', 'Accounts', 'More'])
+        await waitFor(() => expect(names()).toEqual(['SearchCtrl K', 'Needs you', 'Feed']));
+        for (const gone of ['Dashboard', 'People', 'Agents', 'Accounts', 'More'])
             expect(side().queryByRole('button', { name: gone }), gone).toBeNull();
         expect(side().getByRole('navigation', { name: 'Conversations' })).toBeTruthy();
         expect(document.querySelector('.sfoot')?.textContent?.trim()).toBe('Settings');
+    });
+
+    it('opens the Feed from its row under Needs you, marks the row, and takes the dot of unseen lines away', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const feed = () => within(menu()).getByRole('button', { name: /^Feed/ });
+        await waitFor(() => feed());
+        flush(() => {
+            feedUnseen.value = true;
+        });
+        expect(within(feed()).getByLabelText('New lines in the Feed')).toBeTruthy();
+        expect(feed().querySelector('svg')).not.toBeNull();
+        fireEvent.click(feed());
+        await waitFor(() => expect(shown()).toBe(`chat:${feedId.value}`));
+        await waitFor(() => expect(feed().getAttribute('aria-current')).toBe('true'));
+        expect(within(feed()).queryByLabelText('New lines in the Feed')).toBeNull();
+        expect(feedUnseen.value).toBe(false);
     });
 
     it('keeps every page it does not draw at its route, and its panels one link away', async () => {
@@ -117,7 +135,7 @@ describe('the sidebar in Live', () => {
 });
 
 describe('the sidebar', () => {
-    it('lists Search, Feed, Dashboard, Needs you, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
+    it('lists Search, Dashboard, Needs you, Feed, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
         renderConsole();
         await waitFor(() => within(menu()).getByRole('button', { name: /^Feed/ }));
         const names = within(menu())
@@ -126,9 +144,9 @@ describe('the sidebar', () => {
         // Search comes first, with the name of its key beside it.
         expect(names).toEqual([
             'SearchCtrl K',
-            'Feed',
             'Dashboard',
             'Needs you',
+            'Feed',
             'People',
             'Agents',
             'Accounts',

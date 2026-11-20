@@ -165,7 +165,7 @@ from before its first message; an agent's chat is named by the agent's header in
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
   macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
-  the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
+  the **Feed** under it; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
   System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
@@ -731,8 +731,8 @@ and the file it belongs in, by its path; the file is yours to edit, at that path
 
 ### The Feed
 
-One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
-**New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
+One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn in the sidebar under
+**Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
 approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
 paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
 scheduled, a reply sent, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability
