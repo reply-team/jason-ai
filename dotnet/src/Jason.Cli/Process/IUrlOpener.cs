@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Programs;
 
@@ -105,21 +106,46 @@ public sealed class PlatformUrlOpener : IUrlOpener
             return null;
         }
 
-        var arguments = OperatingSystem.IsWindows() ? new[] { "url.dll,FileProtocolHandler", url } : new[] { url };
-        var start = ChildProcess.StartInfo(opener);
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
+        var start = StartOf(opener, url);
         try
         {
             StandardStreams.KeepOutOfChildren();
-            return ChildProcess.Start(start);
+            if (ChildProcess.Start(start) is not { } process)
+            {
+                return null;
+            }
+
+            process.StandardInput.Close();
+            process.OutputDataReceived += Discard;
+            process.ErrorDataReceived += Discard;
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return process;
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// The opener's start, with three streams of the CLI's own: what the opener starts inherits them, and outside GNOME and
+    /// KDE xdg-open runs the program it starts to its end, so the caller's own streams would stay open in Jason Desktop's
+    /// window, and whoever reads the caller's output to its end would wait for that window to close.
+    /// </summary>
+    internal static ProcessStartInfo StartOf(string opener, string url)
+    {
+        var start = ChildProcess.StartInfo(opener, ChildKind.SystemToolWithInput);
+        if (OperatingSystem.IsWindows())
+        {
+            start.ArgumentList.Add("url.dll,FileProtocolHandler");
+        }
+
+        start.ArgumentList.Add(url);
+        return start;
+    }
+
+    private static void Discard(object sender, DataReceivedEventArgs e)
+    {
     }
 }
