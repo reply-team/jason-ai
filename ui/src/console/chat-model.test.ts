@@ -821,7 +821,7 @@ describe("a chat's access mode", () => {
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
         expect(fullAccessLine).toBe(
-            "Full access · the AI runs commands without asking, except those that reach Jason's own settings, data or variables",
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
     });
 });

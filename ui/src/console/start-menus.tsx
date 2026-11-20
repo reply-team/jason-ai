@@ -56,7 +56,7 @@ export const modeSays: Readonly<Record<DesktopChatMode, string>> = {
     plan_only: 'Reads and proposes, and changes nothing.',
     auto_edit: "Works on files in the chat's own folder without asking; everything else is as in Ask first.",
     full_access:
-        "Runs commands on this computer without asking, except those that reach Jason's own settings, data or variables.",
+        "Runs commands on this computer without asking, except those that name Jason's own settings, data or variables.",
 };
 
 /** What a mode does on the host the next turn runs on: Codex's own words where they differ (`codexModeSays`). */

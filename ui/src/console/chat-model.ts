@@ -337,7 +337,7 @@ export const removedFolder =
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
 export const fullAccessLine =
-    "Full access · the AI runs commands without asking, except those that reach Jason's own settings, data or variables";
+    "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables";
 
 /**
  * What the line under the composer says while a chat's turn runs in Full access on Codex: in `exec` Codex never asks,
