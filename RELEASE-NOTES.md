@@ -60,7 +60,9 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
 - **The deb's updates are offered, and Ubuntu's automatic updates leave them alone.** They come with the system's, from
   Jason's apt repository: on Ubuntu, Software Updater offers a new version and installs it when you say so, as
   `sudo apt update && sudo apt upgrade` does in a terminal, and `sudo apt-mark hold jason-desktop` stops them. The deb's
-  `jason update apply` and `jason update rollback` install nothing and print apt's commands instead. Where the system
+  `jason update apply` and `jason update rollback` install nothing and print apt's commands instead. Going back from the
+  deb to 0.49.0 or earlier starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`:
+  those releases' packages carry no key for Jason's apt source, and without it every `apt update` reports the source. Where the system
   replaced Jason under its open window, the update item reads
   `Restart Jason and Its Runtime to Finish the Update to <version>` and one notice says so; the item, or a click on the
   notice, stops the runtime the old version runs, which ends a running turn and the work in progress, and starts Jason

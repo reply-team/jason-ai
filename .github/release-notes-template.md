@@ -112,7 +112,9 @@ On Linux the deb's updates come with the system's, from Jason's apt repository: 
 installs them when you say so, as `sudo apt update && sudo apt upgrade` does; Ubuntu's automatic updates leave them
 alone, and `sudo apt-mark hold jason-desktop` stops them. Where the system updated the package under a running window, its update item says to restart Jason to finish the
 update. apt keeps no previous version; to go back, install the previous release's `jason-desktop-linux-x64.deb` with
-`sudo apt install --allow-downgrades` and hold it. An AppImage update replaces the file where it is, so you need to be able to
+`sudo apt install --allow-downgrades` and hold it. Going back to a release before 0.49.1, whose package carries no key
+for Jason's apt source, starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`,
+or every `apt update` reports the source. An AppImage update replaces the file where it is, so you need to be able to
 write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
 
 On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
