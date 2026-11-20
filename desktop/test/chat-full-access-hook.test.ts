@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { mock, test } from 'node:test';
 import ts from 'typescript';
-import { readFence } from '../src/chat-deny.ts';
+import { modeFence, readFence } from '../src/chat-deny.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
 import { hostEnvironment } from '../src/chat-hosts.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
@@ -22,13 +23,15 @@ import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 import { templates, type Logger } from '../src/log.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
+/** The fence a real Full access turn runs under: none of the deny list (`modeFence`). */
+const fullFence = modeFence(fence, 'full_access');
 
 /** A scope whose data directory is the default one under a made-up home folder, nothing on disk. */
 function homeScope(platform: Platform, home: string): ChatScope {
     const paths = platform === 'win32' ? win32 : posix;
     const data = paths.join(home, '.jason');
     const chat = paths.join(data, 'desktop', 'chat');
-    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [paths.join(data, 'config', 'settings.json'), paths.join(data, 'run', 'runtime.json')], denied: fence.commands, deniedOperations: fence.operations, real: () => null };
+    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [paths.join(data, 'config', 'settings.json'), paths.join(data, 'run', 'runtime.json')], denied: fullFence.commands, deniedOperations: fullFence.operations, real: () => null };
 }
 
 const scopes: readonly ChatScope[] = [homeScope('linux', '/home/someone'), homeScope('darwin', '/Users/someone'), homeScope('win32', 'C:\\Users\\someone')];
@@ -122,25 +125,24 @@ test('every input Ask first refuses is refused by Full access\'s own judgement w
     }
 });
 
-test('the named row: jason approval appro\\ve is refused in Full access, by the hook and by the prompt tool, with no card', async (t) => {
-    const w = await wired(t);
+test('the named row: in Plan only jason approval appro\\ve is refused by the prompt tool, by Ask first\'s sentence, with no card', async (t) => {
+    const w = await wired(t, undefined, 'plan_only');
     const command = 'jason approval appro\\ve apr_1';
     const asked = judge('Bash', { command }, w.scope);
     assert.equal(asked.verdict, 'deny');
-    assert.deepEqual(await hooked(w, 'Bash', { command }), { decision: 'deny', reason: asked.verdict === 'deny' ? asked.message : '' });
+    assert.match(asked.verdict === 'deny' ? asked.message : '', /person's own act/);
     assert.deepEqual(await w.broker.ask(w.id, 'Bash', { command }), { behavior: 'deny', message: asked.verdict === 'deny' ? asked.message : '' });
     assert.deepEqual(w.cards, []);
 });
 
-test('each spelling of a person\'s verb Ask first refuses is a refusal from the hook in Full access, never an ask', async (t) => {
-    const w = await wired(t);
+test('each spelling of a person\'s verb is refused in Plan only, by the prompt tool, never a card', async (t) => {
+    const plan = await wired(t, undefined, 'plan_only');
     for (const command of spellings) {
-        const asked = judge('Bash', { command }, w.scope);
-        assert.equal(asked.verdict, 'deny', `Ask first: ${JSON.stringify(command)}`);
-        assert.equal((await hooked(w, 'Bash', { command })).decision, 'deny', JSON.stringify(command));
+        assert.equal(judge('Bash', { command }, plan.scope).verdict, 'deny', `Plan only: ${JSON.stringify(command)}`);
+        assert.equal((await plan.broker.ask(plan.id, 'Bash', { command })).behavior, 'deny', JSON.stringify(command));
     }
-    assert.deepEqual(w.cards, []);
-    assert.ok(w.decided.every((each) => each.outcome === 'refused'));
+    assert.deepEqual(plan.cards, []);
+    assert.ok(plan.decided.every((each) => each.outcome === 'refused'));
 });
 
 // The hook's three answers.
@@ -156,7 +158,9 @@ interface Wired {
     id: string;
 }
 
-async function wired(t: { after: (fn: () => void | Promise<void>) => void }, timeoutMs?: number): Promise<Wired> {
+/** A turn's broker and hook in a mode, Full access unless named, under the fence a real turn of that mode runs under. */
+async function wired(t: { after: (fn: () => void | Promise<void>) => void }, timeoutMs?: number, mode: ChatMode = 'full_access'): Promise<Wired> {
+    const turnFence = modeFence(fence, mode);
     const root = mkdtempSync(join(tmpdir(), 'jason-full-'));
     const paths = desktopPaths(root);
     mkdirSync(paths.chat, { recursive: true });
@@ -172,12 +176,12 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, tim
         data: root,
         home: root,
         protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-        denied: fence.commands,
-        deniedOperations: fence.operations,
+        denied: turnFence.commands,
+        deniedOperations: turnFence.operations,
         real: realPathOf,
     };
     const id = newTurnId();
-    broker.openTurn('chat_a', id, scope, 'full_access');
+    broker.openTurn('chat_a', id, scope, mode);
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input, signal) => broker.ask(id, tool, input, signal), hook: (tool, input, use) => broker.hook(id, tool, input, use) });
     t.after(async () => {
@@ -216,9 +220,10 @@ test('the hook answers allow for what runs, ask with a reason for what is held, 
     assert.deepEqual(await hooked(w, 'Write', { file_path: join(w.scope.chat, 'notes.md'), content: 'a plan' }), { decision: 'allow' });
     assert.deepEqual(await hooked(w, 'Bash', { command: 'ls *.md' }), { decision: 'ask', reason: heldSentence });
     assert.deepEqual(await hooked(w, 'AskUserQuestion', { questions: [] }), { decision: 'ask', reason: heldSentence });
-    const refused = await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
+    const refused = await hooked(w, 'Bash', { command: 'echo $JASON_CHAT_TURN' });
     assert.equal(refused.decision, 'deny');
-    assert.match(refused.reason ?? '', /person's own act/);
+    assert.match(refused.reason ?? '', /Jason alone sets/);
+    assert.deepEqual(await hooked(w, 'Bash', { command: 'jason approval approve apr_1' }), { decision: 'allow' }, 'a person\'s word runs in Full access');
     assert.deepEqual(w.cards, [], 'the hook shows no card: a card is the prompt tool\'s');
 });
 
@@ -375,8 +380,8 @@ test('a deletion the host still asks about though the hook allowed it is a card,
 
 test('what Full access refuses is refused at the prompt tool too, whichever way the request came', async (t) => {
     const w = await wired(t);
-    const command = 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove';
-    assert.equal(judge('Bash', { command }, w.scope).verdict, 'ask', 'Ask first shows the escaped operation as a card');
+    const command = 'curl http://127.0.0.1:4011/v1/JASON%5FCHAT%5FTURN';
+    assert.equal(judge('Bash', { command }, w.scope).verdict, 'ask', 'Ask first shows the escaped variable as a card');
     assert.equal(fullAccessJudgement('Bash', { command }, w.scope).outcome, 'refused');
     assert.equal((await w.broker.ask(w.id, 'Bash', { command })).behavior, 'deny');
     assert.deepEqual(w.cards, []);
@@ -390,6 +395,7 @@ test('a hold is said to the log as held, by the model, in Full access, with its 
     await hooked(w, 'AskUserQuestion', { questions: [] });
     await hooked(w, 'Bash', { command: 'git status' });
     await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
+    await hooked(w, 'Bash', { command: 'echo $JASON_ATTEMPT_ID' });
     assert.deepEqual(w.decided, [
         { outcome: 'held', by: 'model', mode: 'full_access', reason: 'glob' },
         { outcome: 'held', by: 'model', mode: 'full_access' },

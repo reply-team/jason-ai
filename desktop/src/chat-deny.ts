@@ -2,7 +2,7 @@
 // turn and by the CLI's tests, and a fourth file beside them: the instruction text the chat folder carries for the hosts.
 // The deny list names the jason commands a chat in Plan only never runs (the verbs that are a person's own word and the
 // verbs that change the installation) and the Runtime API operations those verbs call; outside Plan only it refuses
-// nothing, its verbs of a person's word run as the allow list's do, and the rest are the mode's (`modeFence`). The allow
+// nothing, the forms of a person's word run as the allow list's verbs do, and the rest are the mode's (`modeFence`). The allow
 // list names the verbs it runs without asking: every verb of the CLI the deny list does not cover, written from the
 // CLI's command tree by its tests. Any other jason command goes to the person's card. The plan list names the allow list's verbs that change nothing,
 // the only jason commands a chat in Plan only runs, written by the same tests from a declaration of each verb.
@@ -137,23 +137,53 @@ function readIfThere(file: string): string | null {
 
 /**
  * The deny list's verbs that are a person's own word and that a chat outside Plan only runs with no card, as the allow
- * list's verbs are run: the host's own rule lets each through (`modeFence`). A person asks for these in the chat in their
- * own words, so the chat does them: a preference set or unset, an approval approved or rejected, a standing approval set,
- * a question answered, and a campaign started. They stay on the deny list, which Plan only still reads.
+ * list's verbs are run: the host's own rule lets each through (`modeFence`), and the chat's instructions keep each to the
+ * person's word. One principle draws the line: outside Full access, an act that lets sends go without the person's
+ * approval is a card by whichever door, and an act that only narrows needs none. So an approval approved or rejected, a
+ * standing approval taken back, a question answered and a campaign started run with no card; a standing approval set,
+ * which releases sends nobody reads, does not. They stay on the deny list, which Plan only still reads.
  */
-export const personsWordVerbs: readonly string[] = ['preference set', 'preference unset', 'approval approve', 'approval reject', 'approval set-standing', 'decision answer', 'campaign start'];
+export const personsWordVerbs: readonly string[] = ['approval approve', 'approval reject', 'approval unset-standing', 'decision answer', 'campaign start'];
+
+/**
+ * The preferences a person's word sets or unsets with no card outside Plan only: the sender's identity and the tone of
+ * voice, which shape what is written and release nothing. An allow list of keys, so every other key, the send modes and
+ * the interactive host among them, and any key added later, is a card.
+ */
+export const personsWordPreferenceKeys: readonly string[] = ['sender.identity', 'tone_of_voice'];
+
+/**
+ * Every form the host runs by itself outside Plan only for a person's word: each verb of `personsWordVerbs`, and
+ * `preference set` and `preference unset` each followed by one key of `personsWordPreferenceKeys`, so the host's rule is
+ * key by key. Anthropic, https://code.claude.com/docs/en/permissions (read 2026-11-20): "The `:*` suffix is an equivalent
+ * way to write a trailing wildcard, so `Bash(ls:*)` matches the same commands as `Bash(ls *)`", and "`Bash(ls *)`
+ * requires a space after `ls`, so `lsof` doesn't match", so `Bash(jason preference set tone_of_voice:*)` takes that key
+ * as a whole word and no longer key that begins with it. A key spelled any other way, or put after an option, is not
+ * matched and goes to the permission tool, whose card it gets.
+ */
+export const personsWordForms: readonly string[] = [
+    ...personsWordVerbs,
+    ...personsWordPreferenceKeys.flatMap((key) => [`preference set ${key}`, `preference unset ${key}`]),
+];
+
+/**
+ * The allow list's verbs that a chat outside Plan only does not run by itself, since each can let sends go without the
+ * person's approval: a reply's verdict (`reply record`) can lift an opt-out and vouch for a draft under a standing
+ * approval. The CLI's tests write it on the allow list; the turn takes it off, so it is a card in Ask first and Auto-edit
+ * and runs in Full access. Plan only never had it, being no read.
+ */
+export const cardedVerbs: readonly string[] = ['reply record'];
 
 /**
  * The fence one turn runs under in its mode. Plan only: the fence as it is read, every command and operation of the deny
- * list refused. Every other mode: no command or operation of the deny list is refused, since the jason a chat runs is no
- * longer confined and the person's own word in the chat is theirs. The verbs of a person's word (`personsWordVerbs`) join
- * the allow list and run with no card; every other command of the deny list goes to the person as any jason command the
- * host does not run by itself does: a card in Ask first and Auto-edit, and in Full access what Full access does with such
- * a card.
+ * list refused. Every other mode: no command or operation of the deny list is refused. The forms of a person's word
+ * (`personsWordForms`) join the allow list and run with no card, and `cardedVerbs` leave it; every other command of the
+ * deny list goes to the person as any jason command the host does not run by itself does: a card in Ask first and
+ * Auto-edit, and in Full access what Full access does with such a card.
  */
 export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
     if (mode === 'plan_only') return fence;
-    return { ...fence, commands: [], operations: [], allowed: [...fence.allowed, ...personsWordVerbs] };
+    return { ...fence, commands: [], operations: [], allowed: [...fence.allowed.filter((verb) => !cardedVerbs.includes(verb)), ...personsWordForms] };
 }
 
 /**

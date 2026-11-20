@@ -4,7 +4,7 @@
 // accept-edits mode; it has no confirmation and no standing choice, is held in memory alone, and is chosen on Claude Code
 // only, never for the Feed. Full access runs Claude Code in its default mode with a hook that lets a command run with no
 // card where Jason reads it plainly, refuses what Ask first refuses, and puts anything else to the person as Ask first's
-// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. It is
+// card; what Ask first refuses and the keys still hold wherever the desktop can see the attempt. It is
 // chosen through a confirmation that offers this time only or always on this computer, the second with new chats
 // starting in Full access as well; a conversation's Full access is held in memory alone and never remembered past the
 // window, and the standing choice is the main process's own file (`full-access-standing.ts`), under a consent number.

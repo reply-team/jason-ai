@@ -1953,6 +1953,7 @@ export class Chat {
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
             effortNamed: resolved.effort !== undefined,
+            mode: running.mode,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
         // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.
