@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedTools, claudeTurnSettings, fullAccessRemovedTools, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -42,6 +42,7 @@ const causes: readonly Bypass[] = [
     { why: 'bypass_off', named: 'default' },
     { why: 'bypass_off', named: 'auto' },
     { why: 'bypass_off', named: 'another' },
+    { why: 'forced_default', named: 'default' },
     { why: 'bypass_refused', named: null },
     { why: 'unguarded', named: null },
 ];
@@ -69,7 +70,8 @@ test('a turn runs in the mode its chat keeps, on Codex Full access included, but
     assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, claudeVersion: '2.1.200' }).why?.kind, 'not_offered');
     for (const cause of causes) {
         assert.deepEqual(turnMode('full_access', 'claude', { ...at, bypass: cause }), askFirst(cause.why, bypassSentence(cause)), cause.why);
-        assert.deepEqual(turnMode('full_access', 'claude', { ...at, bypass: cause }), bypassLeadsTo(cause), 'what a cause leads to is decided in one place');
+        const { mode, why } = bypassLeadsTo(cause);
+        assert.deepEqual(turnMode('full_access', 'claude', { ...at, bypass: cause }), { mode, why }, 'what a cause leads to is decided in one place');
         assert.equal(turnMode('full_access', 'claude', { ...at, bypass: cause, claudeVersion: '2.1.200' }).why?.kind, cause.why, 'the bypass before the floor');
         assert.deepEqual(turnMode('auto_edit', 'claude', { ...at, bypass: cause }), { mode: 'auto_edit', why: null }, 'no other mode runs in the bypass');
         assert.deepEqual(turnMode('full_access', 'codex', { ...at, bypass: cause }), { mode: 'full_access', why: null }, 'Claude Code\'s bypass is no bypass of Codex');
@@ -179,12 +181,19 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.match(fullAccessSentence(null) ?? '', /could not be read/);
 });
 
-test('Full access not available says so in one shape, its cause after it, until Jason Desktop starts again where a turn showed the cause, and a tool that ran unchecked says the chat keeps its mode', () => {
+test('Full access not available says so in one shape, its cause after it: right now where a turn found the cause, until Jason Desktop starts again where a tool ran unchecked, and a tool that ran unchecked says the chat keeps its mode', () => {
     assert.deepEqual(bypassSentences, {
         root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
-        bypass_refused: 'Full access is not available here until Jason Desktop starts again: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
+        forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
+        bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
         unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
     });
+    // A cause a turn found holds a minute, and its sentence says "right now"; only a tool that ran unchecked holds until the
+    // desktop starts again and says so; running as root is said as it is.
+    for (const cause of causes) {
+        assert.equal(bypassSentence(cause).includes('right now'), bypassLeadsTo(cause).held === 'one_minute', cause.why);
+        assert.equal(bypassSentence(cause).includes('until Jason Desktop starts again'), cause.why === 'unguarded', cause.why);
+    }
     assert.equal(
         unguardedSentence,
         'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.',
@@ -198,7 +207,19 @@ test('Full access not available says so in one shape, its cause after it, until 
     for (const sentence of [...Object.values(bypassSentences), ...named, unguardedSentence, hookFilteredSentence]) assert.doesNotMatch(sentence, /Plan only|Auto-edit/, sentence);
 });
 
-test('a Full access start that names another mode than the bypass says that Claude Code did not start in its bypass mode here and which mode it named, never a cause that was not read', () => {
+test('Claude Code\'s own words that it forced its default mode are read by a closed match on those words, and nothing else of what it wrote is said', () => {
+    assert.equal(forcedDefaultWords, 'Permission mode forced to default');
+    // As Claude Code 2.1.329 writes it on its standard error where CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set.
+    const seen = '⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.';
+    assert.equal(forcedDefault(`${seen}\n`), true);
+    assert.equal(forcedDefault(`a warning first\n${seen}\nand a line after\n`), true, 'among other lines');
+    for (const other of ['', 'permission mode forced to default', 'Permission mode forced to plan', 'Permission mode set to default', 'Error: bypassPermissions not supported in restricted mode']) {
+        assert.equal(forcedDefault(other), false, other);
+    }
+    assert.doesNotMatch(bypassSentence({ why: 'forced_default', named: 'default' }), /SUBPROCESS|allowedTools|hardening|⚠/);
+});
+
+test('a Full access start that names another mode than the bypass says that Claude Code did not start in its bypass mode and which mode it named, never a cause that was not read', () => {
     for (const [named, phrase] of [
         ['default', 'its default mode'],
         ['acceptEdits', 'its acceptEdits mode'],
@@ -208,7 +229,7 @@ test('a Full access start that names another mode than the bypass says that Clau
         ['another', 'a mode Jason does not know'],
     ] as const) {
         const sentence = bypassSentence({ why: 'bypass_off', named });
-        assert.equal(sentence, `Full access is not available here until Jason Desktop starts again: Claude Code did not start in its bypass mode here, and named ${phrase} instead.`);
+        assert.equal(sentence, `Full access is not available here right now: Claude Code did not start in its bypass mode, and named ${phrase} instead.`);
         assert.doesNotMatch(sentence, /disableBypassPermissionsMode|setting|policy|administrator/, named);
     }
 });
@@ -219,8 +240,12 @@ test('the mode Claude Code names is read from a closed table of its modes, and a
     for (const word of ['bypassPermissions', 'Default', 'someNewMode', 'x']) assert.equal(namedMode(word), 'another', word);
 });
 
-test('what a cause the bypass is not available for leads to is decided in one place, for the turn that found it and every later one: today Ask first, the cause said', () => {
-    for (const cause of causes) assert.deepEqual(bypassLeadsTo(cause), { mode: 'ask_first', why: { kind: cause.why, text: bypassSentence(cause) } }, cause.why);
+test('what a cause the bypass is not available for leads to is decided in one place, for the turn that found it and the turns after it: Ask first, the cause said, held a minute where a turn found it and for this run of the desktop as root or where a tool ran unchecked', () => {
+    for (const cause of causes) {
+        const held = cause.why === 'root' || cause.why === 'unguarded' ? 'this_run' : 'one_minute';
+        assert.deepEqual(bypassLeadsTo(cause), { mode: 'ask_first', why: { kind: cause.why, text: bypassSentence(cause) }, held }, cause.why);
+    }
+    assert.equal(bypassHeldMs, 60_000, 'a minute');
 });
 
 test('the box a turn in Ask first says is what the menu draws: this turn runs in Ask first, the menu shows the mode each next turn runs in, and the chat stays set to its own mode', () => {

@@ -28,6 +28,10 @@
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
+// STUB_INIT_MODE is the mode Claude Code's init line names; without it the line names none. STUB_FORCED_DEFAULT has Claude
+// Code force its default mode and say so on stderr, as 2.1.329 does under CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1: "scrub"
+// where the start's environment sets that, "always" on every start that asks for another mode. STUB_BYPASS "refused"
+// refuses the bypass mode before anything starts.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
 // session other than the one asked for and goes on as a turn would.
@@ -152,9 +156,22 @@ async function claude(args, stdin) {
         process.stderr.write('Error: bypassPermissions not supported in restricted mode\n');
         process.exit(1);
     }
-    // The mode the init line names is the row's to say (`STUB_INIT_MODE`), never an echo of the mode the start asked for:
-    // what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names none.
-    const named = process.env.STUB_INIT_MODE;
+    // Claude Code 2.1.329 starts in its default mode, whatever mode the start asked for, while CLAUDE_CODE_SUBPROCESS_ENV_SCRUB
+    // is set, and says so on standard error before its init line (seen with a scratch configuration directory):
+    // STUB_FORCED_DEFAULT "scrub" does that where the start's environment sets the variable to 1, "always" on every start
+    // that asks for another mode than the default.
+    const scrubbed = Object.entries(process.env).some(([name, value]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' && value === '1');
+    const forcing = process.env.STUB_FORCED_DEFAULT;
+    const forced = permissionMode(args) !== 'default' && (forcing === 'always' || (forcing === 'scrub' && scrubbed));
+    if (forced) {
+        process.stderr.write(
+            '⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.\n',
+        );
+    }
+    // Otherwise the mode the init line names is the row's to say (`STUB_INIT_MODE`), never an echo of the mode the start
+    // asked for: what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names
+    // none.
+    const named = forced ? 'default' : process.env.STUB_INIT_MODE;
     print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;

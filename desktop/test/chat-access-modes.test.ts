@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { attemptRefusal, dataRefusal, settingsRefusal } from '../src/chat-permission-model.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
@@ -131,6 +131,8 @@ const modes = (events: ChatEvent[]) => events.flatMap((event) => (event.kind ===
 const notices = (events: ChatEvent[]) => events.flatMap((event) => (event.kind === 'notice' ? [event.text] : []));
 const done = (events: ChatEvent[]) => events.at(-1);
 const claude = { host: 'claude' };
+/** The scrub variable a host was started with, by any spelling of its name. */
+const scrubOf = (host: Recorded | undefined) => Object.entries(host?.env ?? {}).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
 
 test('a new chat is in Full access; put in Ask first, its turn starts Claude Code in its default mode by name, with the hook in a settings file of the turn', async (t) => {
     const r = rig(t);
@@ -239,8 +241,9 @@ test('under Full access the hook refuses the three kinds and nothing else throug
     assert.equal(r.chat.open(id).mode, 'full_access');
 });
 
-test('a tool that ran without the hook stops the Full access turn and says Full access is not available here; the record keeps the mode, and later turns run in Ask first', async (t) => {
-    const r = rig(t);
+test('a tool that ran without the hook stops the Full access turn and says Full access is not available here; the record keeps the mode, and later turns run in Ask first for the rest of this run', async (t) => {
+    let clock = Date.parse('2026-11-20T10:00:00.000Z');
+    const r = rig(t, { chat: { now: () => clock } });
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
     plan(r, [{ unhooked: { tool: 'Bash', input: { command: 'git status' } } }, { say: 'after the tool' }]);
@@ -252,8 +255,9 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
     assert.equal(r.chat.open(id).mode, 'full_access', 'the record keeps the mode');
     assert.deepEqual(r.changes, []);
     assert.equal(r.unchecked, 1, 'the stop is said to the log by its own word');
-    // The policy that filtered the hook out holds for every later turn: each runs in Ask first, this chat's with no word
-    // more, another chat's said once.
+    // The policy that filtered the hook out holds for every later turn of this run, a minute on and more: each runs in Ask
+    // first, this chat's with no word more, another chat's said once.
+    clock += 2 * bypassHeldMs;
     plan(r, [{ say: 'next' }]);
     const next = await r.turn(id, 'again', claude);
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default');
@@ -533,7 +537,7 @@ test('Claude Code names its default mode on the first line of a Full access star
     plan(r, [{ say: 'again' }]);
     const next = await r.turn(id, 'again', claude);
     assert.deepEqual(notices(next), [], 'said once');
-    assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default', 'the next turn asks for no bypass');
+    assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default', 'the next turn, within the minute, asks for no bypass');
 });
 
 test('a Full access start that names a third mode, or one Jason does not know, says which mode it named and leads where the default mode does', async (t) => {
@@ -573,18 +577,100 @@ test('Claude Code refuses its bypass mode before it starts: the turn starts agai
     assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.ok(texts(said).includes('answered'));
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    // Each start has its own mode's environment: the Full access start no scrub, the start again in Ask first the scrub
+    // off Linux.
+    assert.deepEqual(scrubOf(r.hosts()[0]), []);
+    assert.deepEqual(scrubOf(r.hosts()[1]), process.platform === 'linux' ? [] : [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']]);
     assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentences.bypass_refused, 'full_access')]);
     assert.deepEqual(gone, [['bypass_refused', null]], 'the cause, and no mode, since none was named');
     assert.equal(r.chat.open(id).mode, 'full_access');
     const next = await r.turn(id, 'again', claude);
     assert.deepEqual(notices(next), []);
-    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default', 'default'], 'no bypass is asked for again');
+    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default', 'default'], 'within the minute no bypass is asked for again');
 });
 
-test('a desktop that runs as root starts Claude Code in Ask first for a Full access turn, says why once, and the record keeps Full access', async (t) => {
-    const r = rig(t, { chat: { root: () => true } });
+test('a new chat\'s first send runs in Full access, in Claude Code\'s bypass, on every system: no Full access turn carries the scrub, under which Claude Code 2.1.329 starts in its default mode, nor one the desktop inherited, and an Ask first turn keeps it off Linux', async (t) => {
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_FORCED_DEFAULT: 'scrub', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
+    const { id } = await r.chat.create();
+    plan(r, [{ say: 'answered' }]);
+    const said = await r.turn(id, 'hello', claude);
+    assert.ok(texts(said).includes('answered'));
+    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions'], 'one start, in the bypass');
+    assert.deepEqual(r.started, ['full_access']);
+    assert.deepEqual(scrubOf(r.hosts()[0]), []);
+    assert.deepEqual(notices(said), []);
+    assert.deepEqual(gone, []);
+    await r.chat.setMode(id, 'ask_first', 'claude');
+    await r.turn(id, 'again', claude);
+    assert.deepEqual(scrubOf(r.hosts()[1]), process.platform === 'linux' ? [] : [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']]);
+    assert.deepEqual(r.started, ['full_access', 'ask_first']);
+});
+
+test('Claude Code says it forced its default mode: the turn is started again in Ask first and says so by that cause, the log hears the cause and the mode named and nothing Claude Code wrote, and the record keeps Full access', async (t) => {
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_FORCED_DEFAULT: 'always' }, chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
+    const { id } = await r.chat.create();
+    plan(r, [{ sleep: 1500 }, { say: 'answered' }]);
+    const said = await r.turn(id, 'hello', claude);
+    assert.ok(texts(said).includes('answered'));
+    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    assert.deepEqual(r.started, ['full_access', 'ask_first']);
+    assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentence({ why: 'forced_default', named: 'default' }), 'full_access')]);
+    assert.deepEqual(gone, [['forced_default', 'default']]);
+    assert.equal(r.chat.open(id).mode, 'full_access');
+});
+
+test('a turn\'s finding holds a minute: a Full access turn within it runs in Ask first with one start; a minute on, a turn asks for the bypass again, falls again while the cause holds, said to the log again and to the chat once, and runs in Full access once the cause is gone, with no restart of the desktop', async (t) => {
+    let clock = Date.parse('2026-11-20T10:00:00.000Z');
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_INIT_MODE: 'default' }, chat: { now: () => clock, bypassGone: (why, named) => void gone.push([why, named]) } });
+    const { id } = await r.chat.create();
+    const asked = () => r.hosts().map((host) => flag(host.args, '--permission-mode'));
+    plan(r, [{ sleep: 1500 }, { say: 'first' }]);
+    const first = await r.turn(id, 'hello', claude);
+    assert.deepEqual(asked(), ['bypassPermissions', 'default']);
+    assert.deepEqual(notices(first), [askFirstThisTurn(bypassSentence({ why: 'bypass_off', named: 'default' }), 'full_access')]);
+    assert.deepEqual(r.chat.bypassUnavailable(), { why: 'bypass_off', named: 'default' }, 'the menu draws Ask first');
+    clock += bypassHeldMs - 1;
+    plan(r, [{ say: 'within the minute' }]);
+    const within = await r.turn(id, 'again', claude);
+    assert.deepEqual(asked().slice(2), ['default'], 'within the minute no bypass is asked for: one start');
+    assert.deepEqual(notices(within), []);
+    clock += 1;
+    assert.equal(r.chat.bypassUnavailable(), null, 'a minute on, the menu draws Full access again');
+    plan(r, [{ sleep: 1500 }, { say: 'still' }]);
+    const still = await r.turn(id, 'once more', claude);
+    assert.deepEqual(asked().slice(3), ['bypassPermissions', 'default'], 'asked again, and the cause holds');
+    assert.deepEqual(notices(still), [], 'the chat was told once');
+    clock += bypassHeldMs;
+    r.b.env.STUB_INIT_MODE = 'bypassPermissions';
+    plan(r, [{ say: 'in full access' }]);
+    const back = await r.turn(id, 'and now', claude);
+    assert.ok(texts(back).includes('in full access'));
+    assert.deepEqual(asked().slice(5), ['bypassPermissions'], 'the cause gone, the turn runs in the bypass');
+    assert.deepEqual(r.started, ['full_access', 'ask_first', 'ask_first', 'full_access', 'ask_first', 'full_access']);
+    assert.deepEqual(gone, [['bypass_off', 'default'], ['bypass_off', 'default']], 'the log hears each finding');
+    assert.equal(r.chat.open(id).mode, 'full_access');
+});
+
+test('the end of a finding\'s minute asks the page to read the hosts again, so the menu draws the chat\'s own mode once more with no turn sent', async (t) => {
+    let changed = 0;
+    const r = rig(t, { env: { STUB_BYPASS: 'refused' }, chat: { bypassHeldMs: 400, setupChanged: () => void changed++ } });
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    const until = Date.now() + 10_000;
+    while (changed < 2 && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changed, 2, 'once for the finding, once for its end');
+    assert.equal(r.chat.bypassUnavailable(), null);
+});
+
+test('a desktop that runs as root starts Claude Code in Ask first for a Full access turn, says why once, and the record keeps Full access, a minute on and more', async (t) => {
+    let clock = Date.parse('2026-11-20T10:00:00.000Z');
+    const r = rig(t, { chat: { root: () => true, now: () => clock } });
     const { id } = await r.chat.create();
     const first = await r.turn(id, 'hello', claude);
+    clock += 2 * bypassHeldMs;
     const second = await r.turn(id, 'hello again', claude);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['default', 'default']);
     assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.root, 'full_access')]);

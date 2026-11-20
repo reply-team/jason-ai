@@ -322,6 +322,7 @@ test('a bypass found not available is logged by its cause and the mode Claude Co
     const logged = loggedTurns(log);
     logged.bypassGone('bypass_off', 'default');
     logged.bypassGone('bypass_off', 'another');
+    logged.bypassGone('forced_default', 'default');
     logged.bypassGone('bypass_refused', null);
     logged.bypassGone('unguarded', null);
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
@@ -331,6 +332,7 @@ test('a bypass found not available is logged by its cause and the mode Claude Co
     assert.deepEqual(said, [
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'default' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'another' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'forced_default', Named: 'default' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_refused', Named: 'none' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'unguarded', Named: 'none' },
     ]);

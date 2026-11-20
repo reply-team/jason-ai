@@ -932,16 +932,22 @@ until you choose another mode. A turn that Full access cannot apply to runs in A
 that the menu shows the mode each next turn runs in, and that the chat stays set to Full access: a turn on a Claude
 Code older than 2.1.322, sent from a browser tab, or sent while Full access is not offered. A turn on Codex runs in
 Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the
-composer drawn again. Where Claude Code's bypass mode is not available, that turn and every later turn on Claude Code
-run in Ask first until Jason Desktop starts again, the chat keeping Full access on its record, and the chat says why
-once: "Full access is not available here until Jason Desktop starts again", with the cause after it, where Claude Code
-started the turn in another mode, which the chat names as Claude Code named it ("Claude Code did not start in its
-bypass mode here, and named its default mode instead."), Claude Code refuses the mode in its restricted mode or under a
-policy, or a tool ran that Jason's check never saw, a policy having filtered the check out, which also stops the turn
-it ran in; and "Full access is not available here" where Jason Desktop runs as root or under sudo. Why Claude Code
-started in another mode is not something Jason reads: its own settings or an administrator's policy can turn its
-bypass off, and the chat names none of them. A turn that started in another mode is stopped at its first line and
-started again in Ask first, as Ask first's own turn is, and Jason Desktop's log says the cause and the mode named once,
+composer drawn again. Where Claude Code's bypass mode is not available, the turn runs in Ask first, the chat keeping
+Full access on its record, and the chat says why once, the cause after "Full access is not available here right now":
+Claude Code started the turn in another mode, which the chat names as Claude Code named it ("Claude Code did not start
+in its bypass mode, and named its default mode instead."); Claude Code said it forced its permission mode to default;
+or Claude Code refused the mode in its restricted mode or under a policy. The turns of the next minute run in Ask first
+too, with no bypass asked for, and the first Full access turn after that minute asks Claude Code for its bypass again,
+so a cause that has gone away needs no restart of Jason Desktop. Where a tool ran that Jason's check never saw, a
+policy having filtered the check out, the turn it ran in stops, the chat says "Full access is not available here until
+Jason Desktop starts again" with that cause after it, and every later turn on Claude Code runs in Ask first until it
+does; where Jason Desktop runs as root or under sudo, the chat says "Full access is not available here" with that
+cause, and every turn on Claude Code runs in Ask first. Of why Claude Code started in another mode, Jason reads one
+thing: Claude Code's own words that it forced its permission mode to default, which Claude Code 2.1.329 writes while
+`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is set where it starts. No Full access turn sets that variable, nor passes on one
+Jason Desktop inherited. Claude Code's own settings or an administrator's policy can also turn its bypass off, and the
+chat names none of them. A turn that started in another mode is stopped at its first line and started again in Ask
+first, as Ask first's own turn is, and Jason Desktop's log says the cause and the mode named each time a turn finds it,
 so `jason logs --source desktop` shows which it was. A turn you stopped ends with no word of a mode.
 
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
@@ -1045,12 +1051,17 @@ Under the chat, these things differ from a terminal:
   turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, sets
   `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any request; in the other
   modes what the chat runs is the mode's to say, above.
-- **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
-  every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
-  by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
-- **On Linux it does.** No Claude Code turn sets that variable there, and one the desktop inherited is not passed on: on
-  Linux the variable runs every command the agent runs inside Claude Code's sandbox, and the sandbox shuts `jason` off
-  from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn of the chat sets, it denies reads
+- **On macOS and Windows, in Ask first, Auto-edit and Plan only, a credential in an environment variable does not reach
+  the commands the agent runs.** There every Claude Code turn of those modes sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`,
+  which strips what looks like a credential, by name or by value, from the commands the host runs. `reply` signed in
+  through its own store is unaffected.
+- **In Full access it does, on every system.** No Full access turn sets that variable, and one the desktop inherited is
+  not passed on: while it is set, Claude Code starts in its default mode whatever mode it is asked for, its bypass
+  included, and says so ("Permission mode forced to default"), so a Full access turn would never run in Full access. In
+  Full access a key and the credentials the turn carries reach the commands the agent runs, as in a terminal session.
+- **On Linux it does in every mode.** No Claude Code turn sets that variable there, and one the desktop inherited is
+  not passed on: on Linux the variable runs every command the agent runs inside Claude Code's sandbox, and the sandbox
+  shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn of the chat sets, it denies reads
   of the home directory, so Jason's data directory and the runtime's descriptor in it are hidden; and a sandboxed
   command's `localhost` is its own, so the runtime's loopback address is out of reach as well. (`socat` is the sandbox's
   network relay, and the process namespace the variable also brings is a separate effect.) So on Linux a key connected

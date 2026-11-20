@@ -154,11 +154,13 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
   of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
   the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
-  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but on Linux, where a Claude
-  Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that prints it leaves it in the
-  transcript. Each folder keeps the
-  transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
-  provider.
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but in Full access, and on
+  Linux in every mode, where a Claude Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that
+  prints it leaves it in the transcript. No Full access turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, nor passes on one
+  the desktop inherited, since Claude Code starts in its default mode while it is set ("Permission mode forced to
+  default"): in Full access a key and the credentials the turn carries reach the commands the agent runs, as in a
+  terminal session. Each folder keeps the transcripts of its provider's turns, one Claude Code folder per provider since
+  a conversation keeps one session per provider.
 - How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
   key run through Claude Code (Anthropic, DeepSeek, Kimi, GLM, MiniMax), a retry or an end the host reports for a
   refused key ends the turn at once with one sentence naming the provider's card in Connect: a 401 or a failed
@@ -455,22 +457,29 @@ applies to the turns a person starts by sending, from the next one on.
 - **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
   alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
 - **When the bypass is not available.** The turn runs in Ask first and the chat says why once, in one shape, "Full
-  access is not available here: <why>" (`bypassSentence`), and "Full access is not available here until Jason Desktop
-  starts again: <why>" where a turn showed the cause; the record keeps Full access, and the box says so with what the
-  menu draws: "This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to
-  Full access." (`askFirstThisTurn`). The causes: the desktop runs as root (`getuid`), under which Claude Code refuses
-  the mode; Claude Code starts the turn in another mode, which its init line names first, so that start is stopped
-  there and the turn starts again at once in Ask first's own shape: its settings, no PowerShell, every page asked about
-  and the host's rules over the chat's own names. Only that word is read, from a closed table of Claude Code's modes
-  (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and the
-  sentence names it, "Claude Code did not start in its bypass mode here, and named its default mode instead.": why
-  Claude Code did so is not read, so no setting is named. Claude Code refuses the mode before it starts, in its
-  restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn starts again at once in
-  the same shape; or a tool ran that the hook never saw (below). The first cause stands, in memory, until the desktop
-  starts again, and every later Claude Code turn of a Full access chat runs in Ask first meanwhile; the desktop's log
-  says it once, by its cause and the mode named (`chat_bypass_unavailable`), so `jason logs --source desktop` tells the
-  cases apart. What a cause leads to, for the turn that found it and for every later one, is decided in one place
-  (`bypassLeadsTo` in `src/chat-modes.ts`).
+  access is not available here: <why>" (`bypassSentence`), "Full access is not available here right now: <why>" where a
+  turn found the cause, and "Full access is not available here until Jason Desktop starts again: <why>" where a tool ran
+  that the hook never saw; the record keeps Full access, and the box says so with what the menu draws: "This turn runs
+  in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to Full access."
+  (`askFirstThisTurn`). The causes: the desktop runs as root (`getuid`), under which Claude Code refuses the mode;
+  Claude Code starts the turn in another mode, which its init line names first, so that start is stopped there and the
+  turn starts again at once in Ask first's own shape: its settings, its environment, no PowerShell, every page asked
+  about and the host's rules over the chat's own names. That word is read from a closed table of Claude Code's modes
+  (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and once the
+  start has ended its standard error is matched against Claude Code's own words "Permission mode forced to default"
+  (`forcedDefault`), a closed match, nothing else of what it wrote being read: matched, the cause is `forced_default`,
+  "Claude Code said it forced its permission mode to default."; not, the sentence names the mode, "Claude Code did not
+  start in its bypass mode, and named its default mode instead.", and no setting is named. Claude Code refuses the mode
+  before it starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn
+  starts again at once in the same shape; or a tool ran that the hook never saw (below). A cause a turn found holds a
+  minute (`bypassHeldMs`), in memory: the Claude Code turns of a Full access chat in that minute run in Ask first and
+  ask for no bypass, so the host is not started twice on every turn while the cause stays; the menu draws Ask first and
+  is drawn again when the minute ends; and the first Full access turn after it asks for the bypass again, so a cause
+  that went away needs no restart of the desktop. Running as root, and a tool the hook never saw, hold until the
+  desktop starts again. The desktop's log says each cause that comes to hold, by its cause and the mode named
+  (`chat_bypass_unavailable`), so `jason logs --source desktop` tells the cases apart. What a cause leads to, for the
+  turn that found it and the turns after it, and for how long, is decided in one place (`bypassLeadsTo` in
+  `src/chat-modes.ts`).
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
