@@ -35,13 +35,16 @@ message go without your approval.
   confirmation box and no standing choice to keep. A mode you choose from the menu beside the composer (Ask first, Plan
   only or Auto-edit) is kept with the conversation, after a restart and through **Start fresh**, until you choose
   another. Where Full access cannot apply to a turn, that turn runs in Ask first, the chat says why once and keeps its
-  mode: a turn sent from a browser tab, a turn on a Claude Code too old for it, and a turn on Codex. The line under the
-  composer always says the mode the next turn runs in.
+  mode: a turn sent from a browser tab, and a turn on a Claude Code too old for it. The line under the composer always
+  says the mode the next turn runs in.
   [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
   mode lets the AI do.
 - **GAP (M2): what a Full access turn passes to Claude Code.** Written when that change lands.
-- **GAP (K1): Full access on Codex.** Written when that change lands; the item above names Codex among the turns that
-  run in Ask first until then.
+- **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
+  `config.toml`, as Codex does in a terminal: Codex acts with no questions and outside any sandbox. In its other modes a
+  Codex chat stays in Codex's read-only sandbox and reads and proposes, since Codex cannot ask before it acts; the menu
+  says so. If an administrator's requirement forbids running with no sandbox, Codex refuses the turn or runs a narrower
+  sandbox, and the chat says which.
 - **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
   waits for you, answers a decision, starts a campaign, takes back a standing approval, and sets the sender's name or
   tone of voice, with no card; each is recorded under the person the command names, as it would be from a terminal. It
@@ -98,3 +101,4 @@ message go without your approval.
 
 - In this candidate the chat does not yet read a file outside its own folders without asking; that comes in a later
   release.
+- In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
