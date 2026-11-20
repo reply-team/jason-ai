@@ -58,4 +58,63 @@ public class SendReviewApiTests
             new JsonObject { ["send_review"] = new JsonObject { ["work_item_id"] = send.Id, ["operation"] = "message.send" } }.ToJsonString(),
             critic.Context.ToJsonString());
     }
+
+    /// <summary>
+    /// A send the desktop's chat creates no longer carries the chat's header, since the chat no longer sets
+    /// <c>JASON_CONFINED</c>; such a send follows the campaign's send mode as a send from a terminal does: under the
+    /// campaign's automatic mode it waits on the critic the runtime made, and its created line carries no mark. The same
+    /// send created with the header is marked the chat's and is given no critic, as it always parks for the person.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_send_created_without_the_chat_s_header_follows_the_campaign_s_send_mode(bool header)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"DefaultEntryCommand":["agent-host"]}}"""));
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Work" }, Ct)).Id;
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = campaign, cold = "automatic", actor = Ada }, Ct);
+        var contact = (await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ada", channels = new[] { new { channel = "email", value = "ada@example.test" } } }, Ct)).Id;
+        await api.PostOkAsync<AddContactsResult>(Operations.CampaignAddContacts, new { campaign_id = campaign, contacts = new[] { new { contact_id = contact } }, actor = Ada }, Ct);
+
+        var (status, body) = await api.PostAsync(
+            Operations.WorkItemCreate,
+            new
+            {
+                campaign_id = campaign,
+                kind = "provider_op",
+                operation = "message.send",
+                contact_id = contact,
+                context = new
+                {
+                    input = new JsonObject
+                    {
+                        ["channel"] = "email",
+                        ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                        ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = "Thursday at 10 works." },
+                    },
+                },
+                actor = Ada,
+            },
+            header ? new Dictionary<string, string> { ["Jason-Confined"] = "1" } : null,
+            Ct);
+
+        Assert.True(status == System.Net.HttpStatusCode.OK, body);
+        var send = JsonNode.Parse(body)!;
+        var (linesStatus, lines) = await api.PostAsync(Operations.JournalList, new { work_item_id = (string)send["id"]!, kind = "workitem_created", limit = 10 }, Ct);
+        Assert.True(linesStatus == System.Net.HttpStatusCode.OK, lines);
+        var created = Assert.Single(JsonNode.Parse(lines)!["items"]!.AsArray());
+        Assert.Equal(header ? "true" : null, created!["new"]!["confined"]?.ToJsonString());
+        if (header)
+        {
+            Assert.True(send["wait"] is null, body);
+            return;
+        }
+
+        Assert.Equal("waiting", (string?)send["status"]);
+        var on = Assert.Single(send["wait"]!["on"]!.AsArray());
+        var critic = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = (string)on!["work_item_id"]! }, Ct);
+        Assert.Equal((WorkItemKind.AiRole, "critic"), (critic.Kind, critic.Role));
+    }
 }
