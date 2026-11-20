@@ -114,11 +114,12 @@ type ConversationsAreTheSeam = [
     Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
 ];
 
-// A turn names the conversation and the host, the model, the effort and the mode it was approved for; never a campaign,
-// which the conversation's record decides. The mark of a send a browser tab made is the bridge's own, never the page's.
+// A turn names the conversation and the host, the model, the effort and the mode it was approved for, and whether its
+// words were typed in the message box, the only ones an /export is taken from; never a campaign, which the
+// conversation's record decides. The mark of a send a browser tab made is the bridge's own, never the page's.
 type SendIsTheSeam = [
     Holds<Equal<Omit<ChatSendOptions, 'fromTab'>, DesktopChatOptions>>,
-    Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode'>>,
+    Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode' | 'typed'>>,
     Holds<Equal<ChatSendOptions['fromTab'], boolean | undefined>>,
 ];
 

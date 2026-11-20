@@ -168,7 +168,7 @@ async function begin(text: string): Promise<void> {
         }
     }
     here().dock.showChat(id);
-    sendTurn(id, text, true);
+    sendTurn(id, text, true, undefined, true);
 }
 
 // The message goes as soon as an AI is there to take it, once: it is taken out of waiting before the chat is made.

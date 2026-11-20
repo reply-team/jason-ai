@@ -65,11 +65,7 @@ export async function readMemoryWithin(
 /** What a place's memory file comes to, or null where the level has no read (the header says which reasons). */
 export async function readMemoryFile(place: MemoryPlace, platform: NodeJS.Platform = process.platform): Promise<MemoryRead | null> {
     const paths = pathsFor(platform);
-    if (typeof place.folder !== 'string' || !paths.isAbsolute(place.folder)) return null;
-    if (!(await isPlainFolder(place.folder))) return null;
-    if (!(await isPlainFolder(paths.join(place.folder, '.jason')))) return null;
-    const marker = await readNoFollow(paths.join(place.folder, '.jason', 'marker.json'), markerLimit);
-    if (typeof marker !== 'object' || marker === null || marker.more || !markerNames(marker.bytes, markerKinds[place.level], place.id)) return null;
+    if (!(await markedFolder(place, platform))) return null;
     const path = paths.join(place.folder, memoryFileName);
     const read = await readNoFollow(path, memoryFileLimit);
     if (read === null) return null;
@@ -80,6 +76,18 @@ export async function readMemoryFile(place: MemoryPlace, platform: NodeJS.Platfo
     if (text.trim() === '') return { kind: 'absent', level: place.level };
     const digest = `sha256:${createHash('sha256').update(`${place.level}\n${path}\n${read.more ? 'cut' : 'whole'}\n`).update(text, 'utf8').digest('hex')}`;
     return { kind: 'file', level: place.level, path, text, cut: read.more, digest };
+}
+
+/**
+ * Whether a place's folder is the one the runtime marked for it: an absolute path to a folder itself, not a link, whose
+ * `.jason` is a folder too, holding the runtime's marker of that level and id. Read as a memory file's place is read.
+ */
+export async function markedFolder(place: MemoryPlace, platform: NodeJS.Platform = process.platform): Promise<boolean> {
+    const paths = pathsFor(platform);
+    if (typeof place.folder !== 'string' || !paths.isAbsolute(place.folder)) return false;
+    if (!(await isPlainFolder(place.folder)) || !(await isPlainFolder(paths.join(place.folder, '.jason')))) return false;
+    const marker = await readNoFollow(paths.join(place.folder, '.jason', 'marker.json'), markerLimit);
+    return typeof marker === 'object' && marker !== null && !marker.more && markerNames(marker.bytes, markerKinds[place.level], place.id);
 }
 
 /** A file not given, with what a record keeps of it: its level, its path and why, hashed, never a word of it. */
