@@ -1649,6 +1649,209 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows leg that updates from the one-installation release holds what that release's own <c>jason update
+    /// apply</c> printed by two readers, run here as the proof runs them: taken from the script's own text into a
+    /// <c>pwsh</c> of the row's own that opens with the settings lines of the proof's prelude, and handed what the verb
+    /// said, its standard error and its document as <c>Invoke-Program</c> keeps them. <c>Read-Document</c> takes the
+    /// document; <c>Get-HandedFinishFault</c> says what it lacks, or nothing (<see cref="HandOverCases"/>). The leg fails
+    /// on what they say, after the verb ended 0.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_reads_the_one_installation_release_s_update_as_the_proof_runs_its_readers()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's readers run in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var stepAt = script.IndexOf("\n    'FromOneInstallation' {\n", StringComparison.Ordinal);
+        Assert.True(stepAt >= 0, "Test-InstallationWindows.ps1 has no step FromOneInstallation");
+        var step = script[stepAt..];
+        step = step[..step.IndexOf("\n    }\n", StringComparison.Ordinal)];
+        var exited = step.IndexOf("if ($update.Exit -ne 0) { Fail ", StringComparison.Ordinal);
+        var read = step.IndexOf("$fault = Get-HandedFinishFault (Read-Document $update.Said) $fromVersion $Version\n", StringComparison.Ordinal);
+        var held = step.IndexOf("if ($fault) { Fail ", StringComparison.Ordinal);
+        Assert.True(exited >= 0 && read > exited && held > read, "the step FromOneInstallation does not fail on what the readers say of the update's document, after the verb ended 0");
+        AssertTheFinishSaysWhatTheReadersRead();
+
+        using var tree = new TempTree();
+        var cases = HandOverCases(tree);
+        var listed = Path.Combine(tree.Root, "cases.json");
+        File.WriteAllText(listed, JsonSerializer.Serialize(cases.Select(item => new { name = item.Name, file = item.File, from = item.From, to = item.To })));
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, HandOverHarness
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@CASES@", "'" + listed.Replace("'", "''", StringComparison.Ordinal) + "'", StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Read-Document(") + WindowsProofFunction(script, "Get-HandedFinishFault("), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split('\t', 2))
+            .ToDictionary(parts => parts[0], parts => parts.Length > 1 ? parts[1] : "(no tab)", StringComparer.Ordinal);
+        Assert.Equal(cases.Select(item => item.Name).Order(StringComparer.Ordinal), said.Keys.Order(StringComparer.Ordinal));
+        foreach (var item in cases)
+        {
+            Assert.True(said[item.Name] == item.Fault, $"{item.Name}: the Windows readers said '{said[item.Name]}', not '{item.Fault}'{output}");
+        }
+    }
+
+    /// <summary>
+    /// The macOS leg that updates from the one-installation release reads what that release's own <c>jason update apply</c>
+    /// printed by one python3 reader, by the Windows readers' rule and in their words, and fails on what it says; the reader is
+    /// run on the same cases (<see cref="HandOverCases"/>), each the verb's document as the leg keeps its standard output.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_reads_the_one_installation_release_s_update_by_the_Windows_proof_s_rule_and_words()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var stepAt = macos.IndexOf("\nfrom-one-installation)\n", StringComparison.Ordinal);
+        Assert.True(stepAt >= 0, "test-installation-macos.sh has no step from-one-installation");
+        var step = macos[stepAt..];
+        step = step[..step.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
+        var reader = Regex.Match(step, @"handed_read=""\$\(python3 -c '(?<code>[^']*)' ""\$OUT/update-from-one-installation\.json"" ""\$old"" ""\$version""\)"" \|\| fail """);
+        var exited = step.IndexOf("[ \"$status\" -eq 0 ] || fail ", StringComparison.Ordinal);
+        var held = step.IndexOf("[ -z \"$handed_read\" ] || fail ", StringComparison.Ordinal);
+        Assert.True(reader.Success, "the step from-one-installation does not read the update's document by one python3 reader handed the version it went from and the version it went to");
+        Assert.True(exited >= 0 && reader.Index > exited && held > reader.Index, "the step from-one-installation does not fail on what its reader says of the update's document, after the verb ended 0");
+        AssertTheFinishSaysWhatTheReadersRead();
+
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        foreach (var item in HandOverCases(tree))
+        {
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-c", reader.Groups["code"].Value, item.File, item.From, item.To);
+            Assert.True(exit == 0, $"{item.Name}: {stderr}");
+            Assert.True(item.Fault == stdout.TrimEnd('\r', '\n'), $"{item.Name}: the macOS reader said '{stdout.Trim()}', not '{item.Fault}'");
+        }
+    }
+
+    /// <summary>
+    /// What the one-installation release's own <c>jason update apply</c> printed, each case in a file of its own in the row's
+    /// tree: lines it said on standard error, then its document as the product's own type and serializer write it; with the
+    /// version it went from and the version the leg asked for, and what the readers say of it. That release's own part ends
+    /// at the swap, in its own words (CarriedUpdate at v0.49.0): Jason Desktop asked to download the version and wait for
+    /// the go, then the application is that version. What follows is the finishing jason's, in this build's words
+    /// (<see cref="AssertTheFinishSaysWhatTheReadersRead"/>): the runtime healthy at the version, the update complete.
+    /// Handed and finished on Windows, on a Mac, and at a candidate's version; then one case for each way it was not.
+    /// </summary>
+    private static List<(string Name, string File, string From, string To, string Fault)> HandOverCases(TempTree tree)
+    {
+        const string from = "0.49.0";
+        const string to = "0.49.2";
+        const string request = "cli-01JDX4M3V7Q2ZK8R";
+        string Asked(string version) => $"asked: Jason Desktop asked to download {version} and wait for the go, request {request}";
+        string[] Handed(string version, bool moves) =>
+        [
+            $"staged: {version}, for Jason Desktop to install",
+            Asked(version),
+            .. (moves ? [$@"moved: this jason's own file to C:\Users\runneradmin\AppData\Local\jason-desktop-updater\jason-carried\{request}\jason.exe, where it goes on running, so the installer finds none in the application's folder"] : Array.Empty<string>()),
+            $"stopped: Jason Desktop told to go, request {request}",
+            $"kept: Jason Desktop handed {version} to its installer",
+            $"swapped: the application is {version}",
+        ];
+        string[] Finished(string fromVersion, string version, string runtime) =>
+        [
+            $"started: {version}",
+            $"healthy: {runtime}, 31 migrations applied",
+            $"complete: {fromVersion} -> {version}",
+            "settle: Jason Desktop recorded the update as kept",
+        ];
+        static string Document(string documentFrom, string documentTo, string step, string[] steps) =>
+            JsonSerializer.Serialize(new Jason.Contracts.Api.UpdateApplyResponse(documentFrom, documentTo, step, steps), JasonJson.Options);
+
+        var askedTo = $"asked: Jason Desktop asked to download {to} and wait for the go, request <id>";
+        var swappedTo = $"swapped: the application is {to}";
+        var healthyTo = $"healthy: {to}, <n> migrations applied";
+        var cases = new (string Name, string Document, string From, string To, string Fault)[]
+        {
+            ("handed and finished, as on Windows", Document(from, to, "complete", [.. Handed(to, moves: true), .. Finished(from, to, $"{to}+3f9c1e7a")]), from, to, ""),
+            ("handed and finished, as on a Mac, a runtime already answering", Document(from, to, "complete", [.. Handed(to, moves: false), "started: a runtime is already answering", $"healthy: {to}, 31 migrations applied", $"complete: {from} -> {to}"]), from, to, ""),
+            ("handed and finished at a candidate's version", Document(from, "0.49.2-rc.1", "complete", [.. Handed("0.49.2-rc.1", moves: true), .. Finished(from, "0.49.2-rc.1", "0.49.2-rc.1+3f9c1e7a")]), from, "0.49.2-rc.1", ""),
+            ("the application already the version asked for", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", Asked(to), $"swapped: the application is {to} already", .. Finished(from, to, to)]), from, to,
+                $"no step \"{swappedTo}\" follows \"{Asked(to)}\""),
+            ("finished before the swap", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", Asked(to), .. Finished(from, to, to), $"swapped: the application is {to}"]), from, to,
+                $"no step \"{healthyTo}\" follows \"{swappedTo}\""),
+            ("Jason Desktop never asked", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", $"swapped: the application is {to}", .. Finished(from, to, to)]), from, to,
+                $"no step \"{askedTo}\""),
+            ("the runtime healthy at the version it came from", Document(from, to, "complete", [.. Handed(to, moves: true), .. Finished(from, to, $"{from}+5b7d2c11")]), from, to,
+                $"no step \"{healthyTo}\" follows \"{swappedTo}\""),
+            ("complete from another version", Document(from, to, "complete", [.. Handed(to, moves: true), .. Finished("0.48.7", to, $"{to}+3f9c1e7a")]), from, to,
+                $"no step \"complete: {from} -> {to}\" follows \"healthy: {to}+3f9c1e7a, 31 migrations applied\""),
+            ("stopped at kept", Document(from, to, "kept", [.. Handed(to, moves: true)[..^1]]), from, to,
+                "its document ends at the step kept, not complete"),
+            ("gone to another version", Document(from, "0.49.1", "complete", [.. Handed("0.49.1", moves: true), .. Finished(from, "0.49.1", "0.49.1")]), from, to,
+                $"its document says {from} -> 0.49.1, not {from} -> {to}"),
+            ("refused, with no document", "", from, to, "it printed no document"),
+            ("an error's document", """{"error":{"code":"update_refused_by_desktop","message":"Jason Desktop refused the update.","retryable":false}}""", from, to, "its document has no from"),
+        };
+
+        var folder = tree.NewDirectory("updates");
+        return [.. cases.Select((item, at) =>
+        {
+            var file = Path.Combine(folder, $"update-{at}.txt");
+            File.WriteAllText(file, $"Stopping the runtime before the update to {item.To}...\nJason Desktop is downloading {item.To}.\n" + (item.Document.Length > 0 ? item.Document + "\n" : string.Empty));
+            return (Name: item.Name, File: file, From: item.From, To: item.To, Fault: item.Fault);
+        })];
+    }
+
+    /// <summary>
+    /// The words the jason the one-installation release hands the rest to says once it has finished, which both proof
+    /// scripts read: this build's own, where <c>UpdateApplier</c> says them.
+    /// </summary>
+    private static void AssertTheFinishSaysWhatTheReadersRead()
+    {
+        var applier = File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "UpdateApplier.cs"));
+        Assert.Contains("Say(UpdateStep.Healthy, $\"{info.RuntimeVersion}, {info.Database.AppliedMigrations.Count} migrations applied\");", applier, StringComparison.Ordinal);
+        Assert.Contains("Say(UpdateStep.Complete, $\"{ledger.FromVersion} -> {ledger.ToVersion}\");", applier, StringComparison.Ordinal);
+        Assert.Contains("private void Say(UpdateStep step, string what) => Say(step.ToString().ToLowerInvariant(), what);", applier, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The settings lines of the Windows proof's own prelude, taken from its text as the helper row takes them: of the block
+    /// after param()'s closing parenthesis, the lines that set a preference variable or the strict mode.
+    /// </summary>
+    private static string WindowsProofSettings(string script)
+    {
+        var paramsEnd = script.IndexOf("\n)\n\n", StringComparison.Ordinal);
+        Assert.True(paramsEnd >= 0, "Test-InstallationWindows.ps1 has no param() block followed by its prelude");
+        var preludeAt = paramsEnd + "\n)\n\n".Length;
+        var settings = script[preludeAt..script.IndexOf("\n\n", preludeAt, StringComparison.Ordinal)].Split('\n')
+            .Where(line => Regex.IsMatch(line, @"^(?:\$\w+Preference = .+|Set-StrictMode .+)$"))
+            .ToArray();
+        Assert.Contains("$ErrorActionPreference = 'Stop'", settings);
+        Assert.Contains("Set-StrictMode -Version Latest", settings);
+        return string.Join('\n', settings);
+    }
+
+    /// <summary>One function of the Windows proof, by the start of its line, to the closing brace that ends it.</summary>
+    private static string WindowsProofFunction(string script, string opening)
+    {
+        var at = script.IndexOf("\nfunction " + opening, StringComparison.Ordinal);
+        Assert.True(at >= 0, $"Test-InstallationWindows.ps1 has no function {opening}");
+        var end = script.IndexOf("\n}\n", at, StringComparison.Ordinal);
+        return script[(at + 1)..(end + 2)];
+    }
+
+    /// <summary>
+    /// The pwsh the Windows readers' row runs: the settings lines of the proof's own prelude, the proof's own two readers, and
+    /// each case read from its file as the proof keeps what the verb said, one line per case: its name and what the readers
+    /// say of it, apart by a tab.
+    /// </summary>
+    private const string HandOverHarness = """
+        @PRELUDE@
+
+        @FUNCTIONS@
+
+        foreach ($case in @(Get-Content -LiteralPath @CASES@ -Raw | ConvertFrom-Json)) {
+            $said = [IO.File]::ReadAllText($case.file)
+            [Console]::Out.WriteLine("$($case.name)`t$(Get-HandedFinishFault (Read-Document $said) $case.from $case.to)")
+        }
+        """;
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
@@ -1708,7 +1911,7 @@ public partial class InstallScriptTests
         var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
         var server = File.ReadAllText(Path.Combine(root, ".github", "scripts", "serve-feed.py")).Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.DoesNotContain("http.server 80", macos, StringComparison.Ordinal);
-        Assert.Equal(3, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
+        Assert.Equal(4, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
         Assert.Contains("    python3 \"$(dirname \"$0\")/serve-feed.py\" \"$folder\" 8099 \"$log\" &\n", macos, StringComparison.Ordinal);
         Assert.Contains("    until=$(( $(date +%s) + 90 ))\n", macos, StringComparison.Ordinal);
         Assert.Contains("fail \"the feed on 127.0.0.1:8099 answering did not happen within 90 s; ", macos, StringComparison.Ordinal);
