@@ -73,12 +73,11 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: 'codex',
             belowFloor: null,
-            fullAccess: 'Full access runs on Claude Code only.',
+            fullAccess: null,
             autoEdit:
                 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
             runs: {
                 window: {
-                    full_access: { mode: 'ask_first', why: 'Full access runs on Claude Code only.' },
                     auto_edit: {
                         mode: 'ask_first',
                         why: 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',

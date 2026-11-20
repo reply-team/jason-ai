@@ -504,7 +504,7 @@ describe('the console', () => {
         expect([...document.querySelectorAll('.thread .m.ai')].map(label)).toEqual(['Jason', null, 'Jason']);
     });
 
-    it('shows the Windows check of Codex’s sandbox, whole and open, while the turn waits on it', async () => {
+    it('shows the Windows check of Codex’s sandbox, whole and open, while a read-only turn waits on it', async () => {
         const fake = pending(new FakeApi());
         const desktop = chatDesktop({
             ...setupFound,
@@ -515,6 +515,11 @@ describe('the console', () => {
         renderConsole(fake, desktop);
         await waitFor(() => menuButton('Model'));
         chooseIn('Model', 'host', 'codex');
+        // A Full access turn on Codex runs with no sandbox and so waits on no check: the turn is one in Ask first.
+        chooseIn('Access mode', 'mode', 'ask_first');
+        await waitFor(() =>
+            expect(menuButton('Access mode').getAttribute('aria-label')).toBe('Access mode: Ask first'),
+        );
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.find((each) => each.name === 'chat.send')).toBeTruthy());

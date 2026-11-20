@@ -38,6 +38,8 @@ import {
     afresh,
     answered,
     autoEditLine,
+    choiceStops,
+    codexFullAccessLine,
     choiceState,
     codexConfigLine,
     codexHosts,
@@ -93,7 +95,7 @@ import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './liv
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { repeated } from '../screens/attention/store';
 import { Painted } from './painted';
-import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
+import { AccessButton, Glyph, ModeMark, ModelButton, modeSaysOn, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
@@ -445,11 +447,11 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
     if (!can('chat.setMode')) return;
     const chat = chats.value[id];
     if (!chat) return;
-    // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access, leaving Auto-edit
-    // for Ask first or Plan only, or a change to Plan only; Auto-edit to Full access lets it finish. The waiting message is
-    // given back, and no turn follows by itself.
-    const stops = breadth[mode] < breadth[chat.mode];
-    if (chat.running && stops) changeChat(id, stopAsked);
+    // A change to a mode narrower than the one the running turn runs in stops that turn, as Stop does: leaving Full
+    // access, leaving Auto-edit for Ask first or Plan only, or a change to Plan only; Auto-edit to Full access lets it
+    // finish, and so does the mode the turn already runs in. The waiting message is given back, and no turn follows by
+    // itself.
+    if (choiceStops(chat, mode, hostOf(chat), inTab() ? 'tab' : 'window')) changeChat(id, stopAsked);
     here()
         .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
         .then((answer) => {
@@ -483,9 +485,6 @@ export function approvePlan(id: string): void {
         })
         .catch((error: unknown) => changeChat(id, (each) => told({ ...each, plan: null }, messageOf(error))));
 }
-
-/** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
-const breadth: Readonly<Record<DesktopChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
 
 /** The most characters a conversation's name keeps, as the desktop cuts it. */
 const nameLength = 60;
@@ -1458,8 +1457,8 @@ export function ChatControls({
  * The words of the line under a composer for a mode the desktop holds: its name and what it does; none for a mode word
  * this page does not know, which a newer desktop may write.
  */
-const lineOf = (mode: DesktopChatMode, label: string): string | null => {
-    const said = (modeSays as Partial<Record<string, string>>)[mode];
+const lineOf = (mode: DesktopChatMode, label: string, host: DesktopHost | null): string | null => {
+    const said = modeSaysOn(host, mode);
     return said === undefined ? null : `${label} · ${said.charAt(0).toLowerCase()}${said.slice(1).replace(/\.$/, '')}`;
 };
 
@@ -1473,30 +1472,31 @@ export function ChatNotes({ chat }: { chat: Chat }) {
     const host = hostOf(chat);
     const { mode, why } = drawnMode(chat, host, inTab() ? 'tab' : 'window');
     const label = modeChoices(host).find((each) => each.mode === mode)?.label ?? mode;
+    const codex = host !== null && codexHosts.has(host.id);
     return (
         <div className="under">
             {mode === 'full_access' ? (
                 <span className="accline full-access" role="status" aria-label="Full access is on">
-                    {fullAccessLine}
+                    {codex ? codexFullAccessLine : fullAccessLine}
                 </span>
             ) : mode === 'auto_edit' ? (
                 <span className="accline auto-edit" role="status" aria-label="Auto-edit is on">
                     {autoEditLine}
                 </span>
             ) : (
-                lineOf(mode, label) !== null && <span className="accline">{lineOf(mode, label)}</span>
+                lineOf(mode, label, host) !== null && <span className="accline">{lineOf(mode, label, host)}</span>
             )}
             {why !== null && (
                 <span className="accwhy" role="note" aria-label={`Why the next turn runs in ${label}`}>
                     {why.replaceAll('`', '')}
                 </span>
             )}
-            {host?.id === 'codex' && (
+            {host?.id === 'codex' && mode !== 'full_access' && (
                 <span className="codex-config" role="note" aria-label="What Codex reads">
                     {codexConfigLine}
                 </span>
             )}
-            {host !== null && codexHosts.has(host.id) && (
+            {codex && mode !== 'full_access' && (
                 <span className="codex-reach" role="note" aria-label="What a Codex command can reach">
                     {codexReachLine((here().desktop as { platform?: string }).platform)}
                 </span>

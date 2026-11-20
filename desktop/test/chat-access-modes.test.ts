@@ -3,7 +3,7 @@
 // way the desktop puts a chat back to Ask first.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
 import { claudeTurnSettings, codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
@@ -527,21 +527,19 @@ test('a change to Plan only stops the running turn, so the menu never says Plan 
     assert.equal(r.chat.open(id).mode, 'plan_only');
 });
 
-test('a chat in Full access sent to Codex runs that turn in Ask first, in Codex\'s read-only sandbox, and says why once; its record is not changed, and its next Claude Code turn is in Full access', async (t) => {
+test('a chat in Full access sent to Codex runs that turn in Full access, with no sandbox, the person\'s config.toml read and nothing said; its next Claude Code turn is in Full access too', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
-    await r.chat.setMode(id, 'full_access', 'claude');
     const first = await r.turn(id, 'hello', { host: 'codex' });
     const second = await r.turn(id, 'hello again', { host: 'codex' });
     assert.deepEqual(done(first), { kind: 'done', error: null });
     assert.deepEqual(done(second), { kind: 'done', error: null });
-    const args = r.hosts()[0]?.args ?? [];
-    assert.equal(flag(args, '--sandbox'), 'read-only');
-    assert.ok(!args.includes('danger-full-access') && !args.includes('--dangerously-bypass-approvals-and-sandbox'));
-    assert.deepEqual(r.started, ['ask_first', 'ask_first']);
-    const said = notices([...first, ...second]);
-    assert.equal(said.length, 1, `said once: ${JSON.stringify(said)}`);
-    assert.ok(said[0]?.includes(codexFullAccess), `it says why: ${said[0]}`);
+    for (const host of r.hosts()) {
+        assert.equal(flag(host.args, '--sandbox'), 'danger-full-access');
+        assert.ok(!host.args.includes('--ignore-user-config') && !host.args.includes(codexWindowsSandbox), JSON.stringify(host.args));
+    }
+    assert.deepEqual(r.started, ['full_access', 'full_access']);
+    assert.deepEqual(notices([...first, ...second]), [], 'nothing is said: the turn runs in its chat\'s mode');
     assert.equal(JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8')).mode, undefined, 'the record holds no mode');
     await r.turn(id, 'and now on Claude Code', claude);
     assert.equal(r.started.at(-1), 'full_access');
@@ -642,13 +640,15 @@ test('Full access is refused when it is chosen where it cannot apply, and the ch
     const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'ask_first');
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'codex'), { message: 'Full access runs on Claude Code only.' });
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'codex-api-key'), { message: 'Full access runs on Claude Code only.' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: fullAccessSentence('2.1.290') ?? '' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'gemini'), /not an AI host/);
     await assert.rejects(r.chat.setMode(id, 'full_access'), /not an AI host/);
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal((await r.chat.setMode(id, 'plan_only', 'codex')).mode, 'plan_only', 'the other modes apply on any host');
+    // Codex takes Full access, by its own program or by its key, whatever Claude Code\'s version.
+    assert.equal((await r.chat.setMode(id, 'full_access', 'codex')).mode, 'full_access');
+    await r.chat.setMode(id, 'ask_first');
+    assert.equal((await r.chat.setMode(id, 'full_access', 'codex-api-key')).mode, 'full_access');
 });
 
 test('a Codex turn in Plan only leaves the person\'s config.toml unread as every other mode does, and on Windows names the elevated sandbox', async (t) => {
@@ -660,6 +660,96 @@ test('a Codex turn in Plan only leaves the person\'s config.toml unread as every
     const args = r.hosts().at(-1)?.args ?? [];
     assert.ok(args.includes('--ignore-user-config'));
     assert.equal(args.includes(codexWindowsSandbox), process.platform === 'win32');
+});
+
+// Codex's words when an administrator's requirements.toml does not allow the sandbox a turn asked for and Codex runs a
+// narrower one, as it does only under an automatic reviewer: core/src/config/mod.rs, `apply_requirement_constrained_value`,
+// at openai/codex 9f2b87495b, read and not seen, said as a configuration warning, an `error` item
+// (exec/src/event_processor_with_jsonl_output.rs).
+const narrowedByRequirements =
+    'Configured value for `permission_profile` is disallowed by requirements; falling back to required value ReadOnly. Details: invalid value for `permission_profile`: `danger-full-access` is not in the allowed set [ReadOnly] (set by system requirements)';
+
+test('a Full access Codex turn that Codex runs in a narrower sandbox, as an administrator\'s requirements make it, ends well and the chat says once that it could not act in Full access here; a read-only turn says nothing of it', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_CODEX_WARNING = narrowedByRequirements;
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', { host: 'codex' });
+    const second = await r.turn(id, 'hello again', { host: 'codex' });
+    assert.deepEqual(done(first), { kind: 'done', error: null });
+    assert.deepEqual(done(second), { kind: 'done', error: null });
+    assert.deepEqual(r.started, ['full_access', 'full_access'], 'the chat keeps its mode');
+    assert.deepEqual(notices([...first, ...second]), [codexFullAccessNarrowed], 'said once');
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    assert.deepEqual(notices(await r.turn(asked.id, 'hello', { host: 'codex' })), [], 'a read-only turn asked for no more');
+});
+
+test('an ordinary Codex warning, or a Full access turn that fails after Codex started, says nothing of Full access', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_CODEX_WARNING = 'Under-development features enabled: x.';
+    const { id } = await r.chat.create();
+    const said = await r.turn(id, 'hello', { host: 'codex' });
+    assert.deepEqual(done(said), { kind: 'done', error: null });
+    assert.deepEqual(notices(said), []);
+    const failing = rig(t);
+    failing.b.env.STUB_HOST_PLAN = JSON.stringify([{ end: 'error', text: 'Codex could not go on.' }]);
+    const made = await failing.chat.create();
+    const failed = await failing.turn(made.id, 'hello', { host: 'codex' });
+    assert.deepEqual(done(failed), { kind: 'done', error: 'Codex could not go on.' });
+    assert.deepEqual(notices(failed), []);
+});
+
+// Codex's words when an administrator's requirements.toml forbids `danger-full-access`: at openai/codex 9f2b87495b, read
+// and not seen, `codex exec` forces `approval_policy = "never"` (exec/src/lib.rs), so building its configuration fails
+// with these words on stderr before any event (core/src/config/mod.rs).
+const refusedByRequirements =
+    'Error: `approval_policy = "never"` cannot be used because requirements do not allow `sandbox_mode = "danger-full-access"`; Codex would fall back to read-only permissions with approvals disabled.';
+
+test('a Full access Codex turn that Codex refuses before any event ends in Codex\'s own words and then one sentence of ours, every time; a read-only turn refused so ends in Codex\'s words alone', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_CODEX_REFUSE = refusedByRequirements;
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', { host: 'codex' });
+    const second = await r.turn(id, 'hello again', { host: 'codex' });
+    for (const said of [first, second]) {
+        assert.deepEqual(done(said), { kind: 'done', error: `${refusedByRequirements}\n\n${codexFullAccessRefused}` });
+    }
+    assert.deepEqual(notices([...first, ...second]), [], 'nothing else is said');
+    assert.deepEqual(r.started, ['full_access', 'full_access'], 'the chat keeps its mode');
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    assert.deepEqual(done(await r.turn(asked.id, 'hello', { host: 'codex' })), { kind: 'done', error: refusedByRequirements });
+});
+
+test('a Full access Codex turn pins the data directory and the turn\'s mark it was started with in its shell environment policy, and never PATH', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', { host: 'codex' });
+    const host = r.hosts()[0]!;
+    const settings = host.args.flatMap((arg, i) => (host.args[i - 1] === '-c' ? [arg] : []));
+    assert.deepEqual(
+        settings.filter((setting) => setting.startsWith('shell_environment_policy.')),
+        [`shell_environment_policy.set.JASON_DATA_DIR=${JSON.stringify(host.env?.JASON_DATA_DIR)}`, 'shell_environment_policy.set.JASON_CHAT_TURN="1"'],
+    );
+    assert.equal(host.env?.JASON_DATA_DIR, r.b.paths.data);
+});
+
+test('on Windows the sandbox check runs in the turn\'s own folder for a read-only Codex turn, and a Full access Codex turn runs none', async (t) => {
+    const options = { chat: { platform: 'win32' as const }, env: { SystemRoot: 'C:\\Windows' } };
+    const r = rig(t, options);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'hello', { host: 'codex' });
+    const checked = r.b.record().filter((each) => each.name === 'codex-sandbox');
+    assert.ok(checked.length > 0, 'the read-only turn is checked');
+    const own = realpathSync.native(join(r.b.paths.chats, id)).toLowerCase();
+    for (const each of checked) assert.equal(realpathSync.native(each.cwd).toLowerCase(), own, `checked in ${each.cwd}`);
+    assert.deepEqual(r.started, ['ask_first']);
+    const full = rig(t, options);
+    const made = await full.chat.create();
+    await full.turn(made.id, 'hello', { host: 'codex' });
+    assert.deepEqual(full.b.record().filter((each) => each.name === 'codex-sandbox'), [], 'no sandbox, so nothing to check');
+    assert.deepEqual(full.started, ['full_access']);
 });
 
 test('Start fresh keeps the chat\'s mode: a chat in Full access starts a fresh host session in Full access, and no change of mode is said', async (t) => {
@@ -1166,12 +1256,14 @@ test('a settings file whose folder is a link out of the data directory is refuse
     }
 });
 
-// Codex has no fence of the desktop's, and needs none for setup/: every Codex turn runs in Codex's own read-only sandbox,
-// which names no path and so holds every folder alike, the data directory and setup/ in it among them; no mode gives a
-// Codex turn more, since Full access and Auto-edit run on Claude Code only and a turn of a chat in either runs in Ask
-// first when it is sent to Codex, the chat keeping its mode. What that sandbox does not do is keep a Codex command from reading: it reads setup/ and the
-// secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line under the composer too.
-test('a Codex turn, from whichever mode the chat was in, runs read-only with no folder added and no way to write: setup/ is held as every folder is', async (t) => {
+// Codex has no fence of the desktop's: outside Full access every Codex turn runs in Codex's own read-only sandbox, which
+// names no path and so holds every folder alike, the data directory and setup/ in it among them, and Auto-edit runs there
+// as Ask first; in Full access it runs with no sandbox. What that sandbox does not do is keep a Codex command from reading:
+// it reads setup/ and the secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line
+// under the composer too. No argument names the data directory but, in Full access, its pin in the shell environment
+// policy, which the row checks in both spellings: as it is, and escaped as a TOML string spells it, which on Windows,
+// where a path holds backslashes, is no longer the path as it is.
+test('a Codex turn in Ask first, Plan only or Auto-edit runs read-only with no way to write, setup/ held as every folder is; in Full access it runs with no sandbox; in no mode is a folder added', async (t) => {
     for (const mode of fenceModes) {
         const r = rig(t);
         const { id } = await r.chat.create();
@@ -1180,13 +1272,17 @@ test('a Codex turn, from whichever mode the chat was in, runs read-only with no 
         assert.ok(endedWell(said), mode);
         const args = r.hosts()[0]?.args ?? [];
         assert.equal(args[0], 'exec', mode);
-        assert.equal(flag(args, '--sandbox'), 'read-only', mode);
+        const full = mode === 'full_access';
+        assert.equal(flag(args, '--sandbox'), full ? 'danger-full-access' : 'read-only', mode);
         assert.equal(args.filter((arg) => arg === '--sandbox' || arg.startsWith('--sandbox=') || arg === '-s').length, 1, mode);
-        for (const widening of ['--add-dir', '--full-auto', '--dangerously-bypass-approvals-and-sandbox', '--yolo', 'workspace-write', 'danger-full-access']) {
+        for (const widening of ['--add-dir', '--full-auto', '--dangerously-bypass-approvals-and-sandbox', '--yolo', 'workspace-write', ...(full ? [] : ['danger-full-access'])]) {
             assert.ok(!args.includes(widening), `${mode}: ${widening}`);
         }
         assert.ok(!args.some((arg) => /sandbox_workspace_write|writable_roots|sandbox_mode/.test(arg)), `${mode}: no setting widens the sandbox`);
-        assert.ok(!args.some((arg) => arg.includes(r.b.paths.data)), `${mode}: no argument names the data directory`);
+        const pin = `shell_environment_policy.set.JASON_DATA_DIR=${JSON.stringify(r.b.paths.data)}`;
+        const escaped = JSON.stringify(r.b.paths.data).slice(1, -1);
+        const naming = args.filter((arg) => arg.includes(r.b.paths.data) || arg.includes(escaped));
+        assert.deepEqual(naming, full ? [pin] : [], `${mode}: no argument names the data directory but its pin in Full access`);
         assert.equal(r.chat.open(id).mode, mode, mode);
     }
 });
@@ -1224,6 +1320,7 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
         };
         const allowed = rules('--allowedTools');
         const disallowed = rules('--disallowedTools');
+        assert.deepEqual(r.started, [mode], `${mode}: the turn started in it`);
         // The turn ran in the mode the row names: Ask first and Auto-edit take the turn settings, Plan only its own, Full
         // access the turn's settings file.
         const settings = rules('--settings')[0];
@@ -1239,16 +1336,17 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
     }
 });
 
-test('every turn, on either host and in every mode, carries the chat\'s variable, and only a Plan only turn carries JASON_CONFINED', async (t) => {
+test('every turn, on either host and in every mode, carries the chat\'s variable, and JASON_CONFINED only a turn that can only read and propose: Plan only on either host, and every Codex turn outside Full access', async (t) => {
     for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] satisfies ChatMode[]) {
         for (const host of ['claude', 'codex']) {
-            if (host === 'codex' && mode === 'auto_edit') continue;
             const r = rig(t, { env: { JASON_CONFINED: '1', jason_chat_turn: '' } });
             const { id } = await r.chat.create();
             // Every mode is chosen, Ask first among them: a new chat starts in Full access. On Codex a Full access record runs
-            // its turn in Ask first, which still carries the chat's variable and not JASON_CONFINED.
+            // its turn in Full access, which carries the chat's variable and not JASON_CONFINED; Auto-edit runs as Ask first.
             await r.chat.setMode(id, mode, 'claude');
             await r.turn(id, 'hello', { host });
+            const ran = host === 'codex' && mode === 'auto_edit' ? 'ask_first' : mode;
+            assert.deepEqual(r.started, [ran], `${host} ${mode}: the turn started in it`);
             const env = r.hosts()[0]?.env ?? {};
             if (host === 'claude') {
                 const args = r.hosts()[0]?.args ?? [];
@@ -1257,7 +1355,8 @@ test('every turn, on either host and in every mode, carries the chat\'s variable
             }
             const named = (name: string) => Object.entries(env).filter(([each]) => each.toUpperCase() === name);
             assert.deepEqual(named('JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], `${host} ${mode}`);
-            assert.deepEqual(named('JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], `${host} ${mode}`);
+            const confined = mode === 'plan_only' || (host === 'codex' && mode !== 'full_access');
+            assert.deepEqual(named('JASON_CONFINED'), confined ? [['JASON_CONFINED', '1']] : [], `${host} ${mode}`);
         }
     }
 });

@@ -7,7 +7,7 @@ and the settings file a person would edit. It runs on one installation, yours; i
 no installation. Nothing in the runtime exists for the desktop.
 
 It adds three things the browser cannot do: a chat that is a session with your own agent, started for you on this
-computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
+computer (Claude Code or Codex, each starting a new chat in Full access, where it acts without asking), a tray that counts
 what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
 else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
 on macOS and Windows the first start of each version puts `jason` where a new terminal finds it and gives your agents
@@ -542,7 +542,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
-  runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
+  runs with your own settings. The chat runs without them in this version, but for a Codex chat in Full access, which
+  reads your config.toml as Codex in a terminal does. Servers of the folder Open in opens, of a
   plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
   roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
@@ -640,16 +641,19 @@ Claude Code.
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn also passes `--no-chrome`, the first version whose changelog names the flag; below it the
   turn's settings alone keep the browser out.
-- **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn leaves your `config.toml` unread
-  (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that cannot be read, the
-  turn is refused before Codex starts, with a sentence that says to update Codex. **The chat does not read your Codex
-  config.toml, so a provider or profile set there is not used; connect a key on the Connect card.** Nor are the MCP
-  servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
-  every Codex turn turns off; its sign-in is still used.
-- **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
-  since a command in Codex's other Windows sandbox can read the runtime's run file, and with it the token that lets a
-  program act as you through Jason's API. Naming it does not prove it is set up, so at the first send to Codex in each
-  run of the desktop the chat checks first, saying so: **Checking Codex's sandbox… Windows may ask once for an
+- **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn outside Full access leaves your
+  `config.toml` unread (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that
+  cannot be read, the turn is refused before Codex starts, with a sentence that says to update Codex. Outside Full
+  access the line under the composer says **The chat does not read your Codex config.toml, so a provider or profile set
+  there is not used; connect a key on the Connect card.** Nor are the MCP servers it names loaded, since Codex asks no
+  one before such a tool runs, nor your ChatGPT apps (connectors), which every Codex turn turns off; its sign-in is still
+  used. A Full access turn reads your `config.toml`, its MCP servers, providers and profiles with it; the connectors stay
+  off and the search stays on the cached index, both set for the run.
+- **On Windows, a read-only Codex turn needs its elevated sandbox.** Every such turn names it
+  (`windows.sandbox="elevated"`), since a command in Codex's other Windows sandbox can read the runtime's run file, and
+  with it the token that lets a program act as you through Jason's API. A Full access turn runs in no sandbox, names
+  none and waits on no check. Naming it does not prove it is set up, so at the first read-only turn on Codex in each
+  run of the desktop the chat checks first, in the turn's own folder, saying so: **Checking Codex's sandbox… Windows may ask once for an
   administrator; answering No means chatting on Claude Code instead.** That line is Windows' alone. A command tries to open two
   files of the data directory and says only whether it could, never what is in them. One is the runtime's run file,
   which has an access list of its own; the other is the desktop's settings file, which keeps the access list the rest
@@ -675,14 +679,37 @@ Claude Code.
   directory whose path holds one of `, ; = % ^ & | < > !` or a quote is not checked, and Codex does not run there. The
   check reads your Codex config.toml, which the turn does not, since Codex's sandbox command cannot leave it unread. It
   is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.
-- **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
-  nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
+- **Codex in Full access acts with no questions and no sandbox.** A Full access turn runs
+  `exec --json --sandbox danger-full-access`, as Codex in a terminal runs with that sandbox. Codex in `exec` never asks,
+  so the turn acts as you, with your files, your network and the runtime's loopback address, and nothing of Jason's
+  holds it, since Codex runs no hook of Jason's: no card, none of the refusals of the sections below, and not the
+  refusal to read the runtime's run file, the desktop's settings or the turn's own settings that a Claude Code turn
+  keeps in every mode. Since it reads your `config.toml`, it reads your `shell_environment_policy` too: the turn pins
+  `JASON_DATA_DIR` and `JASON_CHAT_TURN` for the commands Codex runs, past an `inherit` or an exclude there, but a policy
+  that keeps only names it lists (`include_only`, or an include filter) still removes them, and `PATH`, which is never
+  pinned, can lose the folder of the `jason` Jason carries, so the `jason` a command runs may act on another
+  installation. The line under the composer says **Full access · Codex runs commands on this computer without
+  asking, with no sandbox**. Choose Ask first or Plan only for a Codex chat that should only read. An administrator's
+  `requirements.toml` can forbid Codex to run with no sandbox. Codex's source reads (not seen on a real machine) that
+  Codex then refuses to start the turn: the chat shows Codex's own words and after them, every time, **If these words
+  say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.**
+  Only where your configuration has Codex's automatic reviewer answer its requests does Codex, by the same source,
+  instead run the sandbox the requirements allow and warn that it did; the chat then says once: **Codex could not act in
+  Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the
+  sandbox they allow.** The chat keeps Full access. No event of Codex's names the sandbox a turn ran in, so a narrowing
+  Codex does not warn of goes unseen.
+- **Outside Full access, Codex reads and proposes.** Codex cannot ask before it acts, and the menu says so: **Reads and
+  proposes. Codex cannot ask before it acts.** Auto-edit runs in Ask first on Codex. Such a turn runs
+  `exec --json --sandbox read-only` and asks for nothing, so no card and no rule of the desktop applies to it. What holds,
+  and what is not known: the turn runs in Codex's read-only sandbox; the `jason` it runs carries `JASON_CONFINED` and
+  refuses your own acts and the installation's; whether a `jason` verb outside those reaches the runtime depends on that
+  sandbox's network, which has not been seen on macOS and Linux; and on Windows the sandbox hides the run file. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder. In Jason's data directory that is the settings file,
   `config/settings.json`, and, in an installation that keeps what a person sets up in `setup/`, the roles, the plugins
   and the settings there and the plugins' secrets in `config/secrets.json`.
-  While Codex is the chat's host, on your sign-in or on the OpenAI key, the line under the composer says what a command
-  can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
+  While Codex is the chat's host outside Full access, on your sign-in or on the OpenAI key, the line under the composer
+  says what a command can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
   the run file from a command: **A Codex command can read your files, Jason's data and settings among them, a plugin's
   secret kept in settings.json too, but not the key Jason's own commands use, its run token. Codex runs it
   read-only.** On macOS and Linux, where nobody has looked, and on a desktop that does not say its system: **A Codex
@@ -830,13 +857,14 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 
 Each chat has an access mode, chosen from a menu beside the composer. The line under the composer and the menu's check
 say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
-Codex, on a Claude Code too old for it, in a browser tab or while Full access is not offered, an Auto-edit chat on
-Codex), when they say Ask first, with the reason under the composer, and the chat keeps its mode. Choosing Ask first
+a Claude Code too old for it, in a browser tab or while Full access is not offered, an Auto-edit chat on Codex), when
+they say Ask first, with the reason under the composer, and the chat keeps its mode. Choosing Ask first
 there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
 removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
-page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
+access, where it runs with none.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
@@ -845,8 +873,8 @@ from the menu meanwhile, nothing is sent and the chat says so. The card is offer
 while the plan is the chat's last word and the chat is still in Plan only, so a plan approved, or followed by another
 turn, is not offered again, after a reload or a restart either. It is offered only on the agent host that made the
 plan: on another one, which never saw it, the card says to ask for the plan again. Keep planning leaves the chat in Plan
-only and puts the cursor in the message box. On Codex the card says that the approved plan still only reads and that Claude Code carries
-it out. The Feed has no plan card.
+only and puts the cursor in the message box. On Codex the card says that the approved plan still only reads and that Full access or Claude
+Code carries it out. The Feed has no plan card.
 
 **Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the
 turn's folder, the conversation's own or, for a conversation an earlier version made, the shared one: `mkdir`, `touch`,
@@ -872,7 +900,8 @@ leaves it. If you go back to an earlier version of Jason Desktop and then return
 first, unless it is in Plan only, and says once why: an earlier version keeps no chat's mode but Plan only.
 Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
-also lists Full access, which asks for no confirmation. In Full access the AI runs commands and changes files on this computer without
+also lists Full access, which asks for no confirmation. On Codex, Full access is no sandbox and nothing of what
+follows, as above. In Full access on Claude Code the AI runs commands and changes files on this computer without
 asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. One line under its
 title says why it asks, for example what in the command Jason could not read plainly, what it would run or change, a
@@ -891,8 +920,8 @@ where it is, with an Open folder button, and Jason removes it after seven days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
 until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once and
-keeps its mode: a turn on Codex, on a Claude Code too old for it, sent from a browser tab, or sent while Full access is
-not offered. Once you update Claude Code, the next turn runs in Full access, says so once and has the composer drawn
+keeps its mode: a turn on a Claude Code too old for it, sent from a browser tab, or sent while Full access is not
+offered. A turn on Codex runs in Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the composer drawn
 again. A tool that ran without Jason having seen it ends the turn and puts the chat in Ask first, a turn you stopped too;
 a mode narrower than Ask first that you chose meanwhile stays.
 
@@ -967,11 +996,13 @@ rights, as every UI token does; there is one level of trust.
 
 Under the chat, these things differ from a terminal:
 
-- **A file `jason` reads comes on standard input.** Every turn sets `JASON_CHAT_TURN`, so an option of `jason` that
+- **A file `jason` reads comes on standard input.** Every turn sets `JASON_CHAT_TURN` (a Codex turn in Full access can
+  clear it, and nothing refuses that), so an option of `jason` that
   reads a file's content into a request (`--file`, `--value-file`, `--note-file`, `--result-file`) takes only `-`, the
-  content coming on standard input, and `jason status --provider-cli` runs only a bare name found on the search path. In
-  Plan only the turn sets `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any
-  request; in the other modes what the chat runs is the mode's to say, above.
+  content coming on standard input, and `jason status --provider-cli` runs only a bare name found on the search path. A
+  turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, sets
+  `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any request; in the other
+  modes what the chat runs is the mode's to say, above.
 - **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
   every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
   by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
@@ -1194,8 +1225,8 @@ removal takes them off too.
 
 ## What is not here
 
-Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own tools in the
-chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Nothing of your own tools reaches a
-turn: a Claude Code turn loads none of your MCP servers, claude.ai connectors or browser, and a Codex turn does not read
-your `config.toml`, so the MCP servers it names are not loaded either. Everything in this
+Managing Reply accounts beyond connecting and reconnecting one, your own tools in a Claude Code chat, a marketplace
+and plugins in frames, and a Linux build for arm64 are not here. A Claude Code turn loads none of your MCP servers,
+claude.ai connectors or browser, and a Codex turn outside Full access does not read your `config.toml`, so the MCP
+servers it names are not loaded either; a Codex turn in Full access reads it, as Codex in a terminal does. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

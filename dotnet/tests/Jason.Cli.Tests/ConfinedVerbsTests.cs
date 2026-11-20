@@ -407,7 +407,7 @@ public class ConfinedVerbsTests
             Assert.DoesNotContain("The act is the person's", text, StringComparison.Ordinal);
         }
 
-        Assert.Contains("Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request.", text, StringComparison.Ordinal);
+        Assert.Contains("Under JASON_CONFINED, which Jason Desktop sets on every chat turn that can only read and propose, it is refused before any request.", text, StringComparison.Ordinal);
         Assert.Contains("A higher bar, not a boundary", text, StringComparison.Ordinal);
         Assert.Contains("a claim, not a proof", text, StringComparison.Ordinal);
         Assert.DoesNotContain("not for an agent", text, StringComparison.Ordinal);

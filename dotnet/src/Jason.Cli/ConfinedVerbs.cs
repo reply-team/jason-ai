@@ -5,9 +5,10 @@ namespace Jason.Cli;
 
 /// <summary>
 /// The commands the CLI refuses under <c>JASON_CONFINED</c> (<see cref="Confinement"/>): a person's own word and the
-/// acts that change this installation. The desktop sets the variable on a chat turn in Plan only, so what an agent runs
-/// there is refused here, locally, before any request; no chat turn in Ask first, Auto-edit or Full access sets it any
-/// more, and there the turn's mode decides, with the agent acting on the person's word. This table is also the command
+/// acts that change this installation. The desktop sets the variable on every chat turn that can only read and propose:
+/// Plan only on any host, and every Codex turn outside Full access (Ask first, and Auto-edit, which runs as it), so what an
+/// agent runs there is refused here, locally, before any request; no other chat turn sets it, and there the turn's mode
+/// decides, with the agent acting on the person's word. This table is also the command
 /// half of <c>desktop/chat-deny-list.txt</c>, which <c>DesktopDenyListTests</c> writes and checks from it, so the two
 /// cannot drift apart.
 /// </summary>
@@ -92,7 +93,7 @@ public static class ConfinedVerbs
     /// An attempt id in the environment is no exception under the variable: it is a claim, not a proof.
     /// </summary>
     public const string Help =
-        "Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request. "
+        "Under JASON_CONFINED, which Jason Desktop sets on every chat turn that can only read and propose, it is refused before any request. "
         + "A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, "
         + "and an attempt id in the environment is a claim, not a proof, so it changes nothing here.";
 

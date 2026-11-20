@@ -60,10 +60,11 @@ unchanged a listing opens nothing, a file gone lists nothing at once, and the lo
 changes, not at every listing. No host command is run to list them: `claude mcp list` connects to the servers, and
 `codex mcp list` can reach the network.
 
-On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
-sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
-Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
-set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`). One cmd line prints a random
+On Windows every read-only Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own
+choice of sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data
+directory. A Full access turn runs in no sandbox, so it names none and is not checked. Naming it proves nothing
+(OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not set up), so the first
+read-only Codex turn of each run of the desktop checks it (`codex-sandbox.ts`), in the turn's own folder. One cmd line prints a random
 marker, then a marker of each file's own only if `type` opens it, the file itself going to `nul`. The first file is a
 control, the system's hosts file under `SystemRoot`, which every Windows account may read and the desktop does not
 own: it opening in the sandbox shows that `type` and `nul` work there at all. Then the runtime's run file, which has an
@@ -85,14 +86,17 @@ config.toml plus `-c` while the turn leaves that file unread, since `codex sandb
 the desktop does not read the file to say what in it would differ. A set-up chat's naming run on Windows names no
 sandbox kind and gets no check: its shell tool is off, and it is held by the read-only sandbox and those settings alone.
 
-**Nothing of the person's own tools reaches a turn.** A Claude Code turn runs `--strict-mcp-config` with the turn's MCP
-file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true` and deny the browser's
-server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn, Plan only
-included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
+**Nothing of the person's own tools reaches a turn, but a Codex turn in Full access.** A Claude Code turn runs
+`--strict-mcp-config` with the turn's MCP file alone, `--no-chrome` as above, and settings that carry
+`disableClaudeAiConnectors: true` and deny the browser's server by name
+(`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn outside Full access, Plan
+only included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
 there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded, since a Codex turn asks no
 one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which config.toml does not hold: every
-Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
-is still read from `CODEX_HOME`.
+Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under
+the composer while Codex is the chat's host outside Full access. Its sign-in is still read from `CODEX_HOME`. A Full
+access Codex turn reads the person's config.toml, as Codex in a terminal does, its MCP servers, providers and profiles
+with it; it still sets the cached search and `features.apps=false` for the run (`codexFullAccessSettings`).
 
 The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
 CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
@@ -217,8 +221,9 @@ and at the end of each turn. It is kept within 2 MB: each text of an entry is cu
 mark in the desktop's words, then the oldest entries are dropped and counted, and the newest entry always stays. An
 entry of a kind this desktop does not know, written by another version, is skipped and counted the same way. A file in
 the folder that is not a record is counted in the log and left as it was. On a Claude Code turn the desktop's file
-rules deny the agent a read or an edit of the folder; a Codex turn is held only by its own read-only sandbox, which the
-desktop does not narrow, so it may read the records.
+rules deny the agent a read or an edit of the folder; a Codex turn outside Full access is held only by its own
+read-only sandbox, which the desktop does not narrow, so it may read the records, and one in Full access by nothing,
+so it may write them.
 
 Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
 a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
@@ -344,7 +349,9 @@ Each conversation has a mode, chosen from the menu beside the composer (`chat.se
 applies to the turns a person starts by sending, from the next one on.
 
 - **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
-  (below). Claude Code starts in its own default mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
+  (below). Claude Code starts in its own default mode; what the permission model does not settle is a card. Codex runs
+  in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it acts, so Ask first on Codex reads and
+  proposes, and the menu says so (`codexModeSays` in the page).
 - **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
@@ -362,19 +369,41 @@ applies to the turns a person starts by sending, from the next one on.
   It is the mode of every new chat, the Feed's included (`feedDefaultMode`), and asks for no confirmation: a record with
   no `mode` is in Full access, and choosing it from the menu clears the field. The `full-access.json` and
   `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
-  them. It is refused where it cannot apply: on Codex, and on a Claude Code older than 2.1.322 or whose version cannot
-  be read, the menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that
-  is sent to Codex, runs on a Claude Code below that floor, comes from a browser tab, or is sent while Full access is not
-  offered runs in Ask first; the chat says why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
+  them. It is refused where it cannot apply: on a Claude Code older than 2.1.322 or whose version cannot be read, the
+  menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that runs on a
+  Claude Code below that floor, comes from a browser tab, or is sent while Full access is not offered runs in Ask first; the chat says why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
   mode a turn on it does not run as itself, from the window and from a tab, the mode it runs in and the sentence why,
   decided by the rule the turn itself runs by (`turnMode`), with Claude Code's version read at that listing. The page
   draws that mode, the line under the composer and the menu's check, with the sentence under the composer, and never
   draws from what it asked for; a host an earlier desktop listed hands no `runs`, and the page draws the chat's own mode.
-  A choice from the menu is of the chat's own mode, the one checked included, so Ask first chosen on Codex stays the
-  chat's on Claude Code. The setup keeps the version its last listing read (`handedClaudeVersion`); a turn whose own read
+  A choice from the menu is of the chat's own mode, the one checked included, so Ask first chosen where Auto-edit runs
+  in it, on Codex, stays the chat's on Claude Code; the checked mode, being the one the running turn runs in, stops no
+  turn. The setup keeps the version its last listing read (`handedClaudeVersion`); a turn whose own read
   finds Claude Code at the floor where that listing found it below or could not read it runs in Full access, asks the
   page to read the hosts again (`setup.changed`) and says so once per conversation (`fullAccessCurrent`).
-- **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
+- **How Full access runs on Codex.** A Full access Codex turn runs `exec --json --sandbox danger-full-access
+  --skip-git-repo-check` with the person's config.toml, no `--ignore-user-config` and no Windows sandbox kind
+  (`codexArguments`). Codex in `exec` never asks, so it acts as the person with their files and network, and none of
+  what follows holds it: no hook, no card, no deny rule, no refusal of the permission model, and not the refusal of the
+  runtime's run file, the desktop's settings or the turn's own settings that every Claude Code turn keeps. It has no
+  version floor of Full access. Reading the person's config.toml, it reads their `shell_environment_policy`, so it
+  pins `JASON_DATA_DIR` and `JASON_CHAT_TURN` by `-c shell_environment_policy.set.<NAME>` (`codexPinnedVariables`): at
+  openai/codex 9f2b87495b, read and not seen, session flags merge over config.toml table by table, so `set` adds to the
+  person's, and `set` is applied after `inherit` and the excludes and before `include_only`, so a policy that keeps only
+  listed names still removes them. PATH is never pinned, since `set` would replace the person's whole PATH, so such a
+  policy can also take the bundle's folder off it. An administrator's `requirements.toml` that does not allow `danger-full-access` makes
+  Codex, at openai/codex 9f2b87495b (read, not seen), refuse to start: `codex exec` forces `approval_policy = "never"`
+  (exec/src/lib.rs), so building its configuration fails (core/src/config/mod.rs) with its words on standard error and
+  no event. A Full access Codex turn that ends so, before any line on standard output and with a failing exit, ends in
+  Codex's own words followed by `codexFullAccessRefused`, every time; the words are not read and nothing is
+  remembered. Only under an automatic reviewer (AutoReview) does Codex, at the same commit, fall back instead to the
+  sandbox the requirements allow and say so as a configuration warning, an `item.completed` of type `error` beginning
+  "Configured value for `permission_profile` is disallowed by requirements" (`sandbox_mode` in an earlier Codex;
+  core/src/config/mod.rs `apply_requirement_constrained_value`, exec/src/event_processor_with_jsonl_output.rs). The
+  desktop reads that line (`codexLine`, `sandbox_narrowed`), lets the turn go on, keeps the chat's mode and says once in
+  the conversation `codexFullAccessNarrowed`; every other warning is dropped, as before. No event names the sandbox a
+  turn ran in (`thread.started` carries the thread alone), so a narrowing Codex does not warn of goes unseen.
+- **How Full access runs on Claude Code.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
   `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in `allowedHttpHookUrls`, so no project file
@@ -508,13 +537,14 @@ applies to the turns a person starts by sending, from the next one on.
   host that does not drive the chat; each host's listing carries `autoEdit`, the
   reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation and no switch;
   it is kept on the conversation's record (`mode`), so a restart keeps it and Start fresh leaves it; a turn sent to
-  Codex runs in Ask first, read-only as every Codex turn, the chat says so once a run, and the record keeps Auto-edit. The page draws the mode a turn on the host runs in, from its
+  Codex runs in Ask first, read-only, the chat says so once a run, and the record keeps Auto-edit. The page draws the mode a turn on the host runs in, from its
   `runs`, as it does for Full access. **The limits:** the conversations an earlier desktop made share the chat folder, so such a chat in
   Auto-edit can remove a file another of them left there; a hard link already in the folder is not told by its path, so a
   command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
   link put into the folder by something else between the two is the same limit Ask first's Write has.
 - A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
-  Auto-edit, Full access, and the page gives the waiting message back as Stop does: no turn follows by itself. So
+  Auto-edit, Full access, and the page gives the waiting message back as Stop does, judging by the mode the turn runs
+  in as the desktop hands it (`choiceStops`), never by the mode the chat keeps: no turn follows by itself. So
   leaving Full access, or leaving Auto-edit for a narrower mode (Ask first or Plan only), stops the turn that runs in
   it, and a change to Plan only stops any running turn, so the menu never says a mode while the running turn could
   still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish

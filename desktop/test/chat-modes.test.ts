@@ -12,7 +12,8 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
+import { followsCodexRefusal } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -36,21 +37,26 @@ test('the four modes, Ask first first, then narrow to wide with Full access last
     assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
 });
 
-test('a turn runs in the mode its chat keeps, but Full access in Ask first from a tab, on Codex, while not offered or below its floor, and Auto-edit in Ask first on Codex, each with its sentence', () => {
+test('a turn runs in the mode its chat keeps, on Codex Full access included, but Full access in Ask first from a tab, while not offered or below its floor, and Auto-edit in Ask first on Codex, each with its sentence', () => {
     const at = { fromTab: false, offered: true, claudeVersion: fullAccessFloor };
     for (const mode of chatModes) assert.deepEqual(turnMode(mode, 'claude', at), { mode, why: null }, mode);
     const askFirst = (kind: string, text: string | null) => ({ mode: 'ask_first', why: { kind, text } });
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, fromTab: true }), askFirst('tab', tabFullAccess));
-    assert.deepEqual(turnMode('full_access', 'codex', at), askFirst('codex', codexFullAccess));
+    assert.deepEqual(turnMode('full_access', 'codex', at), { mode: 'full_access', why: null }, 'Codex acts in Full access, with no sandbox');
+    assert.deepEqual(turnMode('full_access', 'codex', { ...at, claudeVersion: '2.1.200' }), { mode: 'full_access', why: null }, 'Claude Code\'s floor is no floor of Codex');
+    // Only Codex is spared Claude Code's floor: a program of any other name is held to it, never given Full access free.
+    for (const program of ['gemini', 'cursor', 'codex-api-key', '']) {
+        assert.deepEqual(turnMode('full_access', program, { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')), program);
+    }
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, offered: false }), askFirst('not_offered', fullAccessNotYet));
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')));
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: null }), askFirst('floor', fullAccessSentence(null)), 'a version that could not be read');
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: undefined }), { mode: 'full_access', why: null }, 'a version not read is no floor yet');
     assert.deepEqual(turnMode('auto_edit', 'codex', at), askFirst('codex_auto_edit', codexAutoEdit));
     assert.deepEqual(turnMode('auto_edit', 'codex', { ...at, fromTab: true }), askFirst('codex_auto_edit', codexAutoEdit));
-    // The first cause that holds is the one said: a tab before Codex, Codex before the switch, the switch before the floor.
+    // The first cause that holds is the one said: a tab before the switch, the switch before the floor.
     assert.equal(turnMode('full_access', 'codex', { ...at, fromTab: true, offered: false }).why?.kind, 'tab');
-    assert.equal(turnMode('full_access', 'codex', { ...at, offered: false }).why?.kind, 'codex');
+    assert.equal(turnMode('full_access', 'codex', { ...at, offered: false }).why?.kind, 'not_offered');
     assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, claudeVersion: '2.1.200' }).why?.kind, 'not_offered');
     for (const mode of ['ask_first', 'plan_only'] as const) {
         for (const program of ['claude', 'codex']) assert.deepEqual(turnMode(mode, program, { fromTab: true, offered: false, claudeVersion: null }), { mode, why: null }, `${mode} on ${program}`);
@@ -143,7 +149,6 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.notEqual(fullAccessSentence('2.1.295'), null, 'the version that first blocks on a failed hook is below it');
     assert.notEqual(fullAccessSentence('2.1.322-beta.1'), null, 'a pre-release of the floor is below it');
     assert.match(fullAccessSentence(null) ?? '', /could not be read/);
-    assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });
 
 test('a tool that ran unchecked turns Full access off, and the turn\'s end says why and how to go on', () => {
@@ -722,4 +727,17 @@ test('the help form of the PowerShell tool or another tool with a command is a c
         const full = await wired(t, 'full_access');
         assert.match((await hooked(full, tool, { command: 'jason campaign --help' })) ?? 'ran', /^ask: /, `${tool} Full access`);
     }
+});
+
+test('our sentence follows a Codex refusal only on a Full access Codex turn that ended in Codex\'s own words, not stopped, before any line, with a failing exit, and not in the desktop\'s sentence for a refused key', () => {
+    const refused = { program: 'codex', mode: 'full_access', ended: 'Error: no', stopped: false, heard: false, startError: null, code: 1, ours: false } as const;
+    assert.equal(followsCodexRefusal(refused), true);
+    assert.equal(followsCodexRefusal({ ...refused, ours: true }), false, 'a keyed turn ended in the desktop\'s refused-key sentence');
+    assert.equal(followsCodexRefusal({ ...refused, program: 'claude' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, mode: 'ask_first' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, ended: null }), false);
+    assert.equal(followsCodexRefusal({ ...refused, stopped: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, heard: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, startError: 'ENOENT' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, code: 0 }), false);
 });
