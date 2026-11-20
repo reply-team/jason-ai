@@ -263,7 +263,7 @@ function linkOf(data: unknown): unknown {
 
 /** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
 async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
-    // Every member the page may ask for is registered through `seam`, which checks the window's sender.
+    // Every member the page may ask for is registered on `seam` by `handle`, which checks the window's sender.
     const seam: IpcRegistrar = ipcMain;
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal

@@ -390,8 +390,8 @@ one. Presenting what is waiting, and recording what the person says about it, is
 When the person asks where to see what is waiting or what became of the work, name what works: **Needs you** in Jason
 Desktop, or `jason approval list` and `jason decision list` in a terminal, and `jason workitem list --campaign
 <campaign-id>` for the queue. Do not send them to the browser tab `jason ui open` opens: this release's console is drawn
-only in Jason Desktop and in a tab the desktop opens itself, so that tab opens on the Demo, or, while something waits,
-on one page of text that says so, whether Jason Desktop is installed or not; neither is their work.
+only in Jason Desktop's window, so that tab shows one sentence and no console, whether Jason Desktop is installed or not;
+it is not their work.
 
 **A question a role raised is answered by recording the answer, and the campaign's manager acts on it.** When the
 person answers a question a launched role raised, you record it with `jason decision answer` and the person as

@@ -11,8 +11,9 @@ jason ui open
 ```
 
 The runtime answers with a link into the page and the command opens it in your default browser (`--no-open` prints it
-instead, for an agent to hand to you). The link carries a ticket that pairs one browser, once, within 60 seconds;
-after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
+instead, for an agent to hand to you). The link carries a ticket a page pairs with, once, within 60 seconds: Jason
+Desktop's own window, or a build of your own in `ui/custom`; once paired, a bookmark of `http://127.0.0.1:52766/ui/` keeps
+working, across runtime restarts.
 `jason ui open --approval <id>` and `--question <id>` open at the address of one item, `#/attention/approvals/<id>` or
 `#/attention/questions/<id>`. The build of this release draws its console in Jason Desktop alone; in any other tab it
 draws one sentence, that this is the place for a web interface of your own and to ask your agent how to build one
