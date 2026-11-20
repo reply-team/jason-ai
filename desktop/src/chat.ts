@@ -82,6 +82,7 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import {
     askFirstThisTurn,
     codexAutoEdit,
+    codexFullAccessNarrowed,
     earlierDesktopAskFirst,
     feedDefaultMode,
     fullAccessCurrent,
@@ -589,6 +590,8 @@ export class Chat {
     #choices = new Map<string, number>();
     /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
+    /** The conversations already told that Codex ran a Full access turn in a narrower sandbox (`codexFullAccessNarrowed`). */
+    #toldNarrowed = new Set<string>();
     /** The conversations told that a turn runs in Full access since Claude Code is current, where a listing drew Ask first. */
     #toldCurrent = new Set<string>();
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
@@ -1040,6 +1043,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
+        this.#toldNarrowed.delete(conversation.id);
         this.#toldCurrent.delete(conversation.id);
         this.#choices.delete(conversation.id);
         this.#unshaped.delete(conversation.id);
@@ -1988,6 +1992,14 @@ export class Chat {
                 }
                 if (line.kind === 'tool_use') {
                     uses.set(line.id, line.name);
+                    return;
+                }
+                if (line.kind === 'sandbox_narrowed') {
+                    // An administrator's requirements kept a Full access turn in a sandbox: the turn goes on there, the chat
+                    // keeps its mode, and the conversation is told once.
+                    if (running.mode !== 'full_access' || this.#toldNarrowed.has(conversation.id)) return;
+                    this.#toldNarrowed.add(conversation.id);
+                    this.#options.emit(replyTo, { kind: 'notice', text: codexFullAccessNarrowed });
                     return;
                 }
                 if (line.kind === 'tool_result') {

@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
 import { claudeTurnSettings, codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { codexAutoEdit, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccessNarrowed, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
@@ -660,6 +660,27 @@ test('a Codex turn in Plan only leaves the person\'s config.toml unread as every
     const args = r.hosts().at(-1)?.args ?? [];
     assert.ok(args.includes('--ignore-user-config'));
     assert.equal(args.includes(codexWindowsSandbox), process.platform === 'win32');
+});
+
+// Codex's own words when an administrator's requirements.toml does not allow the sandbox a turn asked for and Codex runs
+// a narrower one: core/src/config/mod.rs, `apply_requirement_constrained_value`, at openai/codex 9f2b87495b (read
+// 2026-11-20), said as a configuration warning, an `error` item (exec/src/event_processor_with_jsonl_output.rs).
+const narrowedByRequirements =
+    'Configured value for `permission_profile` is disallowed by requirements; falling back to required value ReadOnly. Details: invalid value for `permission_profile`: `danger-full-access` is not in the allowed set [ReadOnly] (set by system requirements)';
+
+test('a Full access Codex turn that Codex runs in a narrower sandbox, as an administrator\'s requirements make it, ends well and the chat says once that it could not act in Full access here; a read-only turn says nothing of it', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_CODEX_WARNING = narrowedByRequirements;
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', { host: 'codex' });
+    const second = await r.turn(id, 'hello again', { host: 'codex' });
+    assert.deepEqual(done(first), { kind: 'done', error: null });
+    assert.deepEqual(done(second), { kind: 'done', error: null });
+    assert.deepEqual(r.started, ['full_access', 'full_access'], 'the chat keeps its mode');
+    assert.deepEqual(notices([...first, ...second]), [codexFullAccessNarrowed], 'said once');
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    assert.deepEqual(notices(await r.turn(asked.id, 'hello', { host: 'codex' })), [], 'a read-only turn asked for no more');
 });
 
 test('on Windows the sandbox check runs in the turn\'s own folder for a read-only Codex turn, and a Full access Codex turn runs none', async (t) => {

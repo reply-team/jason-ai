@@ -739,3 +739,16 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     const settings = JSON.parse(valueOf(edited, '--settings') ?? '{}') as Record<string, unknown>;
     assert.equal(JSON.stringify(settings).includes('hooks'), false);
 });
+
+test('a Codex configuration warning that requirements put the sandbox below the one asked for is read as such, in the field this Codex names and the one an earlier one named; any other warning is not', () => {
+    // The shape at openai/codex 9f2b87495b (read 2026-11-20): core/src/config/mod.rs, `apply_requirement_constrained_value`,
+    // says "Configured value for `{field_name}` is disallowed by requirements; falling back to required value
+    // {fallback_value:?}. Details: {err}", and exec/src/event_processor_with_jsonl_output.rs says a configuration warning
+    // as an `item.completed` whose item is of type `error` with that `message`.
+    const warning = (message: string) => JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } });
+    for (const field of ['permission_profile', 'sandbox_mode']) {
+        assert.deepEqual(codexLine(warning(`Configured value for \`${field}\` is disallowed by requirements; falling back to required value ReadOnly. Details: not allowed`), new Set()), [{ kind: 'sandbox_narrowed' }], field);
+    }
+    assert.deepEqual(codexLine(warning('Configured value for `web_search_mode` is disallowed by requirements; falling back to required value Cached.'), new Set()), []);
+    assert.deepEqual(codexLine(warning('Under-development features enabled: x.'), new Set()), []);
+});

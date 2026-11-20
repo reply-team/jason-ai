@@ -62,6 +62,13 @@ export function fullAccessSentence(version: string | null): string | null {
 }
 
 /** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
+/**
+ * What the chat says, once in a conversation, when Codex ran a Full access turn in a narrower sandbox because an
+ * administrator's requirements do not allow it to run with none (`codexLine`, `sandbox_narrowed`).
+ */
+export const codexFullAccessNarrowed =
+    'Codex could not act in Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the sandbox they allow.';
+
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
 /**
