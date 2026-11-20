@@ -3,7 +3,7 @@
 /**
  * The runtime's origin, `http://127.0.0.1:<port>`, or null when the text is not a run file or names anything but the
  * loopback address. The run file also carries the runtime's token; the desktop never reads it, since the page pairs
- * through the link `jason ui open` prints and every other call goes through the CLI.
+ * through the link `jason ui pair` prints and every other call goes through the CLI.
  */
 export function runtimeOrigin(text: string): string | null {
     let raw: unknown;
@@ -31,7 +31,7 @@ export function loopbackOrigin(address: string): string | null {
 }
 
 /**
- * The link to load from what `jason ui open --no-open` printed: its `url`, when it is a page of the runtime's own UI at
+ * The link to load from what `jason ui pair` printed: its `url`, when it is a page of the runtime's own UI at
  * the runtime's origin, and null otherwise.
  */
 export function pairingLink(stdout: string, origin: string): string | null {

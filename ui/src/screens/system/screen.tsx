@@ -267,7 +267,7 @@ export function SystemScreen() {
                                 <span className="hint">
                                     {' '}
                                     · the same list as <code>jason ui tokens</code>; pair another with{' '}
-                                    <code>jason ui open</code>
+                                    <code>jason ui pair</code>
                                 </span>
                             </h2>
                             <ScrollBox label="Paired browsers">

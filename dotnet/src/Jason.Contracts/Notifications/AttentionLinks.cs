@@ -5,10 +5,10 @@ namespace Jason.Contracts.Notifications;
 /// <summary>What a <c>jason:</c> link asks the executable to do.</summary>
 public enum AttentionAct
 {
-    /// <summary>Open the UI on what waits, as <c>jason ui open</c> does.</summary>
+    /// <summary>Open Jason Desktop on what waits, as <c>jason ui open</c> does.</summary>
     List,
 
-    /// <summary>Open the UI on one item, as <c>jason ui open --approval</c> or <c>--question</c> does.</summary>
+    /// <summary>Open Jason Desktop on one item, as <c>jason ui open --approval</c> or <c>--question</c> does.</summary>
     Open,
 
     /// <summary>

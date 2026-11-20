@@ -10,9 +10,10 @@ namespace Jason.App.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Six rules. No test names the real registry, the real clipboard, the real terminal starter or the real reader of the
-/// desktop's registration: each would act on, or answer from, the machine running the suite, whatever the data directory
-/// says, the third by opening a window with an agent host in it.
+/// Six rules. No test names the real registry, the real clipboard, the real terminal starter or a real reader of the
+/// desktop's registration (Windows' registry, this account's menu entries or Applications folders): each would act on, or
+/// answer from, the machine running the suite, whatever the data directory says, the third by opening a window with an
+/// agent host in it.
 /// No file reaches the link handler and the real CLI environment together, which carries the real opener, the real
 /// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No
 /// file runs the router beside a <c>jason:</c> link, since the router hands a link the real environment: choosing the
@@ -51,6 +52,9 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("real registry", "var registry = new Registry" + "UserRegistry();")]
     [InlineData("real clipboard", "IClipboard clipboard = new Windows" + "Clipboard();")]
     [InlineData("real desktop registration", "IDesktopRegistration desktop = new WindowsDesktop" + "Registration();")]
+    [InlineData("this machine's desktop registration", "var desktop = DesktopRegistrations" + ".ForThisMachine();")]
+    [InlineData("this account's menu entries", "var desktop = LinuxDesktopRegistration" + ".ForThisAccount();")]
+    [InlineData("this account's Applications folders", "var desktop = MacDesktopRegistration" + ".ForThisAccount();")]
     [InlineData("real terminal", "ITerminalStarter terminals = new PlatformTerminal" + "Starter();")]
     [InlineData("handler with the real environment", "await Link" + "Handler.RunAsync([link], CliEnvironment.Default(), ct);")]
     [InlineData("session verb with the real environment", "await CliApp.RunAsync([\"session\", \"open\", \"--approval\", id], CliEnvironment.Default(), ct);")]
@@ -101,6 +105,14 @@ public sealed partial class NoTestClicksALinkTests
         if (text.Contains(desktop, StringComparison.Ordinal))
         {
             return $"{file} names {desktop}, which reads this account's registry for the desktop's link";
+        }
+
+        foreach (var reader in new[] { string.Concat("DesktopRegistrations", ".ForThisMachine"), string.Concat("DesktopRegistration", ".ForThisAccount") })
+        {
+            if (text.Contains(reader, StringComparison.Ordinal))
+            {
+                return $"{file} names {reader}, which reads this account's own places for the desktop's link";
+            }
         }
 
         if (text.Contains(terminal, StringComparison.Ordinal))

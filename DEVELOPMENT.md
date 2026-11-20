@@ -84,7 +84,7 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 - Run without publishing (with `JASON_DATA_DIR` set as above): `dotnet run --project dotnet/src/Jason.App -- --version`
   · `-- runtime run` · `-- runtime status` · `-- runtime start` (background; nothing is registered until you ask)
   · `-- runtime stop` · `-- runtime autostart enable | disable | status` · `-- campaign list` · `-- workitem list`
-  · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui open`
+  · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui pair`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project dotnet/src/Jason.Runtime --startup-project dotnet/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish dotnet/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`

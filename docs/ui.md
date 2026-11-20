@@ -10,21 +10,29 @@ exists for it alone: everything the page does is a verb you could type.
 jason ui open
 ```
 
-The runtime answers with a link into the page and the command opens it in your default browser (`--no-open` prints it
-instead, for an agent to hand to you). The link carries a ticket a page pairs with, once, within 60 seconds: Jason
-Desktop's own window, or a build of your own in `ui/custom`; once paired, a bookmark of `http://127.0.0.1:52766/ui/` keeps
-working, across runtime restarts.
-`jason ui open --approval <id>` and `--question <id>` open at the address of one item, `#/attention/approvals/<id>` or
-`#/attention/questions/<id>`. The build of this release draws its console in Jason Desktop alone; in any other tab it
-draws one sentence, that this is the place for a web interface of your own and to ask your agent how to build one
-([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom` draws whatever it draws.
+opens Jason Desktop on what waits, by the desktop's own `jason-desktop:` link; `--approval <id>` and `--question <id>`
+open it at one item, and `--no-open` prints the address instead, for an agent to hand to you. It asks the runtime
+nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
+command-line install still waiting to move into the desktop, or an AppImage, whose menu entry declares no link), it
+opens nothing and refuses with `desktop_not_installed`. Outside GNOME and KDE, xdg-open runs the desktop it starts until
+that window closes, so a `jason ui open` that starts it says after ten seconds that it handed the address on
+(`opener_timed_out`) and ends 0: the desktop opens all the same.
 
-On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
-waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
-`jason ui open` does (with no desktop it lands on the one sentence described above, which ignores the address),
-and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
-Jason Desktop is installed for your account, the same click opens the desktop's Needs you instead
-([desktop.md](desktop.md), Links).
+A page of the UI is paired with `jason ui pair`, which prints a link that pairs one page, once, within 60 seconds, and
+opens nothing; Jason Desktop pairs its own window with it. `jason ui pair --approval <id>` and `--question <id>` pair at
+the address of one item, `#/attention/approvals/<id>` or `#/attention/questions/<id>`. For a build of your own in
+`ui/custom`, `jason ui open --web` opens such a link in your default browser (`--web --no-open` prints it); with no
+build of your own it asks nothing, opens nothing and refuses with `custom_ui_not_installed`. Once paired, a bookmark of
+`http://127.0.0.1:52766/ui/` keeps working, across runtime restarts. The build of this release draws its console in
+Jason Desktop alone; in any other tab it draws one sentence, that this is the place for a web interface of your own and
+to ask your agent how to build one ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom`
+draws whatever it draws.
+
+On Windows a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
+waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item, each on the desktop's
+Needs you ([desktop.md](desktop.md), Links), as `jason ui open` opens it. Where no Jason Desktop that takes its links is
+installed for your account the click opens nothing, and a link Jason does not know opens nothing either
+([notifications.md](notifications.md), §7).
 `jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
 put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
 `jason://attention/approvals/<id>/session` and `jason://attention/questions/<id>/session` start an agent session on
@@ -33,7 +41,7 @@ the first toast is shown; before that a browser has no program for them. The `ja
 command line's; Jason Desktop's own links use another, `jason-desktop:`, which opens a page of the desktop's window and
 never touches `jason:` ([`desktop/README.md`](../desktop/README.md), Links).
 
-If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
+If nothing is installed, `jason ui pair` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
 
@@ -49,7 +57,7 @@ its end, and `jason status` names it where the default build is missing or anoth
 has no published UI to fetch.
 
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
-and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
+and run `jason ui open --web`; `jason status` and `jason runtime status --human` say which build is served, with its version
 and digest. Delete `custom/` to go back to the default.
 
 ### Files the UI does not trust
@@ -107,7 +115,7 @@ jason ui revoke --all
 ```
 
 Each pairing is a token the runtime keeps as a hash, with who paired and when, and when it was last used. A token never
-expires on its own; revoke it when a browser should no longer have it. A browser that `jason ui open` opens again ends
+expires on its own; revoke it when a browser should no longer have it. A browser that `jason ui pair`'s link pairs again ends
 the token it held, so the list stays one row per browser. The System screen shows the same list, the browsers used most
 recently first; one not used for a month is dimmed, since a private window that closed or a browser whose data was
 cleared never comes back for its token, and one button revokes every browser but the one you are using.

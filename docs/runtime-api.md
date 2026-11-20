@@ -65,7 +65,7 @@ descriptor, a file only the account that owns the installation can read, and to 
 The token is the whole authority. Whatever the API does, the token allows: there are no scopes, no key per program and
 no read-only token in this version. A program that holds it can do everything the account that owns the installation
 can do with `jason`, including deciding work that reaches real people. The one other holder is a browser paired with
-`jason ui open`, which is given a token of its own with the same rights ([docs/ui.md](ui.md)).
+`jason ui pair`, which is given a token of its own with the same rights ([docs/ui.md](ui.md)).
 
 One credential is narrower than the token, and never a person's: a **handler capability**. The runtime mints one for a
 plugin's handler for a single invocation and hands it only to the plugin-host running that invocation, which makes
@@ -778,7 +778,7 @@ where a build keeps content the UI does not trust and every answer carries a pol
 placed there is served at once and deleting it brings the release's back.
 
 A build in `ui/custom/` is served instead of the release's UI, not beside it. Its pages pair as the release's do. The
-link `jason ui open` prints carries a ticket, good for 60 seconds and for one use. The page trades it at
+link `jason ui pair` prints carries a ticket, good for 60 seconds and for one use. The page trades it at
 `POST /ui/session`, with the body `{"ticket":"…"}` and the runtime's own address as its `Origin`, and is answered with
 a UI token and the token's id; it presents that token as a bearer from then on ([docs/ui.md](ui.md)).
 

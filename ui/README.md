@@ -2,7 +2,7 @@
 
 The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One more client of the Runtime API
 (`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired once with
-`jason ui open`, then bookmarked. Nothing in the runtime knows a screen exists.
+`jason ui pair`, then bookmarked. Nothing in the runtime knows a screen exists.
 
 ## Build
 
@@ -20,7 +20,7 @@ is text in the page, in the browser and in the desktop alike, and the first scre
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build: the release's own, which `jason ui install` places (a release builds
 `ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
-`jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
+`jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open --web`; `jason status` says which build is served. Delete `custom/` to go back.
 
 ## One console
 
@@ -67,7 +67,7 @@ keeps it so its window and starting page open in the same theme before the page 
 
 A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `dist/` linked as that directory's
 `ui/custom/` (a symbolic link on Linux and macOS, a junction on Windows), `npm run dev` rebuilding `dist/` on every
-change, and `jason ui open` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
+change, and `jason ui open --web` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
 it, so `dist/` is served as it stands. No hot reload, and no dev-only origin allowance in the runtime.
 
 ## Screens and their pieces

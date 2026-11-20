@@ -13,7 +13,7 @@ test('the bundle runs under the policy the runtime sends: no refused resource, n
     });
     page.on('pageerror', (error) => violations.push(`pageerror: ${error.message}`));
 
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     const first = await page.goto(url);
     expect(first?.headers()['content-security-policy']).toBe(policy);
     await expect(page.locator('.jc-console .side')).toBeVisible();

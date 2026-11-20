@@ -47,7 +47,7 @@ test('with no runtime up, the desktop starts one through jason runtime start and
         ['skills', 'install', '--roles-only', '--source', bundle],
         ['skills', 'install', '--root', join(b.paths.chat, '.claude', 'skills'), '--host', 'claude_code', '--source', bundle],
         ['skills', 'install', '--root', join(b.paths.chat, '.agents', 'skills'), '--host', 'codex', '--source', bundle],
-        ['ui', 'open', '--no-open'],
+        ['ui', 'pair'],
     ]);
     assert.equal(started.origin, 'http://127.0.0.1:41234');
     assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
@@ -147,7 +147,7 @@ test('a start that fails, or a link that is not the runtime’s UI, stops with w
     await assert.rejects(start(failing), (error: unknown) => error instanceof StartFailed && error.step === 'runtime start' && /did not start/.test(error.message));
 
     const foreign = bench(t, { env: { STUB_LINK: 'https://example.com/ui/#pair=x' } });
-    await assert.rejects(start(foreign), (error: unknown) => error instanceof StartFailed && error.step === 'ui open');
+    await assert.rejects(start(foreign), (error: unknown) => error instanceof StartFailed && error.step === 'ui pair');
 });
 
 test('a layout jason runtime start refuses stops the start in the CLI’s own words, by its code, and nothing after the start is run', async (t) => {

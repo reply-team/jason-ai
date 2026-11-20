@@ -164,6 +164,12 @@ public static class CliErrors
     /// <summary><c>session open</c> at a folder: the terminal was found and did not start.</summary>
     public const string TerminalStartFailed = "terminal_start_failed";
 
+    /// <summary><c>ui open</c>: no Jason Desktop that takes its links is installed for this account, so nothing was opened.</summary>
+    public const string DesktopNotInstalled = "desktop_not_installed";
+
+    /// <summary><c>ui open --web</c>: no build of one's own is in the custom UI directory, so nothing was asked or opened.</summary>
+    public const string CustomUiNotInstalled = "custom_ui_not_installed";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }

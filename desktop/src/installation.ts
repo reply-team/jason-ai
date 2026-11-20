@@ -18,7 +18,7 @@ import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
 /** The verbs the desktop runs, by the words that name them; the log names a verb by these and nothing else. */
-const verbs = ['status', 'runtime start', 'runtime status', 'runtime stop', 'runtime autostart', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', 'campaign get', 'project get', 'session open', '--version'] as const;
+const verbs = ['status', 'runtime start', 'runtime status', 'runtime stop', 'runtime autostart', 'ui install', 'ui pair', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', 'campaign get', 'project get', 'session open', '--version'] as const;
 
 export function verbOf(args: readonly string[]): string {
     const two = args.slice(0, 2).join(' ');
@@ -117,7 +117,7 @@ export function dataNewerRefusalIn(stdout: string): string | null {
 
 export interface Started {
     origin: string;
-    /** The pairing link `jason ui open --no-open` printed. */
+    /** The pairing link `jason ui pair` printed. */
     link: string;
     runtimeVersion: string | null;
     /** Whether the runtime is another version than the bundle's, in which case its own UI was loaded as it is. */
@@ -265,9 +265,9 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         release?.();
     }
 
-    const open = await cli.run(['ui', 'open', '--no-open']);
-    const link = open.exit === 0 ? pairingLink(open.stdout, origin) : null;
-    if (link === null) throw new StartFailed('ui open', open, said(open) || 'jason ui open printed no link to the runtime’s UI.');
+    const pair = await cli.run(['ui', 'pair']);
+    const link = pair.exit === 0 ? pairingLink(pair.stdout, origin) : null;
+    if (link === null) throw new StartFailed('ui pair', pair, said(pair) || 'jason ui pair printed no link to the runtime’s UI.');
 
     return { origin, link, runtimeVersion, versionsDiffer: !facts.sameVersion };
 }

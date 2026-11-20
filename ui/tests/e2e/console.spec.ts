@@ -150,7 +150,7 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     });
     await page.addInitScript(standInDesktop);
 
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     const first = await page.goto(url);
     expect(first?.headers()['content-security-policy']).toBe(
         "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",

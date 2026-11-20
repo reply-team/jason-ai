@@ -465,7 +465,7 @@ Both take the skills from `jason-skills.zip`, the package of them the release th
 checked against that release's `checksums.txt` (§1). `--source` takes them from somewhere else instead: a checkout,
 or a git repository at a ref, which needs `git`.
 
-Then place the browser UI, the page `jason ui open` opens (this release's build draws its console in Jason Desktop alone, and one sentence in any other tab):
+Then place the browser UI, the build Jason Desktop draws (this release's build draws its console in Jason Desktop alone, and one sentence in any other tab):
 
 ```sh
 jason ui install
@@ -564,11 +564,11 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of twelve names in
+One question — "can this installation start work?" — answered check by check. It is one of thirteen names in
 this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and
-`update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
-`session open`, which starts your own agent host, or a plain shell, in a terminal — and it cannot be
-otherwise: half of what it reports is not the runtime's to know.
+`update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do,
+`session open`, which starts your own agent host, or a plain shell, in a terminal, and `ui open`, which opens Jason
+Desktop — and it cannot be otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|

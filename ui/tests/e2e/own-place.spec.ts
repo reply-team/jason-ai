@@ -20,7 +20,7 @@ for (const size of [
         page.on('request', (request) => asked.push(`${request.method()} ${new URL(request.url()).pathname}`));
         page.on('websocket', (socket) => sockets.push(socket.url()));
 
-        const { url } = await jason.uiOpen('--approval', 'apr_00000000000000000000000000');
+        const { url } = await jason.uiPair('--approval', 'apr_00000000000000000000000000');
         await page.goto(url);
 
         const message = page.locator('#app > p.own-place');

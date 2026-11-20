@@ -8,7 +8,7 @@ test('a bookmark works after the runtime restarts on its fixed port', async ({ p
     const port = await freePort();
     const jason = await Jason.start({ port });
     try {
-        const { url } = await jason.uiOpen();
+        const { url } = await jason.uiPair();
         await page.goto(url);
         await expect(page.locator('.jc-console .side')).toBeVisible();
 

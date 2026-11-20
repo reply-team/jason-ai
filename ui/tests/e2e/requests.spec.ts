@@ -5,7 +5,7 @@ test('every request the page makes is an operation, the door, or a file under /u
     const seen: string[] = [];
     page.on('request', (request) => seen.push(`${request.method()} ${request.url()}`));
 
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.locator('.jc-console .side')).toBeVisible();
     // The console's panels follow the journal and have no Refresh of their own: the first screen reads what waits by

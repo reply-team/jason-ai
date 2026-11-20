@@ -52,7 +52,7 @@ export const templates = {
     // The restart re-pair.
     runtime_gone: 'The run file names no runtime; the window waits for one',
     window_repaired: 'The runtime moved from {From} to {Origin}; the window was paired again and reloaded',
-    repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
+    repair_failed: 'Pairing the window again at {Origin} failed: jason ui pair exited {Exit}',
     // The login items.
     login_item_set: 'Open Jason at login was set to {On} on {Platform}',
     login_item_moved: 'Open Jason at login was moved to the file an update installed on {Platform}',

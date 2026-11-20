@@ -1701,6 +1701,15 @@ jobs:
           sudo apt-get -o Acquire::Retries=5 update -qq
           bash .github/scripts/test-apt-route.sh apt
 
+      # `jason ui open` against the same deb's Jason Desktop, once the apt route has taken its run back: the deb installed
+      # by apt again, a display of the leg's own (Xvfb, so xdg-open runs in its generic mode, as outside GNOME and KDE),
+      # one approval's address handed to a desktop that is not running and one question's to the one that runs, each
+      # page recorded as opened by the desktop, `--no-open` handing nothing on, a refusal in words where no menu entry
+      # declares the scheme, and no browser running at any point. .github/scripts/test-desktop-link.sh says each step.
+      - name: jason ui open opens Jason Desktop at the item, never a browser
+        shell: bash
+        run: bash .github/scripts/test-desktop-link.sh apt
+
   # Jason as one installation on Windows, proven on a build of this tree wherever every check runs (the release's pull
   # request, a push to main that runs every check, and a run started by hand): this tree's jason packaged as a release
   # packages it, Jason Desktop built around it as a test build (JASON_DESKTOP_TEST_BUILD: nothing signed, no publisher an
@@ -2777,7 +2786,7 @@ jobs:
           npm run build
           npm run package
 
-      # The zip a person unzips into ~/.jason/ui/custom/ to try this build with jason ui open. Kept fourteen days where
+      # The zip a person unzips into ~/.jason/ui/custom/ to try this build with jason ui open --web. Kept fourteen days where
       # CI's other uploads keep three: those exist for the jobs of the same run, this one for a person trying the build
       # at their own pace.
       - uses: actions/upload-artifact@v7

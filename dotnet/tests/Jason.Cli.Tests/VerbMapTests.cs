@@ -106,7 +106,7 @@ public class VerbMapTests
     /// without one is the map drifting from the rule its own doc comment states.
     /// </summary>
     [Fact]
-    [Critical(Family.R2, "the twelve declared exceptions")]
+    [Critical(Family.R2, "the thirteen declared exceptions")]
     public void Exactly_the_declared_names_have_no_api_operation_behind_them()
     {
         var operations = typeof(Contracts.Api.Operations)
@@ -122,17 +122,20 @@ public class VerbMapTests
 
         // And the verbs stand for none either. Each says it never will, and nothing held that: an
         // `uninstall.*`, `install.*`, `status.*`, `logs.*`, `doctor.*`, `export.*` or `import.*` operation arriving in the contracts would have kept
-        // this test green while the twelve declared exceptions quietly became eleven.
+        // this test green while the thirteen declared exceptions quietly became twelve.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 
     /// <summary>
-    /// The <c>ui</c> group is its three operations and one verb that is none: <c>install</c>, which places the release's
-    /// build on this machine and asks the runtime nothing, the way <c>skills install</c> does. A second verb like it is a
+    /// The <c>ui</c> group is its three operations — <c>ui.open</c> sent by <c>pair</c>, <c>ui.tokens</c> by
+    /// <c>tokens</c>, <c>ui.revoke</c> by <c>revoke</c> — and two verbs that ask the runtime nothing: <c>install</c>, which
+    /// places the release's build on this machine the way <c>skills install</c> does, and <c>open</c>, which opens Jason
+    /// Desktop at an address and, only under <c>--web</c>, asks what <c>pair</c> asks. Held by what each verb sends rather
+    /// than by its name, since <c>open</c> carries an operation's name and stands for none. A third verb like them is a
     /// decision, and it is made here.
     /// </summary>
     [Fact]
-    public void The_ui_verb_group_is_its_three_operations_and_install()
+    public async Task The_ui_verb_group_is_its_three_operations_install_and_open()
     {
         using var paths = new TempPaths();
         var group = Jason.Cli.Commands.UiCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
@@ -142,10 +145,30 @@ public class VerbMapTests
             .Where(field => field.IsLiteral)
             .Select(field => (string)field.GetRawConstantValue()!)
             .Where(name => name.StartsWith("ui.", StringComparison.Ordinal))
-            .Select(name => name["ui.".Length..]);
+            .Order(StringComparer.Ordinal);
 
-        Assert.Equal(["install", "open", "revoke", "tokens"], verbs);
-        Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
+        Assert.Equal(["install", "open", "pair", "revoke", "tokens"], verbs);
+        Assert.Equal(["ui.open", "ui.revoke", "ui.tokens"], operations);
+
+        Assert.Equal(["ui.open"], await SentAsync("ui", "pair"));
+        Assert.Equal(["ui.tokens"], await SentAsync("ui", "tokens"));
+        Assert.Equal(["ui.revoke"], await SentAsync("ui", "revoke", "uit_A"));
+
+        // open with Jason Desktop registered, so each run goes past the presence check to the hand-on or the printed
+        // address, where a request would be sent if one were.
+        foreach (var options in new[] { Array.Empty<string>(), ["--approval", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6"], ["--no-open"] })
+        {
+            var opener = new Link.HandingOpener();
+            using var cli = new Commands.CliRun(opener: opener);
+            var env = cli.Environment with { Desktop = Link.FakeRegistration.Present(cli.Environment) };
+
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["ui", "open", .. options], env, TestContext.Current.CancellationToken));
+            Assert.Equal(0, cli.Requests);
+            Assert.Equal(options is ["--no-open"] ? 0 : 1, opener.Urls.Count);
+        }
+
+        static async Task<string[]> SentAsync(params string[] args) =>
+            [.. (await DefaultActorTests.RunEachAsync(args)).Requests.Select(request => request.Operation)];
     }
 
     /// <summary>

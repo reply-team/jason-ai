@@ -153,7 +153,7 @@ public static class RuntimeStatusCommand
 
     private static string Ui(UiModuleInfo? ui) => ui switch
     {
-        null => "not installed (`jason ui open` says how)",
+        null => "not installed (`jason ui install` places it)",
         { Problem: { } problem } => $"{ui.Source} from {ui.Directory}, with a problem: {problem}",
         _ => $"{ui.Source} {ui.Version} from {ui.Directory}, API {ui.ApiVersion} ({(ui.ApiVersionMatches ? "this runtime's" : "not this runtime's")}), {ui.Digest}",
     };
