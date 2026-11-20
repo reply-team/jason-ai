@@ -90,8 +90,8 @@ public sealed partial class ProductAddressTests : IDisposable
             "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; and install.sh's requirement is held against the application the latest release published, taken the same way and checked against that release's checksums.txt; both are CI's reads and no person's install, so neither is ever a request to the address operated for the product"),
         new(
             ".github/workflows/release.yml",
-            2,
-            "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
+            4,
+            "the installation proof takes the previous release's and the one-installation release's published files from GitHub directly, on each platform it proves, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));

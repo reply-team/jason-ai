@@ -46,6 +46,18 @@
 #                                  the move's record done, the command-line install retired; and whether the build says it
 #                                  is a test build, as JASON_PROOF_BUILD says it must (test on CI's build, release on the
 #                                  release's packages). The uninstall is the next step's
+#   from-one-installation <release> <feed> <version>
+#                                  the one-installation release (<release>, the folder its files were fetched to), Jason
+#                                  Desktop alone, installed by its own install.sh at the version its manifest.json names, a
+#                                  runtime running from the jason it carries and no window open, updated by that jason's own
+#                                  jason update apply --version from a served feed: its Jason Desktop's updater installs this
+#                                  version, and the verb then runs this version's carried jason update apply --finish, which
+#                                  ends complete, as its exit status and the document it prints say (handed_read, by
+#                                  Test-InstallationWindows.ps1's rule and words); nothing of Jason Desktop's or of ShipIt is
+#                                  left running, launchd's ShipIt job is printed, the application and its carried jason say
+#                                  this version, a new login shell finds that jason through the wrapper, and the runtime
+#                                  answers again; the desktop's log and ShipIt's logs are kept on the way out. Gatekeeper's
+#                                  word and the uninstall are the next steps'
 #   requirement <zip>              install.sh's APP_REQUIREMENT against a published application: admitted, and refused for another team
 #   held                           the machine now compared with the machine before, whole, through no leg's begin; and
 #                                  fails when any compare found the machine after an uninstall not the one before
@@ -80,6 +92,13 @@ fail_held() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT
 
 # Every process of Jason's, of its installer and of its uninstaller: what a wait that reached its bound was waiting on.
 jason_processes() { ps -axo pid,ppid,etime,command | grep -iE 'jason|install\.sh|uninstall' | grep -v grep || true; }
+
+# What of Jason Desktop at the application given is running: its own processes, and its ShipIt - launchd's job of Jason
+# Desktop's, or the one in the application's own Squirrel.framework - never another application's ShipIt. One line, each
+# process apart by a semicolon; empty where none is.
+left_running() {
+    { pgrep -lf "$1/Contents/MacOS/" || true; pgrep -lf "ai\.jasonharness\.desktop\.ShipIt|$1/Contents/Frameworks/Squirrel\.framework/" || true; } | sort -u | tr '\n' ';'
+}
 
 # A command run to its end, or to its bound: at the bound what it waited for is named on stderr, with every process of
 # Jason's, and the command is ended and the step fails. Its exit otherwise.
@@ -519,6 +538,41 @@ close_leg() {
     if [ -s "$OUT/leg-failure.txt" ]; then why="it said: $(tr '\n' ' ' < "$OUT/leg-failure.txt")"; else why="its own lines are in its step"; fi
     echo "::error title=Installation::the leg '$open' failed; $why"
     printf '%s\n' "the leg '$open' failed; $why" >> "$OUT/failed-legs.txt"
+    say "the leg '$open' did not end: it is closed $(leg_clock)"
+}
+
+# Each leg's time, from its begin to its end, with the job's beside it, in whole seconds: said where the leg ends, or where
+# a leg that never ended is closed, and so in the job's summary, that a leg's step and the job are bounded by what a run
+# measured. The job is timed from the start of the runner's worker that runs it, which is the job's own start, read from
+# how long ps says it has run ([[days-]hours:]minutes:seconds); where none is found, from the first leg's begin, and the
+# line that starts the job's clock says which.
+start_leg_clock() {
+    local now worker elapsed began from
+    now="$(date +%s)"
+    if [ ! -s "$OUT/job-began.txt" ]; then
+        began="$now"
+        from="this leg's begin: no runner's worker was found"
+        worker="$(pgrep -x Runner.Worker | head -n 1)" || worker=""
+        if [ -n "$worker" ]; then
+            elapsed="$(ps -o etime= -p "$worker" | awk '$1 ~ /^([0-9]+-)?([0-9]+:)?[0-9]+:[0-9]+$/ { n = split($1, part, /[-:]/); s = part[n] + 60 * part[n - 1]; if (n > 2) s += 3600 * part[n - 2]; if (n > 3) s += 86400 * part[n - 3]; print s }')" || elapsed=""
+            case "$elapsed" in
+                '' | *[!0-9]*) from="this leg's begin: the start of the runner's worker could not be read" ;;
+                *) began=$(( now - elapsed )); from="the start of the runner's worker that runs it" ;;
+            esac
+        fi
+        printf '%s\n' "$began" > "$OUT/job-began.txt"
+        say "the job's time is counted from $from; it had run $(( now - began )) s when this leg began"
+    fi
+    printf '%s\n' "$now" > "$OUT/leg-began.txt"
+}
+
+# The open leg's time from its begin, with the job's so far, as a leg's end says them.
+leg_clock() {
+    local now leg_time="an unknown time" job_time="an unknown time"
+    now="$(date +%s)"
+    [ ! -s "$OUT/leg-began.txt" ] || leg_time="$(( now - $(cat "$OUT/leg-began.txt") )) s"
+    [ ! -s "$OUT/job-began.txt" ] || job_time="$(( now - $(cat "$OUT/job-began.txt") )) s"
+    printf '%s after its begin, with the job at %s' "$leg_time" "$job_time"
 }
 
 # Every leg's own scratch, which a leg that fails part way can leave and no product door takes, by name: the copy of
@@ -861,6 +915,7 @@ begin)
     rm -f "$OUT/skip"
     echo "=== $LEG"
     close_leg
+    start_leg_clock
     rm -f "$OUT/leg-failure.txt"
     printf '%s\n' "$LEG" > "$OUT/leg-open.txt"
     for need in "$@"; do
@@ -976,13 +1031,15 @@ begin)
 end)
     printf '%s\n' "$1" >> "$OUT/legs-ended.txt"
     rm -f "$OUT/leg-open.txt"
+    clock="$(leg_clock)"
     # A leg whose own compare differed ran to its end and is recorded as failed already: its step fails here, so that no
     # leg reads as succeeded with a divergence in it.
     if grep -qxF -- "$1" "$OUT/legs-dirty.txt" 2>/dev/null; then
         echo "::error title=Installation::$1 - ended, but its compare differs: it is recorded as failed"
+        say "$1 - ended $clock, its compare differing"
         exit 1
     fi
-    say "$1 - ended"
+    say "$1 - ended $clock"
     ;;
 
 held)
@@ -1313,6 +1370,139 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
         [ "$test_build" = true ] || fail "CI's test build's runtime report does not carry test_build: true"
         say "a test build, and it says so: jason --version on standard error, and test_build: true in the runtime's report"
     fi
+    ;;
+
+from-one-installation)
+    one="$1"; feed="$2"; version="$3"
+    # One trap for the way out of this step, however it ends: the feed server it starts is ended; what of Jason Desktop and
+    # its ShipIt is still running is printed and kept in $OUT, so that an update that failed or reached its bound says what
+    # it left; and the desktop's log and ShipIt's logs are kept in $OUT, as bundle-swap keeps the desktop's log, before the
+    # uninstall the leg runs next takes them with the data directory and the caches.
+    server=""
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; }; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
+
+    # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.sh from its own
+    # assets, which opens nothing, then a runtime started from the jason it carries. It is held to be the release its
+    # fetched manifest.json names, the one pinned.
+    manifest_version="$(python3 -I -c 'import json, sys; doc = json.load(open(sys.argv[1], encoding="utf-8")); print(doc.get("version", "") if isinstance(doc, dict) else "")' "$one/manifest.json")" || fail "the one-installation release's manifest.json could not be read"
+    { [ -n "$manifest_version" ] && [ "$manifest_version" != "$version" ]; } || fail "the one-installation release's manifest.json names '$manifest_version', not a release before $version"
+    within 300 "the one-installation release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$one" sh "$one/install.sh" || fail "the one-installation release's install.sh failed"
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications after the one-installation release's install.sh"
+    carried="$placed/Contents/Resources/bundle/jason"
+    old="$(version_of "$placed")"
+    [ "$old" = "$manifest_version" ] || fail "the one-installation release's install.sh left '$old' at $placed, not $manifest_version, the release its manifest.json names"
+    [ -z "$(pgrep -f "$placed/Contents/MacOS/" || true)" ] || fail "a process of Jason Desktop $old runs after its install.sh, which opens nothing"
+    # A first start migrates a new database and can outlast the start's own wait, which then refuses, saying the runtime it
+    # started is still running: only then is jason runtime status asked until it answers, as the Windows proof's
+    # Start-PreviousRuntime asks. Any other end of the start fails here, one past its bound included: the start runs in a
+    # subshell, so its bound ends the subshell and not this step.
+    status=0
+    ( within 120 "$old's jason runtime start" "$carried" runtime start ) > "$OUT/one-installation-runtime-start.txt" 2>&1 || status=$?
+    cat "$OUT/one-installation-runtime-start.txt"
+    if [ "$status" -ne 0 ]; then
+        { grep -qF '"runtime_start_failed"' "$OUT/one-installation-runtime-start.txt" && grep -qF 'is still running' "$OUT/one-installation-runtime-start.txt"; } \
+            || fail "$old's carried jason runtime start ended with $status, not refusing because the runtime it started is still running: its lines are above"
+        wait_until 180 "a runtime answering $old's carried jason runtime status" sh -c '"$0" runtime status > /dev/null 2>&1' "$carried"
+    fi
+    say "Jason Desktop $old installed by its own install.sh at $placed, no window open, and a runtime answering from its carried jason"
+
+    # Its carried jason update apply, pinned to this version, from the feed served on this machine, with no window open:
+    # it hands the update to its own Jason Desktop, whose updater (Squirrel, then ShipIt once the application has quit)
+    # installs this version, then runs this version's carried jason update apply --finish, and prints that one's document
+    # with its own steps in front, kept in $OUT as it is said. It runs in a subshell, so one past its bound ends in the
+    # reader's line. Read, with its exit status, by the rule, and in the words, of Test-InstallationWindows.ps1's
+    # Get-HandedFinishFault, which says where each step is said.
+    serve_feed "$feed" "$OUT/feed-server-one-installation.log"
+    status=0
+    ( within 900 "$old's jason update apply --version $version" "$carried" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 ) > "$OUT/update-from-one-installation.json" 2> "$OUT/update-from-one-installation.err" || status=$?
+    cat "$OUT/update-from-one-installation.err"
+    cat "$OUT/update-from-one-installation.json"
+    handed_read="$(python3 -I -c 'import json, re, sys
+path, old, new, status = sys.argv[1:5]
+lines = [line for line in open(path, encoding="utf-8").read().splitlines() if line.lstrip().startswith("{")]
+def said(value):
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, list):
+        return " ".join(said(item) for item in value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+def fault():
+    if status != "0":
+        return "it exited with " + status
+    try:
+        doc = json.loads(lines[-1]) if lines else None
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        return "it printed no document"
+    for key in ("from", "to", "step", "steps"):
+        if key not in doc:
+            return "its document has no " + key
+    if said(doc["from"]) != old or said(doc["to"]) != new:
+        return "its document says %s -> %s, not %s -> %s" % (said(doc["from"]), said(doc["to"]), old, new)
+    if said(doc["step"]) != "complete":
+        return "its document ends at the step %s, not complete" % said(doc["step"])
+    asked = "asked: Jason Desktop asked to download %s and wait for the go, request " % new
+    wanted = [
+        (asked + "<id>", "^" + re.escape(asked) + r"\S+$"),
+        ("swapped: the application is " + new, "^" + re.escape("swapped: the application is " + new) + "$"),
+        ("healthy: %s, <n> migrations applied" % new, "^" + re.escape("healthy: " + new) + r"(\+[^,]*)?, [0-9]+ migrations applied$"),
+        ("complete: %s -> %s" % (old, new), "^" + re.escape("complete: %s -> %s" % (old, new)) + "$"),
+    ]
+    items = doc["steps"] if isinstance(doc["steps"], list) else [doc["steps"]]
+    steps = [said(item) for item in items]
+    at, after = 0, ""
+    for named, pattern in wanted:
+        while at < len(steps) and not re.search(pattern, steps[at]):
+            at += 1
+        if at >= len(steps):
+            return "no step \"%s\" follows \"%s\"" % (named, after) if after else "no step \"%s\"" % named
+        after = steps[at]
+        at += 1
+    return ""
+print(fault())' "$OUT/update-from-one-installation.json" "$old" "$version" "$status")" || fail "the document $old's jason update apply printed could not be read"
+    [ -z "$handed_read" ] || fail "$old's carried jason update apply --version $version does not say it handed the update to its Jason Desktop and this version's carried jason finished it: $handed_read"
+    say "$old's own carried jason update apply --version $version, with no window open, handed the update to its Jason Desktop, whose updater installed $version, then ran this version's carried jason update apply --finish, which ended complete, $old -> $version"
+
+    # Nothing of Jason Desktop's or of its updater is left running by an update asked for with no window open: the
+    # processes of the application and of its own ShipIt are printed and given 30 s to end, ShipIt ending once the update
+    # is in place, and launchd's ShipIt job is printed whole, held or not. Then one still running fails the leg, by name.
+    deadline=$(( $(date +%s) + 30 ))
+    while :; do
+        still_running="$(left_running "$placed")"
+        if [ -z "$still_running" ] || [ "$(date +%s)" -ge "$deadline" ]; then break; fi
+        sleep 1
+    done
+    say "the processes of Jason Desktop at $placed and of its ShipIt after the update: ${still_running:-none}"
+    if launchctl print "gui/$(id -u)/ai.jasonharness.desktop.ShipIt" > "$OUT/one-installation-shipit-job.txt" 2>&1; then
+        say "launchd still holds the job ai.jasonharness.desktop.ShipIt after the update, as printed below and kept in one-installation-shipit-job.txt"
+    else
+        say "launchd holds no job ai.jasonharness.desktop.ShipIt after the update"
+    fi
+    cat "$OUT/one-installation-shipit-job.txt"
+    [ -z "$still_running" ] || fail "the update, asked for with no window open, left these running 30 s after it ended: $still_running"
+
+    # This version's application and its carried jason say this version.
+    [ "$(app)" = "$placed" ] || fail "the application is at '$(app)' after the update, not $placed"
+    desktop="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$placed/Contents/Info.plist" 2>&1 || true)"
+    [ "$desktop" = "$version" ] || fail "Jason Desktop at $placed says $desktop after the update, not $version"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed carries $(version_of "$placed") after the update, not $version"
+    said="$(within 60 'the carried jason --version' "$carried" --version | cut -d+ -f1)" || fail "the carried jason --version failed after the update"
+    [ "$said" = "$version" ] || fail "the carried jason says $said after the update, not $version"
+    say "Jason Desktop at $placed says $version, and its carried jason says $version"
+
+    # A terminal opened from now on finds that jason, through the wrapper, and the runtime the finish started answers.
+    { [ -f "$WRAPPER" ] && grep -q "$carried" "$WRAPPER"; } || fail "the wrapper at $WRAPPER does not run $carried after the update"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    within 60 'jason runtime status after the update' "$carried" runtime status > /dev/null 2>&1 || fail "no runtime answers after the update"
+    say "a new login shell finds jason at $WRAPPER, running $carried and saying $version, and the runtime answers again"
     ;;
 
 way-back)

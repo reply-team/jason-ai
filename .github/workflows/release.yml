@@ -825,10 +825,20 @@ jobs:
   # and every leg between a begin and an end, so a leg's failure stops no leg after it and the held step fails the job
   # with the list.
   #
+  # TWO PINS, two worlds a person updates from, each named in the job's own fetch step and held by ReleaseWorkflowTests.
+  # The previous release, v0.48.7, is a release of the world before one installation: its legs begin with a command-line
+  # Jason and Jason Desktop installed apart and reach this release through that release's own update and the move. The
+  # one-installation release, v0.49.0, is a release of the world after, Jason Desktop installed alone with the jason it
+  # carries: its leg begins with no window open, and its carried jason update apply hands this release to its own Jason
+  # Desktop's updater, which installs it, and the rest to this release's carried jason update apply --finish. That leg runs
+  # here alone, where the release is signed: its updater installs only an update signed as the release is, which ci.yml's
+  # test builds never are. Neither pin is ever read as the latest published release.
+  #
   # THE UPDATER, END TO END, is a named place in both platform jobs, for the unit that has jason update apply hand an
   # update to Jason Desktop: a next build at this version and one, signed as this one is, served on the loopback feed and
   # applied by jason update apply with no window, and again with a window open, which refuses. Until it lands, each job's
-  # summary says that this is not proven here.
+  # summary says what of this is not proven here: this release's own handing, with no window and with one open; the
+  # one-installation release's handing this release to its Jason Desktop, with no window, is.
   proof-windows:
     name: The proof on win-x64
     needs: [version, windows, skills]
@@ -841,6 +851,7 @@ jobs:
       OUT: ${{ github.workspace }}\installation
       FEED: ${{ github.workspace }}\feed
       PREVIOUS: ${{ github.workspace }}\previous
+      ONE_INSTALLATION: ${{ github.workspace }}\one-installation
     steps:
       - uses: actions/checkout@v7
 
@@ -1033,6 +1044,74 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
+      # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
+      - name: Fetch the one-installation release this one updates from
+        id: one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          ONE_INSTALLATION_RELEASE: v0.49.0
+        run: |
+          $release = "v$($env:VERSION -replace '-.*$', '')"
+          $tag = $env:ONE_INSTALLATION_RELEASE
+          if ($tag -ceq $release) { throw "the one-installation release named, $tag, is the one this tree builds: there is no earlier release of one installation to update from here" }
+          New-Item -ItemType Directory -Force -Path $env:ONE_INSTALLATION | Out-Null
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          # The setup is what that release's install.ps1 installs, checking it against the same checksums.txt itself.
+          $verified = @('jason-desktop-windows-x64-setup.exe')
+          $unverifiable = @('install.ps1', 'manifest.json')
+          foreach ($name in @('checksums.txt') + $verified + $unverifiable) {
+            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:ONE_INSTALLATION $name) -UseBasicParsing -TimeoutSec 600
+          }
+          $listed = @{}
+          foreach ($line in Get-Content (Join-Path $env:ONE_INSTALLATION 'checksums.txt')) {
+            $hash, $name = $line -split '  ', 2
+            if ($name) { $listed[$name] = $hash }
+          }
+          foreach ($name in $verified) {
+            if (-not $listed.ContainsKey($name)) { throw "$name has no line in $tag's checksums.txt" }
+            if ((Get-FileHash -LiteralPath (Join-Path $env:ONE_INSTALLATION $name) -Algorithm SHA256).Hash -ne $listed[$name]) { throw "$name does not match $tag's checksums.txt" }
+            Write-Host "$name matches $tag's checksums.txt"
+          }
+          foreach ($name in $unverifiable) {
+            if ($listed.ContainsKey($name)) { throw "$name is now listed in $tag's checksums.txt: it belongs with the verified files" }
+            $said = "$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            Write-Host $said
+            "- $said" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+          Write-Host "the one-installation release this one updates from is $tag"
+          "- the one-installation release this one updates from is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      # The path a person with Jason Desktop of one installation takes, on the release's signed packages: that release
+      # installed by its own install.ps1, no window open, its carried jason update apply pinned to this release, from the
+      # feed served on this machine. It hands the update to its own Jason Desktop, whose updater checks this release's
+      # setup is the release publisher's and runs it, then runs this release's carried jason update apply --finish; the
+      # leg holds that it said so, and ended complete. Then the uninstall from a new terminal, compared with the machine
+      # before.
+      - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the one-installation release this one updates from=${{ steps.one-installation.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step FromOneInstallation -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -OneInstallation $env:ONE_INSTALLATION
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-one-installation-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       - name: Read the module path Windows PowerShell rebuilds from an empty one
         if: ${{ !cancelled() }}
         timeout-minutes: 20
@@ -1057,10 +1136,18 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: pwsh
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
+          $ended = Join-Path $env:OUT 'legs-ended.txt'
+          $handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'cancelled') { 'is not proven here: its leg was cancelled' } else { 'is not proven here: its leg was not run' }
           @(
             '### What this job does not prove',
-            '- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here.',
+            "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.",
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this release: it reads only the published releases; this job runs this release''s installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -1086,6 +1173,7 @@ jobs:
       OUT: ${{ github.workspace }}/installation
       FEED: ${{ github.workspace }}/feed
       PREVIOUS: ${{ github.workspace }}/previous
+      ONE_INSTALLATION: ${{ github.workspace }}/one-installation
     steps:
       - uses: actions/checkout@v7
 
@@ -1248,6 +1336,73 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
+      # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
+      - name: Fetch the one-installation release this one updates from
+        id: one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          ONE_INSTALLATION_RELEASE: v0.49.0
+        run: |
+          release="v${VERSION%%-*}"
+          tag="$ONE_INSTALLATION_RELEASE"
+          [ "$tag" != "$release" ] || { echo "::error::the one-installation release named, $tag, is the one this tree builds: there is no earlier release of one installation to update from here"; exit 1; }
+          mkdir -p "$ONE_INSTALLATION"
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          # The application's archive is what that release's install.sh installs, checking it against the same
+          # checksums.txt itself.
+          verified="jason-desktop-macos-arm64.zip"
+          unverifiable="install.sh manifest.json"
+          for name in checksums.txt $verified $unverifiable; do
+            curl -fsSL --max-time 600 -o "$ONE_INSTALLATION/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          listed() { awk -v n="$1" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$ONE_INSTALLATION/checksums.txt"; }
+          for name in $verified; do
+            line="$(listed "$name")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$ONE_INSTALLATION" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$name matches $tag's checksums.txt"
+          done
+          for name in $unverifiable; do
+            [ -z "$(listed "$name")" ] || { echo "::error::$name is now listed in $tag's checksums.txt: it belongs with the verified files"; exit 1; }
+            said="$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            echo "$said"
+            echo "- $said" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "the one-installation release this one updates from is $tag"
+          echo "- the one-installation release this one updates from is $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      # The path a person with Jason Desktop of one installation takes, on the release's signed and notarized packages:
+      # that release installed by its own install.sh, no window open, its carried jason update apply pinned to this
+      # release, from the feed served on this machine. It hands the update to its own Jason Desktop, whose updater installs
+      # it (Squirrel, which takes only an update signed by the application's own team, then ShipIt), then runs this
+      # release's carried jason update apply --finish; the leg holds that it said so, and ended complete. Then Gatekeeper's
+      # word on the application where the update left it, and the uninstall from a new terminal, compared with the machine
+      # before.
+      - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the one-installation release this one updates from=${{ steps.one-installation.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh from-one-installation "$ONE_INSTALLATION" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh assess
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-one-installation-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
       - name: The machine after every uninstall is the machine before
         if: ${{ !cancelled() }}
         timeout-minutes: 20
@@ -1258,10 +1413,20 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: bash
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
+          if [ "$ONE_INSTALLATION_LEG" = success ] && grep -qxF -- "$ONE_INSTALLATION_LEG_NAME" "$OUT/legs-ended.txt" 2>/dev/null; then handed="is proven here, by its leg"
+          elif [ "$ONE_INSTALLATION_LEG" = failure ]; then handed="is not proven here: its leg failed"
+          elif [ "$ONE_INSTALLATION_LEG" = cancelled ]; then handed="is not proven here: its leg was cancelled"
+          else handed="is not proven here: its leg was not run"; fi
           {
             echo '### What this job does not prove'
-            echo "- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here."
+            echo "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed."
             echo "- The 0.48 Jason Desktop's own updater on a Mac reaching this release: it reads only the published releases, and this release ships without that proof."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- Each account of a shared Mac: the runner has one account."
