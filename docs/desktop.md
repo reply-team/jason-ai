@@ -150,7 +150,9 @@ agent's header instead, and the Feed by its own.
   what is added there: your message, the AI's words as they come, a card; the cards waiting for you under the
   conversation stay under it. Scroll up more than a little and it keeps your place until you come back to the foot or
   send something; a message you send, and a permission card that asks you something, always go to the foot, the first
-  message of a new chat included. Opening a chat leaves its place alone.
+  message of a new chat included. Opening a chat leaves its place alone. A chat you come back to from another one
+  follows to the end of what came while it was out of sight if you left it at the foot, and keeps your place if you
+  left it scrolled up.
 - While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
   **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
   a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is

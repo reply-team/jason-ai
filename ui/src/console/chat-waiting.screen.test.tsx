@@ -1467,6 +1467,41 @@ describe('a chat followed to the end of its conversation, above what waits under
         }
     });
 
+    it('follows a chat shown again to its end when it was left at the foot, and keeps the place of one left scrolled up', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const sizes = watchSizes();
+        const layout = layOutChats();
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const box = await sentAndFollowed(desktop);
+            /** Another chat is shown, the answer grows while this one is hidden, and this one is shown again. */
+            const awayWhile = async (text: string) => {
+                await openChat('Summer');
+                expect(box.closest('[hidden]'), 'the chat is hidden').not.toBeNull();
+                flush(() => sizes.resized(box));
+                flush(() => desktop.emit(spring, { kind: 'text', text }));
+                await waitFor(() => expect(box.textContent).toContain(text.slice(0, 7)));
+                await openChat('Spring');
+                flush(() => sizes.resized(box));
+            };
+
+            // Left at the foot: shown again, the end of what came while it was hidden is half the view down.
+            await awayWhile(part(1));
+            expect(box.scrollTop).toBe(followedPlace(box));
+            expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2);
+
+            // Left scrolled up past the slack: shown again, the place is the person's still.
+            scrollAs(box, followedPlace(box) - 400);
+            const kept = box.scrollTop;
+            await awayWhile(part(2));
+            expect(box.scrollTop).toBe(kept);
+            expect(followedPlace(box) - kept).toBeGreaterThan(120);
+        } finally {
+            layout.restore();
+            sizes.restore();
+        }
+    });
+
     it('follows a send and its answer to the box’s own foot while what waits under the conversation is short', async () => {
         springSays = `So far: ${'a reply, '.repeat(200)}`;
         const layout = layOutChats(500, 4, (part) => (part.classList.contains('chat-waiting-for') ? 100 : undefined));

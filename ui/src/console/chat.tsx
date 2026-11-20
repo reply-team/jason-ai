@@ -1643,8 +1643,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     // person reading the cards below it is at the foot, and cards coming or going under it are not followed. What is
     // followed is the place, not only what is written: a change of size with no word added (the box made shorter by
     // what stands outside it, a part of the thread that opens) is followed by the same rule. Opening a chat moves
-    // nothing. Where the person stands is noted as the box scrolls, except at the place the follower itself set, whose
-    // scroll is its own and may be read only after the box changed size. The Demo's thread shares the measure.
+    // nothing; a pane shown again after it was hidden follows to the end of what came meanwhile when it was left at the
+    // foot, and keeps the place of one left scrolled up past the slack. Where the person stands is noted as the box
+    // scrolls, except at the place the follower itself set, whose scroll is its own and may be read only after the box
+    // changed size. The Demo's thread shares the measure.
     const scroller = useRef<HTMLDivElement>(null);
     const follow = useRef<{ chat: string; sent: ReadonlySet<string>; atFoot: boolean } | null>(null);
     const grown = useRef<MutationObserver | null>(null);

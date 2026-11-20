@@ -3,9 +3,14 @@
 // it was: a box's view is `view` pixels high; what it holds is its parts stacked in order, the thread, the queued line and
 // the cards that wait under them, each `perCharacter` pixels for each character of its words unless `heights` sizes it,
 // never less than the view all together; and its place stays between the top and the foot, as a browser keeps it. Each
-// part stands where the stacking puts it, as `getBoundingClientRect` says, the box's view starting at 0.
+// part stands where the stacking puts it, as `getBoundingClientRect` says, the box's view starting at 0. A box under a
+// hidden element is laid out as a browser lays out what is not displayed: every measure is 0 and a place written to it is
+// not taken, while the place it had is kept for when it is shown again.
 
 const box = (element: Element) => element.classList.contains('chat-scroll');
+
+/** Whether an element is under a hidden one, so laid out as nothing. */
+const unseen = (element: Element) => element.closest('[hidden]') !== null;
 const names = ['scrollHeight', 'clientHeight', 'scrollTop', 'getBoundingClientRect'] as const;
 
 /** The parts of a box that are its conversation: the thread and the line queued under it. */
@@ -46,33 +51,38 @@ export function layOutChats(
     Object.defineProperty(proto, 'scrollHeight', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? height(this) : (Reflect.get(above, 'scrollHeight', this) as number);
+            if (box(this)) return unseen(this) ? 0 : height(this);
+            return Reflect.get(above, 'scrollHeight', this) as number;
         },
     });
     Object.defineProperty(proto, 'clientHeight', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? view : (Reflect.get(above, 'clientHeight', this) as number);
+            if (box(this)) return unseen(this) ? 0 : view;
+            return Reflect.get(above, 'clientHeight', this) as number;
         },
     });
     Object.defineProperty(proto, 'scrollTop', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? place(this) : (Reflect.get(above, 'scrollTop', this) as number);
+            if (box(this)) return unseen(this) ? 0 : place(this);
+            return Reflect.get(above, 'scrollTop', this) as number;
         },
         set(this: HTMLElement, value: number) {
-            if (box(this)) places.set(this, Math.min(Math.max(value, 0), height(this) - view));
-            else Reflect.set(above, 'scrollTop', value, this);
+            if (box(this)) {
+                if (!unseen(this)) places.set(this, Math.min(Math.max(value, 0), height(this) - view));
+            } else Reflect.set(above, 'scrollTop', value, this);
         },
     });
     Object.defineProperty(proto, 'getBoundingClientRect', {
         configurable: true,
         writable: true,
         value(this: HTMLElement) {
-            if (box(this)) return rect(0, view);
+            if (box(this)) return unseen(this) ? rect(0, 0) : rect(0, view);
             const parent = this.parentElement;
             if (parent === null || !box(parent))
                 return (Reflect.get(above, 'getBoundingClientRect', this) as () => DOMRect).call(this);
+            if (unseen(parent)) return rect(0, 0);
             let top = 0;
             for (const each of Array.from(parent.children)) {
                 if (each === this) break;
