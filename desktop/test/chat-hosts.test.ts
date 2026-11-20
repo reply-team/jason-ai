@@ -282,7 +282,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(plain, [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -294,7 +294,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -307,7 +307,7 @@ test('in a demo run the data rules refuse the person\'s data directory and harne
         'Read(//home/a/Jason)', 'Read(//home/a/Jason/**)', 'Edit(//home/a/Jason)', 'Edit(//home/a/Jason/**)',
     ]);
     assert.deepEqual(dataRules('linux', '/home/a/.jason', [], [], undefined, []), dataRules('linux', '/home/a/.jason', [], []));
-    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'grant-1', present: ['grant-1'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
+    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'conv_01JD0000000000000000000000', present: ['conv_01JD0000000000000000000000'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
     for (const rule of ['Read(//c/Users/a/.jason/**)', 'Edit(//c/Users/a/.jason)', 'Edit(//c/Users/a/Jason/**)']) assert.ok(windows.includes(rule), rule);
 });
 

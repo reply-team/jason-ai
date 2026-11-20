@@ -29,7 +29,7 @@ const everyMember = [
     ...members.top,
     ...[...members.parts].flatMap(([part, inner]) => [...inner].map((each) => `${part}.${each}`)),
 ] as DesktopMember[];
-const streamed = ['chat.onEvent', 'setup.onChanged', 'fullAccess.onChanged'];
+const streamed = ['chat.onEvent', 'setup.onChanged'];
 
 const tabOver = () => {
     const stand = standInBridge(stubDesktop());
@@ -129,13 +129,11 @@ describe('the object of a tab with a bridge', () => {
         const { desktop, stand } = tabOver();
         await desktop.mode.get();
         await desktop.theme.get();
-        await desktop.fullAccess.standing();
         await desktop.setup.status();
         await desktop.chat.list();
         expect(stand.asked.filter((each) => each.path === '/call').map((each) => each.member)).toEqual([
             'mode.get',
             'theme.get',
-            'fullAccess.standing',
             'setup.status',
             'chat.list',
         ]);
@@ -195,11 +193,10 @@ describe('the object of a tab with no desktop', () => {
         expect(Object.keys(desktop).sort()).toEqual(['platform', ...members.top, ...members.parts.keys()].sort());
     });
 
-    it('answers what a page with no desktop can say: the own installation, no chats, nothing standing, no link', async () => {
+    it('answers what a page with no desktop can say: the own installation, no chats, no link', async () => {
         const desktop = noDesktop();
         expect(await desktop.mode.get()).toEqual({ mode: 'live', unopened: null, preparing: false });
         expect(await desktop.chat.list()).toEqual([]);
-        expect(await desktop.fullAccess.standing()).toBeNull();
         expect(await desktop.theme.get()).toBeNull();
         expect(await desktop.links.take()).toBeNull();
         expect(await desktop.dailyTrends.get()).toBeNull();
@@ -208,22 +205,13 @@ describe('the object of a tab with no desktop', () => {
 
     it('refuses every act in the one sentence, and says nothing of what only the desktop knows', async () => {
         const desktop = noDesktop();
-        const reads = [
-            'mode.get',
-            'chat.list',
-            'fullAccess.standing',
-            'theme.get',
-            'links.take',
-            'dailyTrends.get',
-            'updates.key',
-        ];
+        const reads = ['mode.get', 'chat.list', 'theme.get', 'links.take', 'dailyTrends.get', 'updates.key'];
         const subscriptions = [
             'onCommand',
             'mode.onPreparing',
             'links.onOpen',
             'chat.onEvent',
             'setup.onChanged',
-            'fullAccess.onChanged',
             'updates.onChanged',
         ];
         const acts = everyMember.filter((member) => !reads.includes(member) && !subscriptions.includes(member));

@@ -93,14 +93,17 @@ function shellSpellings(platform: Platform, data: string, inside: string): [stri
 }
 
 /**
- * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a Full
- * access turn works in its grant's folder below `chat-full`, every other in the chat folder.
+ * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a turn works
+ * in its conversation's own folder below `chats` (here in Full access), or in the shared chat folder for a conversation an
+ * earlier desktop made (here in every other mode).
  */
+const conversation = 'conv_01JD0000000000000000000000';
+
 function scopeOf(platform: Platform, mode: ChatMode = 'ask_first'): ChatScope {
     const paths = platform === 'win32' ? win32 : posix;
     const home = platform === 'win32' ? 'C:\\Users\\someone' : platform === 'darwin' ? '/Users/someone' : '/home/someone';
     const data = paths.join(home, '.jason');
-    const chat = mode === 'full_access' ? paths.join(data, 'desktop', 'chat-full', 'grant-1') : paths.join(data, 'desktop', 'chat');
+    const chat = mode === 'full_access' ? paths.join(data, 'desktop', 'chats', conversation) : paths.join(data, 'desktop', 'chat');
     return {
         platform,
         cwd: chat,
@@ -169,8 +172,8 @@ for (const mode of chatModes) {
         for (const platform of platforms) {
             const scope = scopeOf(platform, mode);
             const paths = platform === 'win32' ? win32 : posix;
-            // A Full access turn runs in its grant's folder, and its rules are made with that grant.
-            const rules = dataRules(platform, scope.data, [], [], mode === 'full_access' ? { id: 'grant-1', present: ['grant-1'] } : undefined);
+            // A turn in its conversation's own folder has its rules made with that folder.
+            const rules = dataRules(platform, scope.data, [], [], mode === 'full_access' ? { id: conversation, present: [conversation] } : undefined);
             for (const { part, inside } of parts(platform, scope.data)) {
                 // The rule of the data directory's entry the part is in, which covers everything under it.
                 const entry = paths.join(scope.data, paths.relative(scope.data, inside).split(paths.sep)[0]!);

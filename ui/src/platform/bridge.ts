@@ -9,7 +9,6 @@ import type { JasonDesktop } from './desktop';
 export const bridgeMembers = [
     'mode.get',
     'theme.get',
-    'fullAccess.standing',
     'setup.status',
     'chat.list',
     'chat.open',
@@ -25,7 +24,6 @@ export type BridgeMember = (typeof bridgeMembers)[number];
 export interface BridgeSeam {
     mode: Pick<JasonDesktop['mode'], 'get'>;
     theme: Pick<JasonDesktop['theme'], 'get'>;
-    fullAccess: Pick<JasonDesktop['fullAccess'], 'standing' | 'onChanged'>;
     setup: Pick<JasonDesktop['setup'], 'status' | 'onChanged'>;
     chat: Pick<JasonDesktop['chat'], 'list' | 'open' | 'create' | 'send' | 'stop' | 'rename' | 'onEvent'>;
 }
@@ -210,10 +208,6 @@ export class Bridge {
         return {
             mode: { get: () => call('mode.get') },
             theme: { get: () => call('theme.get') },
-            fullAccess: {
-                standing: () => call('fullAccess.standing'),
-                onChanged: (handler) => this.on('fullAccess.changed', handler as Listener),
-            },
             setup: {
                 status: () => call('setup.status'),
                 onChanged: (handler) => this.on('setup.changed', handler as Listener),
@@ -221,7 +215,7 @@ export class Bridge {
             chat: {
                 list: () => call('chat.list'),
                 open: (chatId) => call('chat.open', chatId),
-                create: (campaignId, host) => call('chat.create', campaignId, host),
+                create: (campaignId) => call('chat.create', campaignId),
                 send: (chatId, text, options) => call('chat.send', chatId, text, options),
                 stop: async (chatId) => void (await call('chat.stop', chatId)),
                 rename: (chatId, title) => call('chat.rename', chatId, title),

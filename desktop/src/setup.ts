@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type ChatMode } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -96,6 +96,9 @@ import {
     type ReplyAccount,
 } from './setup-model.ts';
 
+/** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
+export type TurnSteps = Partial<Record<ChatMode, { mode: ChatMode; why: string }>>;
+
 export interface HostState {
     id: string;
     label: string;
@@ -122,6 +125,13 @@ export interface HostState {
      * (`codexAutoEdit`). Null where it can be chosen, and for a host that does not drive the chat.
      */
     autoEdit: string | null;
+    /**
+     * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`). A mode not named runs as
+     * itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this listing, so the page
+     * draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that does not drive the chat.
+     */
+    runs: { window: TurnSteps; tab: TurnSteps };
     /**
      * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
      * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
@@ -421,6 +431,8 @@ export class Setup {
     #own: OwnServers;
     /** The kind each program's file was last logged as unread with; absent while it lists. */
     #unread = new Map<string, UnreadKind>();
+    /** Claude Code's version as the last listing read it (`handedClaudeVersion`); undefined before one read it. */
+    #handedClaude: string | null | undefined = undefined;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -491,10 +503,21 @@ export class Setup {
         return [];
     }
 
+    /**
+     * Claude Code's version as the last listing of the hosts read it, from which the page drew the mode a turn runs in
+     * (`runs`): null when it could not be read, undefined before a listing read it or when Claude Code was not found. A turn
+     * holds the version it reads itself to it (`Chat.send`), and asks the page to read the hosts again when the two differ
+     * across the floor of Full access.
+     */
+    handedClaudeVersion(): string | null | undefined {
+        return this.#handedClaude;
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
+        this.#handedClaude = claude === null ? undefined : claude.version;
         const kept = this.#deps.models?.lists() ?? new Map();
         const offered = (id: string, label: string) => {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
@@ -516,6 +539,19 @@ export class Setup {
                             : claude.fullAccess
                         : null;
         const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
+        // What a turn on the host runs in, by the record's mode, from the window and from a tab: the turn's own rule.
+        const runsOn = (program: string, drives: boolean): HostState['runs'] => {
+            const steps = (fromTab: boolean): TurnSteps => {
+                const out: TurnSteps = {};
+                if (!drives) return out;
+                for (const recorded of chatModes) {
+                    const turn = turnMode(recorded, program, { fromTab, offered: offeredHere, claudeVersion: program === 'claude' ? claude?.version : undefined });
+                    if (turn.why !== null) out[recorded] = { mode: turn.mode, why: turn.why.text };
+                }
+                return out;
+            };
+            return { window: steps(false), tab: steps(true) };
+        };
 
         let settings: unknown = {};
         let settingsRefused = this.#reloadRefusal;
@@ -542,6 +578,7 @@ export class Setup {
                 belowFloor: own?.belowFloor ?? null,
                 fullAccess: fullAccessOn(host.program, host.drivesChat),
                 autoEdit: autoEditOn(host.program, host.drivesChat),
+                runs: runsOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
                 ownServers: await this.#ownServers(host.program, found),
                 // Said only under a host the chat can use, as the page counts it connected: found, and at its floor.
@@ -559,6 +596,7 @@ export class Setup {
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
             fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             autoEdit: autoEditOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
+            runs: runsOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
             ownServers: [],
             runsRoles: null,

@@ -63,11 +63,11 @@ describe('a composer’s menus, as a select was', () => {
         await waitFor(() => access());
         expect(access().getAttribute('aria-haspopup')).toBe('menu');
         expect(access().getAttribute('aria-expanded')).toBe('false');
-        expect(access().getAttribute('aria-label')).toBe('Access mode: Ask first');
+        expect(access().getAttribute('aria-label')).toBe('Access mode: Full access');
         expect(model().getAttribute('aria-label')).toBe('Model: Claude Code default');
         expect(document.querySelector('.composer select')).toBeNull();
         fireEvent.click(access());
-        const menu = screen.getByRole('menu', { name: 'Access mode: Ask first' });
+        const menu = screen.getByRole('menu', { name: 'Access mode: Full access' });
         expect(access().getAttribute('aria-expanded')).toBe('true');
         expect(access().getAttribute('aria-controls')).toBe(menu.id);
         const items = within(menu).getAllByRole('menuitemradio');
@@ -77,7 +77,7 @@ describe('a composer’s menus, as a select was', () => {
             'Auto-edit',
             'Full access',
         ]);
-        expect(items.filter((each) => each.getAttribute('aria-checked') === 'true')).toEqual([items[0]]);
+        expect(items.filter((each) => each.getAttribute('aria-checked') === 'true')).toEqual([items[3]]);
         // Each item's line, what it does, is its description.
         const said = document.getElementById(items[1]!.getAttribute('aria-describedby')!);
         expect(said?.textContent).toBe('Reads and proposes, and changes nothing.');
@@ -92,19 +92,19 @@ describe('a composer’s menus, as a select was', () => {
         access().focus();
         key(access(), 'ArrowDown');
         const menu = await waitFor(() => screen.getByRole('menu'));
-        expect(focused().getAttribute('aria-label')).toBe('Ask first');
-        key(menu, 'ArrowDown');
-        expect(focused().getAttribute('aria-label')).toBe('Plan only');
-        key(menu, 'ArrowUp');
-        expect(focused().getAttribute('aria-label')).toBe('Ask first');
-        key(menu, 'ArrowUp');
         expect(focused().getAttribute('aria-label')).toBe('Full access');
         key(menu, 'ArrowDown');
         expect(focused().getAttribute('aria-label')).toBe('Ask first');
-        key(menu, 'End');
+        key(menu, 'ArrowUp');
+        expect(focused().getAttribute('aria-label')).toBe('Full access');
+        key(menu, 'ArrowUp');
+        expect(focused().getAttribute('aria-label')).toBe('Auto-edit');
+        key(menu, 'ArrowDown');
         expect(focused().getAttribute('aria-label')).toBe('Full access');
         key(menu, 'Home');
         expect(focused().getAttribute('aria-label')).toBe('Ask first');
+        key(menu, 'End');
+        expect(focused().getAttribute('aria-label')).toBe('Full access');
     });
 
     it('chooses with Enter: the menu closes, the focus is back on the button, which names the mode, and the desktop is asked', async () => {
@@ -113,6 +113,8 @@ describe('a composer’s menus, as a select was', () => {
         access().focus();
         key(access(), 'ArrowDown');
         const menu = await waitFor(() => screen.getByRole('menu'));
+        // From Full access, the item chosen, round to Ask first and on to Plan only.
+        key(menu, 'ArrowDown');
         key(menu, 'ArrowDown');
         press(focused());
         expect(open()).toBeNull();
@@ -154,6 +156,8 @@ describe('a composer’s menus, as a select was', () => {
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => model());
+        chooseIn('Access mode', 'mode', 'ask_first');
+        await waitFor(() => expect(access().getAttribute('aria-label')).toBe('Access mode: Ask first'));
         chooseIn('Model', 'host', 'codex');
         await waitFor(() => expect(model().getAttribute('aria-label')).toBe('Model: Codex default'));
         access().focus();
@@ -168,7 +172,7 @@ describe('a composer’s menus, as a select was', () => {
         );
         press(full);
         expect(open()).not.toBeNull();
-        expect(calls(desktop, 'chat.setMode')).toEqual([]);
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         expect(access().getAttribute('aria-label')).toBe('Access mode: Ask first');
     });
 
@@ -290,25 +294,13 @@ describe('a composer’s menus, beyond what a select gave', () => {
         expect(screen.getByRole('menu').classList.contains('down')).toBe(false);
     });
 
-    it('offers the take-back as a command, not as a choice that could be checked', async () => {
-        const desktop = chatDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
-        renderConsole(desktop);
-        await waitFor(() => access());
-        fireEvent.click(access());
-        const back = await waitFor(() => screen.getByRole('menuitem', { name: 'Full access: ask each time again' }));
-        expect(back.hasAttribute('aria-checked')).toBe(false);
-        expect(within(screen.getByRole('menu')).getAllByRole('menuitemradio')).toHaveLength(4);
-        // The keys still reach it, after the modes.
-        key(screen.getByRole('menu'), 'End');
-        expect(focused()).toBe(back);
-    });
-
     it('draws the access mode’s own mark on the button: a shield with ! or ?, a pencil, an eye', async () => {
         renderConsole();
         await waitFor(() => access());
         const mark = () => access().querySelector('svg')?.getAttribute('class');
-        expect(mark()).toBe('glyph-accAsk');
+        expect(mark()).toBe('glyph-accFull');
+        chooseIn('Access mode', 'mode', 'ask_first');
+        await waitFor(() => expect(mark()).toBe('glyph-accAsk'));
         chooseIn('Access mode', 'mode', 'plan_only');
         await waitFor(() => expect(mark()).toBe('glyph-accPlan'));
         chooseIn('Access mode', 'mode', 'auto_edit');
@@ -316,7 +308,7 @@ describe('a composer’s menus, beyond what a select gave', () => {
         chooseIn('Access mode', 'mode', 'full_access');
         await waitFor(() => expect(mark()).toBe('glyph-accFull'));
         const paths = (name: string) =>
-            [...document.querySelectorAll(`svg.glyph-${name} path`)].map((each) => each.getAttribute('d'));
+            [...access().querySelectorAll(`svg.glyph-${name} path`)].map((each) => each.getAttribute('d'));
         expect(paths('accFull')).toHaveLength(3);
     });
 
@@ -353,9 +345,15 @@ describe('the line under a composer', () => {
         renderConsole();
         await waitFor(() => access());
         const form = screen.getByRole('form', { name: 'Message' });
-        const line = form.querySelector(':scope > .under .accline');
-        expect(line?.textContent).toBe('Ask first · asks on a card before anything Jason does not settle itself');
+        const line = () => form.querySelector(':scope > .under .accline');
+        expect(line()?.textContent).toBe(
+            'Full access · the AI runs commands without asking, except those Jason cannot read',
+        );
         expect(form.querySelector('.composer .under')).toBeNull();
+        chooseIn('Access mode', 'mode', 'ask_first');
+        await waitFor(() =>
+            expect(line()?.textContent).toBe('Ask first · asks on a card before anything Jason does not settle itself'),
+        );
         chooseIn('Access mode', 'mode', 'plan_only');
         await waitFor(() =>
             expect(form.querySelector(':scope > .under .accline')?.textContent).toBe(

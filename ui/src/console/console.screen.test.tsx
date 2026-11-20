@@ -145,10 +145,13 @@ describe('the console', () => {
             );
         });
         // What the empty chat says in Ask first is true of it: a message follows its campaign's send mode, and the AI
-        // approves on the person's word.
-        const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
-        expect(hero.querySelector('p')?.textContent).toBe(
-            "A message written here follows its campaign's send mode; the AI approves when you tell it to.",
+        // approves on the person's word. A new chat starts in Full access, which says nothing of it.
+        chooseIn('Access mode', 'mode', 'ask_first');
+        const hero = () => screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
+        await waitFor(() =>
+            expect(hero().querySelector('p')?.textContent).toBe(
+                "A message written here follows its campaign's send mode; the AI approves when you tell it to.",
+            ),
         );
         // What waits is a page of its own, chosen from the sidebar.
         const needs = await openNeeds();

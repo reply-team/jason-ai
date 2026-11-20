@@ -12,13 +12,16 @@ export type Platform = 'win32' | 'darwin' | 'linux';
 
 export interface ChatScope {
     platform: Platform;
-    /** The folder a relative path is read against: the chat folder. */
+    /** The folder a relative path is read against: the turn's chat folder. */
     cwd: string;
-    /** The chat folder, `<data>/desktop/chat`. */
+    /**
+     * The turn's chat folder: the conversation's own, `<data>/desktop/chats/<id>`, or for a conversation an earlier desktop
+     * made the shared one, `<data>/desktop/chat`.
+     */
     chat: string;
     /** The campaign and project folders added to the turn. */
     added: readonly string[];
-    /** The data directory: nothing under it but the chat folder is the chat's. */
+    /** The data directory: nothing under it but the turn's chat folder is the chat's. */
     data: string;
     /** The person's home folder, for `~/.jason` when the data directory is the default one. */
     home: string;

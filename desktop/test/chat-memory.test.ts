@@ -71,7 +71,8 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, chatOptions: (b
     const keys: Record<string, string> = {};
     const events = new Map<string, ChatEvent[]>();
     const waiters: { id: string; resolve: () => void }[] = [];
-    const named: NamedChat = new NamedChat(() => chat);
+    // Each conversation is put in Ask first, whose settings travel inline, which the fence rows read.
+    const named: NamedChat = new NamedChat(() => chat, { mode: 'ask_first' });
     const chat: Chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -89,7 +90,6 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, chatOptions: (b
             if (event.kind === 'done') for (const waiter of waiters.filter((each) => each.id === id)) waiters.splice(waiters.indexOf(waiter), 1) && waiter.resolve();
         },
         sandboxOutside: outsideStandIn,
-        confirmFullAccess: async () => true,
         fullAccessOffered: true,
         ...chatOptions(b),
     });

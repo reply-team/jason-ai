@@ -2,7 +2,6 @@ import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } fro
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
-import { fullAccessStanding } from '../platform/full-access';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
@@ -23,7 +22,8 @@ import { bringForward } from '../test/area';
 // The console in a browser tab the desktop opened: the console over the tab's object, drawn as the window draws it.
 // What the bridge's table does not carry is drawn off, in its place, with one sentence; Open in is not drawn at all; and
 // no member outside the table is ever asked of the bridge. A tab never says yes: no card has a button, the mode is a
-// label, and a chat outside Ask first and Plan only takes no message from it.
+// label, and a chat outside Ask first, Plan only and Full access takes no message from it; a turn it sends to a chat in
+// Full access runs in Ask first, which the desktop says.
 
 const elsewhere = "Done in Jason Desktop's own window.";
 
@@ -32,7 +32,6 @@ const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, 
 const table = new Set([
     'mode.get',
     'theme.get',
-    'fullAccess.standing',
     'setup.status',
     'chat.list',
     'chat.open',
@@ -47,16 +46,14 @@ interface Options {
     panel?: 'Connect' | 'start';
     /** Conversations the desktop kept before the tab opened. */
     keep?: Parameters<StubDesktop['keep']>[0][];
-    standing?: boolean;
 }
 
-async function renderTab({ panel = 'Connect', keep = [], standing = false }: Options = {}) {
+async function renderTab({ panel = 'Connect', keep = [] }: Options = {}) {
     const desktop = chatDesktop({
         ...setupFound,
         plugins: setupFound.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
     });
     for (const each of keep) desktop.keep(each);
-    if (standing) desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
     const stand = standInBridge(desktop);
     const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
     setPlace('tab', tab);
@@ -127,7 +124,6 @@ beforeEach(() => {
     startMaking.value = null;
     startMode.value = null;
     startPick.value = newChat('', null);
-    fullAccessStanding.value = null;
 });
 
 afterEach(() => {
@@ -308,8 +304,8 @@ describe('A chat in a tab', () => {
         fireEvent.keyDown(box(), { key: 'Enter' });
         await waitFor(() => screen.getByRole('group', { name: 'Queued message' }));
         fireEvent.change(box(), { target: { value: 'Half typed' } });
-        // Jason Desktop's own window widens the chat to Full access, which lets the running turn finish.
-        flush(() => desktop.emit('conv_1', { kind: 'mode', mode: 'full_access' }));
+        // Jason Desktop's own window widens the chat to Auto-edit, which lets the running turn finish.
+        flush(() => desktop.emit('conv_1', { kind: 'mode', mode: 'auto_edit' }));
         await waitFor(() => expect(box().disabled).toBe(true));
         // The box is out of reach, and the words in it cannot be queued: the round button is Stop, and it acts.
         expect(screen.getByRole('button', { name: 'Stop' })).toHaveProperty('disabled', false);
@@ -320,8 +316,17 @@ describe('A chat in a tab', () => {
         expect(calls(stand, 'chat.send')).toHaveLength(1);
         expect(screen.queryByRole('group', { name: 'Queued message' })).toBeNull();
         expect(document.querySelector('.chat-error')?.textContent).toContain(
-            'This chat is in Full access. Send messages to it from Jason Desktop.',
+            'This chat is in Auto-edit. Send messages to it from Jason Desktop.',
         );
+    });
+
+    it('shows a chat in Full access as Ask first, the mode a turn sent from a tab runs in, and says why in the desktop’s words', async () => {
+        await shown({ mode: 'full_access' });
+        expect(screen.getByLabelText('Access mode').textContent).toBe('Ask first');
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(
+            "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+        );
+        expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
     });
 
     it('shows the mode as a label, not a control', async () => {
@@ -336,7 +341,7 @@ describe('A chat in a tab', () => {
         ['ask_first', false, null],
         ['plan_only', false, null],
         ['auto_edit', true, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.'],
-        ['full_access', true, 'This chat is in Full access. Send messages to it from Jason Desktop.'],
+        ['full_access', false, null],
         ['some_new_mode', true, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.'],
     ])('with the chat in %s the box is locked: %s', async (chatMode, locked, sentence) => {
         const { stand } = await shown({ mode: chatMode as never });
@@ -367,7 +372,7 @@ describe('A chat in a tab', () => {
 });
 
 describe('The start screen in a tab', () => {
-    it('offers only the mode the chat starts in: the other access modes are off, with the sentence', async () => {
+    it('checks the mode its first turn runs in, Ask first, as every turn of a Full access chat sent from a tab does: the other access modes are off, with the sentence', async () => {
         await renderTab({ panel: 'start' });
         const form = screen.getByRole('form', { name: 'Start' });
         fireEvent.click(within(form).getByRole('button', { name: /Access mode/ }));
@@ -381,14 +386,17 @@ describe('The start screen in a tab', () => {
         }
     });
 
-    it('with a standing choice of Full access for new chats still starts Ask first and sends the first message', async () => {
-        const { desktop, stand } = await renderTab({ panel: 'start', standing: true });
-        await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
+    it('starts the chat in the mode the desktop makes it in, naming no host, draws the mode its first turn runs in and why, and sends the first message', async () => {
+        const { desktop, stand } = await renderTab({ panel: 'start' });
         const form = screen.getByRole('form', { name: 'Start' });
+        // The desktop makes the chat in Full access, and a turn sent from a tab runs in Ask first, which is drawn.
         expect(within(form).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(
+            "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+        );
         submitStart('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(stand, 'chat.send')).toHaveLength(1));
-        // No host is named, so the desktop starts the chat in Ask first.
+        // Nothing is named but the campaign, of which a set-up chat has none.
         const created = desktop.calls.filter((each) => each.name === 'chat.create');
         expect(created).toHaveLength(1);
         expect(created[0]!.args.every((each) => each === null || each === undefined)).toBe(true);
@@ -398,12 +406,12 @@ describe('The start screen in a tab', () => {
     it('keeps the words in the box and says why when the chat it made is not one a tab may send to', async () => {
         const { desktop, stand } = await renderTab({ panel: 'start' });
         const create = desktop.chat.create;
-        // A desktop that made the chat in Full access in spite of the tab's ask.
+        // A desktop that made the chat in Auto-edit, a mode a tab does not send in.
         desktop.chat.create = async (...args) => {
             const made = await create(...args);
             if ('refused' in made) return made;
-            desktop.kept.get(made.id)!.mode = 'full_access';
-            return { ...made, mode: 'full_access' };
+            desktop.kept.get(made.id)!.mode = 'auto_edit';
+            return { ...made, mode: 'auto_edit' };
         };
         submitStart('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(startDraft.value).toBe('Heads of sales at logistics firms in Poland'));
