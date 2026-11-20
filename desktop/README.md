@@ -123,7 +123,12 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
   start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
-- `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
+- `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder (`folder: 'own'` on its record), where
+  every turn of it runs, in every mode. It is made at the conversation's first turn and removed with the conversation;
+  one that no record names is removed at start. Before each turn the desktop copies the recorded skills of the shared
+  folder into it and writes the instruction files there.
+- `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier desktop made (no
+  `folder` on its record) still run; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each (see below).
@@ -317,36 +322,30 @@ desktop does not narrow, so it may read the records.
 Each conversation has a mode, chosen from the menu beside the composer (`chat.setMode`, `src/chat-modes.ts`). The mode
 applies to the turns a person starts by sending, from the next one on.
 
-- **Ask first** is the mode of every new chat, and no setting changes that. Claude Code starts in its own default
-  mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
+- **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
+  (below). Claude Code starts in its own default mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
 - **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
-  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
+  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), as
+  Ask first and Auto-edit are, so it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
   the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
   fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
   Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
-- **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
-  confirmation, a message box the main process shows, with Cancel focused and Escape answering Cancel, each time Full
-  access is chosen while no standing choice stands. Its buttons are "Give full access this time" and "Always on this
-  computer"; Always writes the standing choice to `<data>/desktop/full-access.json`, one entry per host program
-  (`claude`), with the consent number (`fullAccessConsent`), the moment it was given and whether new chats start in Full
-  access (the box's checkbox, ignored with This time, as its label says). An entry whose consent number is not the
-  current one, lower or higher, is no choice. The file is among the known entries of `<data>/desktop/`, so the data rule
-  refuses a chat's read or change of it in every mode. The standing choice skips the box for every Claude Code chat; with
-  new chats, `chat.create` given a host that can take Full access opens the grant at once, and a host that cannot leaves
-  the chat in Ask first with no notice. No channel of the page gives it: `fullAccess.standing` reads it and
-  `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
-  2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
-  held in memory alone, for that conversation, and gone when the window closes or the chat is started fresh: a record
-  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
+- **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly.
+  It is the mode of every new chat, the Feed's included (`feedDefaultMode`), and asks for no confirmation: a record with
+  no `mode` is in Full access, and choosing it from the menu clears the field. The `full-access.json` and
+  `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
+  them. It is refused where it cannot apply: on Codex, and on a Claude Code older than 2.1.322 or whose version cannot
+  be read, the menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that
+  is sent to Codex, runs on a Claude Code below that floor, or comes from a browser tab runs in Ask first; the chat says
+  why once a run for each of those reasons, and the record keeps its mode. The page draws a line under the composer from
+  the mode the desktop holds, never from what it asked for.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
@@ -377,9 +376,10 @@ applies to the turns a person starts by sending, from the next one on.
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
-- **The AI's folder.** In Full access the AI works in a folder of its own. When Full access ends the desktop says
-  "Full access has ended. The folder the AI worked in is kept for seven days and then removed: <path>", with an Open
-  folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
+- **The AI's folder.** A Full access turn runs in the conversation's working folder, as its other turns do. The folder
+  an earlier desktop made for a Full access grant, under `<data>/desktop/chat-full/`, is moved to `chat-full-ended/` at
+  start; the conversation says where it is, with an Open folder button, when it is next opened, and the desktop removes
+  it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
 - **A denied verb in any letter case is refused, in every mode.** `jason Campaign Set-Send-Mode` is refused as
   `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
@@ -434,9 +434,8 @@ applies to the turns a person starts by sending, from the next one on.
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first, and takes back the standing choice: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
-  input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
-  confirmation says so.
+  the chat to Ask first, on its record too: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
+  input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
   byte for byte: no `--permission-mode`, no `acceptEdits`, no `defaultMode` and no hook; the permission tool alone
@@ -458,7 +457,7 @@ applies to the turns a person starts by sending, from the next one on.
 
   Each operand must hold no `..` component, pass the spelling check Ask first applies (`judgeSpelling`), name no device
   on Windows (`con`, `nul`, `com1`, `lpt1` and the like, with any extension), and lie strictly inside
-  `<data>/desktop/chat` both as written and once links are followed (`located`), the folder itself excluded; the names
+  the folder the turn runs in, the conversation's own or `<data>/desktop/chat`, both as written and once links are followed (`located`), the folder itself excluded; the names
   an agent loads (`guardedPlace`, `namesLocalJason`) and every refusal over the resolved words stay as in Ask first.
   A link or a junction that leads nowhere, at the operand or at any folder above it in the chat folder, is a card: the
   scope's `entry` (`entryOf`, `src/chat-real-path.ts`) finds something there that the real path reader cannot follow,
@@ -471,14 +470,13 @@ applies to the turns a person starts by sending, from the next one on.
   folder, is a card when an operand names it or when the command runs that program and such a file is already there:
   where the search path holds the current folder the shell would run it in place of the system's.
   The chain rule: once a `mv` or a `cp` names or writes a path, no later operand of the same command line may lie
-  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
-  host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
-  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
-  no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
-  restart opens Ask first, Start fresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
-  first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
-  Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
-  Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a
+  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`) and on a
+  host that does not drive the chat; each host's listing carries `autoEdit`, the
+  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation and no switch;
+  it is kept on the conversation's record (`mode`), so a restart keeps it and Start fresh leaves it; a turn sent to
+  Codex runs in Ask first, read-only as every Codex turn, the chat says so once a run, and the record keeps Auto-edit. The page draws its line under the composer from the mode the desktop holds, as it
+  does Full access's. **The limits:** the conversations an earlier desktop made share the chat folder, so such a chat in
+  Auto-edit can remove a file another of them left there; a hard link already in the folder is not told by its path, so a
   command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
   link put into the folder by something else between the two is the same limit Ask first's Write has.
 - A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
