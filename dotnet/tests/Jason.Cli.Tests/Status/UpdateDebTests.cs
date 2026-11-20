@@ -73,8 +73,11 @@ public sealed class UpdateDebTests : IDisposable
         Assert.Contains("Restart Jason and Its Runtime to Finish the Update to 0.34.0", update.Fact, StringComparison.Ordinal);
         Assert.Contains("export const putBackLabel = 'Put Back jason and the Skills…';", DesktopSource("machine-setup.ts"), StringComparison.Ordinal);
         Assert.Contains("Command Line, Put Back jason and the Skills…", update.Fact, StringComparison.Ordinal);
-        Assert.Contains("{ label: 'Jason', submenu: jason },", DesktopSource("desk.ts"), StringComparison.Ordinal);
-        Assert.Contains("return [{ label: 'Command Line', submenu: items }];", DesktopSource("desk.ts"), StringComparison.Ordinal);
+        var desk = DesktopSource("desk.ts");
+        Assert.Contains("{ label: 'Jason', submenu: jason },", desk, StringComparison.Ordinal);
+        Assert.Contains("            ...this.updateItems(false),\n            ...this.commandItems(),\n", desk, StringComparison.Ordinal);
+        Assert.Contains("if (this.deps.setup !== null) return this.setupItems(this.deps.setup);", desk, StringComparison.Ordinal);
+        Assert.Contains("for (const act of menu.acts) items.push({ label: act.label, enabled: app.isPackaged && !this.removing(), click: () => void this.putBackAct(setup) });\n        return [{ label: 'Command Line', submenu: items }];", desk, StringComparison.Ordinal);
         File.WriteAllText(record, AsTheDesktopsStartWritesIt("0.34.0", executable));
         Assert.Equal(CheckState.Ok, (await UpdateCheck(executable, sources)).State);
     }
