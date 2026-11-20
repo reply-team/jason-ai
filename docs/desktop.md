@@ -1086,7 +1086,10 @@ repository, which the package adds: Software Updater offers a new version and in
 update && sudo apt upgrade` does, and Ubuntu's automatic updates leave it alone. There the item says "Updates Come Through the Package"; where the system
 installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
 `<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
-ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. `sudo apt-mark hold jason-desktop`
+ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. Where the system
+installed it while no window was open and the runtime still runs the earlier version, the next start of Jason Desktop
+offers the same item and notice; it never restarts the runtime by itself, and `jason runtime restart` in a terminal brings
+the runtime up too; `jason status` names it until then. `sudo apt-mark hold jason-desktop`
 stops its updates. `jason status` says when Jason's apt source is gone or turned off, as a release upgrade of Ubuntu turns
 it off: turn it on again in Software & Updates, Other Software.
 

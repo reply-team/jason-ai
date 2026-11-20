@@ -512,7 +512,9 @@ internal static partial class StatusChecks
     /// Neither has a command for a repair. The second is finished by Jason Desktop's start, which runs <c>jason install</c> and
     /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; its Put Back
     /// runs the same set-up again. The finishing step alone neither sets the machine up nor writes the record, so this check
-    /// would still fail after it, and no <c>jason</c> verb opens the application.
+    /// would still fail after it, and no <c>jason</c> verb opens the application. A runtime the earlier build still runs is
+    /// left to the person, since a restart ends a running turn: the start offers the restart item, and <c>runtime_version</c>
+    /// names <c>jason runtime restart</c>.
     /// </remarks>
     private static StatusCheck? PackageUpdates(CliEnvironment env)
     {
@@ -537,7 +539,7 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop: its start sets this installation up for {carried.Version}, and where the runtime still runs the earlier build it offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} in its Jason menu, which restarts the runtime on it, as `jason runtime restart` does. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
                 null);
         }
 

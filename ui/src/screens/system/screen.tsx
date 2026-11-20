@@ -98,9 +98,40 @@ function useUpdateKey(): string | null {
     return key;
 }
 
+/** The labels of the deb's update item, whose updates come with the system's and which has no Check for Updates. */
+const packageItemLabel = 'Updates Come Through the Package';
+const packageRestartLabel = 'Restart Jason and Its Runtime to Finish the Update to ';
+
+/**
+ * Whether the desktop's update item is the deb's, read from the item it shows (`updates.item`): the system updates that
+ * desktop and the jason it carries. False in a tab, where the item cannot be read, and from a desktop of an earlier
+ * version, which has no such item, so the sentence stays as it was.
+ */
+function usePackagedDesktop(): boolean {
+    const [packaged, setPackaged] = useState(false);
+    useEffect(() => {
+        const desktop = currentDesktop();
+        if (desktop === undefined || !can('updates.item') || typeof earlier(desktop).updates?.item !== 'function')
+            return;
+        let live = true;
+        desktop.updates
+            .item()
+            .then((answer) => {
+                const label = answer.item?.label ?? '';
+                if (live) setPackaged(label === packageItemLabel || label.startsWith(packageRestartLabel));
+            })
+            .catch(() => undefined);
+        return () => {
+            live = false;
+        };
+    }, []);
+    return packaged;
+}
+
 export function SystemScreen() {
     const api = useApi();
     const updateKey = useUpdateKey();
+    const packaged = usePackagedDesktop();
     useEffect(() => {
         void store.load(api);
     }, [api]);
@@ -118,7 +149,12 @@ export function SystemScreen() {
                 {info?.update?.available && (
                     <Notice>
                         Jason {info.update.version} is available.{' '}
-                        {placeKind() === 'window' && currentDesktop() ? (
+                        {placeKind() === 'window' && currentDesktop() && packaged ? (
+                            <>
+                                Your system updates Jason Desktop and the jason it carries: Software Updater offers it,
+                                as <code>sudo apt update && sudo apt upgrade</code> does in a terminal.
+                            </>
+                        ) : placeKind() === 'window' && currentDesktop() ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
                                 desktop&apos;s Jason menu, or in the menu of its icon in the tray

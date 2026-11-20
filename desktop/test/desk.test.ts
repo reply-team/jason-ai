@@ -303,6 +303,14 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.ok(main.includes('packageNotice = new Notification({'));
     assert.ok(main.includes("packageNotice.on('click', () => void restartPackage());"));
     assert.equal(main.includes('const notice = new Notification('), false, 'no notice held by a local alone');
+    // The same offer, item and notice, from the window's watch and from a start that finds this application's runtime of an
+    // older build, which the system updated while no window was open; once, and never a restart of its own.
+    assert.ok(main.includes("const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged), { version: runtimeVersion, ours: runtimeIsOurs }) : null);"));
+    assert.ok(main.includes("if (form?.form === 'deb') watchFile(join(packaged, 'version.json'), { interval: 60_000 }, offerPackageRestart);"));
+    const started = main.indexOf('if (started.versionsDiffer) runtimeIsOurs = ');
+    assert.ok(started > 0 && main.indexOf('        offerPackageRestart();\n', started) > started, 'offered once the start knows whose runtime it found');
+    assert.equal(main.split('offerPackageRestart()').length - 1, 1, 'offered at the start alone, besides the watch');
+    assert.equal(main.split('restartPackage()').length - 1, 2, 'restarted by the item and the notice alone');
     // Its runtime stopped, the window goes quiet before the relaunch, as an update's install makes it.
     assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,\n        relaunch: () => {\n            quitting = true;\n            repairer.stop();\n            modeDeps.relaunch();\n        },'));
     // What a check the person asked for found: asked from the menu, the tray or the key, whose menu closes or shows no

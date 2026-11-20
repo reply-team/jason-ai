@@ -753,6 +753,20 @@ test('the deb has moved when its version.json names another version than the win
     assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
 });
 
+test('the deb has moved too when the system updated it while no window was open and the runtime this application started still runs the older build', () => {
+    // The start that finds it offers the same restart as a window open at the update: without it the window says nothing
+    // the deb can do, and the runtime runs the older build until a person restarts it by hand.
+    const older = { version: '0.49.1', ours: true };
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', older), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2-rc.1', ours: true }), '0.49.2', 'a candidate before its release');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.3', older), '0.49.3', 'the package moved again under the window: its version');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.1', ours: false }), null, "another installation's runtime, which a restart of this one does not bring up");
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2+14315ba2', ours: true }), null, 'the same build');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.3', ours: true }), null, 'a newer runtime, which a restart from this build would start older');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: null, ours: true }), null, 'no runtime answered');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.2', '0.49.2', older), null, 'an AppImage updates itself');
+});
+
 test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
     // A click on the notice and then the item, or two clicks, would stop the runtime twice and relaunch twice, the second
     // stop racing the first into a refusal while Jason in fact restarts.

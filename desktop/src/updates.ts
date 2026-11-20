@@ -25,6 +25,7 @@
  */
 
 import { nextCheckDelay } from './backoff.ts';
+import { compareVersions } from './host-version.ts';
 import { itemKeys, keyWords } from './keybindings.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
@@ -269,13 +270,17 @@ export function restartOnce(deps: PackageRestartDeps): () => Promise<void> {
 }
 
 /**
- * Pure: the version the system installed under a running window, which the deb's item and notice name; null where nothing
- * moved: the version running (`running`) and the one the package's `version.json` names now (`onDisk`, null where it could
- * not be read) are the same, either is unknown, or this is no deb, whose updates come with the system's.
+ * Pure: the version the system installed, which the deb's item and notice name; null where nothing moved. Under a running
+ * window, the one the package's `version.json` names now (`onDisk`, null where it could not be read) where it is not the
+ * version running (`running`). And while no window was open, the version running, where the runtime this application's own
+ * jason started (`runtime`, as the start found it) still runs an older build: the restart brings it up. Null too where this
+ * is no deb, whose updates come with the system's.
  */
-export function packageMovedTo(form: LinuxPackage | null, running: string | null, onDisk: string | null): string | null {
-    if (form?.form !== 'deb' || running === null || onDisk === null) return null;
-    return onDisk !== running ? onDisk : null;
+export function packageMovedTo(form: LinuxPackage | null, running: string | null, onDisk: string | null, runtime: { version: string | null; ours: boolean } | null = null): string | null {
+    if (form?.form !== 'deb' || running === null) return null;
+    if (onDisk !== null && onDisk !== running) return onDisk;
+    const bare = (version: string) => version.split('+')[0] ?? version;
+    return runtime?.ours === true && runtime.version !== null && compareVersions(bare(runtime.version), bare(running)) < 0 ? running : null;
 }
 
 /** The question the restart item's key asks first, as the install's does: the restart ends a running turn. */

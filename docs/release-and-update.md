@@ -628,14 +628,21 @@ update apply --finish` still runs, as the application's start runs it once apt h
 check` names `sudo apt update && sudo apt upgrade`. Where the system installed a new version under a running window,
 which looks at the package's `version.json` once a minute, the update item reads **Restart Jason and Its Runtime to
 Finish the Update to <version>** and one notice says so; the item, or a click on the notice, stops the runtime the old
-version runs and starts Jason again, whose start finishes the update. Otherwise the item reads **Updates Come Through the
-Package**. `jason status`'s optional `update` check says when updates cannot arrive — Jason's apt source gone or turned
-off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
-Software — and when the package is a version this installation was not set up for yet, which Jason Desktop's start
-finishes: it runs `jason install` and the finishing step, and only once both completed records the version it set up
-for. So the check names that start and no command, since the finishing step alone records nothing; in a window already
-open, the restart item where the package changed under it, and otherwise **Put Back jason and the Skills…** under
-Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
+version runs and starts Jason again, whose start finishes the update. Where the system installed it while no window was
+open, the next start that finds the runtime this application's `jason` started still running the earlier version offers
+the same item and notice, and restarts nothing by itself: a restart ends a running turn, so the person chooses when; that
+item, or `jason runtime restart`, brings the runtime to the new version. The install line run over an older package is
+the same case: it leaves such a runtime running and names the two. Otherwise the item reads **Updates Come Through the
+Package**, and the system screen names no update item: where the runtime is newer it names Software Updater or `sudo apt
+update && sudo apt upgrade`, as does the UI's System screen in the window when a newer release is out. `jason status`'s
+optional `update` check says when updates cannot arrive — Jason's apt source gone or turned off, as a release upgrade of
+Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other Software — and when the package
+is a version this installation was not set up for yet: Jason Desktop's start sets it up, running `jason install` and the
+finishing step, and only once both completed records the version it set up for, and where the runtime still runs the
+earlier version it offers the restart item, as `jason runtime restart` brings that runtime up. So the check names that
+start, the item and `jason runtime restart`, and no command for the set-up, since the finishing step alone records
+nothing; in a window already open, the restart item where the package changed under it, and otherwise **Put Back jason
+and the Skills…** under Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;
