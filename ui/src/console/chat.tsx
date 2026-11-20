@@ -50,6 +50,7 @@ import {
     livePlan,
     lastEntryOf,
     isExport,
+    exportNotTyped,
     planElsewhere,
     lost,
     modeChoices,
@@ -555,13 +556,19 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
 }
 
 /**
- * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `resent` says the words were the waiting message: a
+ * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `typed` says the words are
+ * the ones the person typed in the message box, the only ones an `/export` is taken from. `resent` says the words were the waiting message: a
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
-export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
+export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode, typed = false): void {
+    // Only the words typed in the message box export: a card's option or field that says /export is sent as nothing.
+    if (!typed && isExport(text)) {
+        changeChat(id, exportNotTyped);
+        return;
+    }
     if (isUnmade(id)) {
         void makeUnmade(id).then((real) => {
-            if (real !== null) return sendTurn(real, text, resent, mode);
+            if (real !== null) return sendTurn(real, text, resent, mode, typed);
             // Refused: the words go back to the box first, before anything sent or typed after them.
             changeChat(id, (each) => everyWordBack(each, text));
         });
@@ -593,7 +600,12 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         said(isExport(words) ? each : { ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent),
     );
     here()
-        .desktop.chat.send(id, words, { ...turnOptions(onHost(chat, host.id), host), ...(mode ? { mode } : {}) })
+        .desktop.chat.send(id, words, {
+            ...turnOptions(onHost(chat, host.id), host),
+            ...(mode ? { mode } : {}),
+            // The desktop exports only the words the person typed in the message box, and is told so with them alone.
+            ...(typed && isExport(words) ? { typed: true as const } : {}),
+        })
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
             // From its first turn the desktop keeps the conversation, and lists it.
@@ -608,7 +620,7 @@ effect(() => {
     const ready = Object.values(chats.value).filter((chat) => chat.outbox !== null);
     for (const chat of ready) {
         changeChat(chat.id, handed);
-        sendTurn(chat.id, chat.outbox!, true);
+        sendTurn(chat.id, chat.outbox!, true, undefined, true);
     }
 });
 
@@ -1763,7 +1775,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         }
         if (!current.draft.trim()) return;
         changeChat(chatId, (each) => typed(each, ''));
-        sendTurn(chatId, current.draft);
+        sendTurn(chatId, current.draft, false, undefined, true);
     };
     const stop = () => {
         changeChat(chatId, stopAsked);

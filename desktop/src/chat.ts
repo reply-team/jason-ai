@@ -53,7 +53,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
-import { ExportRefused, exportInto, exportName, exportStart } from './chat-export.ts';
+import { ExportRefused, exportInto, exportName, exportNotTyped, exportStart } from './chat-export.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
 import { readMemoryFile, readMemoryWithin } from './chat-memory-files.ts';
@@ -174,6 +174,11 @@ export interface ChatSendOptions {
      * built, when the conversation is in another mode as it is read; absent, the turn runs in the mode it is in.
      */
     mode?: ChatMode;
+    /**
+     * Present, and true, when the words are the ones the person typed in the message box: only such words are an
+     * `/export` (`chat-export.ts`). The page sends it with an export alone.
+     */
+    typed?: true;
 }
 
 /** A conversation as `chat.list` lists it: `running` whether a turn of it runs now. */
@@ -1409,10 +1414,11 @@ export class Chat {
         if (this.#running.has(conversation.id)) return refuse(busy);
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
-        // `/export <file name>` writes the conversation to a file and starts no turn (`chat-export.ts`).
-        const exported = exportName(text);
-        if (exported !== null) return this.#export(conversation, chatId, exported);
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
+        // `/export <file name>` writes the conversation to a file and starts no turn (`chat-export.ts`), and only from
+        // words the person typed in the message box: one a card sent, or a page that does not say so, writes nothing.
+        const exported = exportName(text);
+        if (exported !== null) return given.typed === true ? this.#export(conversation, chatId, exported) : refuse(exportNotTyped);
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
         if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
         // A go approved for one mode never runs in another: a mode the person chose from the menu meanwhile refuses it.
@@ -1483,7 +1489,7 @@ export class Chat {
             const folder = campaign === null ? null : ((await this.#readCampaign(campaign, false)).about.campaign?.folder ?? null);
             const place: MemoryPlace | null = campaign === null ? await this.#rootPlace() : folder === null ? null : { level: 'campaign', folder, id: campaign };
             if (this.#closed) return;
-            const said = await exportInto(place, campaign !== null, name, text, () => !this.#closed);
+            const said = await exportInto(place, campaign === null ? 'root' : 'campaign', name, text, () => !this.#closed);
             if (said === null) return;
             say({ kind: 'notice', text: said });
             say({ kind: 'done', error: null });

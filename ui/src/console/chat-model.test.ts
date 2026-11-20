@@ -33,6 +33,8 @@ import {
     stopAsked,
     takenBack,
     everyWordBack,
+    exportNotTyped,
+    exportTypeIt,
     typed,
     afresh,
     codexPlanLine,
@@ -503,6 +505,15 @@ describe('an /export typed in the chat, which the desktop answers without a turn
         expect(livePlan(over, 'claude')).toBe(true);
         // Once, when it was a waiting message.
         expect(failed(said(planned(), '/export x.md', true), 'No.').draft).toBe('/export x.md');
+    });
+
+    it('that the person did not type in the message box is sent as nothing: the chat says so beside it, and a plan stays live', () => {
+        const before = planned();
+        const over = exportNotTyped(before);
+        expect(over.entries).toEqual([...before.entries, { kind: 'aside', text: exportTypeIt }]);
+        expect(exportTypeIt).toBe('Type /export in the message box yourself.');
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '' });
+        expect(livePlan(over, 'claude')).toBe(true);
     });
 });
 

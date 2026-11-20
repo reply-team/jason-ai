@@ -1,14 +1,18 @@
 /**
  * `/export <file name>`: a message of a chat that writes the conversation's words to a file instead of starting a turn.
  * It is caught in `Chat.send` before anything of a turn is built, and listed nowhere: no menu entry and no help line.
- * Any other first word that begins with `/` goes to the host as before.
+ * Any other first word that begins with `/` goes to the host as before. Only words the person typed in the message box
+ * export: the page says so with the send (`typed`), and an `/export` sent without it, a card's option or a card's field
+ * or a page that forges one, is refused with "Type /export in the message box yourself." and writes nothing.
  *
  * What is written is Markdown: the conversation's title as a heading, the moment it was written, and in order the
  * person's words under "You" and the AI's under "AI", as the record keeps them; no step, card, error, line or path, so
  * nothing the chat does not show as words. Where it is written: a bare file name alone, given on the message's first line
  * and nothing after it, into the campaign's folder for a campaign's chat and the harness root otherwise, as the runtime
  * recorded them and only while each carries the runtime's marker of it. A name with a folder in it, a parent, a drive, a
- * character or a device name a system cannot hold, or a name the harness keeps for its own files, is refused. The file is
+ * character or a device name a system cannot hold, or a name the harness keeps for its own files, is refused: any name
+ * that begins with a dot, any whose stem before the first dot is AGENTS, CLAUDE or GEMINI in any case, and in the root
+ * `projects`. The file is
  * made new or not at all: a name already there, a link included, is refused and never followed, and nothing is written
  * over.
  */
@@ -18,6 +22,9 @@ import { isAbsolute, join } from 'node:path';
 import type { Conversation } from './chat-conversations.ts';
 import { memoryFileName, type MemoryPlace } from './chat-memory.ts';
 import { markedFolder } from './chat-memory-files.ts';
+
+/** What the chat says to an `/export` the person did not type in the message box. */
+export const exportNotTyped = 'Type /export in the message box yourself.';
 
 /** A sentence the export refuses with, for the chat to say as a send's error. */
 export class ExportRefused extends Error {
@@ -45,10 +52,12 @@ const notAName = 'That is not a file name the desktop writes.';
 /** The names Windows keeps for its devices, as the stem before the first dot, with the spaces it ignores after it. */
 const deviceStem = /^(?:con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])$/i;
 /**
- * The names the harness keeps for its own files in a folder: the person's memory file, each import file the runtime
- * writes beside it (`AgentHosts.ImportFiles`, held to the runtime's table by a test), and the marker's folder.
+ * The stems, before the first dot, of the files the harness and the hosts keep in a folder: the person's memory file and
+ * each import file the runtime writes beside it (`AgentHosts.ImportFiles`, held to the runtime's table by a test), under
+ * any extension, so `CLAUDE.local.md` is theirs too. Every name that begins with a dot is theirs as well: the marker's
+ * `.jason`, and a host's or a tool's own configuration (`.claude`, `.mcp.json`, `.git`).
  */
-const harnessNames: ReadonlySet<string> = new Set([memoryFileName, 'CLAUDE.md', 'GEMINI.md', '.jason'].map((name) => name.toLowerCase()));
+const harnessStems: ReadonlySet<string> = new Set([memoryFileName, 'CLAUDE.md', 'GEMINI.md'].map((name) => (name.split('.')[0] ?? '').toLowerCase()));
 /** The names the runtime makes in the harness root: the projects' folder, `projects/` (docs/projects.md). */
 const rootNames: ReadonlySet<string> = new Set(['projects']);
 /** The longest name the file systems the desktop runs on take, in UTF-8 bytes. */
@@ -70,7 +79,8 @@ export function nameRefusal(name: string, place: 'root' | 'campaign' = 'campaign
     ) {
         return notAName;
     }
-    if (harnessNames.has(name.toLowerCase()) || (place === 'root' && rootNames.has(name.toLowerCase()))) return 'That name is one the harness keeps for its own files. Choose another.';
+    const stem = (name.split('.')[0] ?? '').trimEnd().toLowerCase();
+    if (name.startsWith('.') || harnessStems.has(stem) || (place === 'root' && rootNames.has(name.toLowerCase()))) return 'That name is one the harness keeps for its own files. Choose another.';
     return null;
 }
 
@@ -101,25 +111,26 @@ export function exportStart(conversation: Pick<Conversation, 'title' | 'entries'
  * runtime's marker of that place; null, or a place unmarked, has nowhere to go. Answers the sentence the chat says, or
  * null, with nothing written, when `open` says the window closed meanwhile.
  */
-export async function exportInto(place: MemoryPlace | null, campaign: boolean, name: string, text: string, open: () => boolean = () => true): Promise<string | null> {
+export async function exportInto(place: MemoryPlace | null, kind: 'root' | 'campaign', name: string, text: string, open: () => boolean = () => true): Promise<string | null> {
     const marked = place !== null && (await markedFolder(place));
     if (!open()) return null;
     if (place === null || !marked) {
         throw new ExportRefused(
-            campaign
+            kind === 'campaign'
                 ? 'The folder of this chat’s campaign is not known, or not on this disk, so the file has nowhere to go.'
                 : 'The harness root is not known, or not on this disk, so the file has nowhere to go.',
         );
     }
-    return `Written: ${writeExport(place.folder, name, text)}`;
+    return `Written: ${writeExport(place.folder, name, text, kind)}`;
 }
 
 /**
- * Writes `text` as a new file `name` in `folder` and answers its path. Never over anything: a name already there, a
- * link at it included, is refused before the open and again by the open itself, which makes the file new or fails.
+ * Writes `text` as a new file `name` in `folder`, the harness root or a campaign's folder as `kind` says, and answers its
+ * path. The name is checked again for that folder. Never over anything: a name already there, a link at it included, is
+ * refused before the open and again by the open itself, which makes the file new or fails.
  */
-export function writeExport(folder: string, name: string, text: string): string {
-    const refusal = nameRefusal(name);
+export function writeExport(folder: string, name: string, text: string, kind: 'root' | 'campaign'): string {
+    const refusal = nameRefusal(name, kind);
     if (refusal !== null) throw new ExportRefused(refusal);
     const path = join(folder, name);
     const there = `A file or folder of that name is already there, and the desktop never writes over it: ${path}`;

@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { readConversations, writeConversation, type Conversation, type KeptEntry } from '../src/chat-conversations.ts';
-import { exportName, exportText, nameRefusal } from '../src/chat-export.ts';
+import { exportName, exportText, nameRefusal, writeExport } from '../src/chat-export.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -98,7 +98,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
         async send(chatId, text) {
             const from = events.get(chatId)?.length ?? 0;
             const done = until(chatId, (event) => event.kind === 'done');
-            await chat.send(chatId, text, { host: 'claude' });
+            await chat.send(chatId, text, { host: 'claude', typed: true });
             await done;
             return (events.get(chatId) ?? []).slice(from);
         },
@@ -166,7 +166,7 @@ test('a message is an export only when its first word is /export alone', () => {
 });
 
 test('a name is taken only as a bare file name: no folder, no parent, no drive, nothing a system cannot hold', () => {
-    for (const bare of ['notes.md', 'my notes.md', 'Spring – week 1.md', 'notes', '.notes.md', 'a..b.md']) assert.equal(nameRefusal(bare), null, bare);
+    for (const bare of ['notes.md', 'my notes.md', 'Spring – week 1.md', 'notes', 'a..b.md']) assert.equal(nameRefusal(bare), null, bare);
     for (const path of ['../notes.md', 'sub/notes.md', 'sub\\notes.md', '/tmp/notes.md', 'C:\\notes.md', 'C:notes.md', '..', '.', '\\\\server\\share\\x.md']) {
         assert.equal(nameRefusal(path), withFolder, path);
     }
@@ -204,8 +204,13 @@ test('the harness’s own names are refused, whatever their case: the memory fil
     for (const name of [memory, ...imports, '.jason']) {
         for (const spelled of [name, name.toLowerCase(), name.toUpperCase()]) assert.equal(nameRefusal(spelled), theHarnessOwn, spelled);
     }
-    assert.equal(nameRefusal('AGENTS.md.md'), null);
-    assert.equal(nameRefusal('my-CLAUDE.md'), null);
+    // A name of a host's own file under another extension, and any name that begins with a dot, are the harness's too.
+    for (const name of [memory, ...imports]) {
+        const stem = name.split('.')[0] ?? '';
+        for (const spelled of [`${stem}.local.md`, `${stem.toLowerCase()}.txt`, stem, `${stem.toUpperCase()}.md.md`]) assert.equal(nameRefusal(spelled), theHarnessOwn, spelled);
+    }
+    for (const name of ['.mcp.json', '.git', '.cursorrules', 'CLAUDE.local.md', 'Gemini.md', 'agents.txt', '.notes.md']) assert.equal(nameRefusal(name), theHarnessOwn, name);
+    for (const name of ['my-CLAUDE.md', 'AGENTS-notes.md', 'Claudes.md', 'agentsmd']) assert.equal(nameRefusal(name), null, name);
     // The root keeps projects/ for the projects' folders the runtime makes there; a campaign's folder keeps no such name.
     for (const spelled of ['projects', 'Projects', 'PROJECTS']) {
         assert.equal(nameRefusal(spelled, 'root'), theHarnessOwn, spelled);
@@ -353,6 +358,31 @@ test('a message with more after the /export line, or a name of the harness, is r
     assert.equal(r.hosts(), 0);
 });
 
+test('an /export the person did not type in the message box is refused: no file, and the chat says so', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const before = readdirSync(root).sort();
+    for (const options of [{ host: 'claude' }, { host: 'claude', typed: false }, { host: 'claude', typed: 'yes' }]) {
+        const from = r.events.get(setupChat)?.length ?? 0;
+        const done = r.until(setupChat, (event) => event.kind === 'done');
+        await r.chat.send(setupChat, '/export card.md', options);
+        await done;
+        assert.deepEqual((r.events.get(setupChat) ?? []).slice(from), [{ kind: 'done', error: 'Type /export in the message box yourself.' }], JSON.stringify(options));
+    }
+    assert.deepEqual(readdirSync(root).sort(), before);
+    assert.equal(r.hosts(), 0, 'and nothing went to the host');
+    // The words the person typed still export.
+    assert.deepEqual(await r.send(setupChat, '/export typed.md'), [{ kind: 'notice', text: `Written: ${join(root, 'typed.md')}` }, { kind: 'done', error: null }]);
+});
+
+test('the write checks the name again for the folder it is given: the root’s projects stays refused there', (t) => {
+    const r = rig(t);
+    const { root, campaign } = places(r);
+    assert.throws(() => writeExport(root, 'projects', 'x', 'root'), { message: theHarnessOwn });
+    assert.equal(existsSync(join(root, 'projects')), false);
+    assert.equal(writeExport(campaign, 'projects', 'x', 'campaign'), join(campaign, 'projects'));
+});
+
 test('a campaign’s chat may name its file projects: only the root keeps that name', async (t) => {
     const r = rig(t);
     const { campaign } = places(r);
@@ -364,7 +394,7 @@ test('a campaign’s chat may name its file projects: only the root keeps that n
 test('an export the window closes on says nothing afterwards and writes nothing', async (t) => {
     const r = rig(t);
     const { root } = places(r);
-    const sending = r.chat.send(setupChat, '/export late.md', { host: 'claude' });
+    const sending = r.chat.send(setupChat, '/export late.md', { host: 'claude', typed: true });
     r.chat.closeAll();
     await sending;
     assert.deepEqual(r.events.get(setupChat) ?? [], []);

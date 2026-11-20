@@ -119,9 +119,10 @@ type ConversationsAreTheSeam = [
     Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
 ];
 
-// A turn names the conversation and the host, the model, the effort and the mode it was approved for; never a campaign,
-// which the conversation's record decides.
-type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode'>>];
+// A turn names the conversation and the host, the model, the effort and the mode it was approved for, and whether its
+// words were typed in the message box, the only ones an /export is taken from; never a campaign, which the
+// conversation's record decides.
+type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode' | 'typed'>>];
 
 // A turn's end reaches the page as the desktop says it, with the mark of a plan.
 type DoneIsTheSeam = Holds<Equal<Extract<ChatEvent, { kind: 'done' }>, Extract<DesktopChatEvent, { kind: 'done' }>>>;

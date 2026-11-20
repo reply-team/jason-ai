@@ -534,6 +534,18 @@ export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat =
  */
 export const isExport = (text: string): boolean => /^\/export(?=[\s\u0085]|$)/.test(text.trim());
 
+/** What the chat says to an export the person did not type in the message box, as the desktop says it too. */
+export const exportTypeIt = 'Type /export in the message box yourself.';
+
+/**
+ * An export that did not come from the message box, a card's option or a card's field: it is sent as nothing, and the
+ * chat says so beside the conversation, where it ends no card and no plan.
+ */
+export const exportNotTyped = (chat: Chat): Chat => ({
+    ...chat,
+    entries: [...chat.entries, { kind: 'aside', text: exportTypeIt }],
+});
+
 /**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
  * the words were the waiting message, which the turn gives back if it fails. An export is no message of the
