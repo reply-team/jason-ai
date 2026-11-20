@@ -297,22 +297,6 @@ describe('the start screen', () => {
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
     });
 
-    it('draws the chat it makes in the mode the desktop made it in, with no standing choice read, and asks for no other', async () => {
-        const desktop = stubDesktop();
-        // As the desktop makes a chat now: in Full access, with no standing choice and no box.
-        const make = desktop.chat.create.bind(desktop.chat);
-        desktop.chat.create = async (...args: Parameters<typeof make>) => {
-            const made = await make(...args);
-            return 'refused' in made ? made : { ...made, mode: 'full_access' };
-        };
-        renderConsole(desktop);
-        await ready();
-        ask('Heads of sales at logistics firms in Poland');
-        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.setMode')).toEqual([]);
-        await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
-    });
-
     it('draws an access button and a model button under the box, with the arrow last and no plus', async () => {
         renderConsole(stubDesktop());
         await ready();
@@ -357,7 +341,7 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')[0]!.args[2]).toMatchObject({ model: 'opus', effort: 'high' });
     });
 
-    it("shows the access mode as Full access with the chat's line before any chat is made, and the chat starts in it", async () => {
+    it("shows the access mode as Full access with the chat's line before any chat is made, and the chat starts in it, drawn in the mode the desktop made it in", async () => {
         const desktop = stubDesktop();
         renderConsole(desktop);
         await ready();

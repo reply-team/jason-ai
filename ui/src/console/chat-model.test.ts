@@ -659,7 +659,7 @@ describe("a chat's access mode", () => {
         expect(fromRecord(record as unknown as DesktopConversationRecord, 'claude').mode).toBe('ask_first');
     });
 
-    it("offers the four modes, narrow to wide with Full access last, each disabled with the desktop's reason, and the Feed the same as any chat", () => {
+    it("offers the four modes, narrow to wide with Full access last, each disabled with the desktop's reason", () => {
         expect(modeChoices(claude)).toEqual([
             { mode: 'ask_first', label: 'Ask first', disabled: null },
             { mode: 'plan_only', label: 'Plan only', disabled: null },
@@ -672,9 +672,6 @@ describe("a chat's access mode", () => {
             disabled: 'Full access runs on Claude Code only.',
         });
         expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
-        // The Feed is offered every mode a chat on its host is, Full access and Auto-edit included: the menu reads the
-        // host alone, and no mark of the Feed.
-        expect(modeChoices.length).toBe(1);
     });
 
     it("disables Auto-edit on Codex and with no host in the desktop's words, and nowhere else, the Feed included", () => {

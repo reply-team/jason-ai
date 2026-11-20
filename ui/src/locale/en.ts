@@ -81,7 +81,7 @@ export const en = {
     'start.voice.later': 'Not now',
     'chat.title': 'Chat',
     'chat.desktop':
-        'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do. The chat can be opened in this tab from Jason Desktop: Open in, then the browser.',
+        'The chat with the AI is part of the desktop application. It starts the AI on this computer and holds it to the access you give each chat, which a browser tab cannot do. The chat can be opened in this tab from Jason Desktop: Open in, then the browser.',
     'chat.tab.answered': 'This is answered in Jason Desktop.',
     'chat.tab.auto': 'This chat is in Auto-edit. Send messages to it from Jason Desktop.',
     'chat.tab.other': 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.',

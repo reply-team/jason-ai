@@ -181,11 +181,12 @@ describe('System, Full access with no standing choice', () => {
         const desktop = stubDesktop();
         // A desktop of an earlier version kept Always on this computer, new chats included, and says so when asked.
         const always = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        const asked: string[] = [];
         Object.assign(desktop, {
             fullAccess: {
-                standing: () => Promise.resolve(always),
-                takeBack: () => Promise.resolve(null),
-                onChanged: () => () => undefined,
+                standing: () => (asked.push('standing'), Promise.resolve(always)),
+                takeBack: () => (asked.push('takeBack'), Promise.resolve(null)),
+                onChanged: () => (asked.push('onChanged'), () => undefined),
             },
         });
         window.jasonDesktop = desktop;
@@ -197,6 +198,7 @@ describe('System, Full access with no standing choice', () => {
         expect(screen.queryByText(/enter Full access without asking/)).toBeNull();
         expect(screen.queryByText('New chats start in Full access.')).toBeNull();
         expect(screen.queryByText('Full access asks you each time a chat enters it.')).toBeNull();
+        expect(asked).toEqual([]);
     });
 });
 

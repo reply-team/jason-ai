@@ -1565,7 +1565,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         wasRemoving.current = removing;
     }, [removing]);
     const unmade = isUnmade(chatId);
-    // An unmade chat shows the mode the conversation will take by the standing choices, as a create would give it.
+    // An unmade chat is drawn in the mode its conversation will be made in (`newChatMode`), as a create gives it.
     const chat = record && unmade ? unmadeAsDrawn(record) : record;
     // Reply is offered unless the campaign's enrolment is routed to another plugin: read when the chat is of a draft campaign
     // while Reply is not connected, and read again if the campaign or what is connected changes.

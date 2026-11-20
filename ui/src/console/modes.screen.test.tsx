@@ -430,11 +430,12 @@ describe('Full access, with no standing choice to offer or take back', () => {
         const desktop = chatDesktop();
         // A desktop of an earlier version kept Always on this computer and says so when asked: nothing of it is offered.
         const always = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+        const asked: string[] = [];
         Object.assign(desktop, {
             fullAccess: {
-                standing: () => Promise.resolve(always),
-                takeBack: () => Promise.resolve(null),
-                onChanged: () => () => undefined,
+                standing: () => (asked.push('standing'), Promise.resolve(always)),
+                takeBack: () => (asked.push('takeBack'), Promise.resolve(null)),
+                onChanged: () => (asked.push('onChanged'), () => undefined),
             },
         });
         renderConsole(desktop);
@@ -447,6 +448,7 @@ describe('Full access, with no standing choice to offer or take back', () => {
             ['full_access', 'Full access', false],
         ]);
         expect(screen.queryByText('Full access: ask each time again')).toBeNull();
+        expect(asked).toEqual([]);
     });
 });
 

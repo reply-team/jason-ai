@@ -279,7 +279,6 @@ describe('what a tab never says yes to', () => {
                 ![
                     'mode.get',
                     'theme.get',
-                    'fullAccess.standing',
                     'setup.status',
                     'chat.list',
                     'chat.open',

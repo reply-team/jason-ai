@@ -233,13 +233,17 @@ test('a record an earlier desktop wrote with no mode opens in Full access, in th
     assert.deepEqual(r.started, ['full_access']);
 });
 
-test('a standing choice of Full access an earlier desktop left is gone once the desktop has started, and changes no mode', async (t) => {
+test('a standing choice of Full access an earlier desktop left, and its mark of a take-back owed, are gone once the desktop has started, and change no mode', async (t) => {
     const r = rig(t);
     const planned = earlierRecord(r, { mode: 'plan_only' });
-    // Always on this computer, with new chats left in Ask first: what a desktop of 0.49 kept for its menu.
+    // Always on this computer, with new chats left in Ask first: what an earlier desktop kept for its menu, beside the
+    // mark it left while a take-back of Always was owed.
     put(r.b.paths.fullAccess, `${JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: false } }, null, 2)}\n`);
+    const takenBack = join(dirname(r.b.paths.fullAccess), 'full-access-taken-back');
+    put(takenBack, '');
     const chat = r.restart();
     await settled(() => !existsSync(r.b.paths.fullAccess), 'the file is gone once the desktop has started');
+    assert.equal(existsSync(takenBack), false, 'and so is the mark');
     assert.equal(chat.open(planned).mode, 'plan_only');
     assert.equal((await chat.create()).mode, 'full_access', 'a new chat is in Full access, whatever the file said of new chats');
 });
