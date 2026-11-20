@@ -1,6 +1,7 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach } from 'vitest';
 import { setPlace } from '../platform/places';
+import { enrolReads } from '../console/enrol-route';
 import { forgetEdits } from '../screens/attention/reasking';
 import { takeUnanswered } from './fake-api';
 
@@ -18,6 +19,9 @@ beforeEach(() => setPlace('window'));
 
 // A message edited on the page is the page's own memory, which a test starts without.
 beforeEach(() => forgetEdits());
+
+// Where each campaign's enrolment was last read is the page's own memory too: a test reads it afresh.
+beforeEach(() => (enrolReads.value = {}));
 
 afterEach(() => {
     cleanup();
