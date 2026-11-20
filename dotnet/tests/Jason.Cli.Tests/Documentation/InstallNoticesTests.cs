@@ -464,7 +464,7 @@ public sealed partial class InstallNoticesTests : IDisposable
                 Assert.False(modifyPath, "install.ps1 is never run here with the PATH step: it writes the account's registry.");
                 var translated = arguments.Select(argument => argument == "--version" ? "-Version" : argument);
                 return RunToEnd(
-                    Pwsh(),
+                    Jason.Runtime.Tests.ChildPwsh.StartInfo(_tree.Root),
                     new Dictionary<string, string>(Variables) { ["LOCALAPPDATA"] = _tree.Root, ["POWERSHELL_TELEMETRY_OPTOUT"] = "1" },
                     ["-NoProfile", "-NonInteractive", "-File", script, "-InstallDir", InstallDir, "-NoModifyPath", "-Feed", feed, .. translated]);
             }
@@ -553,31 +553,20 @@ public sealed partial class InstallNoticesTests : IDisposable
                 }
             }
         }
-
-        private static string Pwsh()
-        {
-            var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-                .Select(directory => Path.Combine(directory, "pwsh.exe"))
-                .FirstOrDefault(File.Exists);
-            Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it.");
-            return pwsh!;
-        }
     }
 
     /// <summary>One program, run to completion, with the environment a test gives it on top of this process's own.</summary>
-    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, IEnumerable<string> arguments)
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, IEnumerable<string> arguments) =>
+        RunToEnd(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true }, environment, arguments);
+
+    /// <summary>One program, run to completion from a start made for it, with the environment a test gives it on top.</summary>
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(ProcessStartInfo start, IReadOnlyDictionary<string, string> environment, IEnumerable<string> arguments)
     {
-        var start = new ProcessStartInfo(executable)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.RedirectStandardInput = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
@@ -595,7 +584,7 @@ public sealed partial class InstallNoticesTests : IDisposable
         if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"{Path.GetFileName(executable)} did not finish in two minutes.");
+            Assert.Fail($"{Path.GetFileName(start.FileName)} did not finish in two minutes.");
         }
 
         return (process.ExitCode, stdout.Result, stderr.Result);

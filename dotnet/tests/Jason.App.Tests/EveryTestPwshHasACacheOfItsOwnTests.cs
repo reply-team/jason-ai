@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -29,13 +30,26 @@ public sealed partial class EveryTestPwshHasACacheOfItsOwnTests
     /// <summary>The one start of a test's PowerShell 7.</summary>
     private const string Helper = "ChildPwsh.cs";
 
+    /// <summary>
+    /// The files that start PowerShell 7 at the product's child-process door, which a test of the door must, and name it as a
+    /// program beside that, by file name, with why. Each is held instead to give its start the cache through
+    /// <c>ChildPwsh.WithOwnCache</c>.
+    /// </summary>
+    private static readonly Dictionary<string, string> AtTheDoor = new(StringComparer.Ordinal)
+    {
+        ["ChildProcessModulePathTests.cs"] = "names PowerShell 7's program as data for the door's rule about Windows PowerShell, and asks PowerShell 7 its module path through the door",
+    };
+
     [Fact]
+    [Critical(Family.B9, "the suite's PowerShell 7 children never share the runner's start cache")]
     public void No_test_starts_PowerShell_7_but_through_the_one_start_that_gives_it_a_cache_of_its_own()
     {
         var tests = TestsDirectory();
         var offences = Sources(tests)
             .Where(file => Path.GetFileName(file) is not Self and not Helper)
-            .Where(file => Offends(File.ReadAllText(file)))
+            .Where(file => AtTheDoor.ContainsKey(Path.GetFileName(file))
+                ? !File.ReadAllText(file).Contains("ChildPwsh.WithOwnCache(", StringComparison.Ordinal)
+                : Offends(File.ReadAllText(file)))
             .Select(file => Path.GetRelativePath(tests, file).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToList();
