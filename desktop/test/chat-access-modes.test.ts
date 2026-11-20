@@ -250,7 +250,7 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
     const said = await r.turn(id, 'go', claude);
     assert.deepEqual(modes(said), []);
     assert.deepEqual(done(said), { kind: 'done', error: unguardedSentence });
-    assert.ok(unguardedSentence.startsWith('Full access is not available here until Jason Desktop starts again: '));
+    assert.ok(unguardedSentence.startsWith(`${bypassSentences.unguarded} `));
     assert.ok(!texts(said).includes('after the tool'), 'nothing the host says after it is shown');
     assert.equal(r.chat.open(id).mode, 'full_access', 'the record keeps the mode');
     assert.deepEqual(r.changes, []);
@@ -665,15 +665,18 @@ test('the end of a finding\'s minute asks the page to read the hosts again, so t
     assert.equal(r.chat.bypassUnavailable(), null);
 });
 
-test('a desktop that runs as root starts Claude Code in Ask first for a Full access turn, says why once, and the record keeps Full access, a minute on and more', async (t) => {
+test('a desktop that runs as root says so to the log once, as it starts, starts Claude Code in Ask first for a Full access turn, says why once, and the record keeps Full access, a minute on and more', async (t) => {
     let clock = Date.parse('2026-11-20T10:00:00.000Z');
-    const r = rig(t, { chat: { root: () => true, now: () => clock } });
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { chat: { root: () => true, now: () => clock, bypassGone: (why, named) => void gone.push([why, named]) } });
+    assert.deepEqual(gone, [['root', null]], 'said as the desktop starts, before any turn');
     const { id } = await r.chat.create();
     const first = await r.turn(id, 'hello', claude);
     clock += 2 * bypassHeldMs;
     const second = await r.turn(id, 'hello again', claude);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['default', 'default']);
     assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.root, 'full_access')]);
+    assert.deepEqual(gone, [['root', null]], 'and once');
     assert.equal(r.chat.open(id).mode, 'full_access');
 });
 

@@ -181,23 +181,23 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.match(fullAccessSentence(null) ?? '', /could not be read/);
 });
 
-test('Full access not available says so in one shape, its cause after it: right now where a turn found the cause, until Jason Desktop starts again where a tool ran unchecked, and a tool that ran unchecked says the chat keeps its mode', () => {
+test('Full access not available says so in one shape, its cause after it, right now where the cause holds a minute and no sentence asking for a restart, and a tool that ran unchecked ends its turn in the box\'s own words', () => {
     assert.deepEqual(bypassSentences, {
         root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
         forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
         bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
-        unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+        unguarded: 'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out.',
     });
-    // A cause a turn found holds a minute, and its sentence says "right now"; only a tool that ran unchecked holds until the
-    // desktop starts again and says so; running as root is said as it is.
+    // A cause that holds a minute says "right now"; none says the desktop must start again.
     for (const cause of causes) {
         assert.equal(bypassSentence(cause).includes('right now'), bypassLeadsTo(cause).held === 'one_minute', cause.why);
-        assert.equal(bypassSentence(cause).includes('until Jason Desktop starts again'), cause.why === 'unguarded', cause.why);
+        assert.doesNotMatch(bypassSentence(cause), /starts again|restart/, cause.why);
     }
     assert.equal(
         unguardedSentence,
-        'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.',
+        'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there, and the menu shows the mode each next turn runs in; the chat stays set to Full access.',
     );
+    assert.doesNotMatch(unguardedSentence, /keeps its mode|starts again/);
     assert.equal(
         hookFilteredSentence,
         "Jason's check before each tool did not run in this turn, which a policy can filter out: the cards and Claude Code's own rules still decide what runs, without Jason's refusals in front of them.",

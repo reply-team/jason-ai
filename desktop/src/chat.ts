@@ -270,8 +270,9 @@ export interface ChatOptions {
      */
     hookFiltered?(mode: ChatMode): void;
     /**
-     * Said each time a turn finds Claude Code's bypass not available where no earlier finding still holds: its cause,
-     * and the mode Claude Code named instead, a word of its closed table (`namedMode`), null where it named none.
+     * Said once as the chat is made where the desktop runs as root, and each time a turn finds Claude Code's bypass not
+     * available where no earlier finding still holds: its cause, and the mode Claude Code named instead, a word of its
+     * closed table (`namedMode`), null where it named none.
      */
     bypassGone?(why: BypassWhy, named: NamedMode | null): void;
     /** How long a cause a turn found holds, in milliseconds (`bypassLeadsTo`); absent, `bypassHeldMs`, a minute. A row shortens it. */
@@ -690,7 +691,10 @@ export class Chat {
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
-        this.#bypass = (options.root?.() ?? runsAsRoot()) ? { bypass: { why: 'root', named: null }, until: null } : null;
+        const root = options.root?.() ?? runsAsRoot();
+        this.#bypass = root ? { bypass: { why: 'root', named: null }, until: null } : null;
+        // Running as root holds for the whole run, and is said to the log once, now, as a cause a turn finds is when it does.
+        if (root) options.bypassGone?.('root', null);
         sweepTurnFiles(options.paths.turns);
         // The standing choice of Full access an earlier desktop kept, and its mark of a take-back owed, mean nothing now:
         // every chat starts in Full access with no box. Both files are unlinked, and neither ever changes a mode.

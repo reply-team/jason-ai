@@ -155,16 +155,15 @@ export interface Bypass {
 }
 
 /**
- * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." A cause a turn found holds a
- * minute (`bypassLeadsTo`), and its sentence says so: "... right now: <why>."; a tool that ran unchecked holds for the rest
- * of this run of the desktop, and its sentence says "... until Jason Desktop starts again: <why>." A start that named
+ * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." A cause that holds a minute
+ * (`bypassLeadsTo`) says so: "... right now: <why>." No sentence asks for a restart of the desktop. A start that named
  * another mode and said nothing of why is said by `bypassSentence`, which names that mode.
  */
 export const bypassSentences: Readonly<Record<Exclude<BypassWhy, 'bypass_off'>, string>> = {
     root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
     forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
     bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
-    unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+    unguarded: 'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out.',
 };
 
 /**
@@ -196,10 +195,11 @@ export function bypassLeadsTo(bypass: Bypass): { mode: 'ask_first'; why: { kind:
 }
 
 /**
- * The end of a Full access turn stopped where a tool ran that the turn's hook never saw: said once, the conversation
- * keeps its mode, and its later turns run in Ask first (`unguarded`).
+ * The end of a Full access turn stopped where a tool ran that the turn's hook never saw, said once in the words of the
+ * box (`askFirstThisTurn`): the menu shows the mode each next turn runs in, Ask first while the cause holds
+ * (`unguarded`), and the record keeps Full access, which only a turn in Full access can be stopped for.
  */
-export const unguardedSentence = `${bypassSentences.unguarded} The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.`;
+export const unguardedSentence = `${bypassSentences.unguarded} The turn was stopped there, and the menu shows the mode each next turn runs in; the chat stays set to Full access.`;
 
 /**
  * What an Ask first or Auto-edit turn says once where a tool ran that the turn's hook never saw: the turn runs on, the

@@ -320,6 +320,7 @@ test('a bypass found not available is logged by its cause and the mode Claude Co
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
     const log = fileLogger(b.paths.logs);
     const logged = loggedTurns(log);
+    logged.bypassGone('root', null);
     logged.bypassGone('bypass_off', 'default');
     logged.bypassGone('bypass_off', 'another');
     logged.bypassGone('forced_default', 'default');
@@ -330,6 +331,7 @@ test('a bypass found not available is logged by its cause and the mode Claude Co
         .filter((line) => line.EventName === 'chat_bypass_unavailable')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
     assert.deepEqual(said, [
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'root', Named: 'none' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'default' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'another' },
         { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'forced_default', Named: 'default' },

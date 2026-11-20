@@ -7,9 +7,10 @@
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
  * fresh session; how each naming run of a set-up chat ended, as one closed word; each change of a conversation's mode, by
  * the two modes, and the mode of each turn started and of each request settled; that a Full access turn was stopped for a
- * tool its hook never saw, and the mode of a turn of Ask first or Auto-edit that ran on after one; each time Claude Code's
- * bypass was found not available where no earlier finding still held, by its cause (one of four a turn finds) and the mode
- * Claude Code named instead, a word of its closed table, another or none; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
+ * tool its hook never saw, and the mode of a turn of Ask first or Auto-edit that ran on after one; that Claude Code's
+ * bypass is not available, once at the start where the desktop runs as root and each time a turn found it so where no
+ * earlier finding still held, by its cause (root, or one of four a turn finds) and the mode Claude Code named instead, a
+ * word of its closed table, another or none; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
  * inside, a closed word each; each card the AI asked for that the page did not draw, by its kind (one of six, or unknown)
  * and why (one of four), never what it held. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
