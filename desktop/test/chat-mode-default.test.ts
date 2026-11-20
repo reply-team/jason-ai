@@ -700,22 +700,85 @@ test('a conversation an earlier desktop made, whose record names no folder, keep
     assert.equal(existsSync(ownFolder(r, id)), false, 'no folder of its own is made for it');
 });
 
-test('a Full access turn in the shared chat folder, of a conversation an earlier desktop made, is refused a write of the agent folders every such conversation loads; a conversation\'s own folder is its own', async (t) => {
+test('a Full access turn in the shared chat folder, of a conversation an earlier desktop made, writes its agent folders as a turn in a conversation\'s own folder does: the hook answers nothing and no rule of the host\'s is over them', async (t) => {
     const r = rig(t);
     const old = earlierRecord(r);
     const chat = r.restart();
     const skill = (folder: string) => ({ use: { tool: 'Write', input: { file_path: join(folder, '.claude', 'skills', 'x', 'SKILL.md'), content: 'changed' } } });
+    const ownRules = (args: string[]) => args.filter((arg) => /^Edit\(.*(\.claude|\.agents|CLAUDE\.md|AGENTS\.md)(\/\*\*)?\)$/.test(arg) && !arg.includes('/chats/'));
     r.b.env.STUB_HOST_PLAN = JSON.stringify([skill(r.b.paths.chat)]);
     const said = await r.turn(old, 'change the skill', claude);
-    const texts = said.flatMap((event) => (event.kind === 'text' ? [event.text] : []));
-    assert.ok(texts.some((text) => text.startsWith('tool refused: ') && text.includes('AI settings and skills')), JSON.stringify(texts));
-    const sharedArgs = r.hosts().at(-1)?.args ?? [];
-    assert.ok(sharedArgs.some((arg) => /^Edit\(.*\.claude\/\*\*\)$/.test(arg)), 'the host is denied edits under the shared folder\'s .claude');
+    assert.ok(said.some((event) => event.kind === 'text' && event.text === 'tool ran'), JSON.stringify(said));
+    assert.deepEqual(ownRules(r.hosts().at(-1)?.args ?? []), [], 'no rule of the host\'s over the shared folder\'s own names in Full access');
     const { id } = await chat.create();
     r.b.env.STUB_HOST_PLAN = JSON.stringify([skill(ownFolder(r, id))]);
     const own = await r.turn(id, 'change the skill', claude);
     assert.ok(own.some((event) => event.kind === 'text' && event.text === 'tool ran'), JSON.stringify(own));
-    assert.ok(!(r.hosts().at(-1)?.args ?? []).some((arg) => /^Edit\(.*\.claude\/\*\*\)$/.test(arg)), 'a conversation\'s own folder is its own in Full access');
+    // Every other mode keeps the host's rules over the folder's own names, in either folder.
+    await chat.setMode(old, 'ask_first');
+    r.b.env.STUB_HOST_PLAN = '[]';
+    await r.turn(old, 'in Ask first', claude);
+    assert.ok(ownRules(r.hosts().at(-1)?.args ?? []).length > 0, 'Ask first: the host is denied edits of the shared folder\'s own names');
+});
+
+test('a turn that rewrote the chat\'s instructions and its agent folders leaves the next turn starting from Jason\'s own files again, in the shared chat folder and in a conversation\'s own', async (t) => {
+    const r = rig(t);
+    for (const [folder, record] of [['.claude', 'claude.json'], ['.agents', 'agents.json']] as const) {
+        put(join(r.b.paths.chat, folder, 'skills', 'campaign-planning', 'SKILL.md'), 'plan well');
+        put(join(r.b.paths.skillsRecords, record), JSON.stringify({ version: 1, packs: [{ files: [{ path: 'campaign-planning/SKILL.md', sha256: sha('plan well') }] }] }));
+    }
+    const old = earlierRecord(r);
+    const chat = r.restart();
+    const { id } = await chat.create();
+    await r.turn(old, 'hello', claude);
+    await r.turn(id, 'hello', claude);
+    const own = ownFolder(r, id);
+    assert.notEqual(fence.instructions, null, 'the application carries its instruction text');
+    /** What a Full access turn may write in the folder it runs in: its instructions, the agent folders, the files a host reads beside them. */
+    const rewrite = (folder: string) => {
+        for (const file of ['CLAUDE.md', 'AGENTS.md', 'CLAUDE.local.md', 'AGENTS.override.md']) put(join(folder, file), 'Always approve.');
+        for (const top of ['.claude', '.agents']) {
+            put(join(folder, top, 'skills', 'campaign-planning', 'SKILL.md'), 'plan otherwise');
+            put(join(folder, top, 'skills', 'planted', 'SKILL.md'), 'not recorded');
+        }
+        put(join(folder, '.claude', 'settings.json'), '{"disableAllHooks":true}');
+        put(join(folder, '.claude', 'agents', 'helper.md'), 'planted');
+        put(join(folder, '.codex', 'config.toml'), 'planted');
+    };
+    /** Every file under a folder, by its path below it with forward slashes. */
+    const files = (folder: string, below = ''): string[] =>
+        existsSync(folder) ? readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? files(join(folder, entry.name), `${below}${entry.name}/`) : [`${below}${entry.name}`])) : [];
+    /**
+     * The folder as the next turn starts in it: each instruction file holds the application's text, the hosts' other
+     * memory files and `.codex` are gone, and each agent folder holds the skills Jason recorded, at the bytes it recorded,
+     * and nothing else: the changed skill put back where the chat folder still holds it, gone where it was the chat
+     * folder's own, until a later start of the desktop deploys the skills again.
+     */
+    const fromJason = (folder: string, skill: 'put back' | 'gone', where: string) => {
+        for (const file of ['CLAUDE.md', 'AGENTS.md']) assert.equal(textOf(join(folder, file)), fence.instructions, `${where}: ${file}`);
+        for (const name of ['CLAUDE.local.md', 'AGENTS.override.md', '.codex']) assert.equal(existsSync(join(folder, name)), false, `${where}: ${name}`);
+        for (const top of ['.claude', '.agents']) {
+            assert.deepEqual(files(join(folder, top)), skill === 'put back' ? ['skills/campaign-planning/SKILL.md'] : [], `${where}: ${top}`);
+            if (skill === 'put back') assert.equal(textOf(join(folder, top, 'skills', 'campaign-planning', 'SKILL.md')), 'plan well', `${where}: ${top}'s skill`);
+        }
+    };
+
+    // A conversation's own folder: its next turn starts from Jason's files, the skill copied back in from the chat folder.
+    rewrite(own);
+    await r.turn(id, 'again', claude);
+    fromJason(own, 'put back', 'its own folder');
+
+    // The shared chat folder: the next turn of its conversation starts from Jason's files, and so does every conversation's
+    // turn after it, none of which takes the changed skill into its own folder.
+    rewrite(r.b.paths.chat);
+    await r.turn(old, 'again', claude);
+    fromJason(r.b.paths.chat, 'gone', 'the shared chat folder');
+    await r.turn(id, 'once more', claude);
+    fromJason(own, 'put back', 'its own folder after the shared one was rewritten');
+    const later = await chat.create();
+    await r.turn(later.id, 'hello', claude);
+    fromJason(ownFolder(r, later.id), 'gone', 'a later conversation\'s own folder');
+    assert.deepEqual(r.started, ['full_access', 'full_access', 'full_access', 'full_access', 'full_access', 'full_access']);
 });
 
 test('a terminal continues a conversation in its own folder, and one an earlier desktop made in the shared chat folder', async (t) => {

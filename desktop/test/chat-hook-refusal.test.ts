@@ -1,15 +1,16 @@
 // The turn's hook, in every mode but Plan only, and Full access as Claude Code's own bypass. The hook refuses three kinds
 // and answers nothing else: the installation's settings files and run file, its data directory outside the turn's folder,
-// and Jason's own variables. Each refusal says what the chat does not open and names the jason verb that does the act.
-// In Full access everything else runs with no card; in Ask first and Auto-edit the cards and the host's rules decide it
-// as before. Every command here is a neutral one or a made-up program; every path is made up.
+// and what Jason itself sets for the turn: its variables, with where the shell finds a program, and its permission tool.
+// Each refusal says what the chat does not open and names the jason verb that does the act. In Full access everything
+// else runs with no card; in Ask first and Auto-edit the cards and the host's rules decide it as before. Every command
+// here is a neutral one or a made-up program; every path is made up.
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import ts from 'typescript';
-import { readFence } from '../src/chat-deny.ts';
+import { modeFence, readFence } from '../src/chat-deny.ts';
 import { claudeArguments, hookedSettings } from '../src/chat-hosts.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent } from '../src/chat-permission-broker.ts';
@@ -177,7 +178,10 @@ test('in a demo run the person\'s own installation is refused by its sentence', 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /home/someone/.jason-own/config/settings.json' }, demo), refused(personsRefusal));
 });
 
-test('Jason\'s own variables are refused by their sentences: the confining variable, the attempt\'s, and where the shell finds a program', () => {
+test('what Jason itself sets for the turn is refused by its sentences: its variables, the confining one and the attempt\'s, with where the shell finds a program, and its permission tool', () => {
+    const tool = fullAccessJudgement('mcp__jason_desktop__decide', { tool_name: 'Bash', input: { command: 'git push' } }, linux);
+    assert.equal(tool.outcome, 'refused', 'the chat\'s own permission tool');
+    assert.match(tool.outcome === 'refused' ? tool.message : '', /only the person answers them/);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'JASON_CONFINED= jason campaign list' }, linux), refused(confinedRefusal));
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'env -i jason campaign list' }, linux), refused(confinedRefusal));
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'JASON_ATTEMPT_ID=att_1 jason workitem list' }, linux), refused(attemptRefusal));
@@ -276,23 +280,6 @@ test('what Full access refused before that is none of the three kinds runs, with
     }
 });
 
-test('a turn in the shared chat folder refuses a write of the chat\'s own names there in every mode the hook rides; a conversation\'s own folder does not', () => {
-    const paths = posix;
-    const shared = homeScope('linux', '/home/someone', { chat: '/home/someone/.jason/desktop/chat', cwd: '/home/someone/.jason/desktop/chat', shared: true });
-    const writes: [string, Record<string, unknown>][] = [
-        ['Write', { file_path: '.claude/skills/x/SKILL.md', content: 'x' }],
-        ['Write', { file_path: '.claude/settings.json', content: '{}' }],
-        ['Edit', { file_path: 'CLAUDE.md', old_string: 'a', new_string: 'b' }],
-        ['Bash', { command: 'echo x > .claude/skills/x/SKILL.md' }],
-    ];
-    for (const [tool, input] of writes) {
-        assert.equal(fullAccessJudgement(tool, input, shared).outcome, 'refused', `${tool} ${JSON.stringify(input)}`);
-        assert.deepEqual(fullAccessJudgement(tool, input, linux), runs, `own folder: ${tool} ${JSON.stringify(input)}`);
-    }
-    assert.equal(fullAccessJudgement('Write', { file_path: paths.join(shared.chat, '.claude', 'skills', 'x', 'SKILL.md'), content: 'x' }, shared).outcome, 'refused', 'by its whole path');
-    assert.deepEqual(fullAccessJudgement('Read', { file_path: '.claude/skills/x/SKILL.md' }, shared), runs, 'a read of them runs');
-});
-
 test('Ask first\'s hook stands in front of the host\'s allow rules: a no-card verb fed the settings file or the run file is refused', () => {
     const broker = new PermissionBroker({ emit: () => {} });
     broker.openTurn('c1', 'ask', linux, 'ask_first');
@@ -306,6 +293,119 @@ test('Ask first\'s hook stands in front of the host\'s allow rules: a no-card ve
             assert.deepEqual(broker.hook(turn, 'Bash', { command }, null), { decision: 'deny', reason: settingsRefusal }, `${turn}: ${command}`);
         }
         assert.deepEqual(broker.hook(turn, 'Bash', { command: 'jason preference set tone_of_voice --value-file - < tone.txt' }, null), { decision: 'none' }, `${turn}: a file of the chat's own`);
+    }
+});
+
+/** Whether one of the host's allow rules, `Bash(<words>:*)`, lets a command through: those words, whole, at its start. */
+function allowedBy(args: string[], command: string): boolean {
+    const rules = args.slice(args.indexOf('--allowedTools') + 1, args.indexOf('--disallowedTools'));
+    return rules.some((rule) => {
+        const words = /^Bash\((.*):\*\)$/.exec(rule)?.[1];
+        return words !== undefined && (command === words || command.startsWith(`${words} `));
+    });
+}
+
+test('below the floor of Full access no hook rides Ask first or Auto-edit, so the host is given no allow rule for a no-card form whose verb reads a request\'s file: each reaches the permission tool, which refuses a redirect from the settings file and otherwise asks', () => {
+    const turn = (mode: ChatMode, hooked: boolean) => {
+        const fenced = modeFence(fence, mode);
+        return claudeArguments({ mcpConfig: 'turn.mcp.json', addDirs: [], denied: fenced.commands, allowed: fenced.allowed, reads: fenced.reads, mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: hooked ? '2.1.329' : '2.1.300' });
+    };
+    const reading = [
+        'jason preference set tone_of_voice --value-file - < tone.txt',
+        'jason preference set sender.identity --value cheeky --actor human:someone',
+        'jason rolenote set cmp_1 researcher --note-file - < note.md',
+        'jason campaign create --file - < campaign.json',
+        'jason campaign start cmp_1 --actor human:someone',
+        'jason workitem create cmp_1 --file - < item.json',
+        'jason journal append cmp_1 --kind decision --file - < entry.json',
+    ];
+    const plain = ['jason campaign list', 'jason approval approve apr_1 --actor human:someone', 'jason decision answer dec_1 --option yes --actor human:someone', 'jason preference unset tone_of_voice --actor human:someone'];
+    for (const mode of ['ask_first', 'auto_edit'] as const) {
+        for (const command of reading) {
+            assert.equal(allowedBy(turn(mode, false), command), false, `${mode} below the floor: ${command}`);
+            assert.equal(allowedBy(turn(mode, true), command), true, `${mode} from the floor on, the hook in front of the rule: ${command}`);
+        }
+        for (const command of plain) assert.equal(allowedBy(turn(mode, false), command), true, `${mode} below the floor, a form that reads no file: ${command}`);
+    }
+    // What reaches the permission tool there: a redirect from the settings file is refused, any other use is a card.
+    const askFirst: ChatScope = { ...linux, denied: [], deniedOperations: [] };
+    assert.deepEqual(judge('Bash', { command: 'jason preference set tone_of_voice --value-file - < /home/someone/.jason/config/settings.json' }, askFirst), { verdict: 'deny', message: settingsRefusal });
+    assert.equal(judge('Bash', { command: 'jason preference set tone_of_voice --value cheeky --actor human:someone' }, askFirst).verdict, 'ask');
+});
+
+test('a redirect spelled as Windows spells it is refused in Ask first, by the permission tool and by the hook: the drive\'s path and the profile\'s variable', () => {
+    const askFirst: ChatScope = { ...windows, denied: [], deniedOperations: [] };
+    const broker = new PermissionBroker({ emit: () => {} });
+    broker.openTurn('c1', 'ask', askFirst, 'ask_first');
+    for (const [command, sentence] of [
+        ['jason preference set tone_of_voice --value-file - < C:\\Users\\someone\\.jason\\config\\settings.json', settingsRefusal],
+        ['jason preference set tone_of_voice --value-file - < C:/Users/someone/.jason/run/runtime.json', settingsRefusal],
+        ['jason preference set tone_of_voice --value-file - < %USERPROFILE%\\.jason\\config\\settings.json', settingsRefusal],
+        ['jason rolenote set cmp_1 researcher --note-file - < "%USERPROFILE%/.jason/config/settings.json"', settingsRefusal],
+    ] as const) {
+        assert.deepEqual(judge('Bash', { command }, askFirst), { verdict: 'deny', message: sentence }, `the permission tool: ${command}`);
+        assert.deepEqual(broker.hook('ask', 'Bash', { command }, null), { decision: 'deny', reason: sentence }, `the hook: ${command}`);
+    }
+});
+
+test('on Windows Full access reads this computer\'s own drive shares and the long-path forms as the drive, by Ask first\'s reader, and refuses a path in a device\'s namespace by the data sentence, which Ask first refuses too', () => {
+    const named = homeScope('win32', 'C:\\Users\\someone', { machine: ['DESKTOP-1'] });
+    const below = 'Users\\someone\\.jason\\config\\settings.json';
+    const spellings = [
+        `\\\\localhost\\C$\\${below}`,
+        `\\\\127.0.0.1\\c$\\${below}`,
+        `\\\\::1\\C$\\${below}`,
+        `\\\\DESKTOP-1\\C$\\${below}`,
+        `\\\\?\\UNC\\localhost\\C$\\${below}`,
+        `\\\\.\\UNC\\desktop-1\\C$\\${below}`,
+        `\\\\?\\C:\\${below}`,
+        `//localhost/c$/${below.replace(/\\/g, '/')}`,
+    ];
+    for (const path of spellings) {
+        assert.deepEqual(fullAccessJudgement('Read', { file_path: path }, named), refused(settingsRefusal), `Read ${path}`);
+        assert.deepEqual(fullAccessJudgement('Write', { file_path: path, content: 'x' }, named), refused(settingsRefusal), `Write ${path}`);
+        assert.deepEqual(fullAccessJudgement('Bash', { command: `cat '${path}'` }, named), refused(settingsRefusal), `cat ${path}`);
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command: `Get-Content '${path}'` }, named), refused(settingsRefusal), `Get-Content ${path}`);
+    }
+    assert.deepEqual(
+        fullAccessJudgement('Write', { file_path: 'read.py', content: "open(r'\\\\localhost\\C$\\Users\\someone\\.jason\\config\\settings.json').read()" }, named),
+        refused(dataRefusal),
+        'a script whose text names it by this computer\'s share',
+    );
+    for (const path of ['\\\\?\\Volume{0b3a1c2d-0000-0000-0000-100000000000}\\Users\\someone\\.jason\\config\\settings.json', '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\notes.md']) {
+        for (const [tool, input] of [['Read', { file_path: path }], ['Write', { file_path: path, content: 'x' }], ['Bash', { command: `cat '${path}'` }], ['PowerShell', { command: `Get-Content '${path}'` }]] as const) {
+            assert.deepEqual(fullAccessJudgement(tool, input, named), refused(dataRefusal), `${tool} ${path}`);
+            if (tool !== 'PowerShell') assert.equal(judge(tool, input, named).verdict, 'deny', `Ask first: ${tool} ${path}`);
+        }
+    }
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\localhost\\C$\\Users\\someone\\notes.md' }, named), runs, 'a file of no kind, by this computer\'s drive share');
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\localhost\\Users\\someone\\notes.md' }, named), refused(dataRefusal), 'a share of this computer that names no drive, which is not read');
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: `\\\\server\\C$\\${below}` }, named), runs, 'another computer\'s share');
+});
+
+test('in Full access a verb of the deny list, a jason that starts with an option and a word that begins with @ are refused where they name one of the three kinds, and run where they do not', () => {
+    const settings = '/home/someone/.jason/config/settings.json';
+    const record = '/home/someone/.jason/desktop/conversations/c2.json';
+    const cases: [string, ReturnType<typeof refused>][] = [
+        [`jason plugin grant reply --host api.example.com < ${settings}`, refused(settingsRefusal)],
+        [`jason route set campaign.enroll --plugin reply > ${record}`, refused(dataRefusal)],
+        ['JASON_CONFINED= jason plugin grant reply --host api.example.com', refused(confinedRefusal)],
+        [`jason --actor human:someone preference set tone_of_voice --value-file - < ${settings}`, refused(settingsRefusal)],
+        [`jason --human campaign list > ${record}`, refused(dataRefusal)],
+        ['JASON_CHAT_TURN= jason --actor human:someone campaign list', refused(confinedRefusal)],
+        [`jason @${settings}`, refused(settingsRefusal)],
+        [`jason campaign update cmp_1 --name @${record}`, refused(dataRefusal)],
+        ['jason @words.txt JASON_ATTEMPT_ID=att_1', refused(attemptRefusal)],
+    ];
+    for (const [command, answer] of cases) assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), answer, command);
+    for (const command of ['jason plugin grant reply --host api.example.com', 'jason --actor human:someone approval approve apr_1', 'jason @words.txt']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), runs, command);
+    }
+});
+
+test('the limit: Full access refuses a command that names the settings file, the data directory or what Jason sets for the turn, and one that reaches them without naming them runs: a glob, a variable, a change to a folder a variable names, another account\'s ~', () => {
+    for (const command of ['cat ~/.jas*/config/settings.json', 'd=.jason; cat ~/$d/config/settings.json', 'cd "$HOME" && cat .jason/config/settings.json', 'cat ~someone/.jason/config/settings.json']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), runs, command);
     }
 });
 

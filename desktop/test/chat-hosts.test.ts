@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { helpNouns, modeFence, readFence } from '../src/chat-deny.ts';
+import { helpNouns, modeFence, readFence, withoutRequestFiles } from '../src/chat-deny.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
 import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
@@ -64,10 +64,15 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
-test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
-    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help; with no hook, below the floor of Full access, no verb that reads a request\'s content', () => {
+    assert.deepEqual(valuesOf(claudeArguments({ ...turn, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' }), '--allowedTools'), [
         ...claudeAllowedTools,
         ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`),
+        ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
+    ]);
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+        ...claudeAllowedTools,
+        ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`),
         ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
     ]);
     assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
@@ -181,7 +186,7 @@ test('each allowed and disallowed rule is an argument of its own, so a comma in 
     const args = claudeArguments({ ...turn, dataRules: rules });
     assert.equal(args.filter((arg) => arg === '--allowedTools').length, 1);
     assert.equal(args.filter((arg) => arg === '--disallowedTools').length, 1);
-    for (const rule of [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
+    for (const rule of [...claudeAllowedTools, ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
     assert.deepEqual(valuesOf(args, '--disallowedTools').slice(-2), rules);
 });
 
@@ -553,12 +558,12 @@ test('every Claude Code turn asks the host to run each command in the chat folde
     }
 });
 
-test('a recorded Claude Code turn maps to its session, its words and one step per tool use, in order, then the end', () => {
+test('a recorded Claude Code turn maps to its mode, its session, its words and one step per tool use, in order, then the end', () => {
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
+        { kind: 'permission_mode', mode: 'default' },
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
-        { kind: 'permission_mode', mode: 'default' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
         { kind: 'tool_use', id: 'toolu_1', name: 'Bash' },
         { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list --json' },

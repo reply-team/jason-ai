@@ -2,11 +2,11 @@
 // conversation whose record names no mode is in Full access, the Feed's included (`feedDefaultMode`), and Full access is
 // given with no confirmation. Full access runs Claude Code in its own bypass mode, with Jason's hook in front of every
 // tool use refusing three kinds alone: the installation's settings files and run file, its data directory outside the
-// chat's folder, and Jason's own variables; what Claude Code asks about in that mode itself is a card. Ask first asks
-// before anything that changes outside the allow list's verbs and the acts of the person's word (`modeFence`). Plan only
-// reads and proposes and changes nothing. Auto-edit is Ask first, except that
-// the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by
-// the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
+// chat's folder, and what Jason itself sets for the turn: its variables and its permission tool. What Claude Code asks
+// about in that mode itself is a card. Ask first asks before anything that changes outside the allow list's verbs and the
+// acts of the person's word (`modeFence`). Plan only reads and proposes and changes nothing. Auto-edit is Ask first,
+// except that the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader
+// and never by the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
 // access on Codex, on a Claude Code below its floor, sent from a browser tab, while it is not offered, or where Claude
 // Code's bypass is not available; Auto-edit on Codex) runs in Ask first, the chat says why once, and the record keeps the
 // mode. Nothing here starts a process or reads a file.
@@ -79,12 +79,15 @@ export const tabFullAccess = "Full access is for Jason Desktop's own window, and
  */
 export type BypassWhy = 'root' | 'bypass_off' | 'bypass_refused' | 'unguarded';
 
-/** Each cause's sentence, of the one shape: "Full access is not available here: <why>." */
+/**
+ * Each cause's sentence, of the one shape: "Full access is not available here: <why>." A cause a turn showed is kept for
+ * the rest of this run of the desktop, and its sentence says so: "... until Jason Desktop starts again: <why>."
+ */
 export const bypassSentences: Readonly<Record<BypassWhy, string>> = {
     root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
-    bypass_off: "Full access is not available here: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
-    bypass_refused: 'Full access is not available here: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
-    unguarded: 'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+    bypass_off: "Full access is not available here until Jason Desktop starts again: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
+    bypass_refused: 'Full access is not available here until Jason Desktop starts again: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
+    unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
 };
 
 /**

@@ -31,7 +31,7 @@
  */
 
 import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, statSync, unlinkSync, writeSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
@@ -251,6 +251,11 @@ export interface ChatOptions {
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw, or such a tool ran after a stop. */
     unchecked?(): void;
     /**
+     * Said once in a turn of Ask first or Auto-edit, by its mode, when a tool ran or was refused that its hook never saw:
+     * the turn runs on under its cards and the host's own rules.
+     */
+    hookFiltered?(mode: ChatMode): void;
+    /**
      * Whether the desktop runs as root, as which Claude Code does not run in its bypass mode on macOS and Linux; absent,
      * the system's answer. A row gives its own.
      */
@@ -459,6 +464,8 @@ interface Attempted {
     ours?: boolean;
     /** Whether Claude Code refused its bypass mode before it started (`BypassWhy`). */
     bypassRefused?: boolean;
+    /** Whether Claude Code started in another mode than its bypass, and this start was stopped at its first line. */
+    bypassOff?: boolean;
 }
 
 /** Whether this process runs as root on macOS or Linux, as which Claude Code does not run in its bypass mode. */
@@ -1843,6 +1850,8 @@ export class Chat {
         let endpoint: Endpoint | null = null;
         let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
+        /** Whether the log was told that a tool of this turn ran or was refused unseen by its hook (`hookFiltered`). */
+        let filteredLogged = false;
         // Closes what the turn opened. The file's removal runs whatever came before it, and a removal that fails (a scanner
         // holding the file on Windows) leaves the file for the next start to remove.
         const finishFiles = async () => {
@@ -1884,9 +1893,8 @@ export class Chat {
                     shellHome: turnHome,
                     // Every layout's settings files and the run file, whatever the stamp says, by every route a path can take.
                     protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-                    // A conversation an earlier desktop made runs in the shared chat folder, whose agent folders every such
-                    // conversation loads: none of its turns writes them.
-                    shared: !own,
+                    // The names a network path may give this computer by, beside localhost and the loopback addresses.
+                    machine: [hostname()],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     help: helpNouns(fence.allowed, fence.reads),
@@ -1917,9 +1925,11 @@ export class Chat {
                 // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
                 // chats but mine".
                 const data = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), own ? { id: conversation.id, present: entriesOf(paths.chats) } : undefined);
-                // A conversation's own folder is its own in Full access, its agent folders included; the shared chat folder's
-                // are refused in every mode (`ChatScope.shared`), and every other mode keeps the rules over them.
-                const rulesNow = () => [...data, ...(running.mode === 'full_access' && own ? [] : chatRules(this.#platform, folder))];
+                // In Full access the turn's folder is its own, its instructions and agent folders included, the shared chat
+                // folder's as a conversation's own: before the next turn the desktop writes its instructions there afresh and
+                // leaves its agent folders holding only what it placed (`ownAgentFolder`). Every other mode keeps the rules
+                // over them, and so does a turn narrowed to Ask first.
+                const rulesNow = () => [...data, ...(running.mode === 'full_access' ? [] : chatRules(this.#platform, folder))];
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
@@ -2008,6 +2018,8 @@ export class Chat {
             let pending: string | null = null;
             // Whether the host said any line at all: one that refused its bypass mode says none.
             let spoke = false;
+            // Whether this start ran in another mode than the bypass it asked for, and was stopped at its first line.
+            let bypassOff = false;
             const seen = new Set<string>();
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
@@ -2026,16 +2038,18 @@ export class Chat {
             };
             const said = (line: HostLine) => {
                 spoke = true;
-                if (other || stoppedFor !== null) return;
+                if (other || stoppedFor !== null || bypassOff) return;
                 if (line.kind === 'permission_mode') {
                     // A turn that asked for Claude Code's bypass runs in another mode: its settings turned the bypass off
-                    // (`disableBypassPermissionsMode`), and this line is the one word of it. The turn goes on in Ask first,
-                    // what it asks from now on judged and carded as Ask first's, and the record keeps Full access.
+                    // (`disableBypassPermissionsMode`), and this line, read first from the init line, is the one word of it.
+                    // This start is stopped there, what it still asks judged and carded as Ask first's and nothing more it
+                    // says read, and the turn is started again in Ask first, as one whose bypass was refused is: with Ask
+                    // first's own tools, settings and rules. The record keeps Full access.
                     if (running.mode !== 'full_access' || line.mode === 'bypassPermissions') return;
+                    bypassOff = true;
                     running.mode = 'ask_first';
                     if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
-                    this.#bypassGone('bypass_off');
-                    this.#tellAskFirst(conversation.id, replyTo, 'bypass_off', bypassSentences.bypass_off);
+                    host?.stop();
                     return;
                 }
                 if (line.kind === 'key_source') {
@@ -2060,7 +2074,7 @@ export class Chat {
                     // desktop, and the records keep their modes. A Full access turn ends there, said in its own sentence;
                     // one already stopped, by Stop or by a change of mode, ends as its stop ends it, its next turn saying
                     // why it runs in Ask first. A turn of Ask first or Auto-edit runs on, its cards and Claude Code's own
-                    // rules deciding as before, and the conversation is told once.
+                    // rules deciding as before; the log is told once in the turn, and the conversation once.
                     if (!hooked || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#bypassGone('unguarded');
@@ -2072,6 +2086,10 @@ export class Chat {
                         this.#toldAskFirst.set(conversation.id, told);
                         stopFor(unguardedSentence);
                         return;
+                    }
+                    if (!filteredLogged) {
+                        filteredLogged = true;
+                        this.#options.hookFiltered?.(running.mode);
                     }
                     if (this.#toldFiltered.has(conversation.id)) return;
                     this.#toldFiltered.add(conversation.id);
@@ -2132,7 +2150,7 @@ export class Chat {
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
             for (const { read, how } of giving(resumed)) this.#options.memoryGiven?.(read.level, how);
-            if (running.stopped || stoppedFor !== null) started.stop();
+            if (running.stopped || stoppedFor !== null || bypassOff) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.
             if (exit.startError === null && given !== null) markGiven(conversation.entries, given.waiting);
@@ -2143,8 +2161,8 @@ export class Chat {
             // Claude Code refused its bypass mode before it started, in its restricted mode or under a policy: it said no
             // line, failed, and its standard error names the mode.
             const bypassRefused = running.mode === 'full_access' && !spoke && !running.stopped && exit.startError === null && exit.code !== 0 && /\bbypassPermissions\b/.test(started.stderrTail());
-            const again = resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
-            return { exit, result, host: started, again, ours: refusedKey, bypassRefused };
+            const again = !bypassOff && resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
+            return { exit, result, host: started, again, ours: refusedKey, bypassRefused, bypassOff };
         };
 
         void (async () => {
@@ -2152,13 +2170,15 @@ export class Chat {
             let handed: HandOver | null = null;
             try {
                 last = await attempt(resume, hostChanged, false);
-                if (last.bypassRefused === true && narrowSettings !== null) {
-                    // Started again at once in Ask first, its settings written for it, and the conversation told once why.
+                const narrowed = last.bypassOff === true ? 'bypass_off' : last.bypassRefused === true ? 'bypass_refused' : null;
+                if (narrowed !== null && narrowSettings !== null) {
+                    // A start whose bypass was refused, or was off, is started again at once in Ask first, its settings
+                    // written for it and its command line Ask first's own, and the conversation told once why.
                     running.mode = 'ask_first';
                     if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
                     narrowSettings();
-                    this.#bypassGone('bypass_refused');
-                    this.#tellAskFirst(conversation.id, replyTo, 'bypass_refused', bypassSentences.bypass_refused);
+                    this.#bypassGone(narrowed);
+                    this.#tellAskFirst(conversation.id, replyTo, narrowed, bypassSentences[narrowed]);
                     if (!running.stopped) last = await attempt(resume, hostChanged, false);
                 }
                 if (last.again) {

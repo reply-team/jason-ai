@@ -101,12 +101,11 @@ test('the chat\'s own permission tool stays refused to the agent', () => {
     assert.equal(judge('mcp__jason_desktop__approve', { allow: true }, scope).verdict, 'deny');
 });
 
-test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it but in the shared chat folder', () => {
+test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it, a turn reading no server file of its folder', () => {
     const top = { file_path: posix.join(chat, '.mcp.json'), content: '{"mcpServers":{}}' };
     const judged = judge('Write', top, scope);
     assert.equal(judged.verdict, 'deny');
-    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'a conversation\'s own folder is its own');
-    assert.equal(fullAccessJudgement('Write', top, { ...scope, shared: true }).outcome, 'refused', 'the shared chat folder\'s top');
+    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'the folder the turn runs in');
     assert.equal(judge('Bash', { command: 'echo {} > .mcp.json' }, scope).verdict, 'deny', 'a command too');
     for (const path of [posix.join(campaign, '.mcp.json'), posix.join(chat, 'sub', '.mcp.json'), posix.join(home, 'elsewhere', '.mcp.json')]) {
         const input = { file_path: path, content: '{}' };

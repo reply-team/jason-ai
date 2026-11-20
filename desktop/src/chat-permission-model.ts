@@ -18,18 +18,17 @@ export interface ChatScope {
      * made the shared one, `<data>/desktop/chat`.
      */
     chat: string;
-    /**
-     * Whether the turn runs in the shared chat folder, as every conversation an earlier desktop made does: a write of the
-     * chat's own names there, its instructions and the agent folders each such conversation loads, is refused by the
-     * turn's hook too (`hookRefusal`), in every mode it rides. Absent, a conversation's own folder.
-     */
-    shared?: boolean;
     /** The campaign and project folders added to the turn. */
     added: readonly string[];
     /** The data directory: nothing under it but the turn's chat folder is the chat's. */
     data: string;
     /** The person's home folder, for `~/.jason` when the data directory is the default one. */
     home: string;
+    /**
+     * On Windows, the names this computer has, which a network path may name it by as another computer would: its own
+     * name, say. `localhost` and the loopback addresses are always among them (`thisComputer`). Absent, those alone.
+     */
+    machine?: readonly string[];
     /**
      * The home folder the host's shell resolves `~` to: the `HOME` of the host's environment, or the profile's folder
      * when it carries none. Absent, taken to be `home`. Where the two differ, a command's `~` is read by its text alone.
@@ -173,9 +172,10 @@ export const replyNoCardForms: readonly string[] = (() => {
 
 /**
  * The three kinds the turn's hook refuses in every mode it rides, and the only refusals of Full access (`hookRefusal`):
- * Jason's settings files and run file, its data directory outside the turn's folder, and Jason's own variables. Each
- * sentence says what the chat does not open and names the `jason` verb that does what was asked, never that the chat
- * cannot; Ask first, Auto-edit and Plan only refuse the same places by the same sentences.
+ * Jason's settings files and run file, its data directory outside the turn's folder, and what Jason itself sets for the
+ * turn: its variables, with where the shell finds a program, and its permission tool. Each sentence says what the chat
+ * does not open and names the `jason` verb that does what was asked, never that the chat cannot, the permission tool's
+ * that only the person answers it; Ask first, Auto-edit and Plan only refuse the same places by the same sentences.
  */
 export const settingsRefusal =
     'That is Jason\'s settings file or its run file, the installation\'s own data, which the chat does not open: `jason runtime status` says how Jason runs, '
@@ -214,8 +214,8 @@ export const attemptRefusal =
     'That command names JASON_ATTEMPT_ID, one of Jason\'s own variables, which says a role\'s attempt runs: the chat is never one, and does not open or change it. '
     + '`jason workitem get` reads an item and its attempts. Nothing was run.';
 export const lookupRefusal =
-    'That command changes where the shell finds a program, one of Jason\'s own variables, which the chat does not open or change, so that the jason it starts '
-    + 'stays the desktop\'s: run the `jason` verb you need as it is, such as `jason campaign list`. Nothing was run.';
+    'That command changes where the shell finds a program, which Jason itself sets for the turn and the chat does not open or change, so that '
+    + 'the jason it starts stays the desktop\'s: run the `jason` verb you need as it is, such as `jason campaign list`. Nothing was run.';
 /** What the hook answers where reading a tool use failed: it refuses, since a judgement that failed never runs anything. */
 const unreadRefusal = 'The desktop could not read what this tool would do, so it was not run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
@@ -900,8 +900,9 @@ function namesLocalJason(command: string, scope: ChatScope): boolean {
 
 /**
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
- * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
- * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
+ * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows and
+ * this computer's share of the drive (`\\localhost\C$\...`, `thisComputerNames`), the long-path forms holding the native
+ * one, and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
  * among them, since Git Bash is the Windows shell) when the data directory is the default one, or in a demo run when it
  * is any folder directly in the home folder. A name that only begins like it is not it.
  */
@@ -932,6 +933,8 @@ function namesFolder(command: string, scope: ChatScope, folder: string, except: 
     const spellings = [named];
     const drive = /^([a-z]):\//i.exec(named);
     if (drive) spellings.push(`/${drive[1]}${named.slice(2)}`);
+    // On Windows, this computer named as another computer would, through the drive's share (`hookPlace`).
+    if (drive && scope.platform === 'win32') for (const computer of thisComputerNames(scope)) spellings.push(`/${computer}/${drive[1]}$${named.slice(2)}`);
     const home = pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '');
     const name = named.startsWith(`${home}/`) ? named.slice(home.length + 1) : null;
     if (name !== null && name !== '' && !name.includes('/') && (homeName === null || name === keyOf(scope.platform, homeName))) {
@@ -1428,8 +1431,9 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
 
 /**
  * The refusal a command earns when one of its places is the chat's own: its instructions, or its agent settings and
- * skills, directly in the chat folder. Refused in every mode, as the file tools refuse a write there: a command cannot be
- * told apart as a read or a write.
+ * skills, directly in the chat folder. Refused in every mode but Full access, as the file tools refuse a write there: a
+ * command cannot be told apart as a read or a write. In Full access the folder is the turn's own, and the desktop puts
+ * back what it placed there before the next turn.
  */
 function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | null {
     for (const path of places) {
@@ -1566,14 +1570,15 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
  * What the turn's hook refuses, in every mode it rides, and the only refusals of Full access: three kinds, each by its
  * own sentence. Jason's settings files and run file (`protectedFiles`); its data directory outside the turn's folder,
  * the desktop's records, the turns' files and the other conversations' folders among it, as the host's data rules name
- * it (`dataRules`), and in a demo run the person's own directories too; and Jason's own variables: the confining
- * variable, the attempt's and the data directory's, and where the shell finds a program. They are read the ways a tool's
- * input names them: a file tool's path and a pattern's fixed folders, a command's text as written and its words as the
- * literal reading resolves them, what a writer tool would write, a script read as its lines, and every string of an MCP
- * tool's input. A command whose words are not literal is read by its text alone, and a path a program builds while it
- * runs is not seen. A turn in the shared chat folder also refuses a write of the chat's own names there
- * (`ChatScope.shared`), and a call of the chat's own permission tool is refused, since only the person answers it. Null
- * for anything else.
+ * it (`dataRules`), and in a demo run the person's own directories too; and what Jason itself sets for the turn: its
+ * variables, the confining one, the attempt's and the data directory's, with where the shell finds a program, and its
+ * permission tool, which only the person answers. They are read the ways a tool's input names them: a file tool's path
+ * and a pattern's fixed folders, a command's text as written and its words as the literal reading resolves them, what a
+ * writer tool would write, a script read as its lines, and every string of an MCP tool's input; on Windows a path that
+ * names this computer as another computer would, through a drive's share, as that drive's path (`hookPlace`). A command
+ * whose words are not literal is read by its text alone, and a path a program builds while it runs is not seen. Null for
+ * anything else: the turn's folder is its own, the chat's instructions and agent folders in it among it, which the
+ * desktop puts back before the next turn.
  */
 export function hookRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
     if (tool.startsWith(`mcp__${serverName}__`)) return ownToolRefusal;
@@ -1593,7 +1598,7 @@ export function hookRefusal(tool: string, input: Record<string, unknown>, scope:
     const writer = writers[tool];
     if (writer !== undefined) {
         const value = input[writer];
-        const refused = named(value) ? (pathKind(value, scope) ?? sharedOwnWrite(value, scope)) : null;
+        const refused = named(value) ? pathKind(value, scope) : null;
         return refused ?? writtenKind(tool, input, scope);
     }
     const command = input['command'];
@@ -1608,14 +1613,49 @@ function isProtected(scope: ChatScope, path: string): boolean {
 
 /**
  * The kind a path a file tool names is: the person's own installation in a demo, whose settings and run files among it
- * are the person's; a settings or run file; the data directory.
+ * are the person's; a settings or run file; the data directory. It is read where it leads (`hookPlace`), and a path whose
+ * end is not read is taken for the data directory.
  */
 function pathKind(value: string, scope: ChatScope): string | null {
-    const path = located(value, scope);
+    const path = hookPlace(located(value, scope), scope);
+    if (path === null) return dataRefusal;
     if (inPersonsOwn(scope, path)) return personsRefusal;
     if (isProtected(scope, path)) return settingsRefusal;
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, located(scope.chat, scope), path)) return dataRefusal;
     return null;
+}
+
+/**
+ * The names a network path may give this computer by (`ChatScope.machine`): `localhost`, the loopback addresses in the
+ * spellings a path takes, and its own names; compared folded, as Windows compares them.
+ */
+function thisComputerNames(scope: ChatScope): string[] {
+    return ['localhost', '127.0.0.1', '::1', '[::1]', '0--1.ipv6-literal.net', ...(scope.machine ?? [])].map((name) => name.toLowerCase());
+}
+
+/** Whether a network path's computer is this one: one of its names, any loopback address, or its own name with a domain after it. */
+function thisComputer(computer: string, scope: ChatScope): boolean {
+    const name = computer.toLowerCase();
+    if (/^127(\.\d{1,3}){3}$/.test(name)) return true;
+    const names = thisComputerNames(scope);
+    return names.includes(name) || (scope.machine ?? []).some((own) => !own.includes('.') && name.startsWith(`${own.toLowerCase()}.`));
+}
+
+/**
+ * On Windows, where a located path the hook reads leads, by Ask first's reading of it (`spelled`): one that names this
+ * computer as another computer would (`thisComputer`), through a drive's administrative share (`C$`), is that drive's
+ * path, located again; one through any other share of this computer, and one in a device's or a volume's namespace
+ * (`device`), is null, since where it leads is not read. Any other path, another computer's among them, as it is.
+ */
+function hookPlace(path: string, scope: ChatScope): string | null {
+    if (scope.platform !== 'win32') return path;
+    // The namespace's prefix alone, as a pattern's `\\.` is, names nothing.
+    if (device(scope.platform, path)) return /^\\\\[?.]\\[^\\]/.test(path) ? null : path;
+    if (!network(scope.platform, path)) return path;
+    const [computer = '', share = '', ...rest] = path.slice(2).split('\\');
+    if (!thisComputer(computer, scope)) return path;
+    const drive = /^([a-z])\$$/i.exec(share);
+    return drive === null ? null : located(`${drive[1]}:\\${rest.join('\\')}`, scope);
 }
 
 /** A search's folder, and the fixed folders its pattern begins with, read as paths are. */
@@ -1635,14 +1675,6 @@ function globKind(input: Record<string, unknown>, scope: ChatScope): string | nu
     return pathKind(pattern.startsWith('~') ? leading : pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope);
 }
 
-/** In the shared chat folder, the refusal of a write of, or under, one of the chat's own names directly in it. */
-function sharedOwnWrite(value: string, scope: ChatScope): string | null {
-    if (scope.shared !== true) return null;
-    const { parts, working } = guardedParts(scope, located(value, scope));
-    const found = guardAt(scope, parts);
-    return working?.chat === true && found?.at === 0 && found.guarded.chatsOwn !== undefined ? ownRefusal(found.guarded.chatsOwn) : null;
-}
-
 /**
  * The kinds a text shows wherever it stands, in a file or an MCP tool's input: Jason's own variables and its data, read
  * as written and again over its normalised forms (`readingsOf`), as Ask first reads a name re-spelled by a quote or a
@@ -1658,15 +1690,20 @@ function textKind(text: string, scope: ChatScope): string | null {
     return null;
 }
 
-/** The kinds a command's text and the places its words name show, in the order the sentences are said. */
+/**
+ * The kinds a command's text and the places its words name show, in the order the sentences are said, each place read
+ * where it leads (`hookPlace`), one whose end is not read taken for the data directory.
+ */
 function kindOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
     if (namesAttemptVariable(text)) return attemptRefusal;
     if (changesSearch(text)) return lookupRefusal;
-    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(places, scope)) return personsRefusal;
-    if (places.some((path) => isProtected(scope, path))) return settingsRefusal;
-    if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
-    return scope.shared === true ? chatsOwnPlace(places, scope) : null;
+    const leads = places.map((path) => hookPlace(path, scope));
+    const read = leads.filter((path): path is string => path !== null);
+    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(read, scope)) return personsRefusal;
+    if (read.some((path) => isProtected(scope, path))) return settingsRefusal;
+    if (leads.includes(null) || namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope)) return dataRefusal;
+    return null;
 }
 
 /**
@@ -1755,8 +1792,7 @@ function refusalOver(text: string, places: readonly string[], scope: ChatScope):
     if (jasonRefused !== null) return jasonRefused;
     const own = chatsOwnPlace(places, scope);
     if (own !== null) return own;
-    // reply with words other than `auth status` or `account list` is refused here as in Ask first: Full access is never
-    // weaker than Ask first.
+    // reply with words other than `auth status` or `account list` is refused here as Ask first refuses it.
     return replyRefused(text, scope) ? replyRefusal : null;
 }
 

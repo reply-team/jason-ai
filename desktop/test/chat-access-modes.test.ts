@@ -28,6 +28,8 @@ interface Rig {
     changes: [ChatMode, ChatMode][];
     started: ChatMode[];
     unchecked: number;
+    /** The mode of each turn the log heard a tool the hook never saw in, where the turn went on. */
+    filtered: ChatMode[];
     /** Sends and waits for the turn's `done`; the events it said. */
     turn(id: string, text: string, options: unknown): Promise<ChatEvent[]>;
     until(id: string, take: (event: ChatEvent) => boolean): Promise<ChatEvent>;
@@ -53,6 +55,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
         changes: [],
         started: [],
         unchecked: 0,
+        filtered: [],
         until: (id, take) =>
             new Promise<ChatEvent>((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error(`chat ${id} never said what was waited for; it said ${JSON.stringify(events.get(id) ?? [])}`)), 20_000);
@@ -101,6 +104,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
                   }),
             modeChanged: (from, to) => void r.changes.push([from, to]),
             unchecked: () => void r.unchecked++,
+            hookFiltered: (mode) => void r.filtered.push(mode),
             started: (_host, _resumed, mode) => void r.started.push(mode),
             ...options.chat,
         });
@@ -243,7 +247,7 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
     const said = await r.turn(id, 'go', claude);
     assert.deepEqual(modes(said), []);
     assert.deepEqual(done(said), { kind: 'done', error: unguardedSentence });
-    assert.ok(unguardedSentence.startsWith('Full access is not available here: '));
+    assert.ok(unguardedSentence.startsWith('Full access is not available here until Jason Desktop starts again: '));
     assert.ok(!texts(said).includes('after the tool'), 'nothing the host says after it is shown');
     assert.equal(r.chat.open(id).mode, 'full_access', 'the record keeps the mode');
     assert.deepEqual(r.changes, []);
@@ -467,18 +471,23 @@ test('an Ask first turn\'s host environment keeps HOME as the desktop\'s own env
     assert.equal(homeOf(r.hosts()[0]), undefined);
 });
 
-test('in Ask first a tool the hook never saw is no reason to stop: the turn runs on and the chat says once that Jason\'s refusals could not stand in front of the host\'s rules', async (t) => {
+test('in Ask first a tool the hook never saw is no reason to stop: the turn runs on, the chat says once that Jason\'s refusals could not stand in front of the host\'s rules, and the log hears it at each turn', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'ask_first');
-    plan(r, [{ unhooked: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }, { say: 'after the tool' }]);
+    plan(r, [{ unhooked: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }, { unhooked: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'more.md') } } }, { say: 'after the tool' }]);
     const first = await r.turn(id, 'go', claude);
     assert.deepEqual(done(first), { kind: 'done', error: null });
     assert.ok(texts(first).includes('after the tool'), 'the turn runs on');
     assert.deepEqual(notices(first), [hookFilteredSentence]);
+    assert.deepEqual(r.filtered, ['ask_first'], 'the log hears it once in the turn, by the turn\'s mode');
     const second = await r.turn(id, 'go', claude);
     assert.deepEqual(notices(second), [], 'said once');
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    await r.turn(id, 'go', claude);
+    assert.deepEqual(r.filtered, ['ask_first', 'ask_first', 'auto_edit'], 'and at each turn it is found in');
     assert.equal(r.unchecked, 0, 'no turn was stopped');
+    await r.chat.setMode(id, 'ask_first');
     assert.equal(r.chat.open(id).mode, 'ask_first');
     // In Plan only no hook rides, so a tool it never saw says nothing.
     await r.chat.setMode(id, 'plan_only');
@@ -487,14 +496,37 @@ test('in Ask first a tool the hook never saw is no reason to stop: the turn runs
     assert.deepEqual(notices(planned), []);
 });
 
-test('Claude Code\'s settings turn its bypass off: the Full access turn runs in Ask first from its first request, says why once, and the record keeps Full access', async (t) => {
-    const r = rig(t, { env: { STUB_BYPASS: 'off' } });
+/** A host start that keeps the turn's settings file as it was when the host was started, beside its arguments. */
+function keepingSettings(kept: unknown[]): Partial<ChatOptions> {
+    return {
+        startHost: (launch, args, options) => {
+            const file = flag([...args], '--settings');
+            kept.push(file === undefined || file.startsWith('{') ? file : JSON.parse(readFileSync(file, 'utf8')));
+            return startHost(launch, args, options);
+        },
+    };
+}
+
+test('Claude Code\'s settings turn its bypass off: the Full access turn is ended at its first line and started again in Ask first, in Ask first\'s own shape, says why once, and the record keeps Full access', async (t) => {
+    const settings: unknown[] = [];
+    const r = rig(t, { env: { STUB_BYPASS: 'off' }, chat: keepingSettings(settings) });
     const { id } = await r.chat.create();
-    plan(r, [{ use: { tool: 'Bash', input: { command: 'frobnicate' }, prompt: true } }]);
+    // The first start is stopped at its first line, before the pause ends; the start again runs the plan whole.
+    plan(r, [{ sleep: 1500 }, { use: { tool: 'Bash', input: { command: 'frobnicate' }, prompt: true } }, { say: 'after the card' }]);
     const said = await answered(r, id, [false]);
-    assert.equal(flag(r.hosts()[0]?.args ?? [], '--permission-mode'), 'bypassPermissions', 'the bypass was asked for');
+    const [asked, again] = r.hosts();
+    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default'], 'started again in the default mode');
+    assert.deepEqual(r.started, ['full_access', 'ask_first']);
+    assert.equal(texts(said).filter((text) => text === 'after the card').length, 1, 'the plan ran once, in the turn started again');
     assert.deepEqual(cards(said).map((card) => card.title), ['Run a command'], 'the card is Ask first\'s');
+    // Ask first's own shape: no PowerShell, every page asked about, and the host's rules over the folder's own names.
+    const removed = (args: string[]) => args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--setting-sources'));
+    assert.ok(!removed(asked?.args ?? []).includes('PowerShell'), 'the first start was Full access\'s');
+    assert.ok(removed(again?.args ?? []).includes('PowerShell'), 'the start again is Ask first\'s: no PowerShell');
+    assert.deepEqual((settings[1] as { permissions?: { ask?: string[] } }).permissions?.ask, ['WebFetch(domain:*)'], 'every page asks');
+    assert.ok((again?.args ?? []).some((arg) => /^Edit\(.*CLAUDE\.md\)$/.test(arg)), 'the host is denied edits of the folder\'s own names');
     assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentences.bypass_off)]);
+    assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.equal(r.chat.open(id).mode, 'full_access');
     plan(r, [{ say: 'again' }]);
     const next = await r.turn(id, 'again', claude);
@@ -538,6 +570,39 @@ test('an Ask first turn on a Claude Code below the floor of Full access carries 
     const args = r.hosts()[0]?.args ?? [];
     assert.equal(flag(args, '--permission-mode'), 'default');
     assert.ok(flag(args, '--settings')?.startsWith('{'));
+});
+
+/** Whether one of the host's allow rules, `Bash(<words>:*)`, lets a command through: those words, whole, at its start. */
+function allowedBy(args: string[], command: string): boolean {
+    const rules = args.slice(args.indexOf('--allowedTools') + 1, args.indexOf('--disallowedTools'));
+    return rules.some((rule) => {
+        const words = /^Bash\((.*):\*\)$/.exec(rule)?.[1];
+        return words !== undefined && (command === words || command.startsWith(`${words} `));
+    });
+}
+
+test('on a Claude Code below the floor of Full access, setting a tone from the chat reaches the permission tool in Ask first and in Auto-edit: fed the settings file it is refused, and otherwise it asks first', async (t) => {
+    const settings = (r: Rig) => join(r.b.paths.data, 'config', 'settings.json');
+    for (const version of ['2.1.300', '2.1.257']) {
+        for (const mode of ['ask_first', 'auto_edit'] as const) {
+            const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+            t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+            writeFileSync(versionFile, JSON.stringify({ stdout: `${version} (Claude Code)` }));
+            const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
+            const { id } = await r.chat.create();
+            await r.chat.setMode(id, mode, 'claude');
+            const fed = `jason preference set tone_of_voice --value-file - < ${settings(r).replace(/\\/g, '/')}`;
+            const named = 'jason preference set tone_of_voice --value cheeky --actor human:someone';
+            plan(r, [{ ask: { tool: 'Bash', input: { command: fed } } }, { ask: { tool: 'Bash', input: { command: named } } }]);
+            const said = await answered(r, id, [false]);
+            const args = r.hosts()[0]?.args ?? [];
+            assert.ok(flag(args, '--settings')?.startsWith('{'), `${version} ${mode}: no hook rides the turn`);
+            assert.equal(allowedBy(args, fed), false, `${version} ${mode}: no allow rule of the host's lets it through, so it reaches the permission tool`);
+            assert.equal(allowedBy(args, named), false, `${version} ${mode}: the form, whatever it is given`);
+            assert.ok(texts(said).includes(`decision deny: ${settingsRefusal}`), `${version} ${mode}: ${JSON.stringify(texts(said))}`);
+            assert.deepEqual(cards(said).map((card) => card.detail), [named], `${version} ${mode}: the other is a card`);
+        }
+    }
 });
 
 test('a restart opens a chat that was in Full access in Full access: its record holds no mode', async (t) => {

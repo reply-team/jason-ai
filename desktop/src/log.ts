@@ -129,6 +129,7 @@ export const templates = {
     chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
     chat_mode_changed: 'A chat went from mode {From} to mode {To}',
     chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
+    chat_hook_filtered: 'A chat turn of mode {Mode} ran a tool its hook never saw, and went on under its cards and the rules of its host',
     agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
     chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
     chat_card_refused: 'A card the chat AI asked for was not drawn: kind {Kind}, failure {Failure}',

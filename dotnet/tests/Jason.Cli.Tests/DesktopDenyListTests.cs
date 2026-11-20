@@ -161,6 +161,29 @@ public class DesktopDenyListTests
         Assert.Empty(planned.Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).ToList());
     }
 
+    /// <summary>
+    /// The verbs the desktop names as reading a request's content from a file or from standard input
+    /// (<c>requestFileVerbs</c> in <c>desktop/src/chat-deny.ts</c>) are exactly the verbs of the CLI's command tree with an
+    /// option <see cref="RequestFile"/> reads. Below the floor of Full access no hook rides an Ask first or Auto-edit turn,
+    /// and the desktop gives the host no allow rule for a form of one of these verbs, so a redirect into it reaches the
+    /// permission tool: a verb that gains such an option is red here until the desktop names it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_names_every_verb_that_reads_a_request_s_file()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var expected = Verbs(root, []).Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).Order(StringComparer.Ordinal).ToList();
+
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-deny.ts"));
+        var declaration = Regex.Match(source, @"^export const requestFileVerbs: readonly string\[\] = \[(?<body>[^\]]*)\];", RegexOptions.Multiline);
+        Assert.True(declaration.Success, "desktop/src/chat-deny.ts declares no requestFileVerbs.");
+        var declared = Regex.Matches(declaration.Groups["body"].Value, "'(?<verb>[^']*)'").Select(match => match.Groups["verb"].Value).Order(StringComparer.Ordinal).ToList();
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, declared);
+    }
+
     private static Command LeafOf(Command root, string verb) =>
         verb.Split(' ').Aggregate(root, (command, word) => command.Subcommands.Single(sub => sub.Name == word));
 

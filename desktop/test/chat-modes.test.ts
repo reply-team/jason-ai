@@ -163,16 +163,16 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });
 
-test('Full access not available says so in one shape, its cause after it, and a tool that ran unchecked says the chat keeps its mode', () => {
+test('Full access not available says so in one shape, its cause after it, until Jason Desktop starts again where a turn showed the cause, and a tool that ran unchecked says the chat keeps its mode', () => {
     assert.deepEqual(bypassSentences, {
         root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
-        bypass_off: "Full access is not available here: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
-        bypass_refused: 'Full access is not available here: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
-        unguarded: 'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+        bypass_off: "Full access is not available here until Jason Desktop starts again: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
+        bypass_refused: 'Full access is not available here until Jason Desktop starts again: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
+        unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
     });
     assert.equal(
         unguardedSentence,
-        'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.',
+        'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.',
     );
     assert.equal(
         hookFilteredSentence,
@@ -530,13 +530,11 @@ test('under Full access a command that is not literal is read by its text alone:
     }
 });
 
-test('the chat\'s own instructions and agent settings are refused to a shell command in Ask first; under Full access in the shared chat folder alone', async (t) => {
+test('the chat\'s own instructions and agent settings are refused to a shell command in Ask first; under Full access the hook answers nothing to one, the next turn starting from Jason\'s files again', async (t) => {
     const w = await wired(t, 'full_access');
-    const shared: ChatScope = { ...w.scope, shared: true };
     for (const command of ["mkdir -p .claude && printf '%s' '{\"disableAllHooks\":true}' > .claude/settings.json", 'echo planted >> CLAUDE.md', 'cp evil.md .claude/agents/x.md', 'rm -rf .claude']) {
         assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
-        assert.equal(fullAccessJudgement('Bash', { command }, shared).outcome, 'refused', `the shared folder: ${command}`);
-        assert.equal(await hooked(w, 'Bash', { command }), null, `a conversation's own folder: ${command}`);
+        assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
     }
     assert.equal(judge('Bash', { command: 'mkdir -p notes && echo x > notes/a.md' }, w.scope).verdict, 'ask', 'a folder of its own is a card as before');
 });
