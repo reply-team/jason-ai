@@ -375,6 +375,26 @@ describe('the start screen', () => {
         expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
     });
 
+    it('with Codex picked, whose turns run in Ask first, takes Ask first chosen there as the person’s choice: the chat it makes is put in Ask first', async () => {
+        const both: DesktopSetup = {
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'codex' ? { ...each, found: true, version: '1.0.0' } : each,
+            ),
+        };
+        const desktop = stubDesktop(both);
+        renderConsole(desktop);
+        await ready();
+        fireEvent.click(item(openMenu(/Model:/), 'Codex'));
+        // Drawn as its turns run on Codex: Ask first.
+        await waitFor(() => within(startForm()).getByRole('button', { name: 'Access mode: Ask first' }));
+        fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
+    });
+
     it('where the host offers no Full access, as in the demo, the access mode refuses it in the own words of the chat', async () => {
         const refusal = 'Full access is not offered here.';
         const demo: DesktopSetup = {

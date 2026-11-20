@@ -319,8 +319,9 @@ function Item({
 
 /**
  * The access button: the name of the mode the next turn runs in, as the desktop hands it (`drawnMode`), and a menu of the
- * modes with what each does or why it is refused, that mode checked. A choice is of the mode the chat keeps; choosing
- * the mode the next turn already runs in asks nothing.
+ * modes with what each does or why it is refused, that mode checked. A choice is of the mode the chat keeps: every mode
+ * but that one is asked for, the one checked included, so Ask first chosen where Full access does not run stays the
+ * chat's on the hosts where it does.
  */
 export function AccessButton({
     chat,
@@ -380,7 +381,7 @@ export function AccessButton({
                                 }
                                 onChoose={() => {
                                     close();
-                                    if (each.mode !== drawn && each.mode !== chat.mode) choose(each.mode);
+                                    if (each.mode !== chat.mode) choose(each.mode);
                                 }}
                             />
                         );

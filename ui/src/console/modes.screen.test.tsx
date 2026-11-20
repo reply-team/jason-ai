@@ -144,6 +144,25 @@ describe('a chat’s access mode', () => {
         expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
     });
 
+    it('on a host where Full access does not run, takes Ask first chosen there as the person’s choice: the desktop is asked for it, and back on Claude Code the chat is in Ask first', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        await waitFor(() => expect(line()).not.toBeNull());
+        chooseHost('codex');
+        await waitForMenus(() => expect(value()).toBe('ask_first'));
+        const asked = calls(desktop, 'chat.setMode').length;
+        choose('ask_first');
+        await waitFor(() => expect(calls(desktop, 'chat.setMode')).toHaveLength(asked + 1));
+        expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
+        // The chat is in Ask first now: there is no other mode its turns step down from, and so no reason is said.
+        await waitFor(() => expect(screen.queryByRole('note', { name: /^Why the next turn runs in/ })).toBeNull());
+        chooseHost('claude');
+        await waitForMenus(() => expect(value()).toBe('ask_first'));
+        expect(line()).toBeNull();
+    });
+
     it('from a desktop of an earlier version, whose hosts hand no mode a turn runs in, draws the chat’s own mode on every host, as before', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
