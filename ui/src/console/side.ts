@@ -4,11 +4,12 @@ import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
-import { act, define } from './actions';
+import { act, define, menuPointer, systemMenuAfterKey } from './actions';
 import { html, type Html } from './html';
 import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
+import { supersede } from './conversation-acts';
 import { needsInput } from './needs';
 import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
@@ -123,6 +124,7 @@ define('side.feed', () => {
 });
 /** Shows a conversation of Recent, as a click on its row does. */
 export function openRow(id: string): void {
+    supersede();
     void openConversation(id).then((held) => {
         if (held !== null) here().dock.showChat(held);
     });
@@ -139,15 +141,15 @@ define('side.chat', ([id]) => {
  */
 define('side.rowmenu', ([id], element, event) => {
     if (typeof id !== 'string') return;
-    const pointer = event instanceof MouseEvent && event.type === 'contextmenu' && event.button === 2;
-    if (!pointer && event.type === 'contextmenu' && rowMenu.value?.id === id) return;
+    if (systemMenuAfterKey(event) && rowMenu.value?.id === id) return;
+    const pointer = menuPointer(event);
     const box = element.getBoundingClientRect();
     closeMenus();
     rowMenu.value = {
         id,
         title: element.getAttribute('aria-label') ?? '',
-        x: pointer ? (event as MouseEvent).clientX : box.left + 12,
-        y: pointer ? (event as MouseEvent).clientY : box.bottom,
+        x: pointer?.x ?? box.left + 12,
+        y: pointer?.y ?? box.bottom,
     };
 });
 define('side.show', ([panel]) => {

@@ -50,10 +50,15 @@ export function closeRowMenu(): void {
     rowMenu.value = null;
 }
 
+/** The row of the conversation, where it is drawn. */
+export function rowElement(id: string): HTMLElement | undefined {
+    const rows = document.querySelectorAll<HTMLElement>('.side .recent-row');
+    return [...rows].find((each) => parseArgs(each.dataset['args'])[0] === id);
+}
+
 /** Gives the focus to the row of the conversation, where it is drawn. */
 export function focusRow(id: string): void {
-    const rows = document.querySelectorAll<HTMLElement>('.side .recent-row');
-    [...rows].find((each) => parseArgs(each.dataset['args'])[0] === id)?.focus();
+    rowElement(id)?.focus();
 }
 
 const labels: Readonly<Record<RecentFilter, string>> = {
@@ -132,7 +137,8 @@ function rowView(row: RecentRow): Html {
         aria-label="${row.title}"
         aria-description="${said}"
         ${row.id === currentChat.value || agentsRow(row.id) ? html`aria-current="true"` : null}
-        ${menu ? html`aria-expanded="true"` : null}
+        aria-haspopup="menu"
+        aria-expanded="${menu ? 'true' : 'false'}"
         ${act('side.chat', row.id)}
         data-menu="side.rowmenu"
     >

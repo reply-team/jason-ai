@@ -52,6 +52,18 @@ function closest(event: Event, attribute: string, root: HTMLElement): HTMLElemen
     return found && root.contains(found) ? found : null;
 }
 
+/** Where the pointer opened a control's menu by a right-click; null where the keyboard opened it. */
+export function menuPointer(event: Event): { x: number; y: number } | null {
+    return event instanceof MouseEvent && event.type === 'contextmenu' && event.button === 2
+        ? { x: event.clientX, y: event.clientY }
+        : null;
+}
+
+/** Whether the event is the system's own menu event that follows Shift+F10 or the menu key, not a right-click. */
+export function systemMenuAfterKey(event: Event): boolean {
+    return event.type === 'contextmenu' && menuPointer(event) === null;
+}
+
 /** One listener per kind of event, on the console's root, for every control inside it. The function it returns stops them. */
 export function listen(root: HTMLElement): () => void {
     const click = (event: Event) => {

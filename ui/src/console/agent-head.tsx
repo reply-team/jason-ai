@@ -80,7 +80,7 @@ function ConversationMenu({ agent }: { agent: string }) {
     const choose = (item: MenuItem) => {
         close(false);
         if (item.kind === 'rename' || item.kind === 'remove') void begin(kept!, item.kind, show);
-        else if (item.kind === 'fresh') restartChat(id!);
+        else if (item.kind === 'fresh') void restartChat(id!);
     };
     return (
         <div className="agent-more-wrap" onKeyDown={keys}>

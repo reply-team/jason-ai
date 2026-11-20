@@ -96,17 +96,16 @@ describe('the guard over it', () => {
     });
 });
 
-/** Where a source listens for the right-click: an `addEventListener`, an entry of a table of listeners, or a JSX prop. */
+/**
+ * Where a source names the right-click: an `addEventListener` or an entry of a table of listeners (both carry the
+ * event's name as a string), a handler property or a JSX prop in any case, or the name anywhere else as a string.
+ */
 export function contextMenuListeners(text: string): string[] {
-    return [
-        ...text.matchAll(
-            /addEventListener\(\s*['"`]contextmenu['"`]|\[\s*['"`]contextmenu['"`]\s*,|\bonContextMenu\b/g,
-        ),
-    ].map((match) => match[0]);
+    return [...text.matchAll(/['"`]contextmenu['"`]|\bon-?context-?menu\b/gi)].map((match) => match[0]);
 }
 
 describe('the right-click', () => {
-    it('is taken from the system only by the console’s one listener, on a control that names its menu', () => {
+    it('is named only by the console’s one listener, which takes it on a control that names its menu', () => {
         const every = readdirSync(sourceDir, { recursive: true, encoding: 'utf8' })
             .map((name) => name.split(sep).join('/'))
             .filter((name) => /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name));
@@ -120,6 +119,11 @@ describe('the right-click', () => {
         expect(contextMenuListeners("root.addEventListener('contextmenu', on);")).toHaveLength(1);
         expect(contextMenuListeners("const all = [['contextmenu', on]];")).toHaveLength(1);
         expect(contextMenuListeners('<div onContextMenu={on} />')).toHaveLength(1);
-        expect(contextMenuListeners("if (event.type === 'contextmenu') go();")).toEqual([]);
+        expect(contextMenuListeners('element.oncontextmenu = on;')).toHaveLength(1);
+        expect(contextMenuListeners('const a = html`<div oncontextmenu="go()"></div>`;')).toHaveLength(1);
+        expect(contextMenuListeners("if (event.type === 'contextmenu') go();")).toHaveLength(1);
+        expect(contextMenuListeners('const kind = `contextmenu`;')).toHaveLength(1);
+        expect(contextMenuListeners("if (event.key === 'ContextMenu') go();")).toHaveLength(1);
+        expect(contextMenuListeners('// a menu of its own, opened by the context menu key')).toEqual([]);
     });
 });

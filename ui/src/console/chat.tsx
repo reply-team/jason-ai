@@ -409,9 +409,9 @@ export async function openConversation(id: string): Promise<string | null> {
 }
 
 /** "Start fresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
-export function restartChat(id: string): void {
-    if (!can('chat.restart')) return;
-    here()
+export function restartChat(id: string): Promise<void> {
+    if (!can('chat.restart')) return Promise.resolve();
+    return here()
         .desktop.chat.restart(id)
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
@@ -1851,7 +1851,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         aria-label="Start fresh"
                         disabled={chat.running || chat.removing}
                         title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                        onClick={() => restartChat(chatId)}
+                        onClick={() => void restartChat(chatId)}
                     >
                         <BarMark name="restart" />
                     </button>

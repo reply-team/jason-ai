@@ -8,7 +8,7 @@ import { begin, factsOf, placeGates } from './conversation-acts';
 import { rowItems, type MenuItem } from './conversation-items';
 import { setVariable } from './html';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
-import { closeRowMenu, focusRow, rowDrawn, rowMenu } from './recent';
+import { closeRowMenu, focusRow, rowDrawn, rowElement, rowMenu } from './recent';
 import { openRow } from './side';
 import { conversations, here } from './state';
 
@@ -33,7 +33,7 @@ export function RowMenu() {
     const [dialog, setDialog] = useState<Open | null>(null);
     const drawn = at !== null && rowDrawn(at.id);
 
-    // Placed where it was opened, kept inside the window, with its first act focused.
+    // Placed where it was opened and kept inside the window, measured again whenever its acts change.
     useLayoutEffect(() => {
         const element = menu.current;
         if (at === null || element === null) return;
@@ -42,15 +42,44 @@ export function RowMenu() {
         const y = Math.max(4, Math.min(at.y, window.innerHeight - height - 4));
         setVariable(element, '--row-menu-x', `${x}px`);
         setVariable(element, '--row-menu-y', `${y}px`);
-        menuItems(element)[0]?.focus();
+    });
+    // Its first act focused as it opens.
+    useLayoutEffect(() => {
+        if (at !== null) (menuItems(menu.current)[0] ?? menu.current)?.focus();
     }, [at]);
+    // An act held while it had the focus gives it to the first act that can be taken, or to the menu itself, so its keys
+    // still work; a focus taken elsewhere is left where it is.
+    useLayoutEffect(() => {
+        const element = menu.current;
+        if (element === null) return;
+        const focused = document.activeElement;
+        const lost = focused === null || focused === document.body || element.contains(focused);
+        if (lost && !menuItems(element).includes(focused as HTMLButtonElement) && focused !== element)
+            (menuItems(element)[0] ?? element).focus();
+    });
     useEffect(() => {
         if (at === null) return;
         const away = (event: MouseEvent) => {
             if (!menu.current?.contains(event.target as Node)) closeRowMenu();
         };
+        // The row it stands by moves when Recent scrolls or the window changes size: the menu closes rather than float.
+        const moved = (event: Event) => {
+            const row = rowElement(at.id);
+            if (
+                event.target === document ||
+                (event.target instanceof Node && row?.parentNode && event.target.contains(row))
+            )
+                closeRowMenu();
+        };
+        const resized = () => closeRowMenu();
         document.addEventListener('mousedown', away);
-        return () => document.removeEventListener('mousedown', away);
+        document.addEventListener('scroll', moved, true);
+        window.addEventListener('resize', resized);
+        return () => {
+            document.removeEventListener('mousedown', away);
+            document.removeEventListener('scroll', moved, true);
+            window.removeEventListener('resize', resized);
+        };
     }, [at]);
     // A row no longer drawn, by a new list, a filter or a search, takes its menu with it.
     useEffect(() => {
@@ -67,6 +96,8 @@ export function RowMenu() {
         const row = at.id;
         const agent = agentOf(row);
         closeRowMenu();
+        // The focus goes back to the row, where the act shows nothing that takes it: never to the page itself.
+        focusRow(row);
         if (item.kind === 'open') openRow(row);
         else if (item.kind === 'move' && agent) setDialog({ row, agent, kind: 'move', move: item.move });
         else if (item.kind === 'archive' && agent) setDialog({ row, agent, kind: 'archive' });
@@ -90,7 +121,14 @@ export function RowMenu() {
                     className="agent-menu row-menu"
                     role="menu"
                     aria-label={at.title}
-                    onKeyDown={(event) => menuKeys(event, menu.current, close)}
+                    tabIndex={-1}
+                    onKeyDown={(event) => {
+                        // Tab leaves the menu for the row it was opened on.
+                        if (event.key === 'Tab') {
+                            event.preventDefault();
+                            close(true);
+                        } else menuKeys(event, menu.current, close);
+                    }}
                 >
                     <MenuEntries items={rowItems(agentOf(at.id), factsOf(at.id), placeGates())} onChoose={choose} />
                 </div>
