@@ -1002,9 +1002,10 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
-    /// The releases whose <c>install.sh</c> wrote the PATH lines last: 0.48.7's on macOS, where from 0.49.0 the script
-    /// installs Jason Desktop and the <c>jason install</c> it carries writes them, and 0.49.0's on Linux, where 0.49.1 does
-    /// the same. Every release's script from 0.21.0 to these carried the same rule word for word.
+    /// The releases whose <c>install.sh</c> wrote the PATH lines last: 0.48.7's on macOS and 0.49.0's on Linux. From 0.49.0
+    /// on macOS and 0.49.1 on Linux the script installs Jason Desktop, and the lines are written, where any are, by the
+    /// <c>jason install</c> the application carries. Every release's script from 0.21.0 to these carried the same rule word
+    /// for word.
     /// </summary>
     /// <remarks>
     /// No <c>install.sh</c> writes a profile any more, and <c>jason uninstall</c> still takes back the lines those scripts
@@ -1026,22 +1027,46 @@ public class UninstallPathEntryTests
         var scripts = new List<(string Tag, string Script)>();
         foreach (var tag in LastWriters)
         {
-            if (Git("show", $"{tag}:install/install.sh") is { } script)
+            var (script, said) = Git("show", $"{tag}:install/install.sh");
+            if (script is not null)
             {
                 scripts.Add((tag, script.Replace("\r\n", "\n", StringComparison.Ordinal)));
                 continue;
             }
 
-            Assert.False(
-                Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true",
-                $"{tag} is not in this checkout under CI, so nothing holds the uninstall to the PATH lines its install.sh wrote: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite must keep fetch-depth: 0, which brings the tags.");
-            Assert.Skip($"{tag} is not in this checkout, so the install.sh it published cannot be read.");
+            var failure = UnreadScriptFailure(Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true", tag, said);
+            Assert.True(failure is null, failure);
+            Assert.Skip($"The install.sh {tag} published cannot be read in this checkout: git said {said}");
         }
 
         return scripts;
     }
 
-    private static string? Git(params string[] args)
+    /// <summary>Why a script that cannot be read fails the row, or null where it only skips it.</summary>
+    private static string? UnreadScriptFailure(bool underCi, string tag, string said) => underCi
+        ? $"The install.sh {tag} published cannot be read under CI (git said {said}), so nothing would hold the uninstall to the "
+          + "PATH lines it wrote: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite must keep "
+          + "fetch-depth: 0, which brings the tags."
+        : null;
+
+    /// <summary>
+    /// A checkout without the tags skips the rows above outside CI only: under CI a row that skipped would never run at all,
+    /// so it fails, naming the checkout and what git said.
+    /// </summary>
+    [Fact]
+    public void A_release_s_script_unread_under_ci_fails_naming_the_checkout_and_skips_elsewhere()
+    {
+        var failure = UnreadScriptFailure(underCi: true, "v0.49.0", "fatal: invalid object name 'v0.49.0'.");
+
+        Assert.NotNull(failure);
+        Assert.Contains("actions/checkout", failure, StringComparison.Ordinal);
+        Assert.Contains("fetch-depth: 0", failure, StringComparison.Ordinal);
+        Assert.Contains("fatal: invalid object name 'v0.49.0'.", failure, StringComparison.Ordinal);
+        Assert.Null(UnreadScriptFailure(underCi: false, "v0.49.0", "fatal: invalid object name 'v0.49.0'."));
+    }
+
+    /// <summary>What <c>git</c> printed on success, or null and what it said where it failed or could not be started.</summary>
+    private static (string? Output, string Said) Git(params string[] args)
     {
         var start = new System.Diagnostics.ProcessStartInfo("git")
         {
@@ -1057,11 +1082,18 @@ public class UninstallPathEntryTests
             start.ArgumentList.Add(argument);
         }
 
-        using var git = System.Diagnostics.Process.Start(start)!;
-        var stdout = git.StandardOutput.ReadToEndAsync();
-        _ = git.StandardError.ReadToEndAsync();
-        git.WaitForExit();
-        return git.ExitCode == 0 ? stdout.Result : null;
+        try
+        {
+            using var git = System.Diagnostics.Process.Start(start)!;
+            var stdout = git.StandardOutput.ReadToEndAsync();
+            var stderr = git.StandardError.ReadToEndAsync();
+            git.WaitForExit();
+            return git.ExitCode == 0 ? (stdout.Result, string.Empty) : (null, stderr.Result.Trim());
+        }
+        catch (System.ComponentModel.Win32Exception unstarted)
+        {
+            return (null, $"nothing: it could not be started ({unstarted.Message})");
+        }
     }
 
     private static string RepositoryRoot()
