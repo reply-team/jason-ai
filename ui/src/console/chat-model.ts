@@ -78,6 +78,11 @@ export type Entry =
      * access folder the sentence points at, which its Open folder button opens; null for any other.
      */
     | { kind: 'notice'; text: string; folder: string | null }
+    /**
+     * What the desktop answered an `/export` with, where it wrote the file or why it did not: said in the page beside
+     * the conversation, not kept by the desktop, and no part of the conversation, so it ends no card and no plan.
+     */
+    | { kind: 'aside'; text: string }
     /** A line of the Feed, as the desktop kept it. */
     | { kind: 'line'; line: DesktopLineEntry }
     /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
@@ -115,6 +120,11 @@ export interface Chat {
     outbox: string | null;
     /** The running turn's words when they were the waiting message, given back if that turn fails. */
     resent: string | null;
+    /**
+     * The words of an `/export` the desktop answers now, which is no turn: given back if it is refused. Null when none
+     * runs.
+     */
+    exporting: string | null;
     /** How many of the oldest entries the desktop let go to keep the conversation within its size. */
     dropped: number;
     /** Whether the person asked to remove the conversation and has not yet said again. */
@@ -171,6 +181,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         stopping: false,
         outbox: null,
         resent: null,
+        exporting: null,
         dropped: 0,
         removing: false,
         renaming: null,
@@ -282,7 +293,7 @@ export function moded(chat: Chat, mode: DesktopChatMode): Chat {
  * Whether the chat's plan card may be approved now, with the go sent to `host`: its last entry is a plan the desktop
  * marked, the chat is still in Plan only, no turn runs, nothing waits to be sent, it is not the Feed, the person has
  * neither approved it nor kept planning, and `host` is the host that made it. Anything after the plan, a message, an
- * error or a note, makes it a plan of the past; another host makes it one that host never saw (`planElsewhere`).
+ * error or a note, makes it a plan of the past, but an export's answer beside the conversation does not (`lastEntryOf`); another host makes it one that host never saw (`planElsewhere`).
  */
 export function livePlan(chat: Chat, host: string | null): boolean {
     return planStands(chat) && host !== null && host === chat.turnHost;
@@ -293,9 +304,18 @@ export function planElsewhere(chat: Chat, host: string | null): boolean {
     return planStands(chat) && host !== null && host !== chat.turnHost;
 }
 
+/**
+ * The conversation's last entry: the last one that locks a choice (`locks`), so a line, a gap, a pick or an export's
+ * sentence beside the conversation is not one that follows it.
+ */
+export function lastEntryOf(chat: Chat): Entry | undefined {
+    for (let at = chat.entries.length - 1; at >= 0; at--) if (locks[chat.entries[at]!.kind]) return chat.entries[at];
+    return undefined;
+}
+
 /** `livePlan` on whichever host. */
 function planStands(chat: Chat): boolean {
-    const last = chat.entries.at(-1);
+    const last = lastEntryOf(chat);
     return (
         last?.kind === 'text' &&
         last.plan === true &&
@@ -509,10 +529,18 @@ export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat =
 });
 
 /**
+ * Whether a message is an export, which the desktop answers by writing the conversation to a file and starts no turn
+ * for: its first word is `/export` alone, as the desktop reads it (`exportName`, desktop/src/chat-export.ts).
+ */
+export const isExport = (text: string): boolean => /^\/export(?=\s|$)/.test(text.trim());
+
+/**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
- * the words were the waiting message, which the turn gives back if it fails.
+ * the words were the waiting message, which the turn gives back if it fails. An export is no message of the
+ * conversation: it adds no entry and gives no title, and waits for the desktop's answer as a turn does.
  */
 export function said(chat: Chat, text: string, resent = false): Chat {
+    if (isExport(text)) return { ...chat, running: true, resent: resent ? text : null, exporting: text };
     const first = chat.campaignId === null && !chat.main && !chat.entries.some((each) => each.kind === 'user');
     return {
         ...chat,
@@ -520,6 +548,7 @@ export function said(chat: Chat, text: string, resent = false): Chat {
         entries: [...chat.entries, { kind: 'user', text }],
         running: true,
         resent: resent ? text : null,
+        exporting: null,
     };
 }
 
@@ -568,6 +597,9 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'pick':
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
         case 'notice':
+            // While an export runs, a sentence that names no folder is its answer: beside the conversation.
+            if (chat.exporting !== null && event.folder === undefined)
+                return { ...chat, entries: [...chat.entries, { kind: 'aside', text: event.text }] };
             return {
                 ...chat,
                 entries: [...chat.entries, { kind: 'notice', text: event.text, folder: event.folder ?? null }],
@@ -587,6 +619,15 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'gap':
             return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
+            // An export ended: no turn did, so no plan ends; a refusal is said beside the conversation, and its words go
+            // back to the box, once, above what is typed there.
+            if (chat.exporting !== null) {
+                const over = ended(chat);
+                if (event.error === null)
+                    return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
+                const aside: Entry = { kind: 'aside', text: event.error };
+                return givenBack(released({ ...over, entries: [...over.entries, aside] }), chat.exporting);
+            }
             // A turn ended: every earlier plan is a plan of the past, and this turn's last words are its plan when the
             // desktop says so. The Feed has none.
             const words = unplanned(chat.entries);
@@ -687,6 +728,7 @@ function ended(chat: Chat): Chat {
         running: false,
         stopping: false,
         resent: null,
+        exporting: null,
         entries: chat.entries.map((each) =>
             each.kind === 'permission' && each.answer === null ? { ...each, answer: 'gone' } : each,
         ),
@@ -770,6 +812,7 @@ const locks: Readonly<Record<Entry['kind'], boolean>> = {
     permission: true,
     error: true,
     notice: true,
+    aside: false,
     attached: true,
     fresh: true,
     afresh: true,

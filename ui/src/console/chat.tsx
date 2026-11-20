@@ -48,6 +48,8 @@ import {
     handed,
     kept,
     livePlan,
+    lastEntryOf,
+    isExport,
     planElsewhere,
     lost,
     modeChoices,
@@ -585,8 +587,11 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         return;
     }
     // A chat that named no host yet is on the one its turn runs on from now, so a hold on that host later holds the chat.
-    // The host the turn goes to is the one whose session has its answer, a plan included (`livePlan`).
-    changeChat(id, (each) => said({ ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent));
+    // The host the turn goes to is the one whose session has its answer, a plan included (`livePlan`). An export is no
+    // turn, and leaves the chat on the host it was on.
+    changeChat(id, (each) =>
+        said(isExport(words) ? each : { ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent),
+    );
     here()
         .desktop.chat.send(id, words, { ...turnOptions(onHost(chat, host.id), host), ...(mode ? { mode } : {}) })
         .then((answer) => {
@@ -741,7 +746,7 @@ function planCard(
     drafts = false,
 ): Html {
     // Approve and run is offered over what a person can read: never over a plan of none.
-    const last = entry === chat.entries.at(-1) && (words.trim() !== '' || drawn !== null);
+    const last = entry === lastEntryOf(chat) && (words.trim() !== '' || drawn !== null);
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -1218,6 +1223,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                               Open folder
                           </button>
                       </div>`;
+            case 'aside':
+                return noteLine(entry.text);
             case 'afresh':
                 return noteLine("Started fresh: the AI's next turn begins without its memory of this conversation.");
             case 'line':

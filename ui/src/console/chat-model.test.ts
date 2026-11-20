@@ -432,6 +432,64 @@ describe('a message typed while a turn runs', () => {
     });
 });
 
+describe('an /export typed in the chat, which the desktop answers without a turn', () => {
+    const planning = (): Chat => ({ ...newChat('c1', 'claude'), mode: 'plan_only', turnHost: 'claude' });
+    const planned = (): Chat =>
+        received(received(said(planning(), 'plan it'), { kind: 'text', text: 'Read the replies first.' }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+    const refusal = 'Give a file name alone, such as notes.md, with no folder in it.';
+
+    it('is no message of the conversation: no You entry and no title, while the desktop answers it', () => {
+        const chat = said(newChat('c1', 'claude'), '/export notes.md');
+        expect(chat).toMatchObject({ title: 'New chat', entries: [], running: true, exporting: '/export notes.md' });
+        // Any other word with a slash is a message as any other, and names the chat.
+        expect(said(newChat('c1', 'claude'), '/exports notes.md')).toMatchObject({
+            title: '/exports notes.md',
+            entries: [{ kind: 'user', text: '/exports notes.md' }],
+            exporting: null,
+        });
+    });
+
+    it('says where it wrote beside the thread, and a plan before it stays live', () => {
+        const over = received(
+            received(said(planned(), '/export notes.md'), { kind: 'notice', text: 'Written: /h/notes.md' }),
+            { kind: 'done', error: null },
+        );
+        expect(over.entries.slice(-2)).toEqual([
+            { kind: 'text', text: 'Read the replies first.', plan: true },
+            { kind: 'aside', text: 'Written: /h/notes.md' },
+        ]);
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '' });
+        expect(livePlan(over, 'claude')).toBe(true);
+    });
+
+    it('is given back to the box when refused, says why beside the thread, and a plan before it stays live', () => {
+        const over = received(said(planned(), '/export ../x.md'), { kind: 'done', error: refusal });
+        expect(over.entries.at(-1)).toEqual({ kind: 'aside', text: refusal });
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '/export ../x.md' });
+        expect(livePlan(over, 'claude')).toBe(true);
+        // Above what was typed meanwhile, and once when it was a waiting message joined with another.
+        const joinedWords = ['/export a.md', 'And then?'].join(blank);
+        const queuedOver = received(typed(said(planned(), joinedWords, true), 'Typed'), {
+            kind: 'done',
+            error: refusal,
+        });
+        expect(queuedOver.draft).toBe([joinedWords, 'Typed'].join(blank));
+    });
+
+    it('leaves a chat about no campaign named New chat, so its first message names it', () => {
+        const refused = received(said(newChat('c1', 'claude'), '/export x.md'), {
+            kind: 'done',
+            error: 'This conversation has nothing to write yet.',
+        });
+        expect(refused.title).toBe('New chat');
+        expect(said(typed(refused, ''), 'Find leads in Austin').title).toBe('Find leads in Austin');
+    });
+});
+
 describe('the model and the effort a chat is sent with', () => {
     const every: DesktopEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
     const claude: DesktopHost = {

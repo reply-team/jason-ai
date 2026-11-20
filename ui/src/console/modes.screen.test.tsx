@@ -891,6 +891,37 @@ describe('Plan only’s plan card', () => {
         expect(calls(desktop, 'chat.setMode').length).toBe(before);
     });
 
+    it('an /export after the plan is no turn: the card stays live, its answer is said beside it, and a refusal gives the words back', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        const id = await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        // Sent from another host, the export leaves the plan the plan of the host that made it.
+        chooseHost('codex');
+        fireEvent.change(box(), { target: { value: '/export plan.md' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+        expect(calls(desktop, 'chat.send')[1]!.args[1]).toBe('/export plan.md');
+        flush(() => {
+            desktop.emit(id, { kind: 'notice', text: 'Written: /h/plan.md' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => expect(screen.getByText('Written: /h/plan.md')).toBeTruthy());
+        expect(screen.queryByText('/export plan.md')).toBeNull();
+        chooseHost('claude');
+        await waitFor(() => expect(approve()).not.toBeNull());
+        // A refusal is said beside the plan, and the words go back to the box.
+        fireEvent.change(box(), { target: { value: '/export plan.md' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(3));
+        flush(() => desktop.emit(id, { kind: 'done', error: 'A file or folder of that name is already there.' }));
+        await waitFor(() => expect(screen.getByText('A file or folder of that name is already there.')).toBeTruthy());
+        expect(box().value).toBe('/export plan.md');
+        expect(approve()).not.toBeNull();
+    });
+
     it('Keep planning puts the card aside, keeps Plan only, asks the desktop nothing and gives the box the focus', async () => {
         const desktop = renderConsole();
         await planned(desktop);
