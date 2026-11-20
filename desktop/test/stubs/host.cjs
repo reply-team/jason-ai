@@ -36,6 +36,10 @@
 // that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "hold": "<file>" } waits until the file exists, { "touch": true } leaves a
 // file in the folder it runs in, { "stuck": "<file>" } never answers, outlives the first signal and writes its ids there. With none it ends well and says nothing. STUB_NAMING_LOG, when set, has a line appended
 // as each naming run starts and ends.
+// STUB_CODEX_REFUSE has Codex refuse to start: it writes those words to stderr and exits 1 before any event, as Codex does
+// when its configuration cannot be built.
+// STUB_CODEX_WARNING has Codex say a configuration warning before its thread, as a completed item of type `error`, the
+// shape codex exec --json gives one (codex-rs/exec/src/event_processor_with_jsonl_output.rs).
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
@@ -214,6 +218,11 @@ function codex(args, stdin) {
         process.exit(1);
     }
     const thread = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || '0199a213-81c0-7800-8aa1-bbab2a035a53');
+    if (process.env.STUB_CODEX_REFUSE) {
+        process.stderr.write(`${process.env.STUB_CODEX_REFUSE}\n`);
+        process.exit(1);
+    }
+    if (process.env.STUB_CODEX_WARNING) print({ type: 'item.completed', item: { id: 'item_0', type: 'error', message: process.env.STUB_CODEX_WARNING } });
     print({ type: 'thread.started', thread_id: thread });
     print({ type: 'turn.started' });
     if (!silent(asked)) {

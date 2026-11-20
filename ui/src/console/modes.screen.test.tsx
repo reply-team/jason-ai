@@ -115,7 +115,7 @@ describe('a chat’s access mode', () => {
         expect(line()).not.toBeNull();
     });
 
-    it('on a host where Full access does not run, draws the mode the next turn runs in, Ask first, says why in the desktop’s words, keeps Full access disabled, and asks the desktop for no mode', async () => {
+    it('on Codex, runs Full access as itself: offered, drawn, said in Codex’s own words in the menu and under the composer, with no sentence why, and choosing Codex asks the desktop for no mode', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
@@ -125,42 +125,36 @@ describe('a chat’s access mode', () => {
         const asked = calls(desktop, 'chat.setMode').length;
         chooseHost('codex');
         const full = () => choicesOf('Access mode', 'mode').find((each) => each.value === 'full_access')!;
-        await waitFor(() => expect(full().disabled).toBe(true));
-        await flush(() => new Promise((resolve) => setTimeout(resolve, 100)));
-        // The chat keeps Full access, which is the desktop's to keep; its next turn, on Codex, runs in Ask first, and the
-        // composer draws that, never a choice the turn will not keep.
-        expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
-        expect(value()).toBe('ask_first');
-        expect(line()).toBeNull();
-        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(
-            'Full access runs on Claude Code only.',
-        );
-        expect([full().text, full().said]).toEqual(['Full access', 'Full access runs on Claude Code only.']);
-        // Back on Claude Code the next turn runs in the Full access the chat kept.
-        chooseHost('claude');
-        await waitFor(() => expect(line()).not.toBeNull());
+        await waitFor(() => expect(line()!.textContent).toBe(codexFullLine));
         expect(value()).toBe('full_access');
+        expect([full().text, full().disabled, full().said]).toEqual(['Full access', false, codexFullSays]);
         expect(screen.queryByRole('note', { name: /^Why the next turn runs in/ })).toBeNull();
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
+        // Back on Claude Code, Claude Code's own words.
+        chooseHost('claude');
+        await waitFor(() => expect(line()!.textContent).toBe(claudeFullLine));
+        expect(full().said).toBe('Runs commands on this computer without asking, except those Jason cannot read.');
         expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
     });
 
-    it('on a host where Full access does not run, takes Ask first chosen there as the person’s choice: the desktop is asked for it, and back on Claude Code the chat is in Ask first', async () => {
+    it('on Codex, says Ask first reads and proposes, in the menu and under the composer, and Claude Code’s Ask first in its own words', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => menu());
-        await waitFor(() => expect(line()).not.toBeNull());
         chooseHost('codex');
-        await waitForMenus(() => expect(value()).toBe('ask_first'));
-        const asked = calls(desktop, 'chat.setMode').length;
         choose('ask_first');
-        await waitFor(() => expect(calls(desktop, 'chat.setMode')).toHaveLength(asked + 1));
-        expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
-        // The chat is in Ask first now: there is no other mode its turns step down from, and so no reason is said.
-        await waitFor(() => expect(screen.queryByRole('note', { name: /^Why the next turn runs in/ })).toBeNull());
-        chooseHost('claude');
+        await waitFor(() =>
+            expect(calls(desktop, 'chat.setMode').at(-1)?.args.slice(1)).toEqual(['ask_first', 'codex']),
+        );
+        const ask = () => choicesOf('Access mode', 'mode').find((each) => each.value === 'ask_first')!;
         await waitForMenus(() => expect(value()).toBe('ask_first'));
+        expect(ask().said).toBe(codexAskSays);
+        expect(screen.getByText(codexAskLine)).toBeTruthy();
         expect(line()).toBeNull();
+        chooseHost('claude');
+        await waitFor(() => expect(ask().said).toBe('Asks on a card before anything Jason does not settle itself.'));
+        expect(screen.queryByText(codexAskLine)).toBeNull();
     });
 
     it('from a desktop of an earlier version, whose hosts hand no mode a turn runs in, draws the chat’s own mode on every host, as before', async () => {
@@ -177,14 +171,18 @@ describe('a chat’s access mode', () => {
         expect(screen.queryByRole('note', { name: /^Why the next turn runs in/ })).toBeNull();
     });
 
-    it('says under the composer, on Codex alone, that the chat does not read the person’s Codex config.toml', async () => {
+    it('says under the composer, on Codex alone and outside Full access, that the chat does not read the person’s Codex config.toml', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         renderConsole(chatDesktop(status));
         await waitFor(() => menu());
         const note = () => screen.queryByRole('note', { name: 'What Codex reads' });
         expect(note()).toBeNull();
+        // In Full access a Codex turn reads it, as Codex in a terminal does: nothing is said.
         chooseHost('codex');
+        await waitFor(() => expect(line()!.textContent).toBe(codexFullLine));
+        expect(note()).toBeNull();
+        choose('ask_first');
         await waitFor(() => expect(note()).not.toBeNull());
         expect(note()!.textContent).toBe(
             'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.',
@@ -232,6 +230,8 @@ describe('a chat’s access mode', () => {
             renderConsole(desktop);
             await waitFor(() => menu());
             const note = () => screen.queryByRole('note', { name: 'What a Codex command can reach' });
+            choose('ask_first');
+            await waitForMenus(() => expect(value()).toBe('ask_first'));
             expect(note()).toBeNull();
             for (const id of ['codex', 'codex-api-key']) {
                 chooseHost(id);
@@ -239,6 +239,9 @@ describe('a chat’s access mode', () => {
                 expect(note()!.textContent).toBe(line);
                 expect(note()!.textContent).not.toMatch(/act for you|acts through nothing|network/);
             }
+            // In Full access a Codex command reaches what the person can, which the Full access line says.
+            choose('full_access');
+            await waitFor(() => expect(note()).toBeNull());
             chooseHost('claude');
             await waitFor(() => expect(note()).toBeNull());
         },
@@ -280,14 +283,17 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
 
     it('says in the desktop’s words why Full access cannot be had on the host chosen, asks nothing, and shows no line', async () => {
         const status = structuredClone(setupFound);
-        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const codex = status.hosts.find((each) => each.id === 'codex')!;
+        codex.found = true;
+        // A desktop that does not offer Full access yet says so on every host.
+        codex.fullAccess = 'Full access is not in this version yet.';
         const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => menu());
         choose('ask_first');
         await waitFor(() => expect(line()).toBeNull());
         chooseHost('codex');
         const full = choicesOf('Access mode', 'mode').find((each) => each.value === 'full_access')!;
-        expect([full.disabled, full.said]).toEqual([true, 'Full access runs on Claude Code only.']);
+        expect([full.disabled, full.said]).toEqual([true, 'Full access is not in this version yet.']);
         choose('full_access');
         expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         expect(line()).toBeNull();
@@ -324,6 +330,11 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
 });
 
 const editing = () => screen.queryByRole('status', { name: 'Auto-edit is on' });
+const codexFullLine = 'Full access · Codex runs commands on this computer without asking, with no sandbox';
+const claudeFullLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
+const codexFullSays = 'Runs commands on this computer without asking, with no sandbox.';
+const codexAskSays = 'Reads and proposes. Codex cannot ask before it acts.';
+const codexAskLine = 'Ask first · reads and proposes. Codex cannot ask before it acts';
 const codexAutoEdit =
     'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
@@ -440,6 +451,25 @@ describe('a change of mode around a running turn, narrow to wide', () => {
         await givenBack(desktop);
     });
 
+    it('on Codex, where Auto-edit runs in Ask first, choosing the checked Ask first asks the desktop for it and stops nothing: the waiting message follows the turn', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        chooseHost('codex');
+        await waitForMenus(() => expect(value()).toBe('ask_first'));
+        await running(desktop);
+        const asked = calls(desktop, 'chat.setMode').length;
+        choose('ask_first');
+        await waitFor(() => expect(calls(desktop, 'chat.setMode')).toHaveLength(asked + 1));
+        expect(calls(desktop, 'chat.setMode').at(-1)!.args.slice(1)).toEqual(['ask_first', 'codex']);
+        expect(screen.getByRole('group', { name: 'Queued message' })).toBeTruthy();
+        flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+    });
+
     it('a change from Auto-edit to Full access is wider: the turn goes on and its waiting message follows it', async () => {
         const desktop = renderConsole();
         await waitFor(() => menu());
@@ -516,7 +546,7 @@ describe('Plan only’s plan card', () => {
 
     /** Puts the chat in Plan only, sends a turn, and ends it as the desktop ends a Plan only turn with a plan. */
     const codexWords =
-        'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+        'On Codex the approved plan still only reads: Codex runs Ask first read-only. To have it carried out, choose Full access or Claude Code for this chat.';
     const otherHost =
         'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.';
 
@@ -855,7 +885,7 @@ describe('Plan only’s plan card', () => {
         expect(chats.value[id]!.running).toBe(false);
     });
 
-    it('on Codex says the approved plan still only reads, naming Claude Code, and sends the go to Codex', async () => {
+    it('on Codex says the approved plan still only reads, naming Full access and Claude Code, and sends the go to Codex', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
@@ -971,7 +1001,12 @@ describe('the empty chat’s sentence about approval', () => {
 
     it('is drawn on a host where a Full access chat’s next turn runs in Ask first, and not once back where it runs in Full access', async () => {
         const status = structuredClone(setupFound);
-        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const codex = status.hosts.find((each) => each.id === 'codex')!;
+        codex.found = true;
+        // A host on which Full access is not offered runs a Full access chat's turn in Ask first.
+        const notYet = 'Full access is not in this version yet.';
+        codex.fullAccess = notYet;
+        codex.runs.window.full_access = { mode: 'ask_first', why: notYet };
         renderConsole(chatDesktop(status));
         await waitFor(() => expect(line()).not.toBeNull());
         expect(said()).toBeNull();

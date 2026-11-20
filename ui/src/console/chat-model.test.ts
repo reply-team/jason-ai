@@ -39,6 +39,7 @@ import {
     typed,
     afresh,
     codexPlanLine,
+    choiceStops,
     livePlan,
     planElsewhere,
     planOtherHost,
@@ -735,14 +736,21 @@ describe('the hosts as a desktop of another version answers them', () => {
 });
 
 describe("a chat's access mode", () => {
-    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null, autoEdit: null } as unknown as DesktopHost;
+    const claude = {
+        id: 'claude',
+        label: 'Claude Code',
+        fullAccess: null,
+        autoEdit: null,
+        runs: { window: {}, tab: {} },
+    } as unknown as DesktopHost;
     const codexAutoEdit =
         'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
     const codex = {
         id: 'codex',
         label: 'Codex',
-        fullAccess: 'Full access runs on Claude Code only.',
+        fullAccess: null,
         autoEdit: codexAutoEdit,
+        runs: { window: { auto_edit: { mode: 'ask_first', why: codexAutoEdit } }, tab: {} },
     } as unknown as DesktopHost;
 
     it('is Ask first in a new chat, and is what the desktop says it is, never what the page asked for', () => {
@@ -777,12 +785,23 @@ describe("a chat's access mode", () => {
             { mode: 'auto_edit', label: 'Auto-edit', disabled: null },
             { mode: 'full_access', label: 'Full access', disabled: null },
         ]);
-        expect(modeChoices(codex)[3]).toEqual({
-            mode: 'full_access',
-            label: 'Full access',
-            disabled: 'Full access runs on Claude Code only.',
-        });
-        expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+        // Codex offers Full access, as Claude Code does; with no host nothing is said against it.
+        expect(modeChoices(codex)[3]).toEqual({ mode: 'full_access', label: 'Full access', disabled: null });
+        expect(modeChoices(null)[3]?.disabled).toBeNull();
+    });
+
+    it('stops a running turn for a choice narrower than the mode that turn runs in, not the mode the chat keeps: the checked mode stops nothing', () => {
+        const running = { ...newChat('conv_1', 'codex'), mode: 'auto_edit' as const, running: true };
+        // On Codex Auto-edit runs in Ask first: the checked Ask first changes nothing the turn may do.
+        expect(choiceStops(running, 'ask_first', codex, 'window')).toBe(false);
+        expect(choiceStops(running, 'plan_only', codex, 'window')).toBe(true);
+        // On Claude Code the turn runs in Auto-edit, so Ask first is narrower.
+        expect(choiceStops(running, 'ask_first', claude, 'window')).toBe(true);
+        // Codex runs Full access as itself: leaving it stops the turn.
+        expect(choiceStops({ ...running, mode: 'full_access' }, 'ask_first', codex, 'window')).toBe(true);
+        expect(choiceStops({ ...running, mode: 'full_access' }, 'full_access', codex, 'window')).toBe(false);
+        // A chat with no turn running stops nothing.
+        expect(choiceStops({ ...running, running: false }, 'plan_only', codex, 'window')).toBe(false);
     });
 
     it("disables Auto-edit on Codex and with no host in the desktop's words, and nowhere else, the Feed included", () => {
@@ -930,7 +949,7 @@ describe('Plan only’s plan card, as the page keeps it', () => {
             'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
         );
         expect(codexPlanLine).toBe(
-            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.',
+            'On Codex the approved plan still only reads: Codex runs Ask first read-only. To have it carried out, choose Full access or Claude Code for this chat.',
         );
         expect(planApproved).toBe('Approved: the chat is in Ask first.');
         expect(planModeMoved).toBe("The chat's mode changed before the plan was approved, so nothing was sent.");
