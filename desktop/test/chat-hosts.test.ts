@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { helpNouns, modeFence, readFence } from '../src/chat-deny.ts';
+import { helpNouns, modeFence, readFence, withoutRequestFiles } from '../src/chat-deny.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
 import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
@@ -54,7 +54,7 @@ test('every Claude Code turn blocks reads outside its working folders, so a read
 
 test('the person\'s words are never on a host\'s command line: every argument is a flag or a flag\'s value', () => {
     const claude = claudeArguments({ ...turn, model: 'sonnet', resume: 'ses-1', addDirs: ['/c', '/p'] });
-    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
+    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--permission-mode', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
     for (let i = 0; i < claude.length; i++) {
         const arg = claude[i] ?? '';
         assert.ok(arg.startsWith('-'), `${arg} is not a flag`);
@@ -75,10 +75,15 @@ test('a Codex turn in Full access acts with no sandbox and reads the person\'s o
     assert.deepEqual(codexArguments({ platform: 'linux', mode: 'full_access', model: 'gpt-5', resume: 'thr-1' }).slice(-5), ['--model', 'gpt-5', 'resume', 'thr-1', '-']);
 });
 
-test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
-    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help; with no hook, below the floor of Full access, no verb that reads a request\'s content', () => {
+    assert.deepEqual(valuesOf(claudeArguments({ ...turn, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' }), '--allowedTools'), [
         ...claudeAllowedTools,
         ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`),
+        ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
+    ]);
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+        ...claudeAllowedTools,
+        ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`),
         ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
     ]);
     assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
@@ -133,7 +138,8 @@ test('each noun with a verb on the allow list or the plan list has its help allo
         // The deny rules are not touched: every jason that starts with an option stays refused by the host, root help included.
         const refused = valuesOf(args, '--disallowedTools');
         assert.ok(refused.includes('Bash(jason -*)'), mode);
-        for (const rule of denied) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
+        // Full access keeps the PowerShell tool, as a terminal's session does (`fullAccessRemovedTools`).
+        for (const rule of denied.filter((rule) => mode !== 'full_access' || rule !== 'PowerShell')) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
     }
     // Only `--help`, and no rule for all of a noun, the root's help or a noun the deny list takes away whole.
     const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
@@ -191,7 +197,7 @@ test('each allowed and disallowed rule is an argument of its own, so a comma in 
     const args = claudeArguments({ ...turn, dataRules: rules });
     assert.equal(args.filter((arg) => arg === '--allowedTools').length, 1);
     assert.equal(args.filter((arg) => arg === '--disallowedTools').length, 1);
-    for (const rule of [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
+    for (const rule of [...claudeAllowedTools, ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
     assert.deepEqual(valuesOf(args, '--disallowedTools').slice(-2), rules);
 });
 
@@ -564,9 +570,10 @@ test('every Claude Code turn asks the host to run each command in the chat folde
     }
 });
 
-test('a recorded Claude Code turn maps to its session, its words and one step per tool use, in order, then the end', () => {
+test('a recorded Claude Code turn maps to its mode, its session, its words and one step per tool use, in order, then the end', () => {
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
+        { kind: 'permission_mode', mode: 'default' },
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
@@ -598,6 +605,13 @@ test('the init line says where the turn\'s key came from, by a closed word: the 
     for (const absent of [undefined, 7, null]) assert.deepEqual(source(absent), [{ kind: 'key_source', source: 'absent' }], String(absent));
     // A session id of a shape the desktop does not pass on still says where the key came from.
     assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: '--x', apiKeySource: 'oauth' })), [{ kind: 'key_source', source: 'elsewhere' }]);
+});
+
+test('the init line says the permission mode the turn runs in, as one word, and nothing for any other value', () => {
+    const mode = (value: unknown) => claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'stub-session-1', ...(value === undefined ? {} : { permissionMode: value }) })).filter((line) => line.kind === 'permission_mode');
+    assert.deepEqual(mode('bypassPermissions'), [{ kind: 'permission_mode', mode: 'bypassPermissions' }]);
+    assert.deepEqual(mode('default'), [{ kind: 'permission_mode', mode: 'default' }]);
+    for (const other of [undefined, 7, null, '', 'bypass Permissions', 'x'.repeat(33), 'default\n']) assert.deepEqual(mode(other), [], JSON.stringify(other));
 });
 
 test('a retry Claude Code reports on a 401, a 403 or a failed authentication is a refused key; any other retry says nothing', () => {
@@ -731,7 +745,7 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     const edited = claudeArguments({ ...turn, mode: 'auto_edit' });
     assert.deepEqual(edited, asked);
     assert.deepEqual(claudeArguments({ ...turn, mode: 'auto_edit', resume: 'ses-1', addDirs: ['/c'] }), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] }));
-    assert.equal(edited.includes('--permission-mode'), false);
+    assert.equal(valueOf(edited, '--permission-mode'), 'default', "the host's default, by name");
     assert.ok(edited.includes('--permission-prompt-tool'));
     // No argument and no setting names the host's own accept-edits mode or a default mode of any kind.
     for (const arg of edited) {

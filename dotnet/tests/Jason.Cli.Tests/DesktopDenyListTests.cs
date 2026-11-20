@@ -143,6 +143,50 @@ public class DesktopDenyListTests
         Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// No verb of the plan list takes a request on standard input: none has an option that <see cref="RequestFile"/>
+    /// reads, the one reader of a request's file or of standard input. A redirect into a verb a Plan only turn runs is
+    /// then neither stored nor printed back, which is why the desktop's hook, which refuses the installation's settings
+    /// file and run file in every other mode, does not ride a Plan only turn.
+    /// </summary>
+    [Fact]
+    public void No_verb_of_the_plan_list_takes_a_request_on_standard_input()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var planned = File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-plan-list.txt"))
+            .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+
+        Assert.NotEmpty(planned);
+        Assert.Empty(planned.Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).ToList());
+    }
+
+    /// <summary>
+    /// The verbs the desktop names as reading a request's content from a file or from standard input
+    /// (<c>requestFileVerbs</c> in <c>desktop/src/chat-deny.ts</c>) are exactly the verbs of the CLI's command tree with an
+    /// option <see cref="RequestFile"/> reads. Below the floor of Full access no hook rides an Ask first or Auto-edit turn,
+    /// and the desktop gives the host no allow rule for a form of one of these verbs, so a redirect into it reaches the
+    /// permission tool: a verb that gains such an option is red here until the desktop names it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_names_every_verb_that_reads_a_request_s_file()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var expected = Verbs(root, []).Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).Order(StringComparer.Ordinal).ToList();
+
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-deny.ts"));
+        var declaration = Regex.Match(source, @"^export const requestFileVerbs: readonly string\[\] = \[(?<body>[^\]]*)\];", RegexOptions.Multiline);
+        Assert.True(declaration.Success, "desktop/src/chat-deny.ts declares no requestFileVerbs.");
+        var declared = Regex.Matches(declaration.Groups["body"].Value, "'(?<verb>[^']*)'").Select(match => match.Groups["verb"].Value).Order(StringComparer.Ordinal).ToList();
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, declared);
+    }
+
+    private static Command LeafOf(Command root, string verb) =>
+        verb.Split(' ').Aggregate(root, (command, word) => command.Subcommands.Single(sub => sub.Name == word));
+
     private static List<string> AllowList() =>
         File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt"))
             .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();

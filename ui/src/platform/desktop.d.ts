@@ -217,9 +217,10 @@ export interface DesktopRefusal {
 }
 
 /**
- * Why a card of a Full access turn asks: a shell command by the reason it was held for (`command.*`), any other request
- * by Ask first's card for it (`request.*`), and `host_asked` where Full access would have run it and the host asked all
- * the same. The two codes that name a tool carry its name, and nothing else of the request comes with any of them.
+ * Why a card of a Full access turn asks: `host_asked`, where Full access would have run it and the host asked all the
+ * same; a card kept from an earlier desktop may carry a shell command's reason it was held for (`command.*`), or any
+ * other request's by Ask first's card for it (`request.*`). The two codes that name a tool carry its name, and nothing
+ * else of the request comes with any of them.
  */
 export type DesktopFullAccessWhy =
     | {

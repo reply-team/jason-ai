@@ -97,7 +97,7 @@ describe('a chat’s access mode', () => {
         await waitFor(() => expect(line()).not.toBeNull());
         // In the console's form: the mode's name, a dot and what it does, with no link; the menu beside it changes it.
         expect(line()!.textContent).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
         expect(within(line()!.parentElement!).queryByRole('button')).toBeNull();
         expect(value()).toBe('full_access');
@@ -133,7 +133,9 @@ describe('a chat’s access mode', () => {
         // Back on Claude Code, Claude Code's own words.
         chooseHost('claude');
         await waitFor(() => expect(line()!.textContent).toBe(claudeFullLine));
-        expect(full().said).toBe('Runs commands on this computer without asking, except those Jason cannot read.');
+        expect(full().said).toBe(
+            "Runs commands on this computer without asking, except those that name Jason's own settings, data or variables.",
+        );
         expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
     });
 
@@ -331,7 +333,8 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
 
 const editing = () => screen.queryByRole('status', { name: 'Auto-edit is on' });
 const codexFullLine = 'Full access · Codex runs commands on this computer without asking, with no sandbox';
-const claudeFullLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
+const claudeFullLine =
+    "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables";
 const codexFullSays = 'Runs commands on this computer without asking, with no sandbox.';
 const codexAskSays = 'Reads and proposes. Codex cannot ask before it acts.';
 const codexAskLine = 'Ask first · reads and proposes. Codex cannot ask before it acts';
