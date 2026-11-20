@@ -45,16 +45,10 @@ public sealed class UpdateDebTests : IDisposable
         }
 
         Directory.CreateDirectory(Path.Combine(_dir.Paths.Root, "desktop"));
-        File.WriteAllText(Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json"), $"{{\n  \"ran_for\": \"{setUpFor}\",\n  \"ran_from\": \"{executable}\",\n  \"report\": null\n}}\n");
-        var output = new StringWriter();
-        var env = StatusCommandTests.Machine(_dir, output, installPath: executable) with
-        {
-            Setup = new SetupPlaces(SetupSystem.Linux, Path.Combine(_tree.Paths.Root, "home"), null, UserPathValue.EnvironmentKey, "/bin/bash") { AptSource = sources },
-        };
+        var record = Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json");
+        File.WriteAllText(record, AsTheDesktopsStartWritesIt(setUpFor, executable));
 
-        await CliApp.RunAsync(["status"], env, Ct);
-
-        var update = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "update");
+        var update = await UpdateCheck(executable, sources);
         if (said is null)
         {
             Assert.Equal(CheckState.Ok, update.State);
@@ -64,6 +58,62 @@ public sealed class UpdateDebTests : IDisposable
         Assert.Equal(CheckState.Failed, update.State);
         Assert.False(update.Required);
         Assert.Contains(said, update.Fact, StringComparison.Ordinal);
-        Assert.Contains(source == "on" ? "jason update apply --finish" : "Software & Updates, Other Software", update.Fact, StringComparison.Ordinal);
+        Assert.Null(update.Fix);
+        if (source != "on")
+        {
+            Assert.Contains("Software & Updates, Other Software", update.Fact, StringComparison.Ordinal);
+            return;
+        }
+
+        // The act it names is Jason Desktop's start, and the check passes once that start has written its record for the
+        // package's version: `jason update apply --finish` alone writes none, so it is not the repair.
+        Assert.Contains("Open Jason Desktop, whose start finishes it", update.Fact, StringComparison.Ordinal);
+        File.WriteAllText(record, AsTheDesktopsStartWritesIt("0.34.0", executable));
+        Assert.Equal(CheckState.Ok, (await UpdateCheck(executable, sources)).State);
+    }
+
+    /// <summary>
+    /// <c>&lt;data&gt;/desktop/machine-setup.json</c> as Jason Desktop's start writes it once <c>jason install</c> and the
+    /// finishing step have both completed, held to the desktop's own source: the place, the writer, and the version it writes
+    /// for, the application's own, which on the deb is the package's.
+    /// </summary>
+    private static string AsTheDesktopsStartWritesIt(string version, string executable)
+    {
+        var desktop = Path.Combine(RepositoryRoot(), "desktop", "src");
+        var paths = File.ReadAllText(Path.Combine(desktop, "paths.ts")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var setup = File.ReadAllText(Path.Combine(desktop, "machine-setup.ts")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("const desktop = join(data, 'desktop');", paths, StringComparison.Ordinal);
+        Assert.Contains("machineSetup: join(desktop, 'machine-setup.json'),", paths, StringComparison.Ordinal);
+        Assert.Contains("writeFileSync(temporary, `${JSON.stringify({ ran_for: version, ran_from: place, report: printed }, null, 2)}\\n`, { mode: 0o600 });", setup, StringComparison.Ordinal);
+        Assert.Contains("const completed = routineDone && (finishing === null || finishing.completed);", setup, StringComparison.Ordinal);
+        Assert.Contains("writeSetupRecord(record, version, this.#deps.executable, JSON.parse(result.stdout));", setup, StringComparison.Ordinal);
+
+        return $"{{\n  \"ran_for\": {System.Text.Json.JsonSerializer.Serialize(version)},\n  \"ran_from\": {System.Text.Json.JsonSerializer.Serialize(executable)},\n  \"report\": {{}}\n}}\n";
+    }
+
+    private async Task<StatusCheck> UpdateCheck(string executable, string sources)
+    {
+        var output = new StringWriter();
+        var env = StatusCommandTests.Machine(_dir, output, installPath: executable) with
+        {
+            Setup = new SetupPlaces(SetupSystem.Linux, Path.Combine(_tree.Paths.Root, "home"), null, UserPathValue.EnvironmentKey, "/bin/bash") { AptSource = sources },
+        };
+
+        await CliApp.RunAsync(["status"], env, Ct);
+
+        return Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "update");
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return directory.FullName;
     }
 }

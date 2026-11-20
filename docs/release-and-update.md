@@ -628,9 +628,10 @@ Finish the Update to <version>** and one notice says so; the item, or a click on
 version runs and starts Jason again, whose start finishes the update. Otherwise the item reads **Updates Come Through the
 Package**. `jason status`'s optional `update` check says when updates cannot arrive — Jason's apt source gone or turned
 off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
-Software — and when the package is a version this installation was not set up for yet, with `jason update apply
---finish` as the repair, which opening Jason Desktop runs as well. `sudo apt-mark hold jason-desktop` stops every update
-of it.
+Software — and when the package is a version this installation was not set up for yet, which Jason Desktop's start
+finishes: it runs `jason install` and the finishing step, and only once both completed records the version it set up
+for, so the check names that start, or the restart item where a window is open, and no command, since the finishing step
+alone records nothing. `sudo apt-mark hold jason-desktop` stops every update of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;
