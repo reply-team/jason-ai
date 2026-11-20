@@ -422,8 +422,8 @@ needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earl
 `install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
 `update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
-Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran,
-`jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window,
+Where `jason` is the one Jason Desktop carries, as it is on macOS, Windows and Linux once the install script ran,
+`jason update apply` replaces no file itself. On macOS and Windows it hands the update to the application's own updater, with no window,
 waits for it, and the new version's `jason` finishes it: the plugin packages, the runtime's start, the skills, the terminal command and the UI. It still ends with one JSON
 document and its exit code. Jason Desktop's first start of each version runs `jason install` and
 `jason update apply --finish` itself, so a version installed from the desktop's own menu catches up the same way. A
@@ -437,8 +437,10 @@ command again only on their word. On Linux an AppImage's `jason` hands the updat
 `update_managed_by_package_manager`, since the system updates the package from Jason's apt repository: Software Updater
 offers a new version and installs it when the person says so, Ubuntu's automatic updates leave it alone, and
 `sudo apt update && sudo apt upgrade`, typed by the person between `jason runtime stop` and `jason runtime start` as the
-message prints, installs it; after either, `jason update apply --finish`, or opening Jason Desktop, finishes the update,
-and `jason status`'s `update` check says so until it has.
+message prints, installs it; after either, opening Jason Desktop finishes the update, its start running `jason install`
+and `jason update apply --finish`, and `jason status`'s `update` check says so until it has. `jason update apply
+--finish` typed alone brings the plugins, the skills and the UI up to the version, and the check still says the update is
+not finished.
 
 **A command-line install moving into Jason Desktop.** On macOS, Windows and Linux, `jason update apply` typed into a
 command-line install of an earlier version updates it and then moves it into Jason Desktop: it installs the application,

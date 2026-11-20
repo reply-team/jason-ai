@@ -134,7 +134,8 @@ The Linux job, which signs nothing, builds the deb and the AppImage around the l
 each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
 so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
 the AppImage says so and names the deb, whose AppArmor profile lets the program make the user namespaces its sandbox
-uses; neither package has yet been seen on such a machine. Neither is signed.
+uses; on Ubuntu 24.04 and 26.04 as shipped the deb has been seen to start sandboxed and the AppImage to refuse. Neither is
+signed.
 Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file the release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The deb's own updater is off: its updates
@@ -628,9 +629,11 @@ Finish the Update to <version>** and one notice says so; the item, or a click on
 version runs and starts Jason again, whose start finishes the update. Otherwise the item reads **Updates Come Through the
 Package**. `jason status`'s optional `update` check says when updates cannot arrive — Jason's apt source gone or turned
 off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
-Software — and when the package is a version this installation was not set up for yet, with `jason update apply
---finish` as the repair, which opening Jason Desktop runs as well. `sudo apt-mark hold jason-desktop` stops every update
-of it.
+Software — and when the package is a version this installation was not set up for yet, which Jason Desktop's start
+finishes: it runs `jason install` and the finishing step, and only once both completed records the version it set up
+for. So the check names that start and no command, since the finishing step alone records nothing; in a window already
+open, the restart item where the package changed under it, and otherwise **Put Back jason and the Skills…** under
+Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;

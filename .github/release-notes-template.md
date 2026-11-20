@@ -84,8 +84,8 @@ terminal as `/usr/bin/jason`, and adds Jason's apt repository, so its updates co
 from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
 Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04
 and later, as shipped, the AppImage says so, does not start, and names the deb, whose install brings an AppArmor profile
-for its sandbox there; this release's build machine started both packages sandboxed, and neither has yet been seen on
-such a machine. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+for its sandbox there. This release's build machine started both packages sandboxed, and on Ubuntu 24.04 and 26.04 as
+shipped the deb has been seen to start sandboxed and the AppImage to refuse. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
 library (`libicu`), as the archive's does.

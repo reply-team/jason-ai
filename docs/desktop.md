@@ -53,9 +53,9 @@ Jason never runs without Chromium's sandbox. An AppImage's launcher adds `--no-s
 unprivileged user namespaces, and Jason refuses a start that carries it, with a dialog and no window, on every system.
 So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
 it says so and names the deb, whose install brings an AppArmor profile that lets the program make the user namespaces
-its sandbox uses. The deb has started sandboxed with that profile on Ubuntu 24.04 and 26.04, and the AppImage on Arch,
-each in a virtual machine with a desktop of its own, and not yet on a person's own machine; the AppImage's refusal on
-Ubuntu is built so and not yet seen.
+its sandbox uses. The deb has started sandboxed with that profile on Ubuntu 24.04 and 26.04, the AppImage on Arch, and
+the AppImage has refused on Ubuntu 24.04 and 26.04 as shipped, each in a virtual machine with a desktop of its own, and
+not yet on a person's own machine.
 
 ## What it does at a start
 

@@ -508,6 +508,12 @@ internal static partial class StatusChecks
     /// machine up for, <c>&lt;data&gt;/desktop/machine-setup.json</c>, is not the package's). Null elsewhere, and where neither
     /// stands.
     /// </summary>
+    /// <remarks>
+    /// Neither has a command for a repair. The second is finished by Jason Desktop's start, which runs <c>jason install</c> and
+    /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; its Put Back
+    /// runs the same set-up again. The finishing step alone neither sets the machine up nor writes the record, so this check
+    /// would still fail after it, and no <c>jason</c> verb opens the application.
+    /// </remarks>
     private static StatusCheck? PackageUpdates(CliEnvironment env)
     {
         if (env.Setup is not { Platform: SetupSystem.Linux } places || CarriedExecutable.Of(env) is not { } carried || !SetupPlaces.CarriedByDeb(carried.Executable))
@@ -531,8 +537,8 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. `jason update apply --finish` finishes it, and so does opening Jason Desktop.",
-                "jason update apply --finish");
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
+                null);
         }
 
         string? text = null;
