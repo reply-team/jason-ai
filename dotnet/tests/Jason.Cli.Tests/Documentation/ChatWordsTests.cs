@@ -34,8 +34,8 @@ public partial class ChatWordsTests
     [Fact]
     public void No_page_the_chat_reads_says_an_act_is_the_persons_alone_or_sends_them_to_the_window_for_one()
     {
-        var pages = Pages();
-        Assert.True(pages.Count > 20, $"Only {pages.Count} pages were read, so this guard read less than the chat does.");
+        var pages = Pages(runtimePack: true);
+        Assert.True(pages.Count > 15, $"Only {pages.Count} pages were read, so this guard read less than the chat does.");
 
         var found = new List<string>();
         foreach (var page in pages)
@@ -119,19 +119,23 @@ public partial class ChatWordsTests
     }
 
     /// <summary>
-    /// The person's word has one form in the chat's instructions, and the CLI takes it: rules 11, 13 and 19 name the person
-    /// as Jason's first paragraph names them, <c>--actor human:&lt;account&gt;</c>, with their words as the reason, both after
-    /// the verb, which is where the chat's permission model looks for options; and every <c>jason</c> command a sentence
-    /// giving that form names is a verb that takes <c>--reason</c>. A form a verb did not take would fail the act the person
-    /// asked for, and one taught as "<c>--actor</c> naming them" left the chat to guess the name.
+    /// The person's word has one form in the chat's instructions, and the CLI takes it: rules 11, 12, 13 and 19 name the
+    /// person as Jason's first paragraph names them, <c>--actor human:&lt;account&gt;</c>, with a reason in the chat's own
+    /// words in single quotes, at the end of the command, where a host's rule for the verb (<c>jason preference set
+    /// sender.identity:*</c>) still matches; every <c>jason</c> command a sentence giving that form names is a verb that takes
+    /// <c>--reason</c>, the start, the archive and the opt-out verdict's among them; and the reason the form shows holds no
+    /// character but a letter, a digit, a space and <c>. , : -</c>, since text from outside never goes into a command. A form a
+    /// verb did not take would fail the act the person asked for, and one taught as "<c>--actor</c> naming them" left the
+    /// chat to guess the name.
     /// </summary>
     [Fact]
     public void The_instructions_give_the_persons_word_one_form_the_cli_takes()
     {
-        const string form = "with `--actor human:<account>` as Jason's first paragraph names them and `--reason \"<their words>\"`, both after the verb";
+        const string form = "with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words, at the end of the command";
+        Assert.Matches(@"^[\p{L}\p{N} .,:-]+$", Regex.Match(form, "--reason '(?<reason>[^']*)'").Groups["reason"].Value);
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-instructions.md");
         var text = File.ReadAllText(file);
-        foreach (var number in new[] { 11, 13, 19 })
+        foreach (var number in new[] { 11, 12, 13, 19 })
         {
             var rule = Assert.Single(text.ReplaceLineEndings("\n").Split('\n'), line => line.StartsWith($"{number}. ", StringComparison.Ordinal));
             Assert.True(rule.Contains(form, StringComparison.Ordinal), $"Rule {number} does not give the person's word its form: {rule}");
@@ -170,18 +174,22 @@ public partial class ChatWordsTests
 
         Assert.True(found.Count == 0, "The chat's instructions give --reason to what takes none:\n" + string.Join('\n', found));
         Assert.Equal(
-            ["approval approve", "approval reject", "approval unset-standing", "decision answer", "preference set", "preference set"],
+            ["approval approve", "approval reject", "approval unset-standing", "campaign archive", "campaign start", "decision answer", "preference set", "preference set", "reply record"],
             checkedVerbs.Order(StringComparer.Ordinal));
     }
 
-    /// <summary>The chat's instructions and every skill under <c>skills/</c>, the business pack's among them.</summary>
-    private static List<string> Pages()
+    /// <summary>
+    /// The chat's instructions and every skill under <c>skills/</c>, the business pack's among them; or, for what the chat
+    /// is taught about the acts it runs, the runtime pack alone, the one the chat loads.
+    /// </summary>
+    private static List<string> Pages(bool runtimePack = false)
     {
         var root = RepositoryRoot();
         return
         [
             Path.Combine(root, "desktop", "chat-instructions.md"),
-            .. Directory.EnumerateFiles(Path.Combine(root, "skills"), "SKILL.md", SearchOption.AllDirectories).Order(StringComparer.Ordinal),
+            .. Directory.EnumerateFiles(runtimePack ? Path.Combine(root, "skills", "runtime") : Path.Combine(root, "skills"), "SKILL.md", SearchOption.AllDirectories)
+                .Order(StringComparer.Ordinal),
         ];
     }
 
