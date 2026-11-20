@@ -148,7 +148,7 @@ describe('the console', () => {
         // approves on the person's word.
         const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
         expect(hero.querySelector('p')?.textContent).toBe(
-            'A message written here waits for your approval unless its campaign sends on its own; the AI approves for you when you tell it to.',
+            "A message written here follows its campaign's send mode; the AI approves when you tell it to.",
         );
         // What waits is a page of its own, chosen from the sidebar.
         const needs = await openNeeds();

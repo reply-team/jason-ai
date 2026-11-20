@@ -83,6 +83,9 @@ export const en = {
     'chat.title': 'Chat',
     'chat.desktop':
         'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do. The chat can be opened in this tab from Jason Desktop: Open in, then the browser.',
+    'chat.empty.planOnly': 'Nothing written here reaches a person without your approval.',
+    'chat.empty.onYourWord':
+        "A message written here follows its campaign's send mode; the AI approves when you tell it to.",
     'chat.tab.answered': 'This is answered in Jason Desktop.',
     'chat.tab.full': 'This chat is in Full access. Send messages to it from Jason Desktop.',
     'chat.tab.auto': 'This chat is in Auto-edit. Send messages to it from Jason Desktop.',

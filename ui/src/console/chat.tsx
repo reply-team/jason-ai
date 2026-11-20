@@ -1112,15 +1112,14 @@ function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
 }
 
 /**
- * What the empty chat says about approval, true of its mode: in Plan only nothing written reaches a person unapproved;
- * in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves on the person's word, as
- * theirs. Full access, where a program the AI writes can act as the person, and a mode word this desktop does not know
- * say nothing.
+ * What the empty chat says about approval, one short sentence true of its mode: in Plan only nothing written reaches a
+ * person unapproved; in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves when the
+ * person tells it to. Full access, where a program the AI writes can act as the person, and a mode word this desktop
+ * does not know say nothing.
  */
 function approvalSentence(mode: Chat['mode']): string | null {
-    if (mode === 'plan_only') return 'Nothing written here reaches a person without your approval.';
-    if (mode === 'ask_first' || mode === 'auto_edit')
-        return 'A message written here waits for your approval unless its campaign sends on its own; the AI approves for you when you tell it to.';
+    if (mode === 'plan_only') return t('chat.empty.planOnly');
+    if (mode === 'ask_first' || mode === 'auto_edit') return t('chat.empty.onYourWord');
     return null;
 }
 

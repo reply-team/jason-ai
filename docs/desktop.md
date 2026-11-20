@@ -870,8 +870,8 @@ refused in Full access, with no card, and every `reply` command is among them bu
 not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
 configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat in Full
 access carries no line about approval. The empty chat draws one in the other modes, true of each: in Plan only "Nothing
-written here reaches a person without your approval."; in Ask first and Auto-edit "A message written here waits for your
-approval unless its campaign sends on its own; the AI approves for you when you tell it to." None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
+written here reaches a person without your approval."; in Ask first and Auto-edit "A message written here follows its
+campaign's send mode; the AI approves when you tell it to." None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
@@ -900,12 +900,12 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test; outside Plan only, the acts of a person's word as well: `approval approve`,
+  every time, held to the real tree by a test; outside Plan only, these as well: `approval approve`,
   `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
-  `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. The allow rule
-  runs them with no card, and the chat's instructions keep them to your word: the AI runs one when you said so, and it is
-  recorded under the actor the command names, yours; and, for each noun with a verb on that list, its help, exactly
-  `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
+  `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
+  the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
+  the command with no card, and the act is recorded under the actor the command names; and, for each noun with a verb
+  on that list, its help, exactly `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
   itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
@@ -915,8 +915,8 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
   `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
-  names an operation these verbs call is refused there too. In every other mode none of them is refused: the acts of a
-  person's word above run with no card, and every other one is a card in Ask first and Auto-edit and runs in Full
+  names an operation these verbs call is refused there too. In every other mode none of them is refused: those the bullet
+  above names run with no card, and every other one is a card in Ask first and Auto-edit and runs in Full
   access, as any `jason` command that no allowed verb begins does: an act that would let messages go without your
   approval, a standing approval, another preference, a campaign's send mode, is one of them. Pausing an agent, adding
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person; recording

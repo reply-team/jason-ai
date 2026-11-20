@@ -912,8 +912,7 @@ describe('the empty chat’s sentence about approval', () => {
     // What is true of each mode: in Plan only nothing written reaches a person unapproved; in Ask first and Auto-edit a
     // message follows its campaign's send mode, and the AI approves on the person's word, as theirs.
     const planOnly = 'Nothing written here reaches a person without your approval.';
-    const onYourWord =
-        'A message written here waits for your approval unless its campaign sends on its own; the AI approves for you when you tell it to.';
+    const onYourWord = "A message written here follows its campaign's send mode; the AI approves when you tell it to.";
     // The sentence of the hero under the heading, or null when that hero draws none.
     const said = (heading = 'What should Jason work on?') => {
         const text = screen.getByRole('heading', { name: heading }).closest('.hero')!.querySelector('p')?.textContent;
