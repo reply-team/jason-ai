@@ -238,11 +238,15 @@ then written again with its mode and its shape. A record with no `folder` whose 
 that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
 does not find it.
 
-- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
-  conversation is about, its name quoted on one line, with every control, format and separator character dropped and
-  cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
-  A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the desktop did not
-  make or keep is refused.
+- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: the person, as
+  `human:<account>` by the name the operating system gives this account (`os.userInfo().username`, which the carried
+  `jason`'s `Environment.UserName` reads too), in backticks, with the single-quoted `--actor` a command gives where it
+  holds a space; a name of anything but letters, digits, dots, underscores, hyphens and spaces, longer than the
+  runtime's 100 units or with white space at either end is never given, and a sentence says to ask instead; then which
+  campaign the conversation is about, its name quoted on one line, with every control, format and separator character
+  dropped and cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it
+  as they are. A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the
+  desktop did not make or keep is refused.
 - **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
   letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not
   found, another answers, or the resume fails before saying anything, the turn starts a fresh session given a recap, the

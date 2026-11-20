@@ -742,8 +742,9 @@ it follows it there; the host keeps its own transcript. A set-up chat has the sa
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
 the session each host named for it, and what the page drew, as text, within 2 MB. Every turn begins with a paragraph the
-desktop writes, naming the conversation's campaign and its folder, and a turn that cannot resume its host's session
-starts a fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
+desktop writes, naming you by your account's name, as `human:<name>`, the actor the chat writes what it does on your
+word under, then the conversation's campaign and its folder, and a turn that cannot resume its host's session starts a
+fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
@@ -774,7 +775,8 @@ and the file it belongs in, by its path; the file is yours to edit, at that path
 ### The Feed
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn in the sidebar under
-**Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen. It shows what happens in the
+**Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen; Search opens it too, as its
+page **Feed**. It shows what happens in the
 campaigns as the runtime writes it, one line each: a reply observed, an approval or a question waiting, an approval
 approved or rejected, a question answered, a campaign created, started, paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
 scheduled, a reply sent, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability
@@ -878,12 +880,13 @@ only and puts the cursor in the message box. On Codex the card says that the app
 Code carries it out. The Feed has no plan card.
 
 **Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the
-chat's own folder: `mkdir`, `touch`, `mv`, `cp`, `rm` and `rmdir`, read word by word by Jason, never by the host's own
+turn's folder, the conversation's own or, for a conversation an earlier version made, the shared one: `mkdir`, `touch`,
+`mv`, `cp`, `rm` and `rmdir`, read word by word by Jason, never by the host's own
 accept-edits mode. Such a command runs only when every part of it is one of the six with only the options Jason lists
-for it, with no pipe, redirection, pattern, variable, `~` or `..`, and every path strictly inside the chat folder once
+for it, with no pipe, redirection, pattern, variable, `~` or `..`, and every path strictly inside the turn's folder once
 links are followed and outside the names an agent loads. The path a copy or a move writes into a folder counts as a
 path it names. A recursive or forced removal (`rm -r`, `rm -f`), a copy of a folder, a link that leads nowhere, a move
-to `.github`, a file in the chat folder named like one of the six (which the shell might run in place of the system's),
+to `.github`, a file in the turn's folder named like one of the six (which the shell might run in place of the system's),
 and anything in a campaign's or a project's folder, in the data directory or elsewhere is Ask first's card, and
 whatever Ask first refuses stays refused. Auto-edit runs on Claude Code only; it has no confirmation, is never a
 default, and is kept with the chat as every mode is. Leaving it for Ask first or Plan only
@@ -896,7 +899,9 @@ before the command runs, so a link put into the folder by something else between
 Write has.
 
 A chat's mode is kept with it: it holds after a restart of the desktop and after an update, and **Start fresh**
-leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
+leaves it. If you go back to an earlier version of Jason Desktop and then return, a chat that version used opens in Ask
+first, unless it is in Plan only, and says once why: an earlier version keeps no chat's mode but Plan only.
+Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access, which asks for no confirmation. On Codex, Full access is no sandbox and nothing of what
 follows, as above. In Full access on Claude Code, Claude Code runs in its own bypass mode, as it would in a terminal
@@ -986,7 +991,7 @@ access differs, it says so.
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
   a verdict on a reply is a card in Ask first and Auto-edit and runs in Full access: a verdict of yours can lift the lock
   an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused:
-  a read or a write that names a path under the data directory outside the chat folder (the settings file, the run file
+  a read or a write that names a path under the data directory outside the turn's folder (the settings file, the run file
   and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that names that directory,
   and what Jason itself sets for the turn, its variables and its permission tool: a command that names `JASON_CONFINED`
   or `JASON_CHAT_TURN`, which Jason alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never a role's run),
@@ -994,9 +999,9 @@ access differs, it says so.
   chat's own permission requests, which only you answer; a command an allow rule would run with no card among them from
   Claude Code 2.1.322 on. In every mode but Full access, refused as well: any `reply` command but the two above, a command too long
   for a card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents`
-  and `.codex` folders of the chat folder and to its `.mcp.json`; in Full access the turn's folder is its own, and Jason
+  and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
   puts its own files back before the next turn.
-- **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
+- **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the turn's
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
   Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
