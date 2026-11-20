@@ -1293,7 +1293,8 @@ export class Chat {
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
         // `/export <file name>` writes the conversation to a file and starts no turn (`chat-export.ts`), and only from
-        // words the person typed in the message box: one a card sent, or a page that does not say so, writes nothing.
+        // words the person typed in the message box, as the page says with `typed`: a card's option or field, or a page
+        // that does not say the words were typed, writes nothing.
         const exported = exportName(text);
         if (exported !== null) return given.typed === true ? this.#export(conversation, chatId, exported) : refuse(exportNotTyped);
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');

@@ -217,6 +217,11 @@ test('the harness’s own names are refused, whatever their case: the memory fil
         assert.equal(nameRefusal(spelled, 'campaign'), null, spelled);
     }
     assert.equal(nameRefusal('projects.md', 'root'), null);
+    // Compared as a file system that folds compatible characters reads them: U+017F, which APFS folds to s, a fullwidth
+    // spelling, and a fullwidth dot.
+    for (const name of ['agentſ.md', 'ＣＬＡＵＤＥ.md', 'gemini．local.md', '．mcp.json']) assert.equal(nameRefusal(name), theHarnessOwn, name);
+    assert.equal(nameRefusal('projectſ', 'root'), theHarnessOwn);
+    assert.equal(nameRefusal('ｐrojects', 'root'), theHarnessOwn);
 });
 
 test('the text is the title, the moment, and the person’s and the AI’s words in order: no step, card, error or path', () => {

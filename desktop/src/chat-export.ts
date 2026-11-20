@@ -2,8 +2,9 @@
  * `/export <file name>`: a message of a chat that writes the conversation's words to a file instead of starting a turn.
  * It is caught in `Chat.send` before anything of a turn is built, and listed nowhere: no menu entry and no help line.
  * Any other first word that begins with `/` goes to the host as before. Only words the person typed in the message box
- * export: the page says so with the send (`typed`), and an `/export` sent without it, a card's option or a card's field
- * or a page that forges one, is refused with "Type /export in the message box yourself." and writes nothing.
+ * export, as the page says with the send (`typed`), which the desktop takes as the page's word: a card's option or
+ * field, or a page that does not say the words were typed, writes nothing, and the chat says "Type /export in the
+ * message box yourself."
  *
  * What is written is Markdown: the conversation's title as a heading, the moment it was written, and in order the
  * person's words under "You" and the AI's under "AI", as the record keeps them; no step, card, error, line or path, so
@@ -79,8 +80,10 @@ export function nameRefusal(name: string, place: 'root' | 'campaign' = 'campaign
     ) {
         return notAName;
     }
-    const stem = (name.split('.')[0] ?? '').trimEnd().toLowerCase();
-    if (name.startsWith('.') || harnessStems.has(stem) || (place === 'root' && rootNames.has(name.toLowerCase()))) return 'That name is one the harness keeps for its own files. Choose another.';
+    // Compared as a file system that folds compatible characters reads the name: `agentſ.md` is `agents.md` on APFS.
+    const folded = name.normalize('NFKC').toLowerCase();
+    const stem = (folded.split('.')[0] ?? '').trimEnd();
+    if (folded.startsWith('.') || harnessStems.has(stem) || (place === 'root' && rootNames.has(folded))) return 'That name is one the harness keeps for its own files. Choose another.';
     return null;
 }
 
