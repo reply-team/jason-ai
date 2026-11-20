@@ -16,10 +16,33 @@ public sealed record LaunchResult(bool Started, bool TimedOut, int? ExitCode, st
         .LastOrDefault();
 }
 
+/// <summary>
+/// A toast whose program stays until the person clicks the notification or dismisses it: what it said by the time it
+/// was answered, and, where it stayed, its end to come and the way to end it sooner.
+/// </summary>
+public sealed class WaitingLaunch(LaunchResult said, Task<LaunchResult>? end, Action close)
+{
+    /// <summary>What the program said by then; where it had already ended, its whole end.</summary>
+    public LaunchResult Said { get; } = said;
+
+    /// <summary>Its end, with the end of what it wrote on stdout; null where it had ended by the time it was answered.</summary>
+    public Task<LaunchResult>? End { get; } = end;
+
+    /// <summary>Ends the program, and with it the notification's click; its end then comes as a killed program's.</summary>
+    public void Close() => close();
+}
+
 /// <summary>Runs one toast launch, bounded.</summary>
 public interface IToastLauncher
 {
     Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Starts a program that stays: answered once it wrote a line of stdout that <paramref name="shown"/> takes, ended, or
+    /// outlived <paramref name="bound"/>, and never killed at the bound. One still running is handed back with its end to
+    /// come, which no cancellation of this call ends: only <see cref="WaitingLaunch.Close"/> does.
+    /// </summary>
+    Task<WaitingLaunch> LaunchWaitingAsync(ToastLaunch launch, TimeSpan bound, Func<string, bool> shown, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -50,26 +73,10 @@ public sealed class ProcessToastLauncher : IToastLauncher
         // wrong.
         //
         // A program the door refuses, one named by anything but its full path, never started either, as one that is not there.
-        Process process;
-        try
+        var (started, refused) = Start(launch);
+        if (started is not { } process)
         {
-            var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0], Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
-            foreach (var argument in launch.Command.Skip(1))
-            {
-                start.ArgumentList.Add(argument);
-            }
-
-            start.Environment.Clear();
-            foreach (var (name, value) in launch.Environment)
-            {
-                start.Environment[name] = value;
-            }
-
-            process = Jason.Contracts.Discovery.ChildProcess.Start(start) ?? throw new InvalidOperationException("The process did not start.");
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or ArgumentException)
-        {
-            return new LaunchResult(false, false, null, string.Empty, string.Empty, ex.Message);
+            return new LaunchResult(false, false, null, string.Empty, string.Empty, refused);
         }
 
         using (process)
@@ -111,6 +118,123 @@ public sealed class ProcessToastLauncher : IToastLauncher
             }
 
             return new LaunchResult(true, false, process.ExitCode, await Settled(stdout).ConfigureAwait(false), await Settled(stderr).ConfigureAwait(false));
+        }
+    }
+
+    /// <remarks>
+    /// Its stdout is read line by line as it comes, keeping the last <see cref="MaxStdout"/> characters: what such a program
+    /// says that matters, the action a click sent, comes at its end.
+    /// </remarks>
+    public async Task<WaitingLaunch> LaunchWaitingAsync(ToastLaunch launch, TimeSpan bound, Func<string, bool> shown, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(launch);
+        ArgumentNullException.ThrowIfNull(shown);
+        var (started, refused) = Start(launch);
+        if (started is not { } process)
+        {
+            return new WaitingLaunch(new LaunchResult(false, false, null, string.Empty, string.Empty, refused), null, () => { });
+        }
+
+        try
+        {
+            if (launch.Stdin is { } payload)
+            {
+                await process.StandardInput.WriteAsync(payload.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // The child stopped reading.
+        }
+
+        var said = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var kept = new StringBuilder();
+        string Kept()
+        {
+            lock (kept)
+            {
+                return kept.ToString();
+            }
+        }
+
+        var stdout = Task.Run(
+            async () =>
+            {
+                while (await process.StandardOutput.ReadLineAsync(CancellationToken.None).ConfigureAwait(false) is { } line)
+                {
+                    lock (kept)
+                    {
+                        kept.Append(line).Append('\n');
+                        if (kept.Length > MaxStdout)
+                        {
+                            kept.Remove(0, kept.Length - MaxStdout);
+                        }
+                    }
+
+                    if (shown(line))
+                    {
+                        said.TrySetResult();
+                    }
+                }
+
+                return string.Empty;
+            },
+            CancellationToken.None);
+        var stderr = ReadAsync(process.StandardError, StderrTail, keepEnd: true);
+        var exited = process.WaitForExitAsync(CancellationToken.None);
+
+        async Task<LaunchResult> EndAsync()
+        {
+            using (process)
+            {
+                await exited.ConfigureAwait(false);
+                await Settled(stdout).ConfigureAwait(false);
+                return new LaunchResult(true, false, process.ExitCode, Kept(), await Settled(stderr).ConfigureAwait(false));
+            }
+        }
+
+        try
+        {
+            await Task.WhenAny(said.Task, exited, Task.Delay(bound, cancellationToken)).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (cancellationToken.IsCancellationRequested && !exited.IsCompleted)
+            {
+                Kill(process);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return exited.IsCompleted
+            ? new WaitingLaunch(await EndAsync().ConfigureAwait(false), null, () => { })
+            : new WaitingLaunch(new LaunchResult(true, false, null, Kept(), string.Empty), EndAsync(), () => Kill(process));
+    }
+
+    /// <summary>The program started through the one door, or none and why not.</summary>
+    private static (Process? Process, string? Refused) Start(ToastLaunch launch)
+    {
+        try
+        {
+            var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0], Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
+            foreach (var argument in launch.Command.Skip(1))
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            start.Environment.Clear();
+            foreach (var (name, value) in launch.Environment)
+            {
+                start.Environment[name] = value;
+            }
+
+            return (Jason.Contracts.Discovery.ChildProcess.Start(start) ?? throw new InvalidOperationException("The process did not start."), null);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or ArgumentException)
+        {
+            return (null, ex.Message);
         }
     }
 

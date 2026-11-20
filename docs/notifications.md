@@ -150,9 +150,10 @@ and how many work items they hold: not its link, its reason, a sending account's
 Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that
 bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the
 bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the
-Windows toast alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a
-click opens on (§7). That id is never in the words, never in a plugin channel's input, and never in a toast on macOS or
-Linux. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written by the person
+toast on Windows and Linux alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…`
+id, which a click opens on: on Windows in the toast's `jason:` link (§7), on Linux kept by the runtime beside the
+notification it showed, which reaches only the command its click starts (§4). That id is never in the words, never in a
+plugin channel's input, never sent to Linux's notification server, and never in a toast on macOS. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written by the person
 for themselves, and a notification is read by whoever can see the screen, the phone or, on a public ntfy server, the
 topic.
 
@@ -173,8 +174,9 @@ such a unit exists only while the person is signed in.
   and, for the last, the acts that end it, in order. A Linux runtime with `notify-send` and a session bus but no
   notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`,
   `toast_failed`; `jason notification disable toast --actor human:<Name>` turns it off. A probe that cannot answer — it fails, or
-  outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, each
-  bounded at five seconds, fifteen in all, none of them on the scan.
+  outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, and the
+  first of a runtime's run four, notify-send's help among them, each answered within five seconds, twenty in all, none of
+  them on the scan.
 - **Each account has its own runtime and its own toasts.** One person's approvals are never shown on another's
   desktop.
 - **Do not disturb:** Windows' Do not disturb is invisible to Jason: the notification goes to the notification center
@@ -183,19 +185,32 @@ such a unit exists only while the person is signed in.
   records it silenced — not delivered and not failed. It is the person's own choice, and never reported as a fault.
 - **macOS** shows it with `osascript`, which macOS attributes to the program that showed it. That command is composed
   and checked by tests here; it has not been watched on a Mac.
-- **A click** on the banner, or on its entry in the notification center, opens Jason on Windows: on the one approval
-  or question when exactly one waits, on the list of what waits otherwise. It opens Jason Desktop, on Needs you, as
-  `jason ui open` does: the link's handler reads the desktop's own registration
+- **A click** on the banner, or on its entry in the notification center, opens Jason on Windows and Linux: on the one
+  approval or question when exactly one waits, on the list of what waits otherwise. It opens Jason Desktop, on Needs you, as
+  `jason ui open` does. On Windows the link's handler reads the desktop's own registration
   (`HKEY_CURRENT_USER\Software\Classes\jason-desktop`) and never writes it, starts nothing by the path it names, and
   hands Windows the desktop's `jason-desktop://attention` address, made from the link's parsed parts, through the
   system's opener ([desktop.md](desktop.md), Links). With no desktop registered, or its program gone, the click opens
   nothing; a hand-on that fails is said on stderr by its code (`opener_not_started`, `opener_failed`,
-  `opener_timed_out`), and nothing else opens, never a browser. On macOS and Linux a click opens nothing of
-  Jason's; `jason ui open` opens Jason Desktop on the same list or item. On Windows the opener is `rundll32`, which
+  `opener_timed_out`), and nothing else opens, never a browser. On macOS a click opens nothing of Jason's; `jason ui open`
+  opens Jason Desktop on the same list or item. On Windows the opener is `rundll32`, which
   answers 0 once the address is handed to the shell and does not carry the handler's own result: a desktop that is
   registered and there but does not start leaves the click with no page; `opener_failed` there means the opener itself
   failed. The real click on a real toast is not yet measured on a machine; the link's handling is composed and checked
   by tests here.
+- **On Linux** the toast is shown by notify-send, which stays on the session bus with its notification until it is
+  clicked or dismissed, since GNOME and KDE hand a click only to a sender still there. A click on the notification's body
+  (with dunst, its middle button: its left one closes the notification) starts this executable with the toast's own
+  `jason:` link, as Windows does, and that opens Jason Desktop where xdg-open would start it for its scheme
+  ([ui.md](ui.md)). With no Jason Desktop that takes its links, or with its links going elsewhere, nothing opens, never a
+  browser, and a notification says why, in the words `jason ui open` would print. Where notify-send hands on the
+  activation token the click came with (libnotify 0.8.8 and later, asked of its own help), the handler is given it, so
+  the window comes to the front; with an earlier one, GNOME may say the desktop "is ready" instead, and a click on that
+  brings it. Where the runtime runs in a systemd user unit, the handler runs in a scope of its own
+  (`systemd-run --user --scope`), so the Jason Desktop it starts does not end with the runtime. At most ten toasts wait
+  for their click at once; another ends the oldest one's wait first. The runtime ends every wait when it stops, so a
+  notification shown before a stop opens nothing. notify-send before 0.7.10, and gdbus where there is no notify-send,
+  show a toast no click reaches.
 - **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows no page of Jason's: it puts on the
   clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt`
   prints, for you to paste into your agent host. The list's toast has no button, and neither has a toast whose link is

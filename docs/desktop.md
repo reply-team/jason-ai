@@ -957,7 +957,8 @@ command line handling the `jason://attention` link reads the desktop's registrat
 it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
 starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
 its program gone, or the hand-on failing, nothing opens, and the failure is said by its code
-([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing. Where the desktop takes
+([notifications.md](notifications.md)). On Linux the runtime's notification hands its click to the same link handler,
+which opens the desktop the same way; on macOS a notification's click opens nothing. Where the desktop takes
 its links, `jason ui open` opens it at the same addresses from a terminal or an
 agent's session; on macOS that is built so and not yet seen on a Mac.
 

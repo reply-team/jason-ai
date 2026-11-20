@@ -30,7 +30,7 @@ Jason Desktop alone; in any other tab it draws one sentence, that this is the pl
 to ask your agent how to build one ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom`
 draws whatever it draws.
 
-On Windows a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
+On Windows and Linux a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item, each on the desktop's
 Needs you ([desktop.md](desktop.md), Links), as `jason ui open` opens it. Where no Jason Desktop that takes its links is
 installed for your account the click opens nothing, and a link Jason does not know opens nothing either

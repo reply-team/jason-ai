@@ -63,7 +63,15 @@ public sealed class PointerOnlyTests
         {
             _launches.Enqueue(launch);
             var probe = launch.Command.Contains("org.freedesktop.DBus.NameHasOwner");
-            return Task.FromResult(new LaunchResult(true, false, 0, probe ? "(true,)" : Shown, string.Empty));
+            var help = launch.Command.Contains("--help");
+            return Task.FromResult(new LaunchResult(true, false, 0, probe ? "(true,)" : help ? ToastCommandsTests.Help("0.8.9") : Shown, string.Empty));
+        }
+
+        /// <summary>A Linux toast that waits for its click, dismissed at once.</summary>
+        public Task<WaitingLaunch> LaunchWaitingAsync(ToastLaunch launch, TimeSpan bound, Func<string, bool> shown, CancellationToken cancellationToken)
+        {
+            _launches.Enqueue(launch);
+            return Task.FromResult(new WaitingLaunch(new LaunchResult(true, false, 0, "7\n", string.Empty), null, () => { }));
         }
     }
 
@@ -126,9 +134,11 @@ public sealed class PointerOnlyTests
         Assert.Equal((1, 1, 1), (line.Approvals, line.Decisions, line.ProtectiveFailures));
         Assert.All(line.Channels, outcome => Assert.Equal(ChannelResult.Delivered, outcome.Result));
 
-        // The toast, as every platform composes it: command, stdin and environment.
-        Assert.Equal(6, launcher.Launches.Count);
+        // The toast, as every platform composes it: command, stdin and environment; on Linux with notify-send, its help
+        // asked first, then the toast that waits for its click.
+        Assert.Equal(7, launcher.Launches.Count);
         Assert.Contains(launcher.Launches, launch => launch.Command.Contains("org.freedesktop.DBus.NameHasOwner"));
+        Assert.Contains(launcher.Launches, launch => launch.Command.Contains("--wait"));
         foreach (var launch in launcher.Launches)
         {
             Assert.DoesNotContain(Marker, string.Join(' ', launch.Command), StringComparison.Ordinal);

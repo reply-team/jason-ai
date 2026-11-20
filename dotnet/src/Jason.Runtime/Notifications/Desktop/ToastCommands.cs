@@ -9,11 +9,15 @@ namespace Jason.Runtime.Notifications.Desktop;
 /// <summary>One toast launch: the command, what goes on its stdin, and the environment it runs in.</summary>
 public sealed record ToastLaunch(IReadOnlyList<string> Command, string? Stdin, IReadOnlyDictionary<string, string> Environment);
 
+/// <summary>Which toast a notify-send can show: one that waits for its click, and whether it hands on the click's activation token.</summary>
+public sealed record NotifySendForm(bool Waits, bool Token);
+
 /// <summary>
 /// The exact command a toast is on each platform. Composed here and asserted by tests, never shown by one: on Windows
 /// it is this executable's own <c>toast-host</c> mode with the payload on stdin, on macOS <c>osascript</c>, and on
-/// Linux <c>notify-send</c>, or <c>gdbus</c> where it is absent. Nothing reaches a command line but the pointer
-/// itself, which is counts and where to look.
+/// Linux <c>notify-send</c>, or <c>gdbus</c> where it is absent. Nothing reaches a notification but the pointer
+/// itself, which is counts and where to look: on Linux the item a click opens stays with the runtime, and reaches only
+/// the command a click starts, this executable's handler of the toast's <c>jason:</c> link.
 /// </summary>
 public static class ToastCommands
 {
@@ -42,11 +46,98 @@ public static class ToastCommands
         return new ToastLaunch([Osascript, "-e", script], null, Empty);
     }
 
-    public static ToastLaunch LinuxNotifySend(string program, NotificationMessage message)
+    /// <summary>The action a click on the notification's body sends: the name every notification server takes as the default.</summary>
+    public const string DefaultAction = "default";
+
+    /// <summary>notify-send's own options, as its help names them: what each form of the toast needs.</summary>
+    public static IReadOnlyList<string> WaitingOptions { get; } = ["--action", "--wait", "--print-id"];
+
+    /// <summary>libnotify 0.8.8's option that writes the activation token a click came with to a file descriptor.</summary>
+    public const string TokenOption = "--activation-token-fd";
+
+    /// <summary>notify-send's help, which names the options this notify-send takes.</summary>
+    public static ToastLaunch LinuxNotifySendHelp(string program) => new([program, "--help"], null, Empty);
+
+    /// <summary>
+    /// Which toast this notify-send can show, read from its help by the options' names, which are its interface: one that
+    /// waits for its click where it takes the three options that needs (libnotify 0.7.10 and later), passing the click's
+    /// activation token on where it takes <see cref="TokenOption"/> (0.8.8 and later); the plain toast otherwise.
+    /// </summary>
+    public static NotifySendForm LinuxForm(string help)
+    {
+        ArgumentNullException.ThrowIfNull(help);
+        static bool Names(string help, string option) =>
+            help.Split((char[])[' ', '\n', '\t', ',', '='], StringSplitOptions.RemoveEmptyEntries).Contains(option, StringComparer.Ordinal);
+        return new(WaitingOptions.All(option => Names(help, option)), Names(help, TokenOption));
+    }
+
+    /// <summary>
+    /// The toast on Linux, clickable: notify-send with a default action, waiting on the bus until the person clicks the
+    /// notification or dismisses it (GNOME and KDE deliver a click only to a sender still there), printing the
+    /// notification's id once it is shown and the action's name on a click; with <paramref name="token"/>, the activation
+    /// token the server gave with the click on a line between them, written to its stdout by its own option.
+    /// </summary>
+    public static ToastLaunch LinuxNotifySend(string program, NotificationMessage message, bool token)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return new ToastLaunch([program, "--app-name=" + message.Title, message.Title, message.Summary + "\n" + message.Look], null, Empty);
+        string[] tokenOption = token ? [TokenOption + "=1"] : [];
+        return new ToastLaunch(
+            [program, "--app-name=" + message.Title, $"--action={DefaultAction}=Open", "--wait", "--print-id", .. tokenOption, message.Title, message.Summary + "\n" + message.Look],
+            null,
+            Empty);
     }
+
+    /// <summary>The toast as notify-send before 0.7.10 takes it, with no action, no wait and no id: shown, and no click reaches it.</summary>
+    public static ToastLaunch LinuxNotifySendPlain(string program, NotificationMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        return LinuxSaid(program, message.Title, message.Summary + "\n" + message.Look);
+    }
+
+    /// <summary>A notification that only says something, with no action: why a click opened nothing.</summary>
+    public static ToastLaunch LinuxSaid(string program, string title, string text) => new([program, "--app-name=" + title, title, text], null, Empty);
+
+    /// <summary>
+    /// What a click on a Linux toast starts: this executable with the toast's <c>jason:</c> link and nothing else, as the
+    /// shell starts it for a Windows toast's click, which opens Jason Desktop there or says why it did not. Where the
+    /// runtime runs in a systemd unit, inside a scope of its own (<c>systemd-run --user --scope</c>), as a desktop starts an
+    /// application: else Jason Desktop, started from it, would be in the unit's group and end with the runtime.
+    /// </summary>
+    public static IReadOnlyList<string> LinuxClick(IReadOnlyList<string> self, string link, string? systemdRun)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentException.ThrowIfNullOrEmpty(link);
+        return systemdRun is null ? [.. self, link] : [systemdRun, "--user", "--scope", "--quiet", "--collect", "--", .. self, link];
+    }
+
+    /// <summary>The id notify-send printed once it had shown the notification, its first line of digits; null where none is there yet.</summary>
+    public static string? ShownId(string stdout) => Lines(stdout).FirstOrDefault(IsId);
+
+    /// <summary>Whether notify-send printed that the person clicked the notification.</summary>
+    public static bool Clicked(string stdout) => Lines(stdout).Contains(DefaultAction, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The activation token the server gave with the click: the line <see cref="TokenOption"/> wrote between the id and
+    /// the action; null where there is none, the line is empty, or it is not a token: a short run of printable characters
+    /// with no space.
+    /// </summary>
+    public static string? ActivationToken(string stdout)
+    {
+        var lines = Lines(stdout).ToList();
+        var id = lines.FindIndex(IsId);
+        var action = lines.IndexOf(DefaultAction);
+        if (id < 0 || action <= id + 1)
+        {
+            return null;
+        }
+
+        var token = lines[action - 1];
+        return token is { Length: > 0 and <= 512 } && token.All(character => character is > ' ' and < '\u007f') ? token : null;
+    }
+
+    private static bool IsId(string line) => line.Length is > 0 and <= 10 && line.All(char.IsAsciiDigit);
+
+    private static IEnumerable<string> Lines(string text) => text.Split('\n').Select(line => line.TrimEnd('\r'));
 
     public static ToastLaunch LinuxGdbus(string program, NotificationMessage message)
     {

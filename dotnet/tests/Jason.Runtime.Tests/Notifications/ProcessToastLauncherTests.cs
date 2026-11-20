@@ -15,6 +15,9 @@ public sealed class ProcessToastLauncherTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>How long a row waits for a program it closed to end before it fails rather than hangs: a guard, never a measure.</summary>
+    private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
+
     private static Dictionary<string, string> Environment()
     {
         var source = new Dictionary<string, string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -101,5 +104,47 @@ public sealed class ProcessToastLauncherTests
         Assert.False(result.Started);
         Assert.NotNull(result.StartError);
         Assert.Equal(ToastOutcomes.LaunchFailed, ToastOutcomes.Read(result).Code);
+    }
+    /// <summary>
+    /// A program that stays — notify-send waiting on the bus — is answered as soon as it says the line asked for, never
+    /// killed at the bound, and handed back with its end to come, which closing it brings, with all it said. Breaks if the
+    /// launcher kills a waiting toast at five seconds, which ends the click with it, or loses what it said.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_said_its_line_is_handed_back_waiting_and_ends_when_closed()
+    {
+        var launch = new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "say-and-hold", "42", "600000"], null, Environment());
+
+        var waiting = await new ProcessToastLauncher().LaunchWaitingAsync(launch, TimeSpan.FromSeconds(60), line => line == "42", Ct);
+
+        Assert.Equal((true, false, (int?)null), (waiting.Said.Started, waiting.Said.TimedOut, waiting.Said.ExitCode));
+        Assert.Equal("42\n", waiting.Said.Stdout);
+        var end = Assert.IsType<Task<LaunchResult>>(waiting.End, exactMatch: false);
+        Assert.False(end.IsCompleted, "the program still waits");
+        waiting.Close();
+        var ended = await end.WaitAsync(Hang, Ct);
+        Assert.NotEqual(0, ended.ExitCode);
+        Assert.Equal("42\n", ended.Stdout);
+    }
+
+    /// <summary>
+    /// A program that ends within the bound is answered by its end, with no end to come; one that says nothing it is asked
+    /// for is answered at the bound as still there, and not killed. Breaks if notify-send 0.8.3, which keeps its id until it
+    /// ends, is killed at the bound, or one that ended is held as if it waited.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_ended_is_its_end_and_one_silent_past_the_bound_still_waits()
+    {
+        var ended = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "echo-args", "7"], null, Environment()), TimeSpan.FromSeconds(60), line => line == "never", Ct);
+        Assert.Null(ended.End);
+        Assert.Equal((0, "7\n"), (ended.Said.ExitCode, ended.Said.Stdout.Replace("\r", string.Empty, StringComparison.Ordinal)));
+
+        var silent = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "hold", "600000"], null, Environment()), TimeSpan.FromMilliseconds(200), _ => true, Ct);
+        var end = Assert.IsType<Task<LaunchResult>>(silent.End, exactMatch: false);
+        Assert.False(end.IsCompleted, "the program was not killed at the bound");
+        silent.Close();
+        Assert.NotEqual(0, (await end.WaitAsync(Hang, Ct)).ExitCode);
     }
 }
