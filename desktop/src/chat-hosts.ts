@@ -381,9 +381,9 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
  * refused to its file tools. The host's maker documents that it checks a redirection's target, and a file command it
  * recognizes in Bash (`cat`, `head`), against these rules as if its own file tools read or wrote that file (Anthropic,
  * https://code.claude.com/docs/en/permissions, read 2026-11-20). Where no hook rides the turn, in Plan only and, below
- * Claude Code's floor of Full access, for a command the person's own allow rules let run, the rules' hold of a redirect
- * rests on that documentation: it is documented by the host's maker and not observed by us, since no test of the real
- * host has seen it. A command an allow rule matches is never put to the permission model. The turn's `PreToolUse` hook
+ * Claude Code's floor of Full access, for a command an allow rule lets run with no card (the allow list's verbs and the
+ * forms of the person's word), the rules' hold of a redirect rests on that documentation: it is documented by the host's
+ * maker and not observed by us, since no test of the real host has seen it. A command an allow rule matches is never put to the permission model. The turn's `PreToolUse` hook
  * holds it (`hookedSettings`): in Full access, and in Ask first and Auto-edit from Claude Code's floor of Full access on,
  * it refuses such a command before the host's allow rules let it run. The permission model refuses the same paths when
  * it is asked. In a demo run
