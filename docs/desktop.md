@@ -1114,7 +1114,9 @@ refuses it with `data_newer` before it changes the database, and the starting pa
 own words, which say to update, and offers no going back. A kept version before 0.49.0 has no such check. That puts
 back the previous application and the Jason it carried;
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
-update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
+update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`,
+after `sudo rm /etc/apt/sources.list.d/jason-desktop.sources` where that release is before 0.49.1, whose package carries
+no key for Jason's apt source.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
 A data directory that a newer Jason laid out in a way this one does not know, or whose layout stamp `layout.json` cannot
 be read, is refused instead: the starting page says so in `jason runtime start`'s own words, offers no going back, and no

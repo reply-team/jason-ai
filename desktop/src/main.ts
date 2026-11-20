@@ -58,6 +58,7 @@ import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
@@ -390,7 +391,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         desk.watch();
         repairer.start();
     });
-    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
+    const repairer = new Repairer({
+        readRunFile: () => readText(paths.runFile),
+        cli,
+        log,
+        load: async (link) => void (await current?.loadURL(link)),
+        paired: () => {
+            begin();
+            if (form?.form === 'deb') void readRuntimeAgain().catch(() => undefined);
+        },
+    });
     // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
     const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
     // This run is Live's (a Demo start runs `runDemo`), which offers every act that outlasts it (`offersOf`).
@@ -528,11 +538,23 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         toPage('updates.changed');
         if (Notification.isSupported()) {
             packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
-            packageNotice.on('click', () => void restartPackage());
+            packageNotice.on('click', () => void restartIfOwed());
             packageNotice.show();
         }
     };
     if (form?.form === 'deb') watchFile(join(packaged, 'version.json'), { interval: 60_000 }, offerPackageRestart);
+    // The runtime read again: after the window re-paired with one started anew (`jason runtime restart` in a terminal, say),
+    // and before a press of the restart, which a runtime already on this build does not need: it would end a running turn
+    // for nothing. Where the restart is no longer owed the item goes.
+    const readRuntimeAgain = async () => {
+        runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout);
+        desk.renderMenu();
+        toPage('updates.changed');
+    };
+    const restartIfOwed = async () => {
+        if (form?.form === 'deb') await readRuntimeAgain().catch(() => undefined);
+        if (packageMoved() !== null) await restartPackage();
+    };
     const desk = new Desk({
         window: () => current,
         origin,
@@ -543,7 +565,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         autostart,
         updates,
         packageMoved,
-        restart: () => void restartPackage(),
+        restart: () => void restartIfOwed(),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
@@ -891,7 +913,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             const notice = failedStartNotice(
                 said,
                 layoutRefused,
-                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile, version: kept.fromVersion } : { copy: kept.directory },
                 aside ?? applicationFolder(process.platform, process.execPath),
                 process.platform,
             );

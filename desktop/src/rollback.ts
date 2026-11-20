@@ -12,6 +12,7 @@
 
 import * as nodeFiles from 'node:fs';
 import { basename, dirname, isAbsolute, join, posix, relative, win32 } from 'node:path';
+import { compareVersions } from './host-version.ts';
 import type { Logger } from './log.ts';
 
 /**
@@ -209,8 +210,12 @@ export async function keepPrevious(
     return directory;
 }
 
-/** Where the version an update replaced is: a copy kept here, or the release's package to install again (the deb). */
-export type Previous = { copy: string } | { release: string; file: string };
+/** Where the version an update replaced is: a copy kept here, or the release's package to install again (the deb), of its version. */
+export type Previous = { copy: string } | { release: string; file: string; version: string };
+
+/** The deb's first release whose package carries the key of Jason's apt source, and the source it writes. */
+const keyedSince = '0.49.1';
+const aptSource = '/etc/apt/sources.list.d/jason-desktop.sources';
 
 /**
  * What the starting page says when an update's first start failed. Nothing puts the previous version back by itself: the
@@ -221,7 +226,10 @@ export function keptNotice(said: string, previous: Previous, installed: string, 
         'release' in previous
             ? [
                   `If this version is the cause, the version of Jason it was updated from is published at ${previous.release}.`,
-                  `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo apt install ./${previous.file}: nothing does it for you.`,
+                  // An earlier package carries no key for the source, which its install keeps: every apt update would report it.
+                  compareVersions(previous.version.split('+')[0] ?? previous.version, keyedSince) < 0
+                      ? `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo rm ${aptSource}, since that release carries no key for Jason's apt source, then sudo apt install ./${previous.file}: nothing does it for you.`
+                      : `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo apt install ./${previous.file}: nothing does it for you.`,
               ]
             : [
                   `If this version is the cause, the version of Jason it was updated from is kept at ${previous.copy}.`,

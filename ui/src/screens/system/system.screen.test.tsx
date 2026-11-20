@@ -201,6 +201,19 @@ describe('System, the update sentence', () => {
             expect(screen.queryByText(/updates itself/)).toBeNull();
             cleanup();
         }
+        // Until the item answers, neither sentence: drawing the updater's first would name Check for Updates on the deb.
+        recorded.update = update;
+        const unanswered = () => new Promise(() => undefined);
+        window.jasonDesktop = {
+            platform: 'linux',
+            updates: { key: async () => null, item: unanswered },
+        } as unknown as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        await act(async () => undefined);
+        expect(screen.queryByText(/Check for Updates/)).toBeNull();
+        expect(screen.queryByText(/Your system updates/)).toBeNull();
+        cleanup();
         // A desktop whose item is its own updater's keeps the sentence above.
         recorded.update = update;
         const own = async () => ({

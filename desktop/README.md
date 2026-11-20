@@ -825,7 +825,8 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
   the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
   or the system's update where the runtime is newer. If a version the deb's updater recorded does
-  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. An AppImage
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
   replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
   update apply`. The updater's cache is
   `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.

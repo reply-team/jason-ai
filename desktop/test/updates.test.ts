@@ -611,7 +611,7 @@ test('a start that failed says where the replaced version is only after an updat
     const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
     for (const platform of ['win32', 'darwin', 'linux'] as const) {
         assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
-        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
 });
@@ -950,15 +950,25 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
             ruled,
         ].join(' '),
     );
+    // A release before 0.49.1 carries no key for Jason's apt source, which its install keeps: the source goes first, or every
+    // apt update reports it. Catches a way back that leaves the system's updates failing.
     assert.equal(
-        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
             'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
-            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo rm /etc/apt/sources.list.d/jason-desktop.sources, since that release carries no key for Jason\'s apt source, then sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
+    for (const version of ['0.49.1', '0.49.2-rc.1', '0.50.0']) {
+        assert.ok(
+            keptNotice('The runtime did not start.', { release: previousRelease(version), file: debFile, version }, '/opt/Jason', 'linux').includes(
+                'and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ),
+            version,
+        );
+    }
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {
