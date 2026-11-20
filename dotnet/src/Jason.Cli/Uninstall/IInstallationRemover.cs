@@ -207,6 +207,21 @@ public interface IInstallationRemover
     }
 
     /// <summary>
+    /// macOS: the job <paramref name="label"/> in this account's login domain, as <c>launchctl print gui/&lt;uid&gt;/&lt;label&gt;</c>
+    /// answers (<see cref="Jason.Cli.Autostart.LaunchdJobs.Read"/>). No such job on every other system.
+    /// </summary>
+    Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label) => Jason.Cli.Autostart.LaunchdJob.Absent;
+
+    /// <summary>
+    /// macOS: takes the job <paramref name="label"/> out of this account's login domain, <c>launchctl bootout
+    /// gui/&lt;uid&gt;/&lt;label&gt;</c> and then by its label, as a LaunchAgent's job is taken out
+    /// (<see cref="Jason.Cli.Autostart.LaunchdJobs.BootOut"/>). Nothing it is answered is an error; nothing elsewhere.
+    /// </summary>
+    void BootOutLaunchdJob(string label)
+    {
+    }
+
+    /// <summary>
     /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
     /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
     /// application's steps are done; where that run ends 3 it runs it once more for a person to see, and where the last run

@@ -114,6 +114,12 @@ public static partial class DesktopRemoval
     /// <summary>Squirrel.Mac's ShipIt state under <c>~/Library/Caches</c>: the bundle identifier and <c>.ShipIt</c>.</summary>
     public const string ShipItCacheName = Identifier + ".ShipIt";
 
+    /// <summary>
+    /// The label of the launchd job Squirrel.Mac submits for ShipIt on an update the application installs: the bundle
+    /// identifier and <c>.ShipIt</c>, as its cache is named.
+    /// </summary>
+    public const string ShipItLabel = Identifier + ".ShipIt";
+
     /// <summary>The application's folder that carries <paramref name="carried"/>, or null where it is not inside one.</summary>
     public static string? ApplicationOf(CarriedExecutable carried, SetupPlaces places)
     {

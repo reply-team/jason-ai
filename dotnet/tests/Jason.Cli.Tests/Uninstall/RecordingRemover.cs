@@ -283,6 +283,23 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
 
     public void DeletePreferences(string domain) => Record("preferences.delete", domain);
 
+    /// <summary>
+    /// What launchd says of the job at each read, in order, the last said again once they run out; none, unless a test says,
+    /// is a job that is not there.
+    /// </summary>
+    public List<Jason.Cli.Autostart.LaunchdJob> Jobs { get; } = [];
+
+    /// <summary>The labels launchd was asked about, in order: apart from <see cref="Reads"/>, whose count the looks go by.</summary>
+    public List<string> LaunchdReads { get; } = [];
+
+    public Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label)
+    {
+        LaunchdReads.Add(label);
+        return Jobs.Count == 0 ? Jason.Cli.Autostart.LaunchdJob.Absent : Jobs[Math.Min(LaunchdReads.Count, Jobs.Count) - 1];
+    }
+
+    public void BootOutLaunchdJob(string label) => Record("launchd.bootout", label);
+
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;
 

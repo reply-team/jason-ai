@@ -3,6 +3,32 @@ namespace Jason.Cli.Autostart;
 /// <summary>Runs one command, waiting for it no longer than the limit: <see cref="AutostartRegistrars.Run(IReadOnlyList{string}, TimeSpan?)"/>, or a test's stub.</summary>
 internal delegate (int Exit, string Output, string Error) BoundedRun(IReadOnlyList<string> command, TimeSpan? limit);
 
+/// <summary>What launchd says of one job in one domain (<see cref="LaunchdJobs.Read"/>).</summary>
+public enum LaunchdJobState
+{
+    /// <summary><c>launchctl print</c> answered other than 0: launchd holds no such job there.</summary>
+    Absent,
+
+    /// <summary>Loaded, and not running.</summary>
+    Loaded,
+
+    /// <summary>Loaded and running: launchd says its state is <c>running</c>, or names its process.</summary>
+    Running,
+
+    /// <summary>launchctl could not be started, or did not answer in time.</summary>
+    Unread,
+}
+
+/// <summary>One job as launchd says it stands.</summary>
+/// <param name="State">Absent, loaded, running, or not read.</param>
+/// <param name="Pid">The process it runs, where launchd names one.</param>
+/// <param name="Why">Why it could not be read, where it could not.</param>
+public sealed record LaunchdJob(LaunchdJobState State, int? Pid = null, string? Why = null)
+{
+    /// <summary>No such job.</summary>
+    public static LaunchdJob Absent { get; } = new(LaunchdJobState.Absent);
+}
+
 /// <summary>
 /// macOS: a LaunchAgent's job taken out of this account's launchd before its file goes, wherever an uninstall or a
 /// disable removes one, so no job is left loaded with its plist gone.
@@ -86,7 +112,18 @@ internal static class LaunchdJobs
     public static IReadOnlyList<string> Domains(uint userId)
     {
         var id = userId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return [$"gui/{id}", $"user/{id}"];
+        return [LoginDomain(userId), $"user/{id}"];
+    }
+
+    /// <summary>The account's login domain, <c>gui/&lt;uid&gt;</c>, where a job its applications submit is loaded.</summary>
+    public static string LoginDomain(uint userId) => $"gui/{userId.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>The job <paramref name="label"/> in <paramref name="domain"/>, as <c>launchctl print</c> answers.</summary>
+    public static LaunchdJob Read(string domain, string label, BoundedRun? run = null) => LaunchdJob.Absent;
+
+    /// <summary>Takes the job <paramref name="label"/> out of <paramref name="domain"/>.</summary>
+    public static void BootOut(string domain, string label, BoundedRun? run = null)
+    {
     }
 
     /// <summary>
