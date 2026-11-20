@@ -152,6 +152,22 @@ test('the system screen’s sentence names Check for Updates when the runtime is
     assert.doesNotMatch(sentence, /jason update/);
 });
 
+test('on the deb the system screen’s sentence never names Check for Updates, which the deb has no item for', () => {
+    // This application's own runtime of an older build: the restart item the start offers, or the CLI's restart.
+    const ours = versionsDifferSentence('0.49.1', '0.49.2', true, null, true) ?? '';
+    assert.match(ours, /Choose Restart Jason and Its Runtime to Finish the Update to 0\.49\.2 in the desktop's Jason menu, or in the menu of its icon in the tray, or run `jason runtime restart`, to bring them to one version\./);
+    // A newer runtime, this application's or another's: this desktop is behind, and the system updates it.
+    for (const own of [true, false]) {
+        const behind = versionsDifferSentence('0.50.0', '0.49.2', own, null, true) ?? '';
+        assert.match(behind, /Update Jason Desktop through your system, with Software Updater or `sudo apt update && sudo apt upgrade` in a terminal, to bring them to one version\./, `ours: ${own}`);
+    }
+    // Another installation's older runtime is still brought up by its own jason update.
+    assert.match(versionsDifferSentence('0.48.2', '0.49.2', false, null, true) ?? '', /Run `jason update`/);
+    for (const [runtime, own] of [['0.49.1', true], ['0.50.0', true], ['0.50.0', false], ['0.48.2', false]] as const) {
+        assert.doesNotMatch(versionsDifferSentence(runtime, '0.49.2', own, 'Ctrl+Shift+D', true) ?? '', /Check for Updates/, `${runtime}, ours: ${own}`);
+    }
+});
+
 test('a log names a CLI verb by its closed list, never by its arguments', () => {
     assert.equal(verbOf(['status']), 'status');
     assert.equal(verbOf(['runtime', 'stop']), 'runtime stop');

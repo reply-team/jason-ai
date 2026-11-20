@@ -46,6 +46,10 @@ at this version and released only after its tests passed.
 | `jason-desktop-linux-x64.deb` | Jason Desktop for Linux on x64, as a package for Debian and Ubuntu: `sudo apt install ./jason-desktop-linux-x64.deb` |
 | `jason-desktop-linux-x64.AppImage` | the same application for Linux on x64 as one file, to make executable and run from wherever you keep it, on a system that lets it run its sandbox |
 | `latest-linux.yml` | the Linux desktop's update feed: this version, the deb's and the AppImage's names and their SHA-512 |
+| `Packages` | the apt repository's index of the deb: its control fields, its file name, its size and its hashes |
+| `Release` | the apt repository's release file: the origin `Jason` and the hashes of `Packages`, which apt reads signed as `InRelease`, or with `Release.gpg` |
+| `InRelease` | `Release`, clearsigned with the apt repository's key |
+| `Release.gpg` | `Release`'s detached signature by the same key |
 
 Each archive holds the executable, `LICENSE` (the MIT licence, which covers the whole repository, the runtime
 included) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by
@@ -58,8 +62,7 @@ and no edit of the package. The packages of ntfy, Slack and Telegram are install
 notification channel. The UI's package is placed by `jason ui install`, which the install guide runs and
 `jason update apply` runs at its end.
 On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
-images may not; the install script stops, with the runtime's own message, rather than install a program that does
-not start.
+images may not, and which the deb recommends.
 
 ## Desktop
 
@@ -73,15 +76,16 @@ and the application and the dmg are stapled. The Intel application's `jason` is 
 Rosetta where the release's runner has it; the test suite does not run on an Intel Mac. On macOS and Windows, the
 application's first start of each version puts `jason` in the terminal and Jason's skills where Claude Code and Codex
 read them, each where it is found, through the `jason` it carries; the Windows installer does the same at every install
-and update.
+and update. On Linux the first start does the same, from the `jason` the deb carries or from an AppImage's copy.
 
-On Linux, install the deb with `sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason` and
-in the applications menu. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
+On Linux the install line installs the deb where there is apt and the AppImage elsewhere. By hand, install the deb with
+`sudo apt install ./jason-desktop-linux-x64.deb`; it puts Jason in `/opt/Jason`, in the applications menu and in every
+terminal as `/usr/bin/jason`, and adds Jason's apt repository, so its updates come with the system's. Or make the AppImage executable, `chmod +x jason-desktop-linux-x64.AppImage`, and run it
 from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
 Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04
 and later, as shipped, the AppImage says so, does not start, and names the deb, whose install brings an AppArmor profile
-for its sandbox there; this release's build machine started both packages sandboxed, and neither has yet been seen on
-such a machine. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+for its sandbox there. This release's build machine started both packages sandboxed, and on Ubuntu 24.04 and 26.04 as
+shipped the deb has been seen to start sandboxed and the AppImage to refuse. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
 library (`libicu`), as the archive's does.
@@ -91,9 +95,9 @@ word, and to stable releases only. A candidate's feed files stay on the candidat
 latest release, so an installed desktop, a candidate included, never moves to a candidate. On macOS and Windows, `jason update apply` typed into
 the `jason` the application carries is such a word too: it hands the update to the same updater with no window, and the
 new version's `jason` finishes it, the plugin packages, the runtime's start, the skills, the terminal command and the
-UI. A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own
+UI; on Linux an AppImage's does the same. A command-line install of an earlier version on macOS, Windows or Linux moves into Jason Desktop through its own
 `jason update apply`: it installs the application and moves the command line into it, and the update never fails because
-of the move; `jason status` says where the move stands. Linux has no move.
+of the move; `jason status` says where the move stands.
 
 Installing an update restarts the runtime: the runtime the application carries is stopped first, with
 `jason runtime stop`, as the menu's Restart Jason and Its Runtime to Install says, and the new version starts it again
@@ -104,24 +108,24 @@ puts it back by itself: to go back, quit Jason and put that folder back in the p
 hand. That puts back the previous application and the `jason` it carried; the data directory stays as the newer
 version left it.
 
-On Linux the updates are built as follows, and not yet seen on a real machine. The deb's update installs the new deb
-with `dpkg`, which asks for an administrator's password every time, through the first of `gksudo`, `kdesudo`,
-`pkexec` and `beesu` the system has, else `sudo`: an account that cannot give one cannot install the update, and
-Jason stays open and says so. A deb update keeps no copy; to go back, install the previous release's
-`jason-desktop-linux-x64.deb` the same way. An AppImage update replaces the file where it is, so you need to be able to
+On Linux the deb's updates come with the system's, from Jason's apt repository: Software Updater offers them and
+installs them when you say so, as `sudo apt update && sudo apt upgrade` does; Ubuntu's automatic updates leave them
+alone, and `sudo apt-mark hold jason-desktop` stops them. Where the system updated the package under a running window, its update item says to restart Jason to finish the
+update, and so does the next start where the system updated it while no window was open and the runtime still runs the
+earlier version; it restarts nothing by itself, and `jason runtime restart` brings the runtime up too. apt keeps no previous version; to go back, install the previous release's `jason-desktop-linux-x64.deb` with
+`sudo apt install --allow-downgrades` and hold it. Going back to a release before 0.49.1, whose package carries no key
+for Jason's apt source, starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`,
+or every `apt update` reports the source. An AppImage update replaces the file where it is, so you need to be able to
 write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
 line your terminal and your agents use. It is removed once, by `jason uninstall` in a terminal, by Installed apps on
-Windows, or by Uninstall Jason… in the Jason menu on macOS. The uninstall stops the runtime first, and removes nothing
-when that runtime does not stop. It then takes off what Jason placed - the `jason` command, the skills it recorded in agent
+Windows, or by Uninstall Jason… in the Jason menu on macOS and Linux. The uninstall stops the runtime first, and removes nothing
+when that runtime does not stop. On Linux it then takes the deb's package off, with an administrator's password asked
+once, and removes nothing of yours when that is refused. It then takes off what Jason placed - the `jason` command, the skills it recorded in agent
 hosts' folders, Open Jason at Login, the runtime's start at logon, an older command-line install, the updater's cache and,
 on macOS, the job its updater leaves loaded in launchd - and last the application, and leaves the data directory
-(`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
-carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
-then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
-removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
-cache, `~/.cache/jason-desktop-updater`.
+(`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so.
 
 ## Installing
 
@@ -139,14 +143,14 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 
 Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE>.
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
 line your terminal and your agents use. It is installed once, updated once and removed once. Each line installs it:
-it checks the application's download against `checksums.txt` and its signature, puts it in its place, opens nothing,
-and has the `jason` it carries put `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is
-found; another agent host gets them with `jason skills install --host <host>`. On Linux the line finds this machine's archive, checks it against `checksums.txt` before unpacking, and puts
-`jason` on the PATH in `~/.local/bin`, with its licence and the third-party notices beside it, as `jason-LICENSE` and
-`jason-THIRD-PARTY-NOTICES`. Running the line again over an installed Jason of the same version downloads nothing and
-says so; on Linux, unless a licence file is missing beside the executable, which it then writes. To install this release rather than the latest, name it:
+it checks the application's download against `checksums.txt`, and on macOS and Windows its signature, puts it in its
+place, opens nothing, and has the `jason` it carries put `jason` in the terminal and Jason's skills for Claude Code and
+Codex, where each is found; another agent host gets them with `jason skills install --host <host>`. On Linux it is the
+deb where there is apt, installed by apt with an administrator's password asked once, and the AppImage, for your account
+alone, elsewhere. Running the line again over an installed Jason of the same version downloads nothing and says so. To
+install this release rather than the latest, name it:
 
 ```sh
 curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
@@ -155,8 +159,6 @@ curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh
 ```powershell
 & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
 ```
-
-On Linux, `--no-modify-path` leaves your PATH alone.
 
 ## Upgrading from 0.1.0
 

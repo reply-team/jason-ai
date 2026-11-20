@@ -28,7 +28,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// script refuses any other platform before it does anything else. <c>install.sh</c> has no such luck — the
 /// machine that runs this suite may have no <c>sh</c> at all, and the one Windows has is Git Bash, which the
 /// script refuses by name — so its rules here stay shape guards, and the ubuntu job is what runs it. What the two
-/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallNoticesTests"/>.
+/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallDesktopScriptTests"/>.
 /// </para>
 /// <para>
 /// The proof that a script installs a real archive and answers with the right version is the CI job that runs
@@ -72,15 +72,22 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// Every download a script names is one a release publishes, and no other: a script that named another would be
-    /// offering a download that does not exist. <c>install.sh</c> installs the Linux archive and, on macOS, Jason Desktop's
-    /// zip for the machine's architecture, both of which a release publishes; <c>install.ps1</c> installs the Windows setup.
+    /// offering a download that does not exist. <c>install.sh</c> installs Jason Desktop: on macOS its zip for the machine's
+    /// architecture, on Linux its deb or its AppImage, all of which a release publishes; <c>install.ps1</c> installs the
+    /// Windows setup.
     /// Neither names another platform's archive but in the sentence that refuses a machine no release is built for.
     /// </summary>
     [Fact]
     public void The_downloads_a_script_names_are_ones_a_release_publishes()
     {
         var sh = Script("install.sh");
-        Assert.Equal(new HashSet<string>(StringComparer.Ordinal) { ReleaseAssets.For("linux-x64") }, AssetNames().Matches(sh).Select(match => match.Value).ToHashSet(StringComparer.Ordinal));
+        Assert.Empty(AssetNames().Matches(sh));
+        foreach (var (name, asset) in new[] { ("DEB_ASSET", "jason-desktop-linux-x64.deb"), ("APPIMAGE_ASSET", "jason-desktop-linux-x64.AppImage") })
+        {
+            Assert.Contains($"{name}=\"{asset}\"", Code("install.sh"), StringComparison.Ordinal);
+            Assert.Contains(asset, ReleaseAssets.Desktop);
+        }
+
         Assert.Contains("ASSET=\"jason-desktop-macos-$ARCH.zip\"", Code("install.sh"), StringComparison.Ordinal);
         foreach (var arch in new[] { "arm64", "x64" })
         {
@@ -101,16 +108,22 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// The digest is compared before the archive is opened — an archive that fails its checksum is never
-    /// unpacked, let alone installed. What can be read from the text is the order: the digest is computed
-    /// before the first unpack, on the lines that are code and not on a comment that happens to name both.
+    /// The digest is compared before a download is opened, run or installed — a file that fails its checksum is never
+    /// unpacked, run or handed to apt. What can be read from the text is the order: the digest is computed before the
+    /// first unpack (ditto on macOS), the first run of an AppImage, and the first install by apt, on the lines that are code
+    /// and not on a comment that happens to name both; <see cref="InstallDesktopScriptTests"/> runs each route.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "install.sh verifies the checksum first")]
-    public void Install_sh_checks_the_digest_before_it_unpacks()
+    public void Install_sh_checks_the_digest_before_it_opens_runs_or_installs_a_download()
     {
         var code = Code("install.sh");
-        Assert.True(code.IndexOf("sha256", StringComparison.Ordinal) < code.IndexOf("tar -x", StringComparison.Ordinal), "The checksum is not computed before tar extracts.");
+        var digest = code.IndexOf("sha256sum", StringComparison.Ordinal);
+        foreach (var opened in new[] { "ditto -x", "--appimage-extract", "\"$APT_GET\" install" })
+        {
+            var at = code.IndexOf(opened, StringComparison.Ordinal);
+            Assert.True(digest >= 0 && at > digest, $"The checksum is not computed before {opened}.");
+        }
     }
 
     /// <summary>
@@ -173,52 +186,6 @@ public partial class InstallScriptTests
         Assert.Contains("BASE=\"$RELEASES_URL/latest/download\"", sh, StringComparison.Ordinal);
         Assert.Contains("\"$releasesUrl/download/v$Version\"", ps1, StringComparison.Ordinal);
         Assert.Contains("\"$releasesUrl/latest/download\"", ps1, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// PA9: the line in the profile is marked, and the profile is searched before it is appended to, so that a
-    /// second run adds nothing. What is searched for is the whole line the script wrote — the one naming the
-    /// install directory — and not the comment above it: that comment is an English sentence a person's own
-    /// profile could carry, pasted from somewhere or typed by hand, and keying the decision on it also meant
-    /// that a run with a different <c>--install-dir</c> found "the mark", wrote nothing, and left the directory
-    /// it had just installed into off the PATH.
-    /// </summary>
-    /// <remarks>
-    /// The order in the text is what can be read here; the ubuntu job runs the script three times and counts
-    /// the marks.
-    /// </remarks>
-    [Fact]
-    public void The_path_mark_is_matched_by_the_whole_line_the_script_wrote()
-    {
-        var code = Code("install.sh");
-        var looked = code.IndexOf("grep -qxF \"$LINE\"", StringComparison.Ordinal);
-        var written = code.IndexOf(">>", StringComparison.Ordinal);
-
-        Assert.Contains($"MARKER=\"{Marker}\"", code, StringComparison.Ordinal);
-        Assert.True(looked >= 0 && looked < written, "The profile is not searched for the line the script wrote before it is appended to.");
-        Assert.DoesNotContain("grep -qF \"$MARKER\"", code, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// And the repair <c>jason status</c> prints appends with the same <c>printf</c> the script appends with.
-    /// </summary>
-    /// <remarks>
-    /// Two spellings of "how a line goes into a profile" is how the verb that undoes an installer drifts away
-    /// from it, and a repair is not allowed to be a paraphrase of the script: it is the script's own format,
-    /// its own marker and its own line. The repair used to be the bare export line, which lasts one shell.
-    /// </remarks>
-    [Fact]
-    public void The_status_repair_appends_with_the_format_the_script_appends_with()
-    {
-        var format = Jason.Cli.Uninstall.PathEntry.AppendFormat;
-
-        Assert.Contains($"printf '{format}' \"$MARKER\" \"$LINE\"", Code("install.sh"), StringComparison.Ordinal);
-        var repair = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile");
-        var looked = repair.IndexOf("grep -qxF ", StringComparison.Ordinal);
-        var appended = repair.IndexOf($"printf '{format}' ", StringComparison.Ordinal);
-
-        // And, like the script, it looks for the whole line before it appends: typed twice, it adds nothing.
-        Assert.True(looked >= 0 && looked < appended, "The repair appends without looking for the line the script would have written.");
     }
 
     /// <summary>
@@ -339,7 +306,7 @@ public partial class InstallScriptTests
     /// <c>install.sh</c> says the two lines on where the files will be with <c>printf</c>, each text in single quotes so
     /// that its backticks are text rather than a command to substitute, the folder being <c>Jason</c> in the home as the
     /// runtime makes it. Read here because no Windows runs the script; Linux and macOS run what it prints, in
-    /// <see cref="InstallNoticesTests"/>.
+    /// <see cref="InstallDesktopScriptTests"/>.
     /// </summary>
     [Fact]
     public void Install_sh_prints_where_the_files_will_be_as_text()
@@ -349,33 +316,13 @@ public partial class InstallScriptTests
         Assert.Contains($"printf '{HarnessRootLines.Where("%s")}\\n' \"$ROOT_HOME/Jason\"", code, StringComparison.Ordinal);
 
         // The home loses every separator at its end, not one: `/home/marta//` is the runtime's `/home/marta` too.
-        Assert.Contains("ROOT_HOME=\"$HOME\"\nwhile [ \"${ROOT_HOME%/}\" != \"$ROOT_HOME\" ]; do\n    ROOT_HOME=\"${ROOT_HOME%/}\"\ndone\n", code, StringComparison.Ordinal);
+        Assert.Contains("    ROOT_HOME=\"$HOME\"\n    while [ \"${ROOT_HOME%/}\" != \"$ROOT_HOME\" ]; do\n        ROOT_HOME=\"${ROOT_HOME%/}\"\n    done\n", code, StringComparison.Ordinal);
         Assert.Contains($"printf '%s\\n' '{HarnessRootLines.DefaultProject}'", code, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Install_sh_sets_the_execute_bit() =>
         Assert.Contains("chmod", Script("install.sh"), StringComparison.Ordinal);
-
-    /// <summary>
-    /// The unpacked executable is asked for its version before it is renamed into place, so that nothing that
-    /// does not start is ever installed over something that did — a Linux without the ICU library the runtime
-    /// needs, say, where the program aborts before it prints anything. In the text: the last <c>--version</c>
-    /// before the executable's own rename into place comes after the executable's own unpack. Those two lines are
-    /// named whole: each script now also unpacks and renames its notice files, in functions above the steps.
-    /// </summary>
-    [Theory]
-    [InlineData("install.sh", "tar -xzf \"$TMP/$ASSET\" -C \"$TMP/unpacked\" jason", "mv -f \"$INSTALL_DIR/jason.installing.$$\" \"$TARGET\"")]
-    public void The_unpacked_executable_is_started_before_it_is_installed(string script, string unpack, string install)
-    {
-        var code = Code(script);
-        var unpacked = code.IndexOf(unpack, StringComparison.Ordinal);
-        var installed = code.IndexOf(install, unpacked, StringComparison.Ordinal);
-        Assert.True(unpacked >= 0 && installed > unpacked, $"{script} does not unpack and then install.");
-
-        var started = code.LastIndexOf("--version", installed, StringComparison.Ordinal);
-        Assert.True(started > unpacked, $"{script} does not run the unpacked executable before installing it.");
-    }
 
     /// <summary>
     /// And CI runs the published executable's own uninstall, from the file it removes, on every platform it
@@ -437,33 +384,6 @@ public partial class InstallScriptTests
         var waits = step.IndexOf(".WaitForExit(", StringComparison.Ordinal);
         var looks = step.LastIndexOf("Test-Path -LiteralPath $aside", StringComparison.Ordinal);
         Assert.True(waits > read.Index && waits < looks, $"The uninstall step does not wait for the cleanup's process between reading it ({read.Index}) and looking for the moved copy ({looks}); it waits at {waits}.");
-    }
-
-    /// <summary>
-    /// No artifact in CI but the three platform ones is named so that the install jobs' download takes it.
-    /// </summary>
-    /// <remarks>
-    /// They download <c>jason-*</c> and merge what they get into one directory. The update job's second version
-    /// was uploaded as <c>jason-&lt;rid&gt;-next</c>, carrying an archive with the same file name as the real
-    /// one; when it landed before an install job's download — which it did once the platform jobs grew a step —
-    /// its archive went over the real one beside the other artifact's fragment, and the feed refused itself.
-    /// </remarks>
-    [Fact]
-    public void Only_the_platform_artifacts_are_named_like_the_ones_the_install_jobs_download()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        Assert.Contains("pattern: jason-*", ci, StringComparison.Ordinal);
-
-        var named = ci.Split('\n')
-            .Select(line => line.Trim())
-            .Where(line => line.StartsWith("artifact:", StringComparison.Ordinal))
-            .Select(line => line["artifact:".Length..].Trim())
-            .ToList();
-
-        Assert.NotEmpty(named);
-        Assert.All(named, name => Assert.False(
-            name.StartsWith("jason-", StringComparison.Ordinal),
-            $"ci.yml uploads '{name}', which the install jobs' `jason-*` download would merge over a platform archive."));
     }
 
     /// <summary>
@@ -2511,6 +2431,59 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// On Windows the line every real install takes reads its feed over the web in Windows PowerShell 5.1, which a feed in a
+    /// directory never reaches. The proof's Windows job holds it in a leg of its own: the job's feed served on this machine
+    /// by the proof's one feed server, install.ps1 run by <c>powershell.exe</c> with that address and that shell said and
+    /// held to Windows PowerShell 5.1, the server's own record
+    /// of the manifest, the checksums and the setup each answered, and a runtime over the installed role skills saying
+    /// <c>role_skills</c> is ok. The role skills come from the skills beside the application's jason, so their record is
+    /// held to a folder of the application and never to the feed.
+    /// </summary>
+    [Fact]
+    public void The_windows_proof_installs_from_a_feed_served_on_the_machine_in_Windows_PowerShell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
+        var job = ci.IndexOf("\n  union-windows:\n", StringComparison.Ordinal);
+        Assert.True(job >= 0, "ci.yml no longer has the union-windows job.");
+        var leg = ci.IndexOf("- name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal\n", job, StringComparison.Ordinal);
+        Assert.True(leg > job, "union-windows no longer installs from a feed served on this machine in Windows PowerShell 5.1.");
+        var next = ci.IndexOf("\n      - ", leg + 1, StringComparison.Ordinal);
+        var step = next < 0 ? ci[leg..] : ci[leg..next];
+        var begin = step.IndexOf("-Step Begin -Out $env:OUT -Leg $env:LEG -Clean ", StringComparison.Ordinal);
+        var served = step.IndexOf("-Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script ", StringComparison.Ordinal);
+        var end = step.IndexOf("-Step End -Out $env:OUT -Leg $env:LEG", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && served > begin && end > served, $"the served feed's leg is not framed by a clean begin and its end:\n{step}");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).ReplaceLineEndings("\n");
+        var at = script.IndexOf("\n    'ServedFeed' {\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Test-InstallationWindows.ps1 has no ServedFeed step.");
+        var body = script[at..script.IndexOf("\n    }\n", at, StringComparison.Ordinal)];
+        foreach (var said in new[]
+        {
+            "$server = Start-FeedServer $Feed 8099 ",
+            "Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }",
+            "$served = 'http://127.0.0.1:8099'",
+            "Say \"install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition\"",
+            "$shellEdition -cne 'Desktop' -or -not \"$shellVersion\".StartsWith('5.1.')",
+            "@('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')",
+            "' HTTP/1\\.[01]\" 200'",
+            "skills\\roles\\.jason-skills.json",
+            "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
+        })
+        {
+            Assert.True(body.Contains(said, StringComparison.Ordinal), $"Test-InstallationWindows.ps1's ServedFeed step does not say: {said}");
+        }
+
+        // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
+        Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        // Its answer waited for up to 90 s: the server is the proof's own, and a runner's image can start it slowly.
+        Assert.Contains("    $until = [DateTime]::UtcNow.AddSeconds(90)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\"the feed on 127.0.0.1:$port answering did not happen within 90 s\"", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
+    }
+
+    /// <summary>
     /// The uninstall the application's Uninstall Jason item starts writes both its streams into one file, and a wait's
     /// sentence goes to standard error: the macOS menu leg reads that file's JSON line only to SAY what the report says of
     /// itself (completed, the refusal code, kept and problems) and every other line as said, so a finding the report
@@ -2537,45 +2510,23 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
-    /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
-    /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
+    /// The real proof: CI runs each script against what the same run packaged: install.ps1 from a local directory, and
+    /// install.sh on Ubuntu through the apt route's leg, against the product's address as the leg serves it. The leg
+    /// moves a build older than install.sh's floor for Linux up to it, reading the floor from the one line that refuses
+    /// below it: a rewrite of that line would otherwise fail only the leg, late in the run.
     /// </summary>
     [Fact]
-    public void Ci_holds_the_installer_the_check_and_the_uninstall_to_the_profile_bash_reads()
+    public void Ci_runs_both_scripts_against_what_it_built()
     {
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        var step = ci.IndexOf("name: Install into the profile bash reads, and take it back out", StringComparison.Ordinal);
-
-        Assert.True(step >= 0, "ci.yml no longer installs into a home where bash reads ~/.bash_profile.");
-        Assert.True(ci.IndexOf("bash -l -c 'command -v jason'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
-        Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
-    }
-
-    /// <summary>
-    /// And CI holds the uninstall to the directory rule on a real machine: installed into a <c>~/.local/bin</c> that
-    /// another tool is in, the line it is found through stays — and the installer, run with no <c>SHELL</c> under
-    /// its own <c>set -eu</c>, writes the profile rather than dying before it.
-    /// </summary>
-    [Fact]
-    public void Ci_holds_the_uninstall_to_a_directory_other_tools_share_and_the_installer_to_no_shell()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        var step = ci.IndexOf("name: Install beside another tool with no SHELL set, and leave the line it is found through", StringComparison.Ordinal);
-
-        Assert.True(step >= 0, "ci.yml no longer installs into a directory another tool shares.");
-        Assert.True(ci.IndexOf("env -u SHELL sh install/install.sh", step, StringComparison.Ordinal) > step, "the step no longer runs the installer with no SHELL.");
-        Assert.True(ci.IndexOf("the uninstall took away the line another tool is found through", step, StringComparison.Ordinal) > step, "the step no longer asserts the line stays.");
-    }
-
-    /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
-    [Fact]
-    public void Ci_runs_both_scripts_against_the_archives_it_built()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        Assert.Contains("install/install.sh", ci, StringComparison.Ordinal);
         Assert.Contains("install/install.ps1", ci, StringComparison.Ordinal);
         Assert.Contains("JASON_INSTALL_FEED", ci, StringComparison.Ordinal);
+        Assert.Contains("bash .github/scripts/test-apt-route.sh apt\n", ci, StringComparison.Ordinal);
+        var leg = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-apt-route.sh"));
+        Assert.Contains("\"$repository/install/install.sh\"", leg, StringComparison.Ordinal);
+        Assert.Contains("floor=$(sed -n 's/^ *if older_than \"\\$LATEST\" \\([0-9.]*\\) .*/\\1/p' \"$repository/install/install.sh\")", leg, StringComparison.Ordinal);
+        var floor = Assert.Single(Script("install.sh").Split('\n'), line => Regex.IsMatch(line, @"^ *if older_than ""\$LATEST"" [0-9.]+ "));
+        Assert.Contains("if older_than \"$LATEST\" 0.49.1 ", floor, StringComparison.Ordinal);
     }
 
     // --- install.ps1, run rather than read ----------------------------------------------------------------
@@ -2736,43 +2687,6 @@ public partial class InstallScriptTests
         Assert.True(
             Regex.Replace(stderr, @"\s+", string.Empty).Contains("doesnotmatchchecksums.txt", StringComparison.Ordinal),
             $"{shell} {form} did not say the digest was refused. It said: {stderr}");
-    }
-
-    /// <summary>
-    /// And <c>install.sh</c> stops on a command that fails without a check of the script's own around it: a feed whose
-    /// <c>checksums.txt</c> cannot be read makes <c>cp</c> fail, and <c>set -e</c> is what ends the run there, non-zero,
-    /// in <c>cp</c>'s own words and with nothing installed. Without it the run went on, and stopped later on a check of
-    /// its own, which is not where it failed.
-    /// </summary>
-    [Fact]
-    [UnsupportedOSPlatform("windows")]
-    public void Install_sh_stops_where_a_command_fails_with_nothing_installed()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux leg runs this row.");
-        Assert.SkipUnless(
-            OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64,
-            "install.sh takes an install directory on Linux on x64 alone: macOS installs Jason Desktop, and no other release is built.");
-
-        using var tree = new TempTree();
-        var feed = tree.NewDirectory("feed");
-        var asset = ReleaseAssets.For("linux-x64");
-        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"0.7.0\"\n}\n");
-        File.WriteAllText(Path.Combine(feed, asset), "Not an archive.\n");
-        var checksums = Path.Combine(feed, ReleaseAssets.Checksums);
-        File.WriteAllText(checksums, new string('0', 64) + "  " + asset + "\n");
-        File.SetUnixFileMode(checksums, UnixFileMode.None);
-        Assert.SkipWhen(Readable(checksums), "This account reads a file whatever its mode says, as root does, so there is no refusal to make.");
-
-        var install = tree.NewDirectory("bin");
-        var (exit, _, stderr) = Run(
-            "/bin/sh",
-            new Dictionary<string, string> { ["HOME"] = tree.NewDirectory("home") },
-            Path.Combine(RepositoryRoot(), "install", "install.sh"), "--feed", feed, "--install-dir", install, "--no-modify-path");
-
-        Assert.True(exit != 0, $"install.sh exited 0. It said: {stderr}");
-        Assert.Empty(Directory.EnumerateFileSystemEntries(install));
-        Assert.Contains(ReleaseAssets.Checksums, stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain("install.sh:", stderr, StringComparison.Ordinal);
     }
 
     /// <summary>True when this account can open the file for reading.</summary>

@@ -3,7 +3,7 @@
 A Cloudflare Worker in front of a few paths of the product's download address, `get.jasonharness.ai`: the install page
 an agent is pointed at, one short link per desktop system, and a page of counts. Every other path of the address,
 `/` and everything under `/releases/` included, is answered by the address's redirect to this repository's releases on
-GitHub, and never reaches this code.
+GitHub, and everything under `/apt/` by the rule below that makes it Jason's apt repository; neither reaches this code.
 
 ## What it answers
 
@@ -145,3 +145,18 @@ answers `main`'s page, and then the redirect to it, from then on.
 
 Redirect rules answer before a Worker does. No redirect rule may stand on the Worker's paths: a rule put on one of them
 for a while is removed in the same step that routes the Worker. The rule for `/releases/` and the root stays as it is.
+
+## The apt repository's rule
+
+A second redirect rule of the zone, outside this folder and never reaching the Worker, makes the address Jason's apt
+repository: every path under `/apt/` of `get.jasonharness.ai` answers a 302 to the file of the same name among the latest
+release's downloads on GitHub, the rest of the path appended to this repository's `releases/latest/download/`, with no
+query string.
+The deb's source names `URIs: https://get.jasonharness.ai/apt/` and `Suites: ./`, a flat repository, so apt asks
+`/apt/./InRelease` (and `/apt/./Release` and `/apt/./Release.gpg` where that fails), then `/apt/./Packages`, and the
+package by the `Filename` the index gives it, `/apt/./jason-desktop-linux-x64.deb`. Each `/apt/./<file>` must answer a
+302 to the latest release's `<file>`: Cloudflare reads the path with `./` taken out, so the rule sees `/apt/<file>`, and
+`curl -sI --path-as-is` given the address with `/apt/./InRelease` shows the `Location` it gives. A release that becomes
+the latest carries the index (`Packages`, `Release`, `InRelease`, `Release.gpg`), or every machine with the deb reports
+Jason's source at `apt update`; after a release is published, `curl -sIL https://get.jasonharness.ai/apt/InRelease` ends
+in 200.

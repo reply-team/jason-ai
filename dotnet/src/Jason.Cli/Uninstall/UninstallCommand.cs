@@ -43,7 +43,9 @@ public static class UninstallCommand
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
              account's, on Windows including the task an earlier version registered as Jason. On macOS it
              comes just after step 2: taking the job out of launchd ends the runtime launchd started, with
-             no drain, and the job starts no runtime that stopped
+             no drain, and the job starts no runtime that stopped. On Linux from the deb it comes just after
+             the package, below, so a package that stays leaves it as it was; one that cannot be taken off
+             then is named among the problems, with the commands that take it off by hand, and the rest goes
           2. the runtime — and if it will not stop, nothing further is removed. Before the runtime is looked
              for and before anything is removed, a runtime that is still starting is waited for, up to {StartInFlight.Seconds(StartInFlight.Bound)},
              and then stopped; a dry run never waits. Where another jason of this installation still runs
@@ -109,8 +111,8 @@ public static class UninstallCommand
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
-        Run as the jason Jason Desktop carries (a version.json beside the executable), on macOS and Windows, this
-        takes Jason Desktop off as well, one uninstall from either door, the data directory kept unless
+        Run as the jason Jason Desktop carries (a version.json beside the executable), on macOS, Windows and Linux,
+        this takes Jason Desktop off as well, one uninstall from either door, the data directory kept unless
         --purge-data, the harness root never:
           - refused before anything is removed while Jason Desktop is open (desktop_running): quit it
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
@@ -130,14 +132,23 @@ public static class UninstallCommand
             runtime of another data directory, a journal watch, a call of an agent host opened by hand. The
             application's uninstaller removes nothing while one does. The runtime this stops, and every
             process it started (its plugin hosts, its agents' calls), are not counted.
+          - on Linux from the deb, just after the runtime and before anything of this account's is removed: the package
+            jason-desktop, purged with apt-get, which asks for an administrator's password once, through sudo where
+            there is a terminal, else through the desktop's own dialog (pkexec); its scripts take back what it placed
+            for every account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask
+            in, the package system held, apt failing - nothing of this account's is removed, the runtime's start at
+            logon included, the runtime this stopped is started again, and the verb exits 1 naming sudo apt purge
+            jason-desktop as the way by hand.
           - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
-            where it starts this application. On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
+            where it starts this application; on Linux the XDG autostart entry ai.jasonharness.desktop.desktop under
+            XDG_CONFIG_HOME (~/.config by default). On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
             may be that job's own window: the output says the job stays loaded until the next login.
           - with the runtime: the runtime an earlier version's demo left running on its own data directory.
           - with the jason: link: the jason-desktop link registration, where it starts this application.
           - in place of steps 5 and 6: the terminal command jason install placed, by the rules it placed it by:
-            on macOS ~/.local/bin/jason and jason-desktop where each is the application's wrapper running this
-            jason (or a jason that is gone), then install.sh's lines for ~/.local/bin where it then holds nothing
+            on macOS and Linux ~/.local/bin/jason and jason-desktop where each is the application's wrapper running this
+            jason (or a jason that is gone, or for an AppImage another version's copy beside it; from the deb
+            /usr/bin/jason is the package's), then install.sh's lines for ~/.local/bin where it then holds nothing
             but Jason, a profile file removed only where jason install recorded that it created it and nothing
             but whitespace is left, then the folder once empty; on Windows the application's jason and jason-desktop command
             files in WindowsApps, and the entry in this account's Path naming the application's resources\bundle,
@@ -151,7 +162,7 @@ public static class UninstallCommand
             says it is loaded and not running; one running or set to run keeps ShipIt's cache, the application
             and its state, one found running just before the application goes keeps the application and its
             state, and one launchctl could not be asked about, in a login domain launchd says is there, is left;
-            each is said). Then, on Windows, the
+            each is said; on Linux under XDG_CACHE_HOME, ~/.cache by default). Then, on Windows, the
             jason-retired-<id> folders, as step 6 says, beside the older command-line install's folder too.
           - macOS, just before the application and only where it goes: its own state under ~/Library, each
             where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through
@@ -163,6 +174,12 @@ public static class UninstallCommand
             nothing in them proves them Jason Desktop's, which keeps its own in the data directory.
             --keep-application keeps all of it. Where the home directory is / or not the account's own,
             nothing under ~/Library is looked at, and the plan says so.
+          - Linux, an AppImage, just before the file and only where it goes: its menu entry, applications/
+            jason-desktop.desktop under XDG_DATA_HOME (~/.local/share by default) where it starts that file, its icons
+            icons/hicolor/<size>/apps/jason-desktop-app.png there, the copies of its jason under
+            <data>/desktop/bundle/, the copy an update kept under <data>/desktop/rollback/, <data>/desktop/
+            appimage.json, and ai.jasonharness.desktop there (jason install's record of the profiles it created).
+            --keep-application keeps all of it.
           - with the data kept: run/start-owed.json, the note that a start is owed, since with this
             installation taken off none is.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
@@ -175,8 +192,9 @@ public static class UninstallCommand
             the folder itself next. --keep-application with --purge-data is refused (uninstall_refused).
             macOS: the bundle is deleted only where its Contents/Info.plist names ai.jasonharness.desktop. If
             macOS refuses the delete, the report says what is left and the verb exits 1: move the bundle it
-            names, wherever it is, to the Trash.
-        Elsewhere (Linux), and where no system's places are known, the jason the application carries refuses
+            names, wherever it is, to the Trash. Linux: the AppImage file, deleted; from the deb nothing here,
+            the package having gone first.
+        Where no system's places are known, the jason the application carries refuses
         (uninstall_carried_by_desktop) before anything is read or removed, and the message names the way the
         system removes the application.
         This account's, not this installation's: the logon registration, the notification registration and the
@@ -290,13 +308,18 @@ public static class UninstallCommand
         }
 
         // And a data directory that is not one is refused before anything is read. JASON_DATA_DIR may name any
-        // directory at all, and the purge used to delete the one it named, recursively, whatever it was.
+        // directory at all, and the purge used to delete the one it named, recursively, whatever it was. An AppImage's jason
+        // runs as a copy under this data directory's desktop/bundle, which is the data directory's own and goes with it, so
+        // that copy is no installation the data directory holds.
+        var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        var ownCopy = running is not null && env.Setup is { Platform: SetupSystem.Linux } && !SetupPlaces.CarriedByDeb(running)
+            && string.Equals(Path.GetFullPath(Update.AppImageCopy.BundlesOf(running)), Path.GetFullPath(Update.AppImageCopy.BundlesUnder(env.Paths.Root)), StringComparison.Ordinal);
         if (options.PurgeData
             && DataDirectoryBelt.Refusal(
                 env.Paths.Root,
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 Path.GetTempPath(),
-                Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty)) is { } refusal)
+                ownCopy ? null : Path.GetDirectoryName(running ?? string.Empty)) is { } refusal)
         {
             return Refuse(
                 env,
@@ -650,6 +673,7 @@ public static class UninstallCommand
             ApplicationFates.Deleted => $"  last, the application, {desktop.Application}",
             ApplicationFates.AfterExit => $"  last, the application, {desktop.Application}: its own uninstaller removes it once this command has ended",
             ApplicationFates.Kept => $"  NOT touched: the application, {desktop.Application}, which the uninstaller that asked for this removes next",
+            ApplicationFates.Purged => $"  first, once the runtime has stopped: the package {DesktopRemoval.DebPackage}, {desktop.Application}, taken off by apt, which asks for an administrator's password",
             _ => "  no application: this jason is not inside one",
         });
     }
@@ -739,7 +763,12 @@ public static class UninstallCommand
         return running.Count == 0
             ? null
             : $"Jason Desktop is open (process {string.Join(", ", running.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), and this would remove it from under itself. "
-              + (places.Platform is SetupSystem.MacOs ? "Quit it from the Jason menu" : "Quit it from its icon in the notification area")
+              + (places.Platform switch
+              {
+                  SetupSystem.Windows => "Quit it from its icon in the notification area",
+                  SetupSystem.Linux => "Quit it from its icon in the tray, or close its window where your desktop shows no tray",
+                  _ => "Quit it from the Jason menu",
+              })
               + ", then run this again. Nothing was removed; the data directory is kept either way unless --purge-data says otherwise.";
     }
 
@@ -782,11 +811,11 @@ public static class UninstallCommand
 
     /// <summary>
     /// How the application is removed where the refusal that names it is reached: only where no system's places are known, and
-    /// on a real machine they are known on Windows and macOS (<see cref="SetupPlaces.ForThisMachine"/>), where this verb is the
-    /// application's one uninstall. So it is Linux's way, and the sentence names no other system's.
+    /// on a real machine they are known on Windows, macOS and Linux (<see cref="SetupPlaces.ForThisMachine"/>), where this verb
+    /// is the application's one uninstall. So the sentence names no system's own way.
     /// </summary>
     internal const string RemovingTheApplication =
-        "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
+        "Quit it, then remove it the way this system removes an application.";
 
     /// <summary>
     /// The one shape a refusal takes: the error envelope on stdout by default, a sentence on stderr under

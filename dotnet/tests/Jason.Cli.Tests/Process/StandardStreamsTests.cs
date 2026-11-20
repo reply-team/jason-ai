@@ -11,9 +11,156 @@ namespace Jason.Cli.Tests.Process;
 /// its sources given, and the list against this process's own handles, read and never changed. That a real runtime started
 /// under a handed pipe no longer holds it is held by the executable itself, in <c>HandedHandleTests</c>.
 /// </summary>
+[Collection(HandleInheritanceCollection.Name)]
 public sealed class StandardStreamsTests
 {
     private static readonly IntPtr[] Standard = [new(0x10), new(0x14), new(0x18)];
+
+    /// <summary>
+    /// Linux: a descriptor this process holds open across exec, as Jason Desktop's Electron hands a jason its resource
+    /// files, reaches a child started after it until it is kept out, and no longer after; the process keeps it open itself.
+    /// Catches the runtime a Desktop's jason starts holding the Desktop's files, an AppImage's mount among them, for as long
+    /// as it runs.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_a_descriptor_held_open_across_exec_is_kept_out_of_the_children_started_after()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var fd = open(file, 0);
+        Assert.True(fd > 2, "the descriptor could not be opened");
+        try
+        {
+            Assert.Equal("held", ChildSees(fd));
+
+            StandardStreams.KeepOutOfChildren();
+
+            Assert.Equal("free", ChildSees(fd));
+            Assert.True(File.Exists($"/proc/self/fd/{fd}"), "this process lost the descriptor itself");
+        }
+        finally
+        {
+            _ = close(fd);
+            File.Delete(file);
+        }
+    }
+
+    /// <summary>
+    /// Linux: what this process was handed open across exec is closed, and what it opened itself, close-on-exec as .NET opens
+    /// everything, stays; the uninstall does this at its start, needing none of what Jason Desktop handed it, which inside an
+    /// AppImage's mount kept the AppImage's own process alive to be taken for an open window. Catches "Uninstall Jason..."
+    /// refused by its own process.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void On_linux_the_uninstall_closes_what_it_was_handed_and_every_long_lived_start_keeps_it_out()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Descriptors and close-on-exec are read from Linux's /proc here.");
+        var file = Path.GetTempFileName();
+        var handed = open(file, 0);
+        var own = open(file, CloseOnExecFlag);
+        try
+        {
+            StandardStreams.CloseInherited(fd => fd == handed || fd == own);
+
+            Assert.False(File.Exists($"/proc/self/fd/{handed}"), "a descriptor handed open across exec stayed open");
+            Assert.True(File.Exists($"/proc/self/fd/{own}"), "a descriptor of this process's own was closed");
+        }
+        finally
+        {
+            _ = close(own);
+            File.Delete(file);
+        }
+
+        var router = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.App", "ModeRouter.cs"));
+        Assert.Contains("if (args is [\"uninstall\", ..])\n        {\n            Jason.Cli.Process.StandardStreams.CloseInherited();", router, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every start of a child meant to outlast the CLI keeps out what the CLI holds, on every system: the runtime, the move's
+    /// tools, the uninstall's waiter, `jason session open`'s terminal and every link the CLI opens. On Windows that is every
+    /// handle the CLI holds as inheritable, its standard streams among them. Catches a terminal or a browser started by the
+    /// CLI holding a pipe that ran `jason`, or the Desktop's files, for as long as it stays open.
+    /// </summary>
+    [Fact]
+    public void Every_start_meant_to_outlast_the_cli_keeps_out_what_the_cli_holds()
+    {
+        foreach (var starter in new[] { "Process/RuntimeProcessControl.cs", "Update/MoveSystem.cs", "Uninstall/IInstallationRemover.cs", "Session/ITerminalStarter.cs", "Process/IUrlOpener.cs" })
+        {
+            var source = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.Cli", starter));
+            var kept = source.IndexOf("StandardStreams.KeepOutOfChildren();", StringComparison.Ordinal);
+            Assert.True(kept > 0, $"{starter} starts a child without keeping out what the CLI holds");
+            Assert.True(source.IndexOf("ChildProcess.Start(", kept, StringComparison.Ordinal) > kept, $"{starter} keeps nothing out before its start");
+        }
+
+        var link = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.Cli", "Process", "IUrlOpener.cs"));
+        Assert.Contains("            StandardStreams.KeepOutOfChildren();\n            return ChildProcess.Start(start);", link, StringComparison.Ordinal);
+        var terminal = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.Cli", "Session", "ITerminalStarter.cs"));
+        Assert.Contains("            StandardStreams.KeepOutOfChildren();\n            using var process = ChildProcess.Start(start);", terminal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Windows: a handle this process holds as inheritable, as a pipe that ran `jason` is, reaches a child started after it
+    /// until it is kept out, and no longer after: the read end sees the pipe's end once this process lets its own write end go,
+    /// though the child still runs. Catches a browser or a terminal the CLI started holding such a pipe, and whoever reads it
+    /// waiting for an end of file that comes only when that window closes. Alone in its collection: it changes every
+    /// inheritable handle of this process, which a start on another thread may be handing a child at that moment.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_a_handle_held_inheritable_is_kept_out_of_the_children_started_after()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A child is handed its parent's inheritable handles on Windows; the Linux rows above hold descriptors.");
+        using var pipe = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
+        Assert.Contains(pipe.ClientSafePipeHandle.DangerousGetHandle(), StandardStreams.InheritableHandles() ?? []);
+
+        StandardStreams.KeepOutOfChildren();
+
+        Assert.DoesNotContain(pipe.ClientSafePipeHandle.DangerousGetHandle(), StandardStreams.InheritableHandles() ?? []);
+        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "ping.exe")) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in new[] { "-n", "8", "127.0.0.1" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            pipe.DisposeLocalCopyOfClientHandle();
+            var read = pipe.ReadAsync(new byte[1], TestContext.Current.CancellationToken).AsTask();
+            var first = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+            Assert.True(first == read, "a child started after holds the pipe's write end");
+            Assert.Equal(0, await read);
+            Assert.False(child.HasExited, "the child ended before the pipe was read, so it proves nothing");
+        }
+        finally
+        {
+            child.Kill();
+        }
+    }
+
+    private static string Root => Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..");
+
+    /// <summary>Linux's O_CLOEXEC.</summary>
+    private const int CloseOnExecFlag = 0x80000;
+
+    private static string ChildSees(int fd)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"[ -e /proc/self/fd/{fd} ] && echo held || echo free");
+        using var child = System.Diagnostics.Process.Start(start)!;
+        var said = child.StandardOutput.ReadToEnd().Trim();
+        child.WaitForExit();
+        return said;
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int open([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string path, int flags);
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int close(int fd);
 
     [Fact]
     public void Where_the_list_cannot_be_had_the_three_standard_streams_are_kept_out_and_nothing_else()
@@ -131,4 +278,11 @@ public sealed class StandardStreamsTests
             BinaryPrimitives.WriteUInt32LittleEndian(list.AsSpan(at), (uint)value);
         }
     }
+}
+
+/// <summary>The rows that change this process's own inheritable handles, kept away from everything else while they run.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class HandleInheritanceCollection
+{
+    public const string Name = "handle inheritance";
 }

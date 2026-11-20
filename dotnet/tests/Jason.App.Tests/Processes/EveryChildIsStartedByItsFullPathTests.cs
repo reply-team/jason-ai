@@ -40,6 +40,8 @@ public partial class EveryChildIsStartedByItsFullPathTests
             "Jason.App.Tests/Processes/EveryChildIsStartedByItsFullPathTests.cs:Windows_PowerShell_is_named_by_its_place_in_the_system_folder"),
         ("Jason.Cli/Uninstall/IInstallationRemover.cs", "powershell, ChildKind.SystemToolWithInput",
             "Jason.App.Tests/Processes/EveryChildIsStartedByItsFullPathTests.cs:Windows_PowerShell_is_named_by_its_place_in_the_system_folder"),
+        ("Jason.Cli/Update/AppImageCopy.cs", "appImage, ChildKind.SystemToolWithInput",
+            "Jason.Cli.Tests/Update/UpdateCarriedLinuxTests.cs:The_appimage_is_named_by_its_full_path_whatever_its_record_says"),
         ("Jason.Cli/Update/MoveSystem.cs", "setup, ChildKind.SystemToolWithInput",
             "Jason.Cli.Tests/Update/MoveSystemToolsTests.cs:Every_program_a_move_starts_is_named_by_its_full_path"),
         ("Jason.Cli/Update/MoveSystem.cs", "program, ChildKind.SystemToolWithInput",
@@ -58,7 +60,7 @@ public partial class EveryChildIsStartedByItsFullPathTests
 
     /// <summary>
     /// Every call of the door in the product's sources is a caller in the table, and every caller in the table is a call
-    /// there, with what it hands the door as written: sixteen calls in twelve files. Comments are not calls, and a
+    /// there, with what it hands the door as written: seventeen calls in thirteen files. Comments are not calls, and a
     /// qualified name is read as the short one.
     /// </summary>
     [Fact]
@@ -72,7 +74,7 @@ public partial class EveryChildIsStartedByItsFullPathTests
             .ToList();
 
         Assert.Equal(Callers.Select(caller => (caller.File, caller.Arguments)).Order(), found);
-        Assert.Equal((16, 12), (Callers.Length, Callers.Select(caller => caller.File).Distinct().Count()));
+        Assert.Equal((17, 13), (Callers.Length, Callers.Select(caller => caller.File).Distinct().Count()));
     }
 
     /// <summary>Each caller's row is there to be run: a method of that name in that test file.</summary>

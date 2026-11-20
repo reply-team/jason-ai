@@ -11,7 +11,8 @@ using Jason.Contracts.Update;
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
-/// The install scripts where they install Jason Desktop: <c>install.ps1</c> on Windows and <c>install.sh</c> on macOS. Each
+/// The install scripts where they install Jason Desktop: <c>install.ps1</c> on Windows and <c>install.sh</c> on macOS and on
+/// Linux (its Linux routes are in <c>InstallDesktopScriptTests.Linux.cs</c>). Each
 /// fetches the release's package for the machine, checks it against <c>checksums.txt</c> and its signature, places the
 /// application without a person, runs the jason the application carries as <c>jason install --roles</c>, reads its one
 /// report, starts a runtime again where one answered before and none answers after or where the report says it stopped
@@ -37,7 +38,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// wherever there is a <c>/bin/sh</c>; on Windows they are skipped, and the Windows rows run there alone.
 /// </para>
 /// </remarks>
-public sealed class InstallDesktopScriptTests : IDisposable
+public sealed partial class InstallDesktopScriptTests : IDisposable
 {
     private const string Version = "0.49.0";
 
@@ -1385,8 +1386,8 @@ public sealed class InstallDesktopScriptTests : IDisposable
     private static string Code(string name) =>
         string.Join('\n', Script(name).Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
 
-    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments) =>
-        RunToEnd(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true }, environment, arguments);
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments, string? workingDirectory = null) =>
+        RunToEnd(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = workingDirectory ?? string.Empty }, environment, arguments);
 
     private static (int Exit, string Stdout, string Stderr) RunToEnd(ProcessStartInfo start, IReadOnlyDictionary<string, string> environment, string[] arguments)
     {
