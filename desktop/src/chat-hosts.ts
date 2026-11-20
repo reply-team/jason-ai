@@ -569,9 +569,10 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
  * `JASON_CHAT_TURN=1`, in every mode, whatever the desktop inherited, so the jason it runs reads a request's content from
- * standard input only and runs a provider check's program by a bare name only; a Plan only turn carries `JASON_CONFINED=1`
- * beside it, so its jason also refuses the verbs of a person's word and of the installation, and no other turn carries
- * `JASON_CONFINED`, not even one the desktop inherited. The desktop's own calls of jason carry neither. No host's turn
+ * standard input only and runs a provider check's program by a bare name only; every turn that can only read and propose
+ * carries `JASON_CONFINED=1` beside it, Plan only on any host and every Codex turn outside Full access (Ask first, and
+ * Auto-edit, which runs as it), so its jason also refuses the verbs of a person's word and of the installation, and no
+ * other turn carries `JASON_CONFINED`, not even one the desktop inherited. The desktop's own calls of jason carry neither. No host's turn
  * carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
  * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
@@ -592,7 +593,10 @@ export function hostEnvironment(
         bundleVersion: string | null;
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
-        /** The turn's mode: Plan only alone sets `JASON_CONFINED`. Absent, a run that is no turn of a mode, none. */
+        /**
+         * The turn's mode: a turn that can only read and propose sets `JASON_CONFINED`, Plan only on any host and every Codex
+         * turn outside Full access. Absent, a run that is no turn of a mode, none.
+         */
         mode?: ChatMode;
         /**
          * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
@@ -625,7 +629,8 @@ export function hostEnvironment(
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
     env[chatTurnVariable] = '1';
-    if (options.mode === 'plan_only') env[confinedVariable] = '1';
+    const readsOnly = options.mode === 'plan_only' || (options.program === 'codex' && options.mode !== undefined && options.mode !== 'full_access');
+    if (readsOnly) env[confinedVariable] = '1';
     if (options.program === 'claude') {
         if (options.platform !== 'linux') env[scrub] = '1';
         env[maintainFolder] = '1';

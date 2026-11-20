@@ -4,8 +4,9 @@ namespace Jason.Contracts.Execution;
 /// The variable that confines one call of the CLI. Set to any non-empty value, an option of an operation verb that
 /// reads a file's content into a request takes only standard input, and <c>status --provider-cli</c> runs only a
 /// program it finds by a bare name in a fully qualified entry of the search path. It also refuses, before any request, every command of <c>Jason.Cli</c>'s <c>ConfinedVerbs</c>: a person's own word and the
-/// acts that change an installation, a higher bar and not a boundary. The desktop sets it on a chat turn in Plan only;
-/// no chat turn in Ask first, Auto-edit or Full access sets it, and those set <see cref="ChatTurnVariable"/> alone. It
+/// acts that change an installation, a higher bar and not a boundary. The desktop sets it on every chat turn that can only
+/// read and propose: Plan only on any host, and every Codex turn outside Full access (Ask first, and Auto-edit, which runs
+/// as it); no other chat turn sets it, and those set <see cref="ChatTurnVariable"/> alone. It
 /// confines the call it is set on and
 /// nothing that call starts: three starts drop it, a runtime the CLI starts, the role work a runtime launches and the
 /// terminal <c>session open</c> opens; every other child inherits it, and none reads it. The CLI and the runtime read
@@ -36,8 +37,8 @@ public static class Confinement
     /// <summary>
     /// The header the CLI sends on every request while the call is confined, valued <see cref="HeaderValue"/>: the desktop's
     /// chat marker as the runtime reads it. The runtime records it on a work item made, or whose input is edited, under it, so
-    /// a send written in a Plan only chat turn waits for the person whatever the send mode; a send written in a turn of Ask
-    /// first, Auto-edit or Full access carries no header, its actor is whoever the command names, and it follows the
+    /// a send written in a chat turn that can only read and propose waits for the person whatever the send mode; a send
+    /// written in any other chat turn carries no header, its actor is whoever the command names, and it follows the
     /// campaign's send mode as a send from a terminal does. A higher bar, not a boundary: the runtime cannot tell a person
     /// from a program that holds the token, and a request made around the CLI carries no header.
     /// </summary>

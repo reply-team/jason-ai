@@ -137,7 +137,7 @@ describe('a chat’s access mode', () => {
         expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
     });
 
-    it('on Codex, says Ask first only reads and proposes, in the menu and under the composer, and Claude Code’s Ask first in its own words', async () => {
+    it('on Codex, says Ask first reads and proposes, in the menu and under the composer, and Claude Code’s Ask first in its own words', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
@@ -333,8 +333,8 @@ const editing = () => screen.queryByRole('status', { name: 'Auto-edit is on' });
 const codexFullLine = 'Full access · Codex runs commands on this computer without asking, with no sandbox';
 const claudeFullLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
 const codexFullSays = 'Runs commands on this computer without asking, with no sandbox.';
-const codexAskSays = 'Reads and proposes only: Codex cannot ask before it acts.';
-const codexAskLine = 'Ask first · reads and proposes only: Codex cannot ask before it acts';
+const codexAskSays = 'Reads and proposes. Codex cannot ask before it acts.';
+const codexAskLine = 'Ask first · reads and proposes. Codex cannot ask before it acts';
 const codexAutoEdit =
     'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 

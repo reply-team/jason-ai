@@ -684,7 +684,11 @@ Claude Code.
   so the turn acts as you, with your files, your network and the runtime's loopback address, and nothing of Jason's
   holds it, since Codex runs no hook of Jason's: no card, none of the refusals of the sections below, and not the
   refusal to read the runtime's run file, the desktop's settings or the turn's own settings that a Claude Code turn
-  keeps in every mode. The line under the composer says **Full access · Codex runs commands on this computer without
+  keeps in every mode. Since it reads your `config.toml`, it reads your `shell_environment_policy` too: the turn pins
+  `JASON_DATA_DIR` and `JASON_CHAT_TURN` for the commands Codex runs, past an `inherit` or an exclude there, but a policy
+  that keeps only names it lists (`include_only`, or an include filter) still removes them, and `PATH`, which is never
+  pinned, can lose the folder of the `jason` Jason carries, so the `jason` a command runs may act on another
+  installation. The line under the composer says **Full access · Codex runs commands on this computer without
   asking, with no sandbox**. Choose Ask first or Plan only for a Codex chat that should only read. An administrator's
   `requirements.toml` can forbid Codex to run with no sandbox. Codex's source reads (not seen on a real machine) that
   Codex then refuses to start the turn: the chat shows Codex's own words and after them, every time, **If these words
@@ -695,10 +699,12 @@ Claude Code.
   not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not
   be acting in Full access here.** and keeps Full access. A fallback Codex does not report goes unseen. This is built
   on Codex's documentation and not seen on a real machine.
-- **Outside Full access, Codex only reads and proposes.** Codex cannot ask before it acts, so Ask first on Codex reads
-  and proposes only, and the menu says so: **Reads and proposes only: Codex cannot ask before it acts.** Auto-edit runs
-  in Ask first on Codex. Such a turn runs `exec --json --sandbox read-only` and asks for nothing, so no card and no rule
-  of the desktop applies to it. It reads the chat folder, the folders added to it and its
+- **Outside Full access, Codex reads and proposes.** Codex cannot ask before it acts, and the menu says so: **Reads and
+  proposes. Codex cannot ask before it acts.** Auto-edit runs in Ask first on Codex. Such a turn runs
+  `exec --json --sandbox read-only` and asks for nothing, so no card and no rule of the desktop applies to it. What holds,
+  and what is not known: the turn runs in Codex's read-only sandbox; the `jason` it runs carries `JASON_CONFINED` and
+  refuses your own acts and the installation's; whether a `jason` verb outside those reaches the runtime depends on that
+  sandbox's network, which has not been seen on macOS and Linux; and on Windows the sandbox hides the run file. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder. In Jason's data directory that is the settings file,
   `config/settings.json`, and, in an installation that keeps what a person sets up in `setup/`, the roles, the plugins
@@ -986,11 +992,13 @@ rights, as every UI token does; there is one level of trust.
 
 Under the chat, these things differ from a terminal:
 
-- **A file `jason` reads comes on standard input.** Every turn sets `JASON_CHAT_TURN`, so an option of `jason` that
+- **A file `jason` reads comes on standard input.** Every turn sets `JASON_CHAT_TURN` (a Codex turn in Full access can
+  clear it, and nothing refuses that), so an option of `jason` that
   reads a file's content into a request (`--file`, `--value-file`, `--note-file`, `--result-file`) takes only `-`, the
-  content coming on standard input, and `jason status --provider-cli` runs only a bare name found on the search path. In
-  Plan only the turn sets `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any
-  request; in the other modes what the chat runs is the mode's to say, above.
+  content coming on standard input, and `jason status --provider-cli` runs only a bare name found on the search path. A
+  turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, sets
+  `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any request; in the other
+  modes what the chat runs is the mode's to say, above.
 - **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
   every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
   by value, from the commands the host runs. `reply` signed in through its own store is unaffected.

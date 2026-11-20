@@ -346,10 +346,11 @@ export const codexFullAccessLine = 'Full access · Codex runs commands on this c
 
 /**
  * What the menu says of a mode on Codex where it says other than on Claude Code: Codex in `exec` cannot ask, so its Ask
- * first only reads and proposes, and its Full access runs with no sandbox. The other modes say what they say anywhere.
+ * first reads and proposes, in its read-only sandbox and with the jason it runs confined, and its Full access runs with no
+ * sandbox. The words claim no more than that holds. The other modes say what they say anywhere.
  */
 export const codexModeSays: Readonly<Partial<Record<DesktopChatMode, string>>> = {
-    ask_first: 'Reads and proposes only: Codex cannot ask before it acts.',
+    ask_first: 'Reads and proposes. Codex cannot ask before it acts.',
     full_access: 'Runs commands on this computer without asking, with no sandbox.',
 };
 

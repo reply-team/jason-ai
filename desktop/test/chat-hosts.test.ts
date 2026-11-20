@@ -395,7 +395,7 @@ test('the host\'s environment puts the bundled jason first on PATH and names the
     assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
-test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED in Plan only, whatever the desktop inherited in any letter case', () => {
+test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED on every turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, whatever the desktop inherited in any letter case', () => {
     for (const program of ['claude', 'codex'] as const) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
             for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only', undefined] as const) {
@@ -403,7 +403,8 @@ test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFIN
                     const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {}, ...(mode === undefined ? {} : { mode }) });
                     const said = `${program} ${platform} ${mode} ${JSON.stringify(inherited)}`;
                     assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], said);
-                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], said);
+                    const confined = mode === 'plan_only' || (program === 'codex' && mode !== undefined && mode !== 'full_access');
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), confined ? [['JASON_CONFINED', '1']] : [], said);
                 }
             }
         }

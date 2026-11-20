@@ -1325,17 +1325,17 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
     }
 });
 
-test('every turn, on either host and in every mode, carries the chat\'s variable, and only a Plan only turn carries JASON_CONFINED', async (t) => {
+test('every turn, on either host and in every mode, carries the chat\'s variable, and JASON_CONFINED only a turn that can only read and propose: Plan only on either host, and every Codex turn outside Full access', async (t) => {
     for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] satisfies ChatMode[]) {
         for (const host of ['claude', 'codex']) {
-            if (host === 'codex' && mode === 'auto_edit') continue;
             const r = rig(t, { env: { JASON_CONFINED: '1', jason_chat_turn: '' } });
             const { id } = await r.chat.create();
             // Every mode is chosen, Ask first among them: a new chat starts in Full access. On Codex a Full access record runs
-            // its turn in Full access, which carries the chat's variable and not JASON_CONFINED.
+            // its turn in Full access, which carries the chat's variable and not JASON_CONFINED; Auto-edit runs as Ask first.
             await r.chat.setMode(id, mode, 'claude');
             await r.turn(id, 'hello', { host });
-            assert.deepEqual(r.started, [mode], `${host} ${mode}: the turn started in it`);
+            const ran = host === 'codex' && mode === 'auto_edit' ? 'ask_first' : mode;
+            assert.deepEqual(r.started, [ran], `${host} ${mode}: the turn started in it`);
             const env = r.hosts()[0]?.env ?? {};
             if (host === 'claude') {
                 const args = r.hosts()[0]?.args ?? [];
@@ -1344,7 +1344,8 @@ test('every turn, on either host and in every mode, carries the chat\'s variable
             }
             const named = (name: string) => Object.entries(env).filter(([each]) => each.toUpperCase() === name);
             assert.deepEqual(named('JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], `${host} ${mode}`);
-            assert.deepEqual(named('JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], `${host} ${mode}`);
+            const confined = mode === 'plan_only' || (host === 'codex' && mode !== 'full_access');
+            assert.deepEqual(named('JASON_CONFINED'), confined ? [['JASON_CONFINED', '1']] : [], `${host} ${mode}`);
         }
     }
 });

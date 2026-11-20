@@ -346,8 +346,8 @@ applies to the turns a person starts by sending, from the next one on.
 
 - **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
   (below). Claude Code starts in its own default mode; what the permission model does not settle is a card. Codex runs
-  in its read-only sandbox: it cannot ask before it acts, so Ask first on Codex reads and proposes only, and the menu
-  says so (`codexModeSays` in the page).
+  in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it acts, so Ask first on Codex reads and
+  proposes, and the menu says so (`codexModeSays` in the page).
 - **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
@@ -382,7 +382,12 @@ applies to the turns a person starts by sending, from the next one on.
   (`codexArguments`). Codex in `exec` never asks, so it acts as the person with their files and network, and none of
   what follows holds it: no hook, no card, no deny rule, no refusal of the permission model, and not the refusal of the
   runtime's run file, the desktop's settings or the turn's own settings that every Claude Code turn keeps. It has no
-  version floor of Full access. An administrator's `requirements.toml` that does not allow `danger-full-access` makes
+  version floor of Full access. Reading the person's config.toml, it reads their `shell_environment_policy`, so it
+  pins `JASON_DATA_DIR` and `JASON_CHAT_TURN` by `-c shell_environment_policy.set.<NAME>` (`codexPinnedVariables`): at
+  openai/codex 9f2b87495b, read and not seen, session flags merge over config.toml table by table, so `set` adds to the
+  person's, and `set` is applied after `inherit` and the excludes and before `include_only`, so a policy that keeps only
+  listed names still removes them. PATH is never pinned, since `set` would replace the person's whole PATH, so such a
+  policy can also take the bundle's folder off it. An administrator's `requirements.toml` that does not allow `danger-full-access` makes
   Codex, at openai/codex 9f2b87495b (read, not seen), refuse to start: `codex exec` forces `approval_policy = "never"`
   (exec/src/lib.rs), so building its configuration fails (core/src/config/mod.rs) with its words on standard error and
   no event. A Full access Codex turn that ends so, before any line on standard output and with a failing exit, ends in
