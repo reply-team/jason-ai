@@ -116,10 +116,17 @@ public static class UiCommands
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var approvalId = parseResult.GetValue(approval);
             var questionId = parseResult.GetValue(question);
-            if (Refused(approvalId, questionId) is { } usage)
+            if (approvalId is not null && questionId is not null)
             {
-                env.Error.WriteLine(usage);
+                env.Error.WriteLine("Say one place: --approval or --question, not both.");
                 return Task.FromResult(ExitCodes.Usage);
+            }
+
+            if (NoItem(approvalId, questionId) is { } refused)
+            {
+                env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, retryable: false));
+                env.Error.WriteLine(refused.Message);
+                return Task.FromResult(ExitCodes.ApiError);
             }
 
             if (parseResult.GetValue(web))
@@ -138,13 +145,15 @@ public static class UiCommands
     }
 
     /// <summary>
-    /// Why the options name no place the link table takes, or null: one place at most, and an id of its own kind in the
-    /// shape the runtime gives it, since the address is made from it and the runtime is not asked whether it is one.
+    /// The refusal for an id that is not one of its kind in the shape the runtime gives it, or null: the address is made
+    /// from the id and the runtime is not asked, so text that names no item is refused here, by the code and exit the
+    /// runtime refuses an id it does not know with, as every other verb that takes an id ends on one.
     /// </summary>
-    private static string? Refused(string? approvalId, string? questionId) =>
-        approvalId is not null && questionId is not null ? "Say one place: --approval or --question, not both."
-        : approvalId is not null && !PublicId.IsWellFormed(AttentionLinks.ApprovalPrefix, approvalId) ? $"--approval takes an approval's id, {AttentionLinks.ApprovalPrefix}_ and 26 letters and digits, as approval list shows it."
-        : questionId is not null && !PublicId.IsWellFormed(AttentionLinks.QuestionPrefix, questionId) ? $"--question takes a question's id, {AttentionLinks.QuestionPrefix}_ and 26 letters and digits, as decision list shows it."
+    private static DesktopRefusal? NoItem(string? approvalId, string? questionId) =>
+        approvalId is not null && !PublicId.IsWellFormed(AttentionLinks.ApprovalPrefix, approvalId)
+            ? new("approval_not_found", $"--approval names no approval: an approval's id is {AttentionLinks.ApprovalPrefix}_ and 26 letters and digits, as approval list shows it.")
+        : questionId is not null && !PublicId.IsWellFormed(AttentionLinks.QuestionPrefix, questionId)
+            ? new("decision_not_found", $"--question names no question: a question's id is {AttentionLinks.QuestionPrefix}_ and 26 letters and digits, as decision list shows it.")
         : null;
 
     /// <summary>

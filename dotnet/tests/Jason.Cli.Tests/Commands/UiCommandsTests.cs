@@ -112,19 +112,38 @@ public class UiCommandsTests
         Assert.Contains(code, cli.Error.ToString(), StringComparison.Ordinal);
     }
 
-    /// <summary>An id of the other kind or of no id's shape, or both options at once, is a usage error and hands nothing on.</summary>
+    /// <summary>
+    /// An id of the other kind or of no id's shape names no item, so it is refused as the runtime refuses an id it does not
+    /// know, by the same code and exit — understood, not a usage error, as every other verb that takes an id ends on one —
+    /// and hands nothing on. Breaks if text that is not such an id reaches an address.
+    /// </summary>
     [Theory]
-    [InlineData("--approval", Question)]
-    [InlineData("--question", Approval)]
-    [InlineData("--approval", "apr_7")]
-    [InlineData("--approval", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6/../../feed")]
-    public async Task Open_refuses_an_id_that_is_not_one_of_its_kind(string option, string id)
+    [InlineData("--approval", Question, "approval_not_found")]
+    [InlineData("--question", Approval, "decision_not_found")]
+    [InlineData("--approval", "apr_7", "approval_not_found")]
+    [InlineData("--approval", "<id>", "approval_not_found")]
+    [InlineData("--approval", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6/../../feed", "approval_not_found")]
+    public async Task Open_refuses_an_id_that_is_not_one_of_its_kind(string option, string id, string code)
     {
         var opener = new HandingOpener();
         using var cli = new CliRun(Opened, opener: opener);
         var env = cli.Environment with { Desktop = FakeRegistration.Present(cli.Environment) };
 
-        Assert.Equal(ExitCodes.Usage, await CliApp.RunAsync(["ui", "open", option, id], env, Ct));
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["ui", "open", option, id], env, Ct));
+
+        Assert.Empty(opener.Urls);
+        Assert.Equal(0, cli.Requests);
+        Assert.Contains("\"code\":\"" + code + "\"", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Two places at once is a usage error, and hands nothing on.</summary>
+    [Fact]
+    public async Task Open_takes_one_place_at_most()
+    {
+        var opener = new HandingOpener();
+        using var cli = new CliRun(Opened, opener: opener);
+        var env = cli.Environment with { Desktop = FakeRegistration.Present(cli.Environment) };
+
         Assert.Equal(ExitCodes.Usage, await CliApp.RunAsync(["ui", "open", "--approval", Approval, "--question", Question], env, Ct));
 
         Assert.Empty(opener.Urls);
