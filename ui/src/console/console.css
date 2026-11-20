@@ -495,12 +495,16 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent and New chat: two light buttons across the width, one above the other. */
+/* New GTM agent with its caret, and New chat under them: light buttons across the width. */
 .jc-console .newstack {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin: 2px 14px 8px;
+}
+.jc-console .newrow {
+    display: flex;
+    gap: 8px;
 }
 .jc-console .newstack .newbtn {
     margin: 0;
@@ -508,6 +512,9 @@
     font-weight: 500;
     padding: 8px 10px;
     border-radius: 10px;
+}
+.jc-console .newrow .newbtn {
+    flex: 1;
 }
 .jc-console .caret {
     flex: none;
@@ -522,6 +529,18 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .newrow .caret {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.jc-console .newrow .caret:hover,
+.jc-console .newrow .caret[aria-expanded='true'] {
+    background: var(--panel);
+    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -545,6 +564,9 @@
     border-radius: 12px;
     padding: 4px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+.jc-console .menuwrap.create > .menu {
+    top: calc(100% + 4px);
 }
 .jc-console .menuitem {
     display: grid;

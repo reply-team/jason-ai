@@ -1567,16 +1567,6 @@ function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, c
  * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
  * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
  */
-/**
- * The line that says whose chat it is, standing at the top of every chat but the Feed from before its first message:
- * the agent's name as the runtime lists the campaign, else the name the chat was made with, or that it is about none.
- */
-function whoseLine(chat: Chat): string {
-    if (chat.campaignId === null) return t('chat.whose.none');
-    const listed = campaigns.value.find((each) => each.id === chat.campaignId)?.name;
-    return t('chat.whose.agent', { name: listed ?? chat.title });
-}
-
 export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?: boolean }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -1764,7 +1754,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
-                {chat.main ? null : <span className="chat-whose">{whoseLine(chat)}</span>}
+                {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
+                {chat.main || chat.campaignId !== null ? null : (
+                    <span className="chat-whose">{t('chat.whose.none')}</span>
+                )}
                 {chat.main ? null : chat.renaming === null ? (
                     !underHead && (
                         <button

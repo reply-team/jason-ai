@@ -15,9 +15,9 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations, feedId } from './state';
 
-// Every chat says whose it is on one standing line at the top of its panel: "Chat · <agent's name>" for an agent's chat,
-// "Chat · no agent" for a chat about no agent. The line is there before the first message and stays after it. The Feed
-// is not a chat of an agent or of none, and carries no such line.
+// A chat that belongs to no agent says so on one standing line at the top of its panel, "Chat · no agent", before its
+// first message and after it. An agent's chat carries no such line, since its header already names the agent, and the
+// Feed carries none.
 
 function renderConsole(where: Mode = 'live', desktop: StubDesktop = chatDesktop()): StubDesktop {
     mode.value = where;
@@ -102,19 +102,20 @@ describe('the line that says whose chat it is', () => {
         expect(lineText()).toBe('Chat · no agent');
     });
 
-    it('names the agent on an agent’s chat, before its first message and after it', async () => {
+    it('draws no line on an agent’s chat, whose header names it, before its first message or after it', async () => {
         const desktop = renderConsole();
         await openSpring();
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
-        expect(lineText()).toBe('Chat · Spring');
+        expect(within(shownPane()!).getByRole('textbox', { name: 'Your message' })).toBeTruthy();
+        expect(line()).toBeNull();
         const id = await send(desktop, 'Who replied this week?');
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
         await waitFor(() => expect(chats.value[id]?.running).toBe(false));
         expect(screen.queryByRole('heading', { name: 'What should Jason do in Spring?' })).toBeNull();
-        expect(lineText()).toBe('Chat · Spring');
+        expect(line()).toBeNull();
     });
 
-    it('names the agent as the runtime lists it, also where the person gave its conversation a name of their own', async () => {
+    it('draws no line on an agent’s conversation the person gave a name of their own', async () => {
         const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000S1',
@@ -125,7 +126,7 @@ describe('the line that says whose chat it is', () => {
         renderConsole('live', desktop);
         await openSpring();
         expect(await screen.findByText('The kept words about Spring')).toBeTruthy();
-        expect(lineText()).toBe('Chat · Spring');
+        expect(line()).toBeNull();
     });
 
     it('stands first in the chat’s bar, before the bar’s buttons, in the quiet small type of a label', async () => {

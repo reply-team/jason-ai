@@ -92,7 +92,6 @@ export const en = {
     'chat.tab.empty': 'No chats yet.',
     'chat.tab.pick': 'Choose a chat, or start a new one.',
     'chat.tab.running': 'running',
-    'chat.whose.agent': 'Chat · {name}',
     'chat.whose.none': 'Chat · no agent',
     'chat.code.copy': 'Copy code',
     'chat.code.copied': 'Copied',
