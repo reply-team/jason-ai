@@ -324,7 +324,7 @@ public static class UninstallRunner
                 afterThePackage.Add(
                     $"The runtime's start at logon could not be taken away: {refusal.Message} With the package off it starts nothing, since the "
                     + $"program it runs is gone; `systemctl --user disable {AutostartArtifacts.UnitName}` and deleting "
-                    + $"{RuntimeAutostartCommands.Removal(env, registrar.Platform, leavesNoMark: true).ArtifactPath} take it off.");
+                    + $"{AutostartArtifacts.ArtifactPath(AutostartPlatform.Linux, AutostartRegistrars.Home, string.Empty)} take it off.");
                 return null;
             }
 

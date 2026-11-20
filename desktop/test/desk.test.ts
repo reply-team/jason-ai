@@ -318,7 +318,8 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.ok(owed.includes('if (packageMoved() !== null) await restartPackage();'), owed);
     assert.equal(main.split('restartPackage()').length - 1, 1, 'restarted only where still owed');
     assert.equal(main.split('restartIfOwed()').length - 1, 2, 'by the item and the notice alone');
-    assert.ok(main.includes("runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout);"));
+    // A runtime that does not answer leaves the offer standing: a hung old build is the one the restart is for.
+    assert.ok(main.includes("runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout) ?? runtimeVersion;"));
     assert.ok(main.includes("paired: () => {\n            begin();\n            if (form?.form === 'deb') void readRuntimeAgain().catch(() => undefined);\n        },"));
     // Its runtime stopped, the window goes quiet before the relaunch, as an update's install makes it.
     assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,\n        relaunch: () => {\n            quitting = true;\n            repairer.stop();\n            modeDeps.relaunch();\n        },'));

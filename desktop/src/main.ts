@@ -547,7 +547,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // and before a press of the restart, which a runtime already on this build does not need: it would end a running turn
     // for nothing. Where the restart is no longer owed the item goes.
     const readRuntimeAgain = async () => {
-        runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout);
+        // A runtime that does not answer keeps what was known of it: a hung old build is the one the restart is for.
+        runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout) ?? runtimeVersion;
         desk.renderMenu();
         toPage('updates.changed');
     };
