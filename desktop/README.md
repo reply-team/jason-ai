@@ -51,7 +51,7 @@ of its own rather than a TOML package. Both are read from the desktop's own envi
 Dock or the Start menu without a `CLAUDE_CONFIG_DIR` that the person's shell sets names the servers of the home's file
 instead; a wrong guess names other servers and harms nothing. Only the main process reads the files, whole, and only the
 names leave them, each made one line, its unseen characters taken out and drawn in forty characters at most, on
-`setup.status()`'s host, which a paired browser tab reads too. A file that is not there lists nothing; one that cannot be
+`setup.status()`'s host. A file that is not there lists nothing; one that cannot be
 read or parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No file
 can fail or hang the listing: only a regular file is opened, none over 64 MiB is read, and one nested more than 64 deep
 or naming more than 1,000 servers lists nothing. Each file's last answer, its names or its kind and never its text, is
@@ -612,7 +612,7 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   in the page, on the link or anywhere else, gives the page one second in which that one address may open, at most one
   tab per act. Both moments are read from a monotonic clock (`performance.now()`), and a moment before the gesture is
   refused. Any other address opens nothing. The view's pop-ups stay denied, the policy is
-  unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
+  unchanged and the page's file is not edited. The open is logged as
   `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
   all: a name the page names ahead (`<link rel="dns-prefetch">`) is looked up below every guard above, and this is what

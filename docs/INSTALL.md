@@ -465,7 +465,7 @@ Both take the skills from `jason-skills.zip`, the package of them the release th
 checked against that release's `checksums.txt` (§1). `--source` takes them from somewhere else instead: a checkout,
 or a git repository at a ref, which needs `git`.
 
-Then place the browser UI, the build Jason Desktop draws (this release's build draws its console in Jason Desktop and in a tab the desktop opens; any other tab opens on the demo, or, while something waits, shows where to get the desktop and what waits):
+Then place the browser UI, the build Jason Desktop draws (this release's build draws its console in Jason Desktop alone, and one sentence in any other tab):
 
 ```sh
 jason ui install

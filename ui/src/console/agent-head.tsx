@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useApi } from '../api/context';
 import { essentials } from '../platform/console-shell';
-import { can } from '../platform/places';
 import { navigate, route, type CampaignTab, type Route } from '../router';
 import { Tabs } from '../layout/tabs';
 import { agentKind, firstTabName, kindWord } from '../screens/campaigns/kind';
@@ -12,7 +11,7 @@ import { isUnmade, openConversation, restartChat } from './chat';
 import type { Chat } from './chat-model';
 import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
-import { changeChat, chats, conversations, inTab } from './state';
+import { changeChat, chats, conversations } from './state';
 
 // The agent's header: one for every place the agent has in the console, its chat and its page's tabs, drawn by the area
 // above them and kept while the person moves between that agent's tabs. Its name, its state and its type are the
@@ -122,38 +121,32 @@ function ConversationMenu({ agent }: { agent: string }) {
             </button>
             {open && (
                 <div ref={menu} className="agent-menu" role="menu" aria-label="This agent's conversation">
-                    {can('chat.rename') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={kept === undefined || chat?.removing === true}
-                            title={kept === undefined ? keptTitle : 'Give this conversation a name of your own'}
-                            onClick={() => choose(() => void begin(agent, kept!, 'renaming'))}
-                        >
-                            Rename conversation
-                        </button>
-                    )}
-                    {!inTab() && can('chat.restart') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={id === undefined || kept === undefined || busy}
-                            title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                            onClick={() => choose(() => restartChat(id!))}
-                        >
-                            Start conversation fresh
-                        </button>
-                    )}
-                    {!inTab() && can('chat.remove') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={kept === undefined || busy}
-                            onClick={() => choose(() => void begin(agent, kept!, 'removing'))}
-                        >
-                            Remove conversation
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        role="menuitem"
+                        disabled={kept === undefined || chat?.removing === true}
+                        title={kept === undefined ? keptTitle : 'Give this conversation a name of your own'}
+                        onClick={() => choose(() => void begin(agent, kept!, 'renaming'))}
+                    >
+                        Rename conversation
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        disabled={id === undefined || kept === undefined || busy}
+                        title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
+                        onClick={() => choose(() => restartChat(id!))}
+                    >
+                        Start conversation fresh
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        disabled={kept === undefined || busy}
+                        onClick={() => choose(() => void begin(agent, kept!, 'removing'))}
+                    >
+                        Remove conversation
+                    </button>
                 </div>
             )}
         </div>
@@ -225,12 +218,12 @@ export function AgentHead({ id, tab }: { id: string; tab: CampaignTab }) {
                             }}
                         />
                     )}
-                    {can('chat.create') && <ConversationMenu agent={id} />}
+                    <ConversationMenu agent={id} />
                 </div>
             </div>
             <Tabs
                 tabs={[
-                    ...(can('chat.create') ? [{ key: 'chat' as CampaignTab, label: 'Chat' }] : []),
+                    { key: 'chat' as CampaignTab, label: 'Chat' },
                     ...pages.map((each) => ({
                         key: each as CampaignTab,
                         label: label(each),

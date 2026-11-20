@@ -2826,8 +2826,8 @@ jobs:
             npx playwright install chromium firefox webkit
           fi
 
-      # With the sealed probe: a hostile page in the console's frame tries every way out, in each of the three engines
-      # (ui/playwright.config.ts). It runs here and nowhere else.
+      # With the sealed probe: a hostile page under sealed/, framed and opened by itself, tries every way out, in each of
+      # the three engines (ui/playwright.config.ts). It runs here and nowhere else.
       - name: Browser smoke
         env:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason

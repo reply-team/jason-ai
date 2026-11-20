@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import type { JasonDesktop } from '../platform/desktop';
 import { followStanding, fullAccessStanding, readStandingAgain, takeBackStanding } from '../platform/full-access';
-import { setPlace } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
@@ -22,7 +21,6 @@ const without = (...parts: (keyof JasonDesktop)[]): JasonDesktop => {
 
 afterEach(() => {
     cleanup();
-    setPlace('window');
 });
 
 describe('A desktop without the Open in part', () => {

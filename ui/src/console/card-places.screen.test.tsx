@@ -1,15 +1,12 @@
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
 import type { DesktopConversationRecord, DesktopKeptEntry } from '../platform/desktop';
-import { loadMode, mode } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
@@ -254,43 +251,5 @@ describe('where the two cards stand', () => {
                 [setupChat, 'ai_setup', 'schema'],
             ]),
         );
-    });
-});
-
-describe('the two cards in a browser tab', () => {
-    it('draw as in the window, and each button opens its place there', async () => {
-        const desktop = stubDesktop(setupFound);
-        const stand = standInBridge(desktop);
-        const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
-        setPlace('tab', tab);
-        await loadMode(tab);
-        desktop.keep({
-            ...setUp([...turn('ai_setup'), { kind: 'user', text: 'And Reply?' }, asking('reply_setup', 'There.')]),
-            mode: 'ask_first',
-        });
-        const fake = answering(new FakeApi().answer('ui.tokens', 'ui.tokens/two'));
-        await session.bootstrap();
-        try {
-            render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
-            const pane = await openChat('Setting up');
-            const reply = await card(pane, 'Reply');
-            expect(words(reply)).toBe(`Reply ${replySentence} Open Accounts`);
-            expect(words(await card(pane, 'AI'))).toBe(`AI ${aiSentence} Open Connect`);
-            fireEvent.click(within(reply).getByRole('button', { name: 'Open Accounts' }));
-            await waitFor(() => expect(route.value).toEqual({ screen: 'accounts' }));
-            // Each place says itself what only the desktop's window does.
-            const offHere = "Done in Jason Desktop's own window.";
-            await waitFor(() =>
-                expect(within(shownPane()).getByRole('region', { name: 'Reply accounts' })).toBeTruthy(),
-            );
-            await waitFor(() => expect(within(shownPane()).getAllByText(offHere).length).toBeGreaterThan(0));
-            const again = await openChat('Setting up');
-            fireEvent.click(within(await card(again, 'AI')).getByRole('button', { name: 'Open Connect' }));
-            await waitFor(() => expect(within(shownPane()).getByRole('heading', { name: 'Connect' })).toBeTruthy());
-            await waitFor(() => expect(within(shownPane()).getAllByText(offHere).length).toBeGreaterThan(0));
-        } finally {
-            cleanup();
-            setPlace('window');
-        }
     });
 });

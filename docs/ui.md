@@ -24,10 +24,9 @@ the address of one item, `#/attention/approvals/<id>` or `#/attention/questions/
 `ui/custom`, `jason ui open --web` opens such a link in your default browser (`--web --no-open` prints it); with no
 build of your own it asks nothing, opens nothing and refuses with `custom_ui_not_installed`. Once paired, a bookmark of
 `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts. The build of this release draws its console in
-Jason Desktop and in a tab the desktop opens; any other tab is neither, so it opens on the demo, or, while something
-waits, on the one page that says Live Mode is only available in Jason Desktop, where to download it, what waits and
-where to decide it ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom` draws whatever it
-draws.
+Jason Desktop alone; in any other tab it draws one sentence, that this is the place for a web interface of your own and
+to ask your agent how to build one ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom`
+draws whatever it draws.
 
 On Windows a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item, each on the desktop's
@@ -48,7 +47,7 @@ If nothing is installed, `jason ui pair` says so with the code `ui_not_installed
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
-`Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+`Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to no other.
 Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
 name serves nothing.
 
@@ -101,34 +100,11 @@ The build's own layout is trusted, and so is whoever can write under `<data>/ui/
 link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
 asks for it.
 
-### The demo in a browser tab
-
-The release's build carries one page there, `sealed/demo.html`: the demo page Jason Desktop shows in Demo, the same file
-byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
-it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
-switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
-other address brings back where the tab was before: the console in a tab the desktop opened, and in a tab with no
-desktop the page that tab opens on ([below](#settings-and-chat-in-the-browser)). Nothing is kept of this in your
-installation and nothing is asked: the runtime is not told, the desktop is not asked and its mode is not changed, and
-your installation is as it was. The tab alone remembers which of Demo and Live you pressed last, in its session storage,
-so a reload of that tab keeps it; another tab does not. A reload at `#/demo` shows the page
-again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
-the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
-
-The page is shown in a frame that keeps scripts alone, `sandbox="allow-scripts"`, with no feature delegated (`allow=""`)
-and no referrer: never the same origin, so it holds nothing of the runtime's address, the UI's token included; no form,
-pop-up, download, dialog or move of the tab. Its words in the strip are the page's own; its numbers and states are samples
-the page carries, never the runtime's. Narrower than the desktop's window ever shows the page, 900 pixels, the page keeps
-that width and scrolls sideways, and the switch stands in a strip of its own above it.
-
-The addresses the page holds are counted in [`desktop/demo/addresses.txt`](../desktop/demo/addresses.txt), each with why
-it is inert there; the UI's guards and the desktop's tests hold the page to that list exactly. What keeps them inert is
-the content policy the page is served under, which in a frame is the one thing between its script and the network: a
-hostile page put where the demo page stands aims every way out it can name (a fetch, an image, a WebSocket, a form, a
-pop-up, the tab's address, the frame's own move) at a server on the loopback that answers anything, and at a file the UI
-serves, and the server must hear nothing and the file must not be reached; it reads nothing of the console's storage or
-of the page above it either (the sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium,
-Firefox and WebKit, and nowhere else.
+The build of this release holds nothing under `sealed/`. What keeps a page there unable to act is tried in the browser:
+a hostile page put under `sealed/` of a build of one's own, opened by itself, aims every way out it can name (a fetch,
+an image, a WebSocket, a form, a pop-up, the tab's address, its own move) at a server on the loopback that answers
+anything, and at a file the UI serves, and the server must hear nothing and the file must not be reached (the sealed
+probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium, Firefox and WebKit, and nowhere else.
 
 ## Paired browsers
 
@@ -312,9 +288,7 @@ and a box for your own answer. Under the mailbox an email goes
 from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
 not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
 wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
-anywhere else. In a browser the console is the same, and a campaign's Chat
-and the Start screen work only in the desktop's window and in a tab the desktop opened; any other tab draws no console
-([below](#settings-and-chat-in-the-browser)).
+anywhere else. A browser tab draws no console ([below](#settings-and-chat-in-the-browser)).
 
 ## Performance
 
@@ -550,33 +524,18 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it. Its **Notifications** section is [described below](#notifications-in-settings).
 
-**The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
-Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
-the desktop, while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
-is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
-account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
-Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
-only place that approves
-([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab draws no console, whatever the installation holds and whatever the address
-names (the address is left as it is). It draws one page of text, centred, with the Demo | Live switch at the top right:
-"Live Mode is only available in Jason Desktop.", then "To access Live Mode, download Jason Desktop." with a link to the
-releases page and the sentence that the desktop app starts an AI session locally on your computer, and then that you can
-build your own web interface or work directly with Jason from a terminal session with your AI using the installed Jason
-skills. A tab opens on that page only while approvals or questions wait, or when the read of them fails; with nothing
-waiting it opens on the demo, as a press of Demo does (until the read answers, only the switch is drawn). A quiet line
-under the words counts what waits and says where to decide: in Jason Desktop, or ask your agent what Jason is waiting
-for, or run `jason approval list` and `jason decision list`, as the toast's pointer does; when the read fails there is no
-line. Once you press Live or Demo, that tab keeps your choice over a reload, and `#/demo` in the address still means the
-demo. The switch's Demo shows the demo in that tab alone, and its Live shows the page and stays. The default Demo takes the
-address's place, so the address a person came with is not kept once they press Live; the page ignores an address anyway. The runtime starts no AI and no process for a screen, in either case.
+**In a browser tab.** The console is drawn in Jason Desktop's own window alone. A browser tab at the runtime's `/ui/`,
+over the build of this release, draws one sentence and nothing else, whatever the address names: "This is the place for
+a web interface of your own. To build one, ask your agent how." It has no link, no Demo and no console, reads no pairing and
+asks the runtime nothing. A build of your own in `ui/custom` is served there instead ([above](#where-the-page-comes-from)).
 
 ## Accounts
 
 One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
 the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
 the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
-box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
-acts are the desktop's and offers none. The page writes no setting and adds no provider. The notification channels are not
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page.
+The page writes no setting and adds no provider. The notification channels are not
 here: they are the **Notifications** section of Settings.
 
 ## Notifications in Settings

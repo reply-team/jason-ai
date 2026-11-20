@@ -182,16 +182,11 @@ function topLevel(list: string): string[] {
 const cuts = /line-clamp|max-height|overflow(-[xy])?: (hidden|clip)|text-overflow/;
 const hides = /display: none|visibility: hidden|opacity: 0(?![.\d])|(^|[ ;])height: 0/;
 
-/** The sheets the chat and its cards are drawn with: those the desktop's window and the browser tab's chat import. */
-const sheetsOfTheChat = [
-    ...new Set(
-        ['src/console/mount.tsx', 'src/screens/chat/tab-chat.tsx'].flatMap((file) =>
-            Array.from(readFileSync(file, 'utf8').matchAll(/^import '(\.[^']+\.css)';$/gm), (sheet) =>
-                posix.join(posix.dirname(file), sheet[1]!),
-            ),
-        ),
-    ),
-];
+/** The sheets the chat and its cards are drawn with: those the console's mount imports. */
+const sheetsOfTheChat = Array.from(
+    readFileSync('src/console/mount.tsx', 'utf8').matchAll(/^import '(\.[^']+\.css)';$/gm),
+    (sheet) => posix.join('src/console', sheet[1]!),
+);
 
 /** The rules that could ever reach an element: in any state of it (hovered, focused, disabled), in either theme. A rule
  * of a pseudo-element never hides the element itself, and a selector this document cannot read is not one a browser
@@ -441,13 +436,12 @@ describe('what waits in an agent’s chat', () => {
         const { fake } = renderConsole();
         fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
         const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
-        // Both shells' own sheets and the console's, read from their imports.
+        // The console's own sheets, read from its mount's imports.
         expect(sheetsOfTheChat).toEqual(
             expect.arrayContaining([
                 'src/console/console.css',
                 'src/console/harness.css',
                 'src/console/chat-cards.css',
-                'src/screens/chat/tab-chat.css',
             ]),
         );
         expect(sheetsOfTheChat.length).toBeGreaterThanOrEqual(5);

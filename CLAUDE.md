@@ -67,10 +67,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   absent the runtime is unchanged (`UiGuardTests`). A UI token has the run token's rights: one level of trust, the
   machine's user. The UI is tested in three layers (`ui/README.md`, "Testing"): unit tests of dense logic in Node, screen tests against the exchanges the runtime's own tests recorded under
   `docs/api/fixtures/` (`ApiFixtures`, held one-to-one with the files and rewritten only under
-  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Nine guards hold the layers: the unit project
+  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Eight guards hold the layers: the unit project
   runs without a DOM and may not import React; no `.json` under `ui/` but the configuration; a dependency allowlist; the
   fixture catalog; the console's templates (markup only from its tag, into the page only through its painter, no
-  inline handler or style); the desktop seam, its members named once more; the classic shell's chunk, which reaches no console file but the few it shares; only the smoke's harness starts processes;
+  inline handler or style); the desktop seam, its members named once more; only the smoke's harness starts processes;
   one CI job runs all of it.
 
 ## Conventions

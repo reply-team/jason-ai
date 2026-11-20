@@ -3,7 +3,6 @@ import type { CampaignSummary, CampaignSummaryResponse, CampaignSummaryRow, Page
 import { parseRoute } from '../router';
 import * as store from '../screens/campaigns/store';
 import { act, define } from './actions';
-import { offUnless } from './off';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
 import { toCampaignRow } from './live';
@@ -77,9 +76,7 @@ export function campaignsView(): Html {
                             No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the
                             AI sets it up with you.
                         </p>
-                        <button class="btn sm p" type="button" ${act('campaigns.start')} ${offUnless('chat.create')}>
-                            New chat
-                        </button>
+                        <button class="btn sm p" type="button" ${act('campaigns.start')}>New chat</button>
                     </div>`
                   : html`<div class="tscroll" ${scrollAttrs('Agents')}>
                         <table class="t">
@@ -106,12 +103,7 @@ export function campaignsView(): Html {
                                                 <button class="btn sm" type="button" ${act('campaigns.open', row.id)}>
                                                     Open
                                                 </button>
-                                                <button
-                                                    class="btn sm"
-                                                    type="button"
-                                                    ${act('campaigns.chat', row.id)}
-                                                    ${offUnless('chat.create')}
-                                                >
+                                                <button class="btn sm" type="button" ${act('campaigns.chat', row.id)}>
                                                     Chat
                                                 </button>
                                             </td>

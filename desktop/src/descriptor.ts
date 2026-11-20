@@ -47,6 +47,6 @@ export function pairingLink(stdout: string, origin: string): string | null {
 }
 
 /** Whether an address is a page of the runtime's own UI: at the runtime's origin, under `/ui/`. */
-export function isOwnPage(url: string, origin: string): boolean {
+function isOwnPage(url: string, origin: string): boolean {
     return loopbackOrigin(url) === origin && new URL(url).pathname.startsWith('/ui/');
 }

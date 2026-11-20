@@ -5,7 +5,6 @@ import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { registry } from '../platform/slots';
-import { setPlace } from '../platform/places';
 import { mode, type Mode } from '../platform/mode';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
@@ -551,14 +550,6 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
         }
     });
 
-    it('draws no band and no room in a browser tab on a Mac, which keeps its own title bar', async () => {
-        setPlace('tab', mac());
-        renderConsole(mac(), 'live');
-        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
-        expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
-        expect(band()).toBeNull();
-    });
-
     it('draws no band on Windows or Linux, whose buttons stand over the strip', async () => {
         for (const platform of ['win32', 'linux'] as const) {
             renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
@@ -671,15 +662,7 @@ describe('the strip in the Windows and Linux desktop’s window, whose caption b
         }
     });
 
-    it('leaves nothing in a browser tab on Windows or Linux, nor in the Mac’s window', async () => {
-        for (const platform of overlaid) {
-            setPlace('tab', on(platform));
-            renderConsole(on(platform), 'live');
-            await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
-            expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay'), platform).toBe(false);
-            cleanup();
-        }
-        setPlace('window');
+    it('leaves nothing in the Mac’s window', async () => {
         renderConsole(Object.assign(stubDesktop(), { platform: 'darwin' as const }), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay')).toBe(false);

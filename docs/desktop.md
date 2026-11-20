@@ -145,15 +145,13 @@ shows before anything is typed and what you send waits, while the window is open
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
   conversation to its foot above the box; opening a chat leaves its place alone.
 - While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
-  **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
-  a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
+  **Stop** otherwise: with the box empty, while the model's name is still to be typed, and while a stop is under way. What you send with the arrow is
   queued. It shows in the conversation as your message, with "Queued · Jason takes it when this turn ends" under it,
   and goes as your next message once the turn ends well. A message you send while one is queued is added under it, a
   blank line between, and the two go together. **Take back** puts the whole queue into the box when the box is empty.
   Escape in the box stops the turn, with words typed or none, except while a menu, a list, the search box or a dialog is
   open on the screen: then the key is theirs, and the sidebar's menus and the search box close by it. A turn you stop,
-  and a turn that fails, gives the queued words back to the box, above what you typed there, and so does a turn that
-  ends while a tab may no longer send to its chat; nothing is sent by itself.
+  and a turn that fails, gives the queued words back to the box, above what you typed there; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
@@ -269,14 +267,12 @@ opens a folder in the place you used last, and its arrow lists every place avail
 - **The file manager**: File Explorer on Windows, Finder on macOS, and on Linux whatever `xdg-open` shows a folder with; the
   entry is absent where `xdg-open` is not found. And **Copy path**, which puts the folder's path on the
   clipboard.
-- **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
-  ([below](#the-chat-in-a-browser-tab)).
 
 On Windows and macOS, the row of an installed application shows that application's own icon, read at run time. On Linux,
 and for rows with no application of their own, the menu keeps its glyphs.
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
+otherwise the first place of the list. Copy path and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
@@ -351,34 +347,6 @@ the entry is shown but cannot be chosen, and says to stop the turn or wait for i
 continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
 this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
 words.
-
-### The chat in a browser tab
-
-**Browser** opens the console in a tab of your system's browser, drawn as the window draws it, with the chats the window
-shows, for as long as the desktop runs. Everything that reads the runtime works there as it does in the window: the
-Dashboard, Needs you, People, Agents, Accounts as far as the runtime knows them, Performance, Activity, Work items,
-System, Settings and the search, and the chat's list of conversations, a conversation and the box. A tab sends only to a
-chat in Ask first or Plan only; for a chat in any other mode its box is locked, with a sentence naming the mode. A tab
-never answers a permission card or a plan card, which say they are answered in Jason Desktop, never changes a chat's mode
-and never chooses Full access, and a chat started from a tab starts in Ask first, whatever the standing choice of Full
-access says. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
-with one sentence, "Done in Jason Desktop's own window.": the account acts of Connect and of the Accounts page, the access
-modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
-shows the demo page in that tab alone and leaves the desktop's mode as it is
-([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
-draws no Start fresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
-holds Rename conversation alone. The tab shows the
-Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
-
-The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
-on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
-a tab the desktop opened holds the chat; any other tab draws no console: it opens on the demo, or, while something waits, on one page that
-says Live Mode is only available in Jason Desktop ([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
-not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
-`127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
-which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
-still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
-`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation.
 
 ## The demo
 
@@ -490,14 +458,9 @@ navigation to the address as it refuses every other, then opens that one address
 of your own click or Enter in the page and at most once in two seconds, so the page cannot open it by itself. Said
 plainly: the link opens only right after a click or Enter of yours in the demo, so any real click or Enter in the page
 gives the page one second in which that one address may open, at most one tab per act. Any other
-address, the same one with a path, a query, a fragment or another scheme included, opens nothing. In a browser tab the
-address is text.
+address, the same one with a path, a query, a fragment or another scheme included, opens nothing.
 
-**In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
-with its own switch over the page's strip, while the desktop stays on your installation
-([ui.md](ui.md#the-demo-in-a-browser-tab)).
-
-**What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
+**What is not in the demo.** The demo has no chat, no Connect and no Open in, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH, no Uninstall Jason… and no Remove
 What Jason Placed:
 each belongs to your own installation, which **Live** opens. The page is drawn in the light theme it was built in,
@@ -534,7 +497,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   was and the refusal is said in the runtime's own words. Use changes only the default: a work item, a campaign or a role
   that names a profile keeps it, work already running finishes on the program it started on, the chat is not touched (each
   chat's program is chosen in its own model menu, and a new chat starts as before), and neither is the host Open in
-  starts a session of your own on (`agent.interactive_host`). In a browser tab it is drawn off with the other acts.
+  starts a session of your own on (`agent.interactive_host`).
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's

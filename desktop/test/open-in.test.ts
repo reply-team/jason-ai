@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { invokeChannels, handle, RefusedSender, type IpcRegistrar } from '../src/ipc.ts';
-import { defaultPlace, editorLine, fileManager, fileManagerLine, findEditor, OpenIn, placesFound, type Line, type OpenInDeps, type PlaceId, type Probes } from '../src/open-in.ts';
+import { defaultPlace, editorLine, fileManager, fileManagerLine, findEditor, OpenIn, placeIds, placesFound, type Line, type OpenInDeps, type PlaceId, type Probes } from '../src/open-in.ts';
 import { editorEnvironment } from '../src/open-in-env.ts';
 import { personEnvironmentOf, type PersonEnvironment } from '../src/mode.ts';
 import { startDetached } from '../src/open-in-start.ts';
@@ -127,7 +127,7 @@ const keptChats = [
     conversation(chatB, { sessions: { codex: 'thread-b' }, plain_sessions: ['codex'], chosen: { host: 'codex', model: null, effort: null } }),
 ];
 
-function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; cliErr?: string; remembered?: PlaceId | null; chats?: Conversation[]; running?: string[]; chatFolder?: string; browser?: () => Promise<string | null> } = {}): Bench {
+function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; cliErr?: string; remembered?: PlaceId | null; chats?: Conversation[]; running?: string[]; chatFolder?: string; } = {}): Bench {
     const cliCalls: string[][] = [];
     const cwds: (string | undefined)[] = [];
     const started: Line[] = [];
@@ -178,7 +178,6 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
         chatFolder: () => options.chatFolder ?? 'C:\\data\\desktop\\chat',
         continueFlags,
         logContinue: (event, fields) => void logged.push(`${event}:${fields.Host}`),
-        ...(options.browser === undefined ? {} : { browser: options.browser }),
     };
     return { openIn: new OpenIn(deps), cwds, cliCalls, started, copied, kept, flagsGiven, remembered, logged };
 }
@@ -603,40 +602,14 @@ test('in a demo run the working folder is the run’s own chat folder, and the C
     assert.match(main, /const openIn = new OpenIn\(\{[\s\S]*?\n        cli,\n[\s\S]*?continuable: \(chatId\) => chat\.continuable\(chatId\),\n        chatFolder: \(\) => paths\.chat,\n/);
 });
 
-// The chat in a browser tab: a place of its own, offered where the desktop can open one.
+// Open in opens a folder, and never a browser: the chat is drawn in the desktop's own window alone.
 
-test('a browser is offered only where the desktop can open one, after the file manager and before Copy path, with the page’s own word', () => {
-    assert.deepEqual(ids(placesFound(windows, { claude: true, codex: false }, true)), ['claude', 'terminal', 'vscode', 'zed', 'files', 'browser', 'copy']);
-    assert.ok(!ids(placesFound(windows, { claude: true, codex: false })).includes('browser'));
-    assert.equal(placesFound(windows, { claude: false, codex: false }, true).find((place) => place.id === 'browser')?.label, '');
-});
-
-test('a browser is never the default, nor kept as the place used last, nor read back from the settings', async () => {
-    const places = placesFound(probes('linux', []), { claude: false, codex: false }, true);
-    assert.equal(defaultPlace(places, 'browser'), 'terminal');
-    const opened: number[] = [];
-    const b = bench({ browser: async () => (opened.push(1), null) });
-    assert.equal(await b.openIn.open('browser'), null);
-    assert.deepEqual(b.kept, []);
-    assert.deepEqual(b.logged, ['open_in:browser']);
-    assert.equal(((await b.openIn.targets()) as { default: string }).default, 'claude');
-    assert.deepEqual(parseSettings('{"open_in": "browser"}'), { feed: null, skillsDeployedFor: null, theme: null });
-});
-
-test('a browser opens the chat: no folder is read, no campaign asked for, and nothing is started or copied', async () => {
-    const opened: number[] = [];
-    const b = bench({ root: 'C:\\Nowhere', browser: async () => (opened.push(1), null) });
-    assert.equal(await b.openIn.open('browser', 'cmp_01'), null);
-    assert.equal(opened.length, 1);
+test('Open in offers no browser: not a place, not opened, and an older settings file naming it reads as no place used last', async () => {
+    assert.ok(!(placeIds as readonly string[]).includes('browser'));
+    assert.deepEqual(ids(placesFound(windows, { claude: true, codex: false })), ['claude', 'terminal', 'vscode', 'zed', 'files', 'copy']);
+    const b = bench();
+    assert.deepEqual(await b.openIn.open('browser'), { refused: 'That is not a place this computer can open the folder in.' });
     assert.deepEqual(b.cliCalls, []);
     assert.deepEqual(b.started, []);
-    assert.deepEqual(b.copied, []);
-});
-
-test('a browser the desktop cannot open is refused with its sentence, and one not offered is not a place', async () => {
-    const refused = bench({ browser: async () => "Jason's runtime is not running." });
-    assert.deepEqual(await refused.openIn.open('browser'), { refused: "Jason's runtime is not running." });
-    assert.deepEqual(refused.logged, ['open_in_refused:browser']);
-    const none = bench();
-    assert.deepEqual(await none.openIn.open('browser'), { refused: 'That is not a place this computer can open the folder in.' });
+    assert.deepEqual(parseSettings('{"open_in": "browser"}'), { feed: null, skillsDeployedFor: null, theme: null });
 });

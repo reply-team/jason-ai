@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// The sealed probe, a hostile page in the console's frame, runs in the pull request's CI alone, where the workflow sets
+// The sealed probe, a hostile page under sealed/ opened by itself, runs in the pull request's CI alone, where the workflow sets
 // JASON_SEALED_PROBE; there it runs in Chromium, Firefox and WebKit, and every other spec in Chromium.
 const probe = /probe[\\/].*\.spec\.ts$/;
 const probing = process.env.JASON_SEALED_PROBE === '1';

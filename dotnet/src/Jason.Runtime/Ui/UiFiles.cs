@@ -10,7 +10,7 @@ namespace Jason.Runtime.Ui;
 /// </summary>
 public static class UiFiles
 {
-    public const string ContentSecurityPolicy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
+    public const string ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
 
     /// <summary>
     /// The policy of a file under <c>sealed/</c>, content the UI does not trust: its own inline script and style, fonts and
