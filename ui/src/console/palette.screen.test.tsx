@@ -112,7 +112,7 @@ describe('the Search row', () => {
             within(menu())
                 .getAllByRole('button')
                 .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, '')),
-        ).toEqual(['SearchCtrl K', 'Needs you', 'Feed']);
+        ).toEqual(['SearchCtrl K', 'Needs you', 'Feed', 'Accounts']);
         cleanup();
         mode.value = 'demo';
         renderConsole();

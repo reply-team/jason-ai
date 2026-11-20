@@ -110,8 +110,8 @@ without it, through Claude Code, Codex or any other agent, and that Jason is ope
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New GTM agent** brings it forward; its caret offers **New GTM agent** and **Connect an account**. **New chat**, the
-button under them, makes a chat about no agent directly, and such a chat says so on a line at its top, "Chat · no agent",
+**New GTM agent** brings it forward. **New chat**, the
+button under it, makes a chat about no agent directly, and such a chat says so on a line at its top, "Chat · no agent",
 from before its first message; an agent's chat is named by the agent's header instead, and the Feed by its own.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
@@ -165,7 +165,7 @@ from before its first message; an agent's chat is named by the agent's header in
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
   macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
-  the **Feed** under it; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
+  the **Feed** under it; **Accounts**, where an account is connected; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
   System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
