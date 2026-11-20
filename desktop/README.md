@@ -354,8 +354,9 @@ applies to the turns a person starts by sending, from the next one on.
   before it runs. Below the floor no hook rides the turn, and the host is given no allow rule for a form of a verb that
   reads a request's content from a file or from standard input (`requestFileVerbs`, held to the CLI's command tree by
   `DesktopDenyListTests`): each reaches the permission tool, which refuses a redirection from the installation's data
-  and otherwise asks. That is the cost on an older Claude Code: setting a name or a tone from the chat asks first, as
-  does every other such verb. Codex runs in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it
+  and runs its plain form with no card, as the host's rule would (`plainForm` in `src/chat-permission-model.ts`): one
+  `jason` command of the allow list, its input nothing, a here-document or one file in the turn's folders. Anything else
+  is a card, as before. Codex runs in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it
   acts, so Ask first on Codex reads and proposes, and the menu says so (`codexModeSays` in the page).
 - **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny

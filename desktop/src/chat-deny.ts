@@ -191,7 +191,8 @@ export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
  * such content serves (`--file`, `--value-file`, `--note-file`, `--result-file`). Below the floor of Full access no hook
  * rides an Ask first or Auto-edit turn to read where such content comes from, so the host is given no allow rule for a
  * form of one of these verbs (`withoutRequestFiles`): each reaches the permission tool, which refuses a redirect from
- * the installation's own data and otherwise asks. Held to the CLI's command tree by DesktopDenyListTests, so a verb that
+ * the installation's own data and runs a plain form with no card, as the host's rule would (`plainForm`), so it costs no
+ * card the rule did not. Held to the CLI's command tree by DesktopDenyListTests, so a verb that
  * gains such an option is red there until it is named here.
  */
 export const requestFileVerbs: readonly string[] = [

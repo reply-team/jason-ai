@@ -581,8 +581,9 @@ function allowedBy(args: string[], command: string): boolean {
     });
 }
 
-test('on a Claude Code below the floor of Full access, setting a tone from the chat reaches the permission tool in Ask first and in Auto-edit: fed the settings file it is refused, and otherwise it asks first', async (t) => {
-    const settings = (r: Rig) => join(r.b.paths.data, 'config', 'settings.json');
+test('on a Claude Code below the floor of Full access, a verb that reads a request\'s content reaches the permission tool in Ask first and in Auto-edit, which runs its plain form with no card, as the host\'s rule would, and refuses it fed from the settings file or the run file', async (t) => {
+    const settings = (r: Rig) => join(r.b.paths.data, 'config', 'settings.json').replace(/\\/g, '/');
+    const runFile = (r: Rig) => r.b.paths.runFile.replace(/\\/g, '/');
     for (const version of ['2.1.300', '2.1.257']) {
         for (const mode of ['ask_first', 'auto_edit'] as const) {
             const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
@@ -591,16 +592,24 @@ test('on a Claude Code below the floor of Full access, setting a tone from the c
             const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
             const { id } = await r.chat.create();
             await r.chat.setMode(id, mode, 'claude');
-            const fed = `jason preference set tone_of_voice --value-file - < ${settings(r).replace(/\\/g, '/')}`;
-            const named = 'jason preference set tone_of_voice --value cheeky --actor human:someone';
-            plan(r, [{ ask: { tool: 'Bash', input: { command: fed } } }, { ask: { tool: 'Bash', input: { command: named } } }]);
-            const said = await answered(r, id, [false]);
+            const plainForms = ['jason campaign start cmp_1 --actor human:someone', 'jason workitem create cmp_1 --file - < item.json', 'jason preference set tone_of_voice --value cheeky --actor human:someone'];
+            const fedForms = [
+                `jason campaign start cmp_1 < ${settings(r)}`,
+                `jason workitem create cmp_1 --file - < ${settings(r)}`,
+                `jason workitem create cmp_1 --file - < ${runFile(r)}`,
+                `jason preference set tone_of_voice --value-file - < ${settings(r)}`,
+            ];
+            plan(r, [...plainForms, ...fedForms].map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
+            const said = await answered(r, id, []);
             const args = r.hosts()[0]?.args ?? [];
             assert.ok(flag(args, '--settings')?.startsWith('{'), `${version} ${mode}: no hook rides the turn`);
-            assert.equal(allowedBy(args, fed), false, `${version} ${mode}: no allow rule of the host's lets it through, so it reaches the permission tool`);
-            assert.equal(allowedBy(args, named), false, `${version} ${mode}: the form, whatever it is given`);
-            assert.ok(texts(said).includes(`decision deny: ${settingsRefusal}`), `${version} ${mode}: ${JSON.stringify(texts(said))}`);
-            assert.deepEqual(cards(said).map((card) => card.detail), [named], `${version} ${mode}: the other is a card`);
+            for (const command of [...plainForms, ...fedForms]) assert.equal(allowedBy(args, command), false, `${version} ${mode}: no allow rule of the host's lets it through: ${command}`);
+            assert.deepEqual(
+                texts(said).filter((text) => text.startsWith('decision ')),
+                [...plainForms.map(() => 'decision allow'), ...fedForms.map(() => `decision deny: ${settingsRefusal}`)],
+                `${version} ${mode}`,
+            );
+            assert.deepEqual(cards(said), [], `${version} ${mode}: no card`);
         }
     }
 });

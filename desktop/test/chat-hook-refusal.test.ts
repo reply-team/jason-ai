@@ -305,7 +305,7 @@ function allowedBy(args: string[], command: string): boolean {
     });
 }
 
-test('below the floor of Full access no hook rides Ask first or Auto-edit, so the host is given no allow rule for a no-card form whose verb reads a request\'s file: each reaches the permission tool, which refuses a redirect from the settings file and otherwise asks', () => {
+test('below the floor of Full access no hook rides Ask first or Auto-edit, so the host is given no allow rule for a no-card form whose verb reads a request\'s file: each reaches the permission tool, which runs its plain form with no card as the host\'s rule would, refuses it fed from the settings file or the run file, and asks about anything else', () => {
     const turn = (mode: ChatMode, hooked: boolean) => {
         const fenced = modeFence(fence, mode);
         return claudeArguments({ mcpConfig: 'turn.mcp.json', addDirs: [], denied: fenced.commands, allowed: fenced.allowed, reads: fenced.reads, mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: hooked ? '2.1.329' : '2.1.300' });
@@ -327,10 +327,45 @@ test('below the floor of Full access no hook rides Ask first or Auto-edit, so th
         }
         for (const command of plain) assert.equal(allowedBy(turn(mode, false), command), true, `${mode} below the floor, a form that reads no file: ${command}`);
     }
-    // What reaches the permission tool there: a redirect from the settings file is refused, any other use is a card.
-    const askFirst: ChatScope = { ...linux, denied: [], deniedOperations: [] };
-    assert.deepEqual(judge('Bash', { command: 'jason preference set tone_of_voice --value-file - < /home/someone/.jason/config/settings.json' }, askFirst), { verdict: 'deny', message: settingsRefusal });
-    assert.equal(judge('Bash', { command: 'jason preference set tone_of_voice --value cheeky --actor human:someone' }, askFirst).verdict, 'ask');
+    // What reaches the permission tool there: a plain form of the host's rules runs with no card, as the rule would run it,
+    // its content from a file in the chat's folder or a here-document included.
+    const bare: ChatScope = { ...linux, denied: [], deniedOperations: [], entry: () => null };
+    const askFirst: ChatScope = { ...bare, allowed: modeFence(fence, 'ask_first').allowed };
+    const document = 'jason workitem create cmp_1 --file - <<\'EOF\'\n{"title":"Call Ada"}\nEOF';
+    for (const command of [...reading, ...plain, document, 'jason campaign list 2>&1', 'jason campaign list 2>/dev/null']) {
+        assert.deepEqual(judge('Bash', { command }, askFirst), { verdict: 'allow' }, command);
+    }
+    const onWindows: ChatScope = { ...windows, denied: [], deniedOperations: [], entry: () => null, allowed: modeFence(fence, 'ask_first').allowed };
+    assert.deepEqual(judge('Bash', { command: 'jason workitem create cmp_1 --file - < item.json' }, onWindows), { verdict: 'allow' });
+    assert.deepEqual(judge('Bash', { command: 'jason workitem create cmp_1 --file - < C:/Users/someone/.jason/config/settings.json' }, onWindows), { verdict: 'deny', message: settingsRefusal });
+    // Fed from the settings file or the run file, it is refused.
+    for (const fed of ['/home/someone/.jason/config/settings.json', '/home/someone/.jason/run/runtime.json']) {
+        for (const command of [`jason preference set tone_of_voice --value-file - < ${fed}`, `jason campaign start cmp_1 < ${fed}`, `jason workitem create cmp_1 --file - < ${fed}`]) {
+            assert.deepEqual(judge('Bash', { command }, askFirst), { verdict: 'deny', message: settingsRefusal }, command);
+        }
+    }
+    // Anything that cannot be read as that plain form is a card, as before: a pipe, a file outside the chat's folders, a
+    // redirection that writes, a variable, an option before the verb, a verb or a key no rule of the host's names.
+    for (const command of [
+        'cat item.json | jason workitem create cmp_1 --file -',
+        'jason workitem create cmp_1 --file - < /home/someone/notes/item.json',
+        'jason workitem create cmp_1 --file - < item.json > made.json',
+        'jason campaign start "$CAMPAIGN"',
+        'jason campaign --actor human:someone start cmp_1',
+        'jason reply record cnv_1 --nature person',
+        'jason approval set-standing cmp_1 interested',
+        'jason preference set send_mode.cold --value "{}"',
+        'jason preference set tone_of_voicex --value cheeky',
+        `${document}\nrm item.json`,
+        'jason campaign start cmp_1; jason campaign archive cmp_2',
+    ]) {
+        assert.equal(judge('Bash', { command }, askFirst).verdict, 'ask', command);
+    }
+    assert.equal(judge('Bash', { command: 'jason workitem create cmp_1 --file - < D:/notes/item.json' }, onWindows).verdict, 'ask');
+    // A file named jason in the folder the shell runs in keeps the card.
+    assert.equal(judge('Bash', { command: 'jason campaign start cmp_1' }, { ...askFirst, entry: (path) => (posix.basename(path) === 'jason' ? 'present' : null) }).verdict, 'ask');
+    // A scope that names no rule of the host's, as Plan only's, keeps every card.
+    assert.equal(judge('Bash', { command: 'jason campaign start cmp_1' }, bare).verdict, 'ask');
 });
 
 test('a redirect spelled as Windows spells it is refused in Ask first, by the permission tool and by the hook: the drive\'s path and the profile\'s variable', () => {

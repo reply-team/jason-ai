@@ -1907,6 +1907,9 @@ export class Chat {
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     help: helpNouns(fence.allowed, fence.reads),
+                    // The host's allow rules of Ask first and Auto-edit, whose plain forms the model runs with no card where
+                    // the host is given no rule for them (`withoutRequestFiles`).
+                    ...(running.mode === 'ask_first' || running.mode === 'auto_edit' ? { allowed: fence.allowed } : {}),
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,

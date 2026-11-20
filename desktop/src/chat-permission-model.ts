@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers } from './chat-literal.ts';
+import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
@@ -51,12 +51,19 @@ export interface ChatScope {
      * Absent, none.
      */
     help?: readonly string[] | undefined;
+    /**
+     * The forms of the host's allow rules in Ask first and Auto-edit (`allowRules`), whose plain form runs here with no
+     * card as the host's rule would run it (`plainForm`): below Claude Code's floor of Full access the host is given no
+     * rule for a verb that reads a request's content (`withoutRequestFiles`), so its command reaches the model. Absent,
+     * none: every jason command that reaches the model is a card.
+     */
+    allowed?: readonly string[] | undefined;
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
     real: (path: string) => string | null;
     /**
      * What is at a path, its last component not followed: null when nothing is there, `unresolved` for a link or a
-     * junction that leads nowhere or an entry that cannot be read, `present` otherwise. Auto-edit alone reads it; absent,
-     * Auto-edit runs nothing unasked.
+     * junction that leads nowhere or an entry that cannot be read, `present` otherwise. Auto-edit reads it, and so does a
+     * plain form of the allow list (`plainForm`); absent, neither runs unasked.
      */
     entry?: (path: string) => 'present' | 'unresolved' | null;
     /**
@@ -736,6 +743,32 @@ function isNounHelp(tool: string, command: string, scope: ChatScope): boolean {
     return words.length === 3 && words[0] === 'jason' && words[2] === '--help' && (scope.help ?? []).includes(words[1] as string);
 }
 
+/**
+ * True when the Bash tool's command is a plain form of the host's allow rules (`ChatScope.allowed`), read literally with
+ * no `~` taken (`readLiteral`): one command whose program is the desktop's own `jason` and whose next words are a form's;
+ * whose standard input is nothing, a here-document, or one file in a working folder (`workingFolderOf`) given by its only
+ * redirection, and which otherwise redirects only to `/dev/null`; with no file named jason in the folder the shell runs
+ * in (`shadowed`) and no guard's card. It is judged after every refusal, so a redirection from the installation's
+ * settings file, its run file or its data is refused before it is looked at.
+ */
+function plainForm(tool: string, command: string, places: readonly string[], scope: ChatScope): boolean {
+    const forms = scope.allowed ?? [];
+    if (tool !== 'Bash' || forms.length === 0) return false;
+    // Whatever goes wrong while the command is read, it keeps its card: a reading that failed never runs anything.
+    try {
+        const reading = readLiteral('Bash', command, { platform: scope.platform, home: null });
+        if (reading.held || reading.commands.length !== 1) return false;
+        const { words, targets, input, cwd } = reading.commands[0] as LiteralCommand;
+        if (cwd !== null || words[0] !== 'jason' || !forms.some((form) => form.split(' ').every((word, at) => words[at + 1] === word))) return false;
+        if (input === 'file' ? targets.length !== 1 : targets.some((target) => target !== '/dev/null')) return false;
+        if (input === 'file' && workingFolderOf(scope, located(targets[0] as string, scope)) === null) return false;
+        if (shadowed(scope, new Set(['jason']))) return false;
+        return !changesServers(command, scope) && !namesSearch(command) && guardedPlace(places, scope) === undefined && !namesLocalJason(command, scope);
+    } catch {
+        return false;
+    }
+}
+
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */
 function isReply(platform: Platform, token: string): boolean {
     const program = programOf(platform, token);
@@ -1129,6 +1162,9 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     const own = chatsOwnPlace(places, scope);
     if (own !== null) return { verdict: 'deny', message: own };
     if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
+    // A plain form of the host's own allow rules runs with no card, as the host's rule would run it (`plainForm`): no card
+    // shows it, so it is not held to a card's length.
+    if (jason === 'jason' && plainForm(tool, command, places, scope)) return allow;
     // After every refusal and before any card: a card cuts its detail at the limit, so Allow would run what nobody saw.
     // A grant is looked at only for a card, so none allows it either.
     if (command.length > detailLimit) return { verdict: 'deny', message: longRefusal };
@@ -1142,8 +1178,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesLocalJason(command, scope)) return { verdict: 'ask', title: jasonFileTitle, detail: shorten(command), remember: null };
     // A noun's help, exactly as the host's help rule names it, runs here too: it prints and changes nothing.
     if (isNounHelp(tool, command, scope)) return allow;
-    // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
-    // person's to answer, each time.
+    // A jason command in no plain form of the allow list is the person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.

@@ -218,7 +218,7 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * itself reaches the prompt tool. Below the floor, where no hook rides an Ask first or Auto-edit turn to read where a
  * request's content comes from, the host is given no allow rule for a form of a verb that reads one from a file or from
  * standard input (`withoutRequestFiles`), so each reaches the prompt tool, which refuses a redirect from the
- * installation's own data and otherwise asks. Every deny rule is passed in every mode; Anthropic,
+ * installation's own data and runs a plain form with no card, as the rule would. Every deny rule is passed in every mode; Anthropic,
  * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
  * `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat, and from `noChromeFrom` on `--no-chrome`, so

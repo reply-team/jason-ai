@@ -940,9 +940,11 @@ word of a mode.
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
 rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused
 before it runs; where a policy has filtered the check out, the turn runs on and the chat says so once. On an older
-Claude Code no check rides a turn in Ask first or Auto-edit, so a `jason` verb that reads a request's content from a
-file or from standard input runs only after a card, and one fed the settings file by a redirection is refused. That is
-the cost on an older Claude Code: setting your name or your tone from the chat asks first. A turn in Plan only carries
+Claude Code no check rides a turn in Ask first or Auto-edit, so Claude Code is given no allow rule for a `jason` verb
+that reads a request's content from a file or from standard input, and the desktop's permission tool answers it
+instead: fed a settings file by a redirection, it is refused; written plainly, one command whose content comes from
+nothing, a here-document or one file in the folders the turn works in, it runs with no card, as the rule would have run
+it; anything else is a card. A turn in Plan only carries
 no check of its own: no verb on its list takes a request on standard input, every other command is refused there
 already, and where a command's output is sent meets Claude Code's own rules for the data directory, which every mode
 carries. That those rules hold where a redirection reads or writes, in Plan only and on an older Claude Code for a
@@ -965,8 +967,9 @@ access differs, it says so.
   `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
   the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
   the command with no card, and the act is recorded under the actor the command names. On a Claude Code older than
-  2.1.322, Ask first and Auto-edit give no rule to a verb that reads a request's content from a file or from standard
-  input, `preference set` and `campaign start` among them, so each is a card there (above). The chat's instructions name
+  2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
+  standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
+  written plainly with no card, as the rule would (above). The chat's instructions name
   the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
