@@ -216,10 +216,11 @@ public sealed partial class OwnTreeDeleteTests
     }
 
     /// <summary>
-    /// The folder beside an AppImage's copies that the file's own runtime wrote what it carries into, discarded once the copy
-    /// is placed or refused: here refused, since the bundle read names another version. What the runtime writes keeps the
-    /// image's own modes, so beside the plant a directory without its write permission holds a file, which a recursive
-    /// delete cannot empty anywhere.
+    /// The folder beside an AppImage's copies that the file's own runtime writes what it carries into: one an earlier read
+    /// left is emptied before the file is read again, and the new one is discarded once its bundle is placed as the copy.
+    /// What the runtime writes keeps the image's own modes, so each holds, beside the plant, a directory without its write
+    /// permission and a file in it, which a recursive delete cannot empty on Linux, where an AppImage runs: where the
+    /// leftover stays, the read is never made and no copy is placed.
     /// </summary>
     [Fact]
     public async Task The_folder_an_appimage_was_read_into_goes_whole()
@@ -229,29 +230,40 @@ public sealed partial class OwnTreeDeleteTests
         var bundles = AppImageCopy.BundlesUnder(dir.Paths.Root);
         var appImage = Path.Combine(dir.Paths.Root, AppImageCopy.FileName);
         File.WriteAllText(appImage, "an AppImage");
+        var version = SemanticVersion.Parse("0.49.1");
+        var leftover = Path.Combine(bundles, $".{version}.tmp-{Environment.ProcessId}");
+        Directory.CreateDirectory(leftover);
+        Plant(leftover, outside);
+        Closed(leftover);
 
         try
         {
-            var made = await AppImageCopy.MakeAsync(appImage, bundles, SemanticVersion.Parse("0.49.1"), (_, _, folder, _) =>
+            var made = await AppImageCopy.MakeAsync(appImage, bundles, version, (_, _, folder, _) =>
             {
                 var bundle = Path.Combine(folder, "squashfs-root", "resources", "bundle");
                 Directory.CreateDirectory(bundle);
                 File.WriteAllText(Path.Combine(bundle, "jason"), "jason");
-                Installation.CarriedRecord.Beside(Path.Combine(bundle, "jason"));
-                Plant(bundle, outside);
-                var closed = Directory.CreateDirectory(Path.Combine(folder, "squashfs-root", "usr"));
-                File.WriteAllText(Path.Combine(closed.FullName, "lib"), "a file the image carries");
-                closed.Attributes |= FileAttributes.ReadOnly;
+                Installation.CarriedRecord.Beside(Path.Combine(bundle, "jason"), $"{{\n  \"version\": \"{version}\"\n}}\n");
+                Plant(Path.Combine(folder, "squashfs-root"), outside);
+                Closed(Path.Combine(folder, "squashfs-root"));
                 return Task.FromResult(true);
             }, Ct);
 
-            Assert.False(made, "A bundle naming another version was placed as the copy.");
+            Assert.True(made, "No copy was placed: the folder an earlier read left was not emptied, so the file was not read again.");
+            Assert.True(AppImageCopy.Holds(bundles, version));
             Gone(bundles, ".tmp-");
             AsItWas(outside, kept);
         }
         finally
         {
             Clear(dir.Paths.Root);
+        }
+
+        static void Closed(string tree)
+        {
+            var closed = Directory.CreateDirectory(Path.Combine(tree, "usr"));
+            File.WriteAllText(Path.Combine(closed.FullName, "lib"), "a file the image carries");
+            closed.Attributes |= FileAttributes.ReadOnly;
         }
     }
 
