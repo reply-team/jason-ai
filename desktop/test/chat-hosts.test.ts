@@ -90,15 +90,15 @@ test('no allowed rule begins the spellings that ran with no prompt under one rul
     assert.ok(prefixes.every((prefix) => prefix.startsWith('jason ') && prefix.length > 'jason '.length), 'a rule for all of jason');
 });
 
-test('the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
-    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
+test('in Plan only the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
+    const disallowed = valuesOf(realTurn('plan_only'), '--disallowedTools');
     assert.ok(entries.length > 10);
     for (const entry of entries) assert.ok(disallowed.includes(`Bash(jason ${entry}:*)`), `${entry} is not fenced`);
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 71 verbs are allowed', () => {
-    const args = claudeArguments(turn);
+test('in Plan only a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: the plan list\'s 47 verbs are allowed', () => {
+    const args = realTurn('plan_only');
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
     assert.ok(disallowed.includes('Bash(jason project link:*)'));
@@ -107,7 +107,7 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 71);
+    assert.equal(allowed.length, 47);
 });
 
 test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before', () => {

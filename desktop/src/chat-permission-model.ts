@@ -181,9 +181,10 @@ const optionRefusal = 'That command starts jason with an option, or gives it a w
 const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
 /**
  * A command that names or clears Jason's own variables (`ownVariables`), in every mode: Jason alone sets them, and a jason
- * started without the chat's environment may act on another installation than the one this window shows.
+ * started without the chat's environment may act on another installation than the one this window shows; and
+ * `JASON_CHAT_TURN` is what keeps a jason the chat runs from reading a file an option names.
  */
-const confinedRefusal = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets, and a jason started without the chat\'s environment may act on another installation than the one this window shows: the chat never runs it. Nothing was run.';
+const confinedRefusal = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets: JASON_CHAT_TURN keeps a jason the chat runs from reading a file an option names, and a jason started without the chat\'s environment may act on another installation than the one this window shows. The chat never runs it. Nothing was run.';
 const attemptRefusal = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';

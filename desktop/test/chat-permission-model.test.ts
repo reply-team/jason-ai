@@ -90,7 +90,7 @@ const run = (scope: ChatScope, command: string) => judge('Bash', { command }, sc
 const real = (scope: ChatScope): ChatScope => ({ ...scope, denied: [], deniedOperations: [] });
 
 /** The one sentence for a command that names or clears Jason's own variables, in every mode. */
-const ownVariablesSentence = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets, and a jason started without the chat\'s environment may act on another installation than the one this window shows: the chat never runs it. Nothing was run.';
+const ownVariablesSentence = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets: JASON_CHAT_TURN keeps a jason the chat runs from reading a file an option names, and a jason started without the chat\'s environment may act on another installation than the one this window shows. The chat never runs it. Nothing was run.';
 
 /** The sentence for a jason that starts with an option or carries a word that begins with @: the form to use instead. */
 const optionSentence = 'That command starts jason with an option, or gives it a word that begins with @, which the chat never runs: write the verb first and its options after it, such as `jason approval approve <id> --actor human:<name>`. Nothing was run.';
@@ -793,6 +793,36 @@ test('a command naming a place in the data directory is refused however it is sp
     for (const command of ['cat ../chat/notes.md', 'cat notes/../draft.md', 'echo $JASON_DATA_DIRS', 'echo $JASON_DATA_DIR_COPY']) {
         assert.equal(run(windows(), command).verdict, 'ask', command);
         assert.equal(run(mac(), command).verdict, 'ask', command);
+    }
+});
+
+test('a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string of the file is refused in Ask first and Auto-edit as a plain read of it is, and in Full access', () => {
+    // The shell opens the file, so the CLI's rule that a file option takes only standard input never sees a path: the
+    // model reads the command's text for the place, whichever door feeds it to the verb.
+    const fed = (verb: string, file: string): string[] => [
+        `${verb} --value-file - < ${file}`,
+        `${verb} < ${file}`,
+        `cat ${file} | ${verb} --value-file -`,
+        `${verb} --value-file - <<< "$(cat ${file})"`,
+        `${verb} --value-file - <<<$(< ${file})`,
+    ];
+    const verb = 'jason preference set tone_of_voice';
+    const cases: [ChatScope, string[]][] = [
+        [windows(), ['C:/Users/someone/.jason/config/settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json', '$USERPROFILE/.jason/config/settings.json',
+            '$JASON_DATA_DIR/run/runtime.json', '../../config/settings.json', '../../run/runtime.json']],
+        [mac(), ['~/.jason/config/settings.json', '/Users/someone/.jason/run/runtime.json', '$HOME/.jason/run/runtime.json', '../../config/settings.json',
+            '../../run/runtime.json']],
+    ];
+    for (const [scope, files] of cases) {
+        for (const file of files) {
+            for (const command of fed(verb, file)) {
+                assert.equal(judge('Bash', { command }, real(scope)).verdict, 'deny', `${scope.platform} Ask first: ${command}`);
+                assert.equal(autoEditJudgement('Bash', { command }, real(scope)).verdict, 'deny', `${scope.platform} Auto-edit: ${command}`);
+                assert.equal(fullAccessJudgement('Bash', { command }, real(scope)).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+            }
+        }
+        // A file of the chat folder fed the same ways is the chat's own and runs.
+        for (const command of fed(verb, 'tone.json')) assert.equal(judge('Bash', { command }, real(scope)).verdict === 'deny', false, `${scope.platform}: ${command}`);
     }
 });
 

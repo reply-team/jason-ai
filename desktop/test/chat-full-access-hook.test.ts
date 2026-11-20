@@ -484,3 +484,17 @@ test('a Full access turn\'s environment names HOME as the folder the judgement t
     assert.equal(hostEnvironment({ PATH: '/x' }, { ...options, platform: 'linux' }).HOME, undefined, 'without a home named, nothing is added');
     assert.equal(hostEnvironment({ PATH: '/x', HOME: '/h' }, { ...options, platform: 'linux' }).HOME, '/h', 'and nothing is changed');
 });
+
+test('the hook refuses a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string', async (t) => {
+    const w = await wired(t);
+    const paths = desktopPaths(w.root);
+    for (const file of [...settingsFilesOf(paths.data), paths.runFile]) {
+        const spelled = file.replaceAll('\\', '/');
+        for (const command of [`jason preference set tone_of_voice --value-file - < ${spelled}`, `cat ${spelled} | jason preference set tone_of_voice --value-file -`,
+            `jason preference set tone_of_voice --value-file - <<< "$(cat ${spelled})"`]) {
+            const answered = await hooked(w, 'Bash', { command });
+            assert.equal(answered.decision, 'deny', command);
+        }
+    }
+    assert.deepEqual(await hooked(w, 'Bash', { command: 'jason preference set tone_of_voice --value-file - < tone.json' }), { decision: 'allow' }, 'a file of the chat folder runs');
+});

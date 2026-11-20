@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
-import { modeFence, readFence } from '../src/chat-deny.ts';
+import { modeFence, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
 import { powerShellRunsInFullAccess } from '../src/chat-modes.ts';
 import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
@@ -239,7 +239,7 @@ test('cmd, a .bat or a .cmd with arguments is held whole, in either shell', () =
 
 // 1.3 (a): a literal command is still refused by its resolved words.
 
-test('in Plan only a person\'s verbs are refused in every form, never a card; in a real Full access turn a plain one runs, and in Ask first it is a card', () => {
+test('in Plan only a person\'s verbs are refused in every form, never a card; in a real Full access turn a plain one runs, and in Ask first the permission model cards each, while the host\'s allow rule runs those of the no-card set before the model is asked', () => {
     for (const command of ['jason approval approve apr_1', 'jason decision answer dec_1 --option a', 'jason block clear blk_1', "jason approval 'approve' apr_1", 'jason approval ap"pro"ve apr_1', 'sudo jason approval approve apr_1', 'echo approval approve apr_1 | xargs jason approval approve']) {
         const judged = judge('Bash', { command }, planned);
         assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, `Plan only: ${command}`);
@@ -248,6 +248,10 @@ test('in Plan only a person\'s verbs are refused in every form, never a card; in
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
         assert.equal(judge('Bash', { command }, scope).verdict, 'ask', `Ask first: ${command}`);
     }
+    // The host's allow rule is one per form of the no-card set (`claudeArguments`, chat-hosts.test.ts): approving and
+    // answering are among them, so the host runs them unasked; clearing a block is not, so its card is the model's.
+    assert.ok(personsWordForms.includes('approval approve') && personsWordForms.includes('decision answer'));
+    assert.ok(!personsWordForms.includes('block clear'));
 });
 
 test('in Plan only starting a campaign is refused in every form, never a card; in a real Full access turn it runs, as pausing one does', () => {

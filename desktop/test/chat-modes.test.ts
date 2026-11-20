@@ -585,7 +585,7 @@ test('each refusal and each hold of the hook is said to the log, by the model, i
 
 // The second look's further spellings, in Ask first and under Full access alike.
 
-const judgedConfined = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets, and a jason started without the chat\'s environment may act on another installation than the one this window shows: the chat never runs it. Nothing was run.';
+const judgedConfined = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets: JASON_CHAT_TURN keeps a jason the chat runs from reading a file an option names, and a jason started without the chat\'s environment may act on another installation than the one this window shows. The chat never runs it. Nothing was run.';
 
 test('env and exec clear the environment only in the part they begin: an ordinary command list is no refusal', () => {
     const scope = homeScope('linux', '/home/someone');
