@@ -171,6 +171,63 @@ describe('System, the update sentence', () => {
         await act(async () => undefined);
         expect(screen.queryByText(/or press/)).toBeNull();
     });
+
+    it("in the deb's window names the system's update, which brings it, and never Check for Updates, which the deb has no item for", async () => {
+        // The deb's item, as its menu shows it: the package's, or its restart once the system installed a new version.
+        for (const label of [
+            'Updates Come Through the Package',
+            'Restart Jason and Its Runtime to Finish the Update to 9.9.9',
+        ]) {
+            recorded.update = update;
+            const item = async () => ({
+                version: '9.9.8',
+                item: { label, enabled: label !== 'Updates Come Through the Package' },
+                said: null,
+            });
+            window.jasonDesktop = {
+                platform: 'linux',
+                updates: { key: async () => null, item },
+            } as unknown as NonNullable<typeof window.jasonDesktop>;
+            systemFake();
+            await waitFor(() =>
+                expect(screen.getByText(/Your system updates Jason Desktop and the jason it carries/)).toBeTruthy(),
+            );
+            expect(screen.getByText(/Software Updater/)).toBeTruthy();
+            expect(screen.getByText('sudo apt update && sudo apt upgrade')).toBeTruthy();
+            expect(screen.queryByText(/Check for Updates/)).toBeNull();
+            expect(screen.queryByText(/updates itself/)).toBeNull();
+            cleanup();
+        }
+        // Until the item answers, neither sentence: drawing the updater's first would name Check for Updates on the deb.
+        recorded.update = update;
+        const unanswered = () => new Promise(() => undefined);
+        window.jasonDesktop = {
+            platform: 'linux',
+            updates: { key: async () => null, item: unanswered },
+        } as unknown as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        await act(async () => undefined);
+        expect(screen.queryByText(/Check for Updates/)).toBeNull();
+        expect(screen.queryByText(/Your system updates/)).toBeNull();
+        cleanup();
+        // A desktop whose item is its own updater's keeps the sentence above.
+        recorded.update = update;
+        const own = async () => ({
+            version: '9.9.8',
+            item: { label: 'Check for Updates…', enabled: true },
+            said: null,
+        });
+        window.jasonDesktop = {
+            platform: 'linux',
+            updates: { key: async () => null, item: own },
+        } as unknown as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        await act(async () => undefined);
+        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+        expect(screen.queryByText(/Software Updater/)).toBeNull();
+    });
 });
 
 describe('System, the standing choice of Full access', () => {

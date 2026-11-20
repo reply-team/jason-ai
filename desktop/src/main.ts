@@ -57,11 +57,12 @@ import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
-import { accountShell, loginPath, shellPath } from './shell-path.ts';
+import { accountShell, handedPath, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart, updaterCache } from './uninstall.ts';
 import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
@@ -267,10 +268,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const seam: IpcRegistrar = ipcMain;
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
-    // finds it.
-    const inherited = pathOf(process.env);
+    // finds it; where it answers nothing, the PATH this start was handed less what an earlier start added to it.
+    const handed = handedPath(pathOf(process.env), process.env['APPDIR'], home, process.platform);
     const shellRead = askedShell();
-    const pathRead = loginPath(inherited, home, shellRead);
+    const pathRead = loginPath(handed, home, shellRead);
     process.env.PATH = await pathRead;
     // What a new terminal has: the login shell's own PATH, before the usual places, never the PATH above. Placing the
     // PATH command writes the PATH lines only where its folder is not on it, and where the shell said none, always.
@@ -379,7 +380,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         desk.watch();
         repairer.start();
     });
-    const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
+    const repairer = new Repairer({
+        readRunFile: () => readText(paths.runFile),
+        cli,
+        log,
+        load: async (link) => void (await current?.loadURL(link)),
+        paired: () => {
+            begin();
+            if (form?.form === 'deb') void readRuntimeAgain().catch(() => undefined);
+        },
+    });
     // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
     const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
     // This run is Live's (a Demo start runs `runDemo`), which offers every act that outlasts it (`offersOf`).
@@ -442,9 +452,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on Linux: the uninstall's own steps, over the same items the menu sets. Offered in Live
-    // alone (`offersOf`). On macOS, Uninstall Jason…: the one uninstall, the carried jason's, started on its own once the
-    // person says so, waiting for this process to quit.
+    // Remove What Jason Placed: the uninstall's own steps, over the same items the menu sets, offered on no system now
+    // (`removalOffered`). On macOS and Linux, Uninstall Jason…: the one uninstall, the carried jason's, started on its own
+    // once the person says so, waiting for this process to quit.
     const removal = offers.removal && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
@@ -485,7 +495,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The deb: apt replaces the package under a running window (Software Updater, `apt upgrade`). Its
     // version.json is looked at once a minute; once it names another version, the update item offers the restart, and one
     // notice says so too, whose click restarts: the old build's runtime stopped, then Jason started again, whose start
-    // finishes the update (`machine-setup.ts`).
+    // finishes the update (`machine-setup.ts`). A start that finds this application's runtime of an older build, the system
+    // having updated the package while no window was open, offers the same.
     // Once its runtime has stopped, the window goes quiet as an update's install makes it (`beforeInstall`): the repairer
     // would otherwise start the old build's runtime again while the relaunch waits for a set-up that is running.
     const packageRestart = {
@@ -498,24 +509,42 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         refused: (why: string) => dialog.showErrorBox(windowTitle, why),
     };
     const restartPackage = restartOnce(packageRestart);
-    const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged)) : null);
+    // The runtime this start found, and whether this application's jason started it (`whoseRuntime`), once the start knows.
+    let runtimeVersion: string | null = null;
+    let runtimeIsOurs = false;
+    const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged), { version: runtimeVersion, ours: runtimeIsOurs }) : null);
     // Held for as long as the window runs: a notice nothing refers to is collected, and its click with it.
     let packageNotice: Notification | null = null;
-    if (form?.form === 'deb') {
-        let told = false;
-        watchFile(join(packaged, 'version.json'), { interval: 60_000 }, () => {
-            const moved = packageMoved();
-            if (moved === null || told) return;
-            told = true;
-            desk.renderMenu();
-            toPage('updates.changed');
-            if (Notification.isSupported()) {
-                packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
-                packageNotice.on('click', () => void restartPackage());
-                packageNotice.show();
-            }
-        });
-    }
+    let packageTold = false;
+    // The offer, once: from the watch, and from a start that finds this application's runtime of an older build, the
+    // system having updated the package while no window was open. It restarts nothing itself: a restart ends a running
+    // turn, so the person chooses when.
+    const offerPackageRestart = () => {
+        const moved = packageMoved();
+        if (moved === null || packageTold) return;
+        packageTold = true;
+        desk.renderMenu();
+        toPage('updates.changed');
+        if (Notification.isSupported()) {
+            packageNotice = new Notification({ title: windowTitle, body: `Your system updated Jason to ${moved}. Restart Jason and its runtime to finish the update.` });
+            packageNotice.on('click', () => void restartIfOwed());
+            packageNotice.show();
+        }
+    };
+    if (form?.form === 'deb') watchFile(join(packaged, 'version.json'), { interval: 60_000 }, offerPackageRestart);
+    // The runtime read again: after the window re-paired with one started anew (`jason runtime restart` in a terminal, say),
+    // and before a press of the restart, which a runtime already on this build does not need: it would end a running turn
+    // for nothing. Where the restart is no longer owed the item goes.
+    const readRuntimeAgain = async () => {
+        // A runtime that does not answer keeps what was known of it: a hung old build is the one the restart is for.
+        runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout) ?? runtimeVersion;
+        desk.renderMenu();
+        toPage('updates.changed');
+    };
+    const restartIfOwed = async () => {
+        if (form?.form === 'deb') await readRuntimeAgain().catch(() => undefined);
+        if (packageMoved() !== null) await restartPackage();
+    };
     const desk = new Desk({
         window: () => current,
         origin,
@@ -526,7 +555,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         autostart,
         updates,
         packageMoved,
-        restart: () => void restartPackage(),
+        restart: () => void restartIfOwed(),
         kept: keptCopy,
         // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
         place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
@@ -559,8 +588,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     updates?.start();
     // A terminal's update request, taken by this window's own updater (a build that has none takes none: `requestSupport`).
     serveRequests(log, paths.data, { menu: updates !== null, updater: () => updates ?? requestUpdater({ data: paths.data, log }) });
-    let runtimeVersion: string | null = null;
-    let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
     // One runner for the Connect cards and the chat, so a listing and a turn share one read of Claude Code's version.
     const programs = sharingVersionReads(programsOn(env, version));
@@ -584,9 +611,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(seam, 'updates.key', origin, updateKey, refused);
     // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
-    // on the label the page drew and only while the item still says it.
-    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);
-    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);
+    // on the label the page drew and only while the item still says it. The answer carries what the person's last check
+    // found, wherever it was asked from; a press from the page raises no notification, since the page says it.
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null), refused);
+    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -615,6 +643,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         runtimeVersion: () => runtimeVersion,
         runtimeIsOurs: () => runtimeIsOurs,
         updateKey,
+        deb: form?.form === 'deb',
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
         saveSettings: (next) => {
@@ -820,6 +849,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
+        offerPackageRestart();
         // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
         const kept = readWindowPairing(paths.windowPairing);
         const { cleared } = await loadWindow(
@@ -867,7 +897,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             const notice = failedStartNotice(
                 said,
                 layoutRefused,
-                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile, version: kept.fromVersion } : { copy: kept.directory },
                 aside ?? applicationFolder(process.platform, process.execPath),
                 process.platform,
             );

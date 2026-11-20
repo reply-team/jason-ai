@@ -5,13 +5,14 @@
  * `/opt/Jason` back by hand would need an administrator and leave dpkg's record on the newer version, so its record names
  * no copy and the starting page names the previous release's deb to install again instead. The first launch of the new version settles
  * it: a start that loads the window records the copy as kept; one that does not keeps it too, says where it is, and
- * refuses that version from then on. Either way the copy stays until the next update replaces it, and the Jason menu
- * names it while it is there (`keptLine`). Only the application is copied: nothing of the runtime's data, and nothing
+ * refuses that version from then on. Either way the copy stays until the next update replaces it, and the menus name
+ * its version while it is there (`keptLine`). Only the application is copied: nothing of the runtime's data, and nothing
  * outside the folder the application is installed in.
  */
 
 import * as nodeFiles from 'node:fs';
 import { basename, dirname, isAbsolute, join, posix, relative, win32 } from 'node:path';
+import { compareVersions } from './host-version.ts';
 import type { Logger } from './log.ts';
 
 /**
@@ -93,14 +94,16 @@ export function isRejected(state: RollbackState, version: string): boolean {
 }
 
 /**
- * The Jason menu's line while a copy of the previous version is there: the copy a start that worked recorded as kept, or
- * the one a first start that failed left pending. Null when no copy is there, or when it is of the version that runs.
+ * The menus' line while a copy of the previous version is there, the tray's and the window's alike: the copy a start
+ * that worked recorded as kept, or the one a first start that failed left pending. It names the version and never the
+ * folder, whose path would make a menu as wide as itself; a start that failed and an update that was not installed name
+ * the folder, where a person needs it. Null when no copy is there, or when it is of the version that runs.
  */
 export function keptLine(state: RollbackState, currentVersion: string, exists: (path: string) => boolean): string | null {
     const pending = state.pending?.toVersion === currentVersion ? { version: state.pending.fromVersion, directory: state.pending.directory } : undefined;
     const copy = state.kept ?? pending;
     if (copy === undefined || copy.directory === null || copy.version === currentVersion || !exists(copy.directory)) return null;
-    return `The previous version ${copy.version} is kept at ${copy.directory}; put it back by hand.`;
+    return `The previous version ${copy.version} is kept.`;
 }
 
 /** The folder the application is installed as: the `.app` around the executable on macOS, its folder elsewhere. */
@@ -207,8 +210,12 @@ export async function keepPrevious(
     return directory;
 }
 
-/** Where the version an update replaced is: a copy kept here, or the release's package to install again (the deb). */
-export type Previous = { copy: string } | { release: string; file: string };
+/** Where the version an update replaced is: a copy kept here, or the release's package to install again (the deb), of its version. */
+export type Previous = { copy: string } | { release: string; file: string; version: string };
+
+/** The deb's first release whose package carries the key of Jason's apt source, and the source it writes. */
+const keyedSince = '0.49.1';
+const aptSource = '/etc/apt/sources.list.d/jason-desktop.sources';
 
 /**
  * What the starting page says when an update's first start failed. Nothing puts the previous version back by itself: the
@@ -219,7 +226,10 @@ export function keptNotice(said: string, previous: Previous, installed: string, 
         'release' in previous
             ? [
                   `If this version is the cause, the version of Jason it was updated from is published at ${previous.release}.`,
-                  `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo apt install ./${previous.file}: nothing does it for you.`,
+                  // An earlier package carries no key for the source, which its install keeps: every apt update would report it.
+                  compareVersions(previous.version.split('+')[0] ?? previous.version, keyedSince) < 0
+                      ? `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo rm ${aptSource}, since that release carries no key for Jason's apt source, then sudo apt install ./${previous.file}: nothing does it for you.`
+                      : `To go back, quit Jason, download ${previous.file} from that page, and in the folder it is in run sudo apt install ./${previous.file}: nothing does it for you.`,
               ]
             : [
                   `If this version is the cause, the version of Jason it was updated from is kept at ${previous.copy}.`,

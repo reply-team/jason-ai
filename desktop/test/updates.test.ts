@@ -27,7 +27,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, packageMovedTo, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, restartOnce, restartQuestion, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, packageMovedTo, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, restartOnce, restartQuestion, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -242,6 +242,163 @@ test('a version whose first start failed here is not offered again', async (t) =
     assert.deepEqual(states.at(-1), { step: 'idle' });
 });
 
+// A check the person asks for says what it found, in one sentence the item's answer carries and, asked outside Settings,
+// a notification repeats. A look on the cadence never writes one.
+test('a check the person asks for says what it found; a look on the cadence says nothing', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater();
+    const { updates, timers } = updaterOn(s, updater);
+    const ask = async () => 0;
+    updates.start();
+    await timers.fire();
+    assert.equal(updates.said, null, 'a look on the cadence says nothing');
+    // Nothing newer.
+    assert.equal(await pressItem(updates, 'check', false, ask), 'Jason Desktop 0.34.0 is the latest version.');
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    // A newer one, which the item then offers.
+    updater.latest = '0.35.0';
+    assert.equal(await pressItem(updates, 'check', true, ask), 'Version 0.35.0 is available.');
+    assert.equal(updates.said, 'Version 0.35.0 is available.');
+    assert.deepEqual(updates.current, { step: 'offered', version: '0.35.0' });
+    // The item's next step clears it.
+    await pressItem(updates, 'download', false, ask);
+    assert.equal(updates.said, null);
+    // Only a check returns a sentence.
+    assert.equal(await pressItem(updates, 'install', true, async () => 1), null);
+});
+
+test('a newer version the person went back from is said as out and not offered, never as the latest', async (t) => {
+    const s = scratch(t);
+    writeRollback(s.rollback, { rejected: ['0.35.0'] });
+    const { updates } = updaterOn(s, fakeUpdater({ latest: '0.35.0' }));
+    assert.equal(await updates.check(true), 'Version 0.35.0 is out. It is not offered here because you went back from it.');
+    assert.deepEqual(updates.current, { step: 'idle' });
+    assert.equal(updates.said, 'Version 0.35.0 is out. It is not offered here because you went back from it.');
+});
+
+test('the line is replaced by the next check the person asks for, kept by a look on the cadence, and a failure is cleared by a look that succeeds', async (t) => {
+    const s = scratch(t);
+    let failing = false;
+    const updater = fakeUpdater({ fails: () => failing });
+    const { updates, timers, states } = updaterOn(s, updater);
+    updates.start();
+    assert.equal(await updates.check(true), 'Jason Desktop 0.34.0 is the latest version.');
+    // A look on the cadence that fails, or finds nothing newer, leaves the line as it is.
+    failing = true;
+    await timers.fire();
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    failing = false;
+    await timers.fire();
+    assert.equal(updates.said, 'Jason Desktop 0.34.0 is the latest version.');
+    // The person's next check replaces it, a failure too: the error's own text never reaches the sentence.
+    failing = true;
+    const failed = await updates.check(true);
+    assert.equal(failed, 'Could not check for updates: something unexpected went wrong. Try again later.');
+    assert.equal(updates.said, failed);
+    for (const planted of ['planted', 'https://', 'token']) assert.equal(failed?.includes(planted), false, planted);
+    assert.deepEqual(states.at(-1), { step: 'idle' });
+    // A look on the cadence that fails again says nothing new; one that succeeds clears the failure.
+    await timers.fire();
+    assert.equal(updates.said, failed);
+    failing = false;
+    await timers.fire();
+    assert.equal(updates.said, null);
+    // A look on the cadence that finds a newer version moves the item on, which clears a line.
+    assert.equal(await updates.check(true), 'Jason Desktop 0.34.0 is the latest version.');
+    updater.latest = '0.35.0';
+    await timers.fire();
+    assert.deepEqual(updates.current, { step: 'offered', version: '0.35.0' });
+    assert.equal(updates.said, null);
+});
+
+test('a check that is not made says nothing: where electron-updater is not active, and while a step is under way', async (t) => {
+    const s = scratch(t);
+    const inactive = updaterOn(s, fakeUpdater({ inactive: true })).updates;
+    assert.equal(await inactive.check(true), null);
+    assert.equal(inactive.said, null);
+    const { updates } = updaterOn(s, fakeUpdater({ latest: '0.35.0' }));
+    await updates.check(true);
+    await updates.download();
+    assert.equal(await updates.check(true), null, 'downloaded: no look');
+    assert.equal(updates.said, null);
+});
+
+// The reason a failed check gives is one of four, by the kind of failure; the error's text is never shown.
+test('a failed check names one of four reasons by the kind of failure', () => {
+    const coded = (message: string, code: string) => Object.assign(new Error(message), { code });
+    const http = (statusCode: number) => Object.assign(new Error(`${statusCode} planted\nHeaders: {}`), { name: 'HttpError', statusCode, code: `HTTP_ERROR_${statusCode}` });
+    const offline = [
+        new Error('net::ERR_INTERNET_DISCONNECTED'),
+        new Error('net::ERR_NAME_NOT_RESOLVED'),
+        new Error('net::ERR_CONNECTION_REFUSED'),
+        new Error('net::ERR_CONNECTION_TIMED_OUT'),
+        new Error('net::ERR_TIMED_OUT'),
+        new Error('net::ERR_NETWORK_CHANGED'),
+        new Error('net::ERR_PROXY_CONNECTION_FAILED'),
+        new Error('Request timed out'),
+        coded('getaddrinfo ENOTFOUND github.com', 'ENOTFOUND'),
+        coded('connect ECONNREFUSED 127.0.0.1:443', 'ECONNREFUSED'),
+        coded('read ECONNRESET', 'ECONNRESET'),
+        coded('getaddrinfo EAI_AGAIN github.com', 'EAI_AGAIN'),
+        // electron-updater wraps the tag's read; the connection's own words are inside.
+        coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: Error: net::ERR_NAME_NOT_RESOLVED', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'),
+    ];
+    const refused = [http(403), http(429), coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: HttpError: 429 Too Many Requests', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND')];
+    const feedUnread = [
+        http(404),
+        http(500),
+        http(502),
+        coded('Cannot parse releases feed: planted', 'ERR_UPDATER_INVALID_RELEASE_FEED'),
+        coded('No published versions on GitHub', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'),
+        coded('Cannot find latest.yml in the latest release artifacts (planted)', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'),
+        coded('Cannot parse update info from latest.yml', 'ERR_UPDATER_INVALID_UPDATE_INFO'),
+        coded('Unable to find latest version on GitHub (planted), please ensure a production release exists: HttpError: 404', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'),
+    ];
+    const other = [new Error('planted'), new TypeError('planted'), null, undefined, 'planted', { code: 42 }];
+    for (const error of offline) assert.equal(checkFailureOf(error), 'offline', String(error));
+    for (const error of refused) assert.equal(checkFailureOf(error), 'refused', String(error));
+    for (const error of feedUnread) assert.equal(checkFailureOf(error), 'feed', String(error));
+    for (const error of other) assert.equal(checkFailureOf(error), 'other', String(error));
+    assert.deepEqual(
+        (['offline', 'refused', 'feed', 'other'] as const).map((failure) => checkWords({ kind: 'failed', failure })),
+        [
+            'Could not check for updates: there is no connection to where releases are published.',
+            'Could not check for updates: the release server is refusing requests for now. Try again later.',
+            'Could not check for updates: the list of releases could not be read.',
+            'Could not check for updates: something unexpected went wrong. Try again later.',
+        ],
+    );
+    assert.equal(checkWords({ kind: 'latest', version: '0.48.6' }), 'Jason Desktop 0.48.6 is the latest version.');
+    assert.equal(checkWords({ kind: 'available', version: '0.48.7' }), 'Version 0.48.7 is available.');
+    assert.equal(checkWords({ kind: 'held', version: '0.48.7' }), 'Version 0.48.7 is out. It is not offered here because you went back from it.');
+});
+
+// electron-updater 6.8.11 wraps the read of the latest tag twice, each time with the inner error's stack
+// (out/providers/GitHubProvider.js: getLatestTagName throws "Unable to find latest version on GitHub (${url}), please
+// ensure a production release exists: ${e.stack || e.message}" as ERR_UPDATER_LATEST_VERSION_NOT_FOUND, and
+// getLatestVersion catches that and throws "Cannot parse releases feed: ${e.stack || e.message},\nXML:\n${feedXml}" as
+// ERR_UPDATER_INVALID_RELEASE_FEED). The timeout is builder-util-runtime's out/httpExecutor.js `new Error("Request timed
+// out")`, an HttpError's message is `${statusCode} ${statusMessage}` and "\nHeaders: ...". The feed's XML, release
+// notes included, follows "\nXML:\n" and is never read for the kind of failure.
+test('a doubly wrapped failure is told by the words before the feed, never by the feed', () => {
+    const doubly = (inner: string) => Object.assign(
+        new Error(
+            'Cannot parse releases feed: Error: Unable to find latest version on GitHub (https://github.com/planted/planted/releases/latest), '
+                + `please ensure a production release exists: ${inner}\n    at ClientRequest.<anonymous> (planted.js:1:1)\n    at GitHubProvider.getLatestTagName (planted.js:2:2)`
+                + `\n    at GitHubProvider.getLatestVersion (planted.js:3:3),\nXML:\n<?xml version="1.0"?><feed><entry><content>`,
+        ),
+        { code: 'ERR_UPDATER_INVALID_RELEASE_FEED' },
+    );
+    const withNotes = (error: Error, notes: string) => Object.assign(error, { message: `${error.message}${notes}</content></entry></feed>` });
+    assert.equal(checkFailureOf(withNotes(doubly('Error: Request timed out'), 'planted')), 'offline', 'a wrapped timeout');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 429 Too Many Requests\nHeaders: {}'), 'Fixed a read ECONNRESET on a slow proxy.')), 'refused', 'a 429 under notes that name ECONNRESET');
+    assert.equal(checkFailureOf(withNotes(doubly('HttpError: 404 Not Found\nHeaders: {}'), 'Says net::ERR_TIMED_OUT in plain words.')), 'feed', 'a 404 under notes that name net::ERR_TIMED_OUT');
+});
+
+test('asked outside Settings, the sentence comes as a notification of its own', () => {
+    assert.deepEqual(updateNotice('Version 0.48.7 is available.'), { title: 'Jason Desktop', body: 'Version 0.48.7 is available.' });
+});
+
 test('the download happens on the person’s word, and the install on a second one', async (t) => {
     const s = scratch(t);
     const updater = fakeUpdater({ latest: '0.35.0' });
@@ -454,7 +611,7 @@ test('a start that failed says where the replaced version is only after an updat
     const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
     for (const platform of ['win32', 'darwin', 'linux'] as const) {
         assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
-        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
 });
@@ -524,9 +681,11 @@ test('the new version’s first start settles the record: a start that worked ke
     ]);
 });
 
-test('while a copy of the previous version is kept, the Jason menu says where, under the update item', () => {
+// The line is the same in the tray's menu and the window's: the version kept, and never its folder, whose path makes a
+// menu as wide as itself. Where a person needs the folder, a start that failed and an update that was not installed name it.
+test('while a copy of the previous version is kept, both menus say which version, under the update item, and not where', () => {
     const copy = '/data/desktop/rollback/0.34.0/Jason.app';
-    const line = 'The previous version 0.34.0 is kept at /data/desktop/rollback/0.34.0/Jason.app; put it back by hand.';
+    const line = 'The previous version 0.34.0 is kept.';
     const there = (path: string) => path === copy;
     assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.35.0', there), line);
     // A first start that failed keeps the copy under its pending record.
@@ -592,6 +751,20 @@ test('the deb has moved when its version.json names another version than the win
     assert.equal(packageMovedTo({ form: 'deb' }, null, '0.49.2'), null, 'a window that knows no version of its own');
     assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.1', '0.49.2'), null, 'an AppImage updates itself');
     assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
+});
+
+test('the deb has moved too when the system updated it while no window was open and the runtime this application started still runs the older build', () => {
+    // The start that finds it offers the same restart as a window open at the update: without it the window says nothing
+    // the deb can do, and the runtime runs the older build until a person restarts it by hand.
+    const older = { version: '0.49.1', ours: true };
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', older), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2-rc.1', ours: true }), '0.49.2', 'a candidate before its release');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.3', older), '0.49.3', 'the package moved again under the window: its version');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.1', ours: false }), null, "another installation's runtime, which a restart of this one does not bring up");
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2+14315ba2', ours: true }), null, 'the same build');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.3', ours: true }), null, 'a newer runtime, which a restart from this build would start older');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: null, ours: true }), null, 'no runtime answered');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.2', '0.49.2', older), null, 'an AppImage updates itself');
 });
 
 test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
@@ -777,15 +950,25 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
             ruled,
         ].join(' '),
     );
+    // A release before 0.49.1 carries no key for Jason's apt source, which its install keeps: the source goes first, or every
+    // apt update reports it. Catches a way back that leaves the system's updates failing.
     assert.equal(
-        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
             'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
-            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo rm /etc/apt/sources.list.d/jason-desktop.sources, since that release carries no key for Jason\'s apt source, then sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
+    for (const version of ['0.49.1', '0.49.2-rc.1', '0.50.0']) {
+        assert.ok(
+            keptNotice('The runtime did not start.', { release: previousRelease(version), file: debFile, version }, '/opt/Jason', 'linux').includes(
+                'and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ),
+            version,
+        );
+    }
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {
@@ -1000,7 +1183,7 @@ test('the terminal settle records the update that installed this version as kept
     assert.equal(settleByRequest(s.rollback, '0.35.0', log), false, 'a second settle changes nothing');
     assert.equal(settleStart(s.rollback, '0.35.0', true, log), null, 'nor does the first window start after it');
     assert.deepEqual(log.lines, [{ level: 'info', name: 'update_settled_by_request', fields: { Version: '0.35.0' } }]);
-    assert.equal(keptLine(readRollback(s.rollback), '0.35.0', () => true), `The previous version 0.34.0 is kept at ${copy}; put it back by hand.`);
+    assert.equal(keptLine(readRollback(s.rollback), '0.35.0', () => true), 'The previous version 0.34.0 is kept.');
     // A record with no copy (the deb's) settles into nothing kept.
     writeRollback(s.rollback, { pending: { fromVersion: '0.35.0', toVersion: '0.36.0', directory: null }, rejected: [] });
     assert.equal(settleByRequest(s.rollback, '0.36.0', log), true);

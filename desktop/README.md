@@ -122,7 +122,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
-  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own. `jason
+  uninstall` that keeps the data removes it, since it takes off what the set-up placed.
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
@@ -795,7 +796,11 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   from an AppImage's copy under `<data>/desktop/bundle/<version>/`, never from the mount, and runs none where there is no
   copy. From the deb the terminal's `jason` is the package's own `/usr/bin/jason`, which the package's scripts write;
   from an AppImage it is `jason install`'s wrapper in `~/.local/bin`, with the installer's PATH lines where a new
-  terminal's PATH lacks that folder. `src/path-command.ts` remains only for a system the set-up does not cover.
+  terminal's PATH lacks that folder. The login shell is asked from the PATH the start was handed less what an earlier
+  start added to its own (`handedPath` in `src/shell-path.ts`): a desktop an update or the mode switch starts inherits that
+  start's PATH, its usual places at the end and its AppImage mount in front, and a profile that keeps the PATH it is
+  given, as Arch's does, would otherwise print them back as a terminal's. `src/path-command.ts` remains only for a system
+  the set-up does not cover.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
@@ -822,8 +827,13 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
   running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
   (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
-  it, then a relaunch, whose machine set-up finishes that update. If a version the deb's updater recorded does
-  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. An AppImage
+  it, then a relaunch, whose machine set-up finishes that update. A start that finds the runtime this application's own
+  `jason` started still running an older build, the system having updated the package while no window was open, offers
+  the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
+  the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
+  or the system's update where the runtime is newer. If a version the deb's updater recorded does
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
   replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
   update apply`. The updater's cache is
   `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.

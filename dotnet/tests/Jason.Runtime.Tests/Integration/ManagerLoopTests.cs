@@ -31,7 +31,15 @@ public class ManagerLoopTests
     /// without anybody registering a role called "manager" that already exists. A role with a command of its
     /// own — the ones the tests add — still wins over this.
     /// </summary>
-    private static string Settings(int reviewSeconds, params string[] managerOptions)
+    /// <remarks>
+    /// A start summons nothing under these: each test here is about the line or the clock that wakes a manager, and the
+    /// review a start summons would be the campaign's claim and its first check-in. The one test of the cadence from a
+    /// start keeps the defaults (<see cref="Defaults"/>).
+    /// </remarks>
+    private static string Settings(int reviewSeconds, params string[] managerOptions) =>
+        Dispatch.StartlessTriggers.Into(Defaults(reviewSeconds, managerOptions));
+
+    private static string Defaults(int reviewSeconds, params string[] managerOptions)
     {
         var command = string.Join(
             ",",
@@ -172,25 +180,38 @@ public class ManagerLoopTests
 
     /// <summary>
     /// Silence is the case the cadence exists for: work that simply sits there produces no line at all, so
-    /// nothing would ever summon a review of it.
+    /// nothing would ever summon a review of it. Going live is a line, and its review comes first; the cadence is
+    /// measured from that review, not from the start, so the clock moves between the two.
     /// </summary>
     [Fact]
     public async Task A_due_review_is_created_with_nothing_in_the_chronicle_to_cause_it()
     {
-        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 3_600));
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Defaults(reviewSeconds: 3_600));
         var campaign = await host.CampaignAsync(Ct);
 
-        // Not yet: the campaign went live a moment ago.
+        // Half an hour after the campaign went live, the next scan summons the review its start asks for, and that one alone.
+        host.Clock.Advance(TimeSpan.FromMinutes(30));
         await host.ScanAsync(Ct);
-        Assert.Empty(await CheckInsAsync(host, campaign));
+        var started = await CheckInAsync(host, campaign);
+        host.Track(started.Id);
+        Assert.Equal("triggered", (string?)started.Context["review_intent"]);
+        Assert.Equal(JournalKinds.CampaignStarted, (string?)started.Context["trigger"]);
+        Assert.Equal(LineageState.Root, started.Lineage!.State);
+        await host.WaitForStatusAsync(started.Id, WorkItemStatus.Succeeded, Ct);
 
-        // The loop's own tick is on this clock, so the hour below wakes it for a scan of its own beside the one
+        // Seventy minutes after the start is past an hour from the start and short of an hour from its review: nothing
+        // is due, whichever scan looks, the loop's own tick included.
+        host.Clock.Advance(TimeSpan.FromMinutes(40));
+        await host.ScanAsync(Ct);
+        Assert.Empty(await CheckInsAsync(host, campaign, except: started.Id));
+
+        // The loop's own tick is on this clock, so the move below may wake it for a scan of its own beside the one
         // asked for here. Scans run one at a time and either may be the one that summons, so the proof is the
         // check-in itself, read back once this scan has had its turn.
-        host.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        host.Clock.Advance(TimeSpan.FromMinutes(20));
         await host.ScanAsync(Ct);
 
-        var checkIn = await CheckInAsync(host, campaign);
+        var checkIn = Assert.Single(await CheckInsAsync(host, campaign, except: started.Id));
         host.Track(checkIn.Id);
         Assert.Equal("scheduled", (string?)checkIn.Context["review_intent"]);
         Assert.Null(checkIn.Context["trigger"]);
@@ -207,7 +228,34 @@ public class ManagerLoopTests
         // what this line is about, which is that the next one falls due at all.
         host.Clock.Advance(TimeSpan.FromSeconds(3_600));
         await host.ScanAsync(Ct);
-        Assert.Single(await CheckInsAsync(host, campaign, except: checkIn.Id));
+        Assert.Single(await CheckInsAsync(host, campaign, except: checkIn.Id), item => item.Id != started.Id);
+    }
+
+    /// <summary>
+    /// An installation where no role can be launched, as a fresh one is: no execution profile, and no entry command for
+    /// every role. The review its start summons fails at the claim and says why at once; that failure is the check-in's
+    /// own line and summons no successor; and the work queued behind the review is claimed at the next scan, held by
+    /// nothing. That work is waiting before the review exists, one step below a check-in's priority so that the review
+    /// is claimed ahead of it, and is of a role with a command of its own, so that it runs where the manager cannot.
+    /// </summary>
+    [Fact]
+    public async Task A_start_where_no_role_can_launch_fails_its_review_at_once_and_holds_nothing_behind_it()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("fake-succeed", Ct, "succeed");
+        var work = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-succeed", priority = -1 }, Ct);
+
+        await host.ScanAsync(Ct);
+        var started = await CheckInAsync(host, campaign);
+        Assert.Equal(JournalKinds.CampaignStarted, (string?)started.Context["trigger"]);
+        Assert.Equal(WorkItemStatus.Failed, started.Status);
+        Assert.Equal(AttemptErrors.RoleNotLaunchable, started.LastError!.Code);
+        Assert.Equal(WorkItemStatus.Created, (await host.GetAsync(work.Id, Ct)).Status);
+
+        await host.ScanAsync(Ct);
+        await host.WaitForStatusAsync(work.Id, WorkItemStatus.Succeeded, Ct);
+        Assert.Equal(started.Id, (await CheckInAsync(host, campaign)).Id);
     }
 
     /// <summary>

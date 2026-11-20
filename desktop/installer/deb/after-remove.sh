@@ -7,8 +7,7 @@
 # Then, on a removal and never on an upgrade, what after-install.sh wrote and what the system wrote for it, so that a
 # removed Jason leaves nothing of the system's behind: /usr/bin/jason where it is this package's link, Jason's apt
 # source, and the AppArmor cache its profile was compiled into. The key is a file of the package and goes with it. On a
-# purge as well, what apt kept of Jason's repository: its lists and the packages it downloaded. The rule for automatic
-# updates is a configuration file of the package, which dpkg keeps on a removal and deletes on a purge.
+# purge as well, what apt kept of Jason's repository: its lists and the packages it downloaded.
 
 # Delete the link to the binary
 # update-alternatives --remove <name> <path>: 'path' must be the registered alternative binary,

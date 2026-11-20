@@ -12,8 +12,9 @@ namespace Jason.Cli.Tests.Files;
 
 /// <summary>
 /// A tree the command-line client made of its own is deleted whole through one delete, <c>DirectoryTrees.Delete</c>: a
-/// skill a deployment staged, the skill a swap replaced, the UI's staging directory and the build it set aside, and the
-/// update's staging directory, as well as the uninstall's purge and a staged skills fetch that already went through it.
+/// skill a deployment staged, the skill a swap replaced, the UI's staging directory and the build it set aside, the
+/// update's staging directory, and the folder an AppImage was read into, as well as the uninstall's purge and a staged
+/// skills fetch that already went through it.
 /// A recursive <c>Directory.Delete</c> refuses a read-only file on Windows, as git leaves the packs of every clone, and
 /// refuses a junction there after removing it; the one delete clears the marks and removes a link as itself.
 /// </summary>
@@ -211,6 +212,58 @@ public sealed partial class OwnTreeDeleteTests
         finally
         {
             Clear(dir.Paths.Root);
+        }
+    }
+
+    /// <summary>
+    /// The folder beside an AppImage's copies that the file's own runtime writes what it carries into: one an earlier read
+    /// left is emptied before the file is read again, and the new one is discarded once its bundle is placed as the copy.
+    /// What the runtime writes keeps the image's own modes, so each holds, beside the plant, a directory without its write
+    /// permission and a file in it, which a recursive delete cannot empty on Linux, where an AppImage runs: where the
+    /// leftover stays, the read is never made and no copy is placed.
+    /// </summary>
+    [Fact]
+    public async Task The_folder_an_appimage_was_read_into_goes_whole()
+    {
+        using var dir = new TempPaths();
+        var (outside, kept) = Outside(dir);
+        var bundles = AppImageCopy.BundlesUnder(dir.Paths.Root);
+        var appImage = Path.Combine(dir.Paths.Root, AppImageCopy.FileName);
+        File.WriteAllText(appImage, "an AppImage");
+        var version = SemanticVersion.Parse("0.49.1");
+        var leftover = Path.Combine(bundles, $".{version}.tmp-{Environment.ProcessId}");
+        Directory.CreateDirectory(leftover);
+        Plant(leftover, outside);
+        Closed(leftover);
+
+        try
+        {
+            var made = await AppImageCopy.MakeAsync(appImage, bundles, version, (_, _, folder, _) =>
+            {
+                var bundle = Path.Combine(folder, "squashfs-root", "resources", "bundle");
+                Directory.CreateDirectory(bundle);
+                File.WriteAllText(Path.Combine(bundle, "jason"), "jason");
+                Installation.CarriedRecord.Beside(Path.Combine(bundle, "jason"), $"{{\n  \"version\": \"{version}\"\n}}\n");
+                Plant(Path.Combine(folder, "squashfs-root"), outside);
+                Closed(Path.Combine(folder, "squashfs-root"));
+                return Task.FromResult(true);
+            }, Ct);
+
+            Assert.True(made, "No copy was placed: the folder an earlier read left was not emptied, so the file was not read again.");
+            Assert.True(AppImageCopy.Holds(bundles, version));
+            Gone(bundles, ".tmp-");
+            AsItWas(outside, kept);
+        }
+        finally
+        {
+            Clear(dir.Paths.Root);
+        }
+
+        static void Closed(string tree)
+        {
+            var closed = Directory.CreateDirectory(Path.Combine(tree, "usr"));
+            File.WriteAllText(Path.Combine(closed.FullName, "lib"), "a file the image carries");
+            closed.Attributes |= FileAttributes.ReadOnly;
         }
     }
 

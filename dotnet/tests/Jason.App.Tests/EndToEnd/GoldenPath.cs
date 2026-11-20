@@ -28,11 +28,16 @@ internal sealed record CliResult(int ExitCode, string Output, string Error, stri
 /// minutes sets the smallest interval the validator accepts.
 /// </param>
 /// <param name="MaxAttempts">The shipped three, so a retriable end is retried the way it would be in the field.</param>
+/// <param name="StartSummons">
+/// The shipped triggers, under which a campaign's start summons its manager. False writes them less
+/// <c>campaign_started</c>, for a test about something else that reads the campaign's work while nothing else moves.
+/// </param>
 internal sealed record SettingsShape(
     bool Routed = true,
     int TickSeconds = 1,
     int? ProviderHeartbeatSeconds = null,
-    int MaxAttempts = 3);
+    int MaxAttempts = 3,
+    bool StartSummons = true);
 
 /// <summary>
 /// One installation of Jason, as a test owns it: its own data directory, its own Reply account, and the
@@ -180,6 +185,16 @@ internal static class GoldenPath
                     ["Plugin"] = PluginId,
                     ["Binding"] = new JsonObject { ["profile"] = it.Account.Profile },
                 },
+            };
+        }
+
+        if (!shape.StartSummons)
+        {
+            settings["Manager"] = new JsonObject
+            {
+                ["Triggers"] = new JsonArray([.. Jason.Runtime.Configuration.ManagerOptions.Default
+                    .Where(kind => kind != Jason.Runtime.Journal.JournalKinds.CampaignStarted)
+                    .Select(kind => (JsonNode?)JsonValue.Create(kind))]),
             };
         }
 

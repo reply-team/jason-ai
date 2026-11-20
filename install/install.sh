@@ -17,7 +17,8 @@
 # of jason, for the shell it ran in and an agent's session already running, which read no profile again.
 #
 # On Linux it installs Jason Desktop as each system's users install comparable applications, and opens nothing. The
-# package manager the system has decides. Where there is apt (Ubuntu, Debian, Mint): the release's deb, checked against
+# package manager the system has decides. Where there is apt (/usr/bin/apt-get and /usr/bin/dpkg: Ubuntu, Debian, Mint),
+# every tool of its route named by its path there: the release's deb, checked against
 # checksums.txt and installed by apt, with the one password a system package needs - asked by sudo where this line has a
 # terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most twenty minutes - and refused
 # in its own words where none can be asked or given; the package adds Jason's apt repository, its key and /usr/bin/jason,
@@ -34,7 +35,7 @@
 # Harness:Root in the settings names another folder — and makes no folder for it.
 #
 #   curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.0/install.sh | sh -s -- --version 0.49.0
+#   curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.2/install.sh | sh -s -- --version 0.49.2
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, the application's zips, manifest.json and checksums.txt — which is how CI runs it against what it
@@ -50,6 +51,7 @@ RELEASES_URL="https://get.jasonharness.ai/releases"
 LICENCE_BASE="https://github.com/reply-team/jason-ai/blob"
 INSTALL_DIR="$HOME/.local/bin"
 FEED="${JASON_INSTALL_FEED:-}"
+FEED_GIVEN=""
 VERSION=""
 MODIFY_PATH=1
 INSTALL_DIR_GIVEN=""
@@ -59,7 +61,8 @@ usage() {
 Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL]
 
   --version X.Y.Z        install that release rather than the latest (on macOS, 0.49.0 or later; on Linux, 0.49.1 or later)
-  --feed DIRECTORY|URL   read the release's files from there instead of the published releases (also JASON_INSTALL_FEED)
+  --feed DIRECTORY|URL   read the release's files from there instead of the published releases (also JASON_INSTALL_FEED,
+                         except where apt installs the package with your password, which takes --feed alone)
 
 On macOS it installs Jason Desktop into /Applications, or ~/Applications where this account may not write to
 /Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
@@ -83,8 +86,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --version) [ $# -ge 2 ] || fail "--version needs a value"; VERSION="$2"; shift ;;
         --version=*) VERSION="${1#--version=}" ;;
-        --feed) [ $# -ge 2 ] || fail "--feed needs a value"; FEED="$2"; shift ;;
-        --feed=*) FEED="${1#--feed=}" ;;
+        --feed) [ $# -ge 2 ] || fail "--feed needs a value"; FEED="$2"; FEED_GIVEN=1; shift ;;
+        --feed=*) FEED="${1#--feed=}"; FEED_GIVEN=1 ;;
         --install-dir) [ $# -ge 2 ] || fail "--install-dir needs a value"; INSTALL_DIR="$2"; INSTALL_DIR_GIVEN=1; shift ;;
         --install-dir=*) INSTALL_DIR="${1#--install-dir=}"; INSTALL_DIR_GIVEN=1 ;;
         --no-modify-path) MODIFY_PATH=0 ;;
@@ -153,6 +156,12 @@ fetch() {
 }
 
 TMP="$(mktemp -d)"
+# Held to a full path whatever TMPDIR says: apt reads an argument as a file only where it begins with / or ./, and pkexec
+# runs apt from the root folder.
+case "$TMP" in
+    /*) ;;
+    *) TMP="$(pwd)/$TMP" ;;
+esac
 trap 'rm -rf "$TMP"' EXIT
 
 # The archive, downloaded with checksums.txt and checked against it before anything opens it. An archive that does
@@ -361,6 +370,7 @@ set_up_and_end() {
         *'"runtime":"stopped"'*) start_again ;;
         *) if [ -n "$ANSWERED" ] && ! answers "$CARRIED"; then start_again; fi ;;
     esac
+    ANSWERED_BEFORE="$ANSWERED"
     ANSWERED=""
     case "$REPORT" in
         '{"error":'*) fail "jason install refused, as its report above says, so jason was not put in the terminal. Jason Desktop is installed at $DEST" ;;
@@ -372,6 +382,17 @@ set_up_and_end() {
         *'"completed":true'*) ;;
         *) echo 'Jason is installed and in the terminal; `jason install` named above what else it did not get done, and `jason status` names it too.' ;;
     esac
+    # The deb, put in place over an earlier build by this line or by the system while a runtime of that build runs: the
+    # runtime is left running, since a restart ends a turn it may be running and the person chooses when, as Jason
+    # Desktop's next start offers it.
+    if [ "$DEST" = "${DEB_PLACE:-}" ] && [ -n "$ANSWERED_BEFORE" ]; then
+        RUNNING="$("$CARRIED" runtime status 2>/dev/null | sed -n 's/.*"runtime_version":"\([^"\\]*\)".*/\1/p' | head -n 1)" || RUNNING=""
+        RUNNING="${RUNNING%%+*}"
+        # Earlier by the package system's own order, which puts a candidate before its release.
+        if [ -n "$RUNNING" ] && "$DPKG" --compare-versions "$(printf '%s' "$INSTALLED" | tr '-' '~')" gt "$(printf '%s' "$RUNNING" | tr '-' '~')"; then
+            echo "The runtime still runs Jason $RUNNING and was left running, since a restart ends a turn it may be running: Restart Jason and Its Runtime to Finish the Update to $INSTALLED, which Jason Desktop offers when it opens, or \`jason runtime restart\`, brings it to $INSTALLED."
+        fi
+    fi
     OPEN_SHELL="$(printf '%s' "$REPORT" | sed -n 's/.*"open_shell":"\([^"\\]*\)".*/\1/p' | head -n 1)"
     [ -n "$OPEN_SHELL" ] || OPEN_SHELL="$HOME/.local/bin/jason"
     # Whether a terminal opened from now on runs this jason for the name, as jason install decided it once everything was
@@ -419,6 +440,14 @@ APPIMAGE_ASSET="jason-desktop-linux-x64.AppImage"
 APPIMAGE_PLACE="$HOME/Applications"
 # How long apt waits for the package lock another installation holds.
 LOCK_SECONDS=600
+# The programs the apt route runs, and hands to sudo or pkexec to run as root, each by the path Debian and Ubuntu keep it
+# at, never looked up on a PATH whatever started the line may have set: these files decide the route, too.
+APT_GET="/usr/bin/apt-get"
+DPKG="/usr/bin/dpkg"
+DPKG_QUERY="/usr/bin/dpkg-query"
+SUDO="/usr/bin/sudo"
+PKEXEC="/usr/bin/pkexec"
+TIMEOUT="/usr/bin/timeout"
 
 # How long an install through the system's password dialog is given: apt's wait for the lock and ten minutes more, for
 # the password and apt's own work, so that apt answers first.
@@ -437,14 +466,6 @@ refuse_while_running() {
     fi
 }
 
-# The apt options every install of the package takes: the package lock waited for, a configuration file the person
-# changed kept, and the person's proxy, which sudo and pkexec both drop.
-apt_options() {
-    APT_OPTIONS="-y -o DPkg::Lock::Timeout=$LOCK_SECONDS -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
-    [ -z "${http_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::http::Proxy=$http_proxy"
-    [ -z "${https_proxy:-}" ] || APT_OPTIONS="$APT_OPTIONS -o Acquire::https::Proxy=$https_proxy"
-}
-
 # Whether this account is one the system's dialog asks its own password of: an administrator, by Ubuntu's rule.
 administrator() {
     id -nG 2>/dev/null | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'
@@ -456,25 +477,26 @@ administrator() {
 # session). Which refusal it is is read from their own words, never from an exit code alone.
 apt_install() {
     FILE="$1"
-    apt_options
-    APT_GET="$(command -v apt-get)"
+    # What apt is given, as a list of arguments, each one argument whatever it holds: the package lock waited for, a
+    # configuration file the person changed kept, the person's proxy, which sudo and pkexec both drop, and the file.
+    set -- -y -o "DPkg::Lock::Timeout=$LOCK_SECONDS" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+    [ -z "${http_proxy:-}" ] || set -- "$@" -o "Acquire::http::Proxy=$http_proxy"
+    [ -z "${https_proxy:-}" ] || set -- "$@" -o "Acquire::https::Proxy=$https_proxy"
+    set -- "$@" "$FILE"
     : > "$TMP/apt.err"
     STATUS=0
     ROUTE=none
-    if (: < /dev/tty) 2>/dev/null && command -v sudo >/dev/null 2>&1; then
+    if (: < /dev/tty) 2>/dev/null && [ -x "$SUDO" ]; then
         ROUTE=sudo
         echo "Installing Jason Desktop's package with apt; sudo asks for your password."
-        # shellcheck disable=SC2086
-        sudo "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
-    elif command -v pkexec >/dev/null 2>&1; then
+        "$SUDO" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
+    elif [ -x "$PKEXEC" ]; then
         ROUTE=pkexec
         echo "Installing Jason Desktop's package with apt; your desktop asks for your password in its own window."
-        if command -v timeout >/dev/null 2>&1; then
-            # shellcheck disable=SC2086
-            timeout "$ASK_SECONDS" pkexec "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
+        if [ -x "$TIMEOUT" ]; then
+            "$TIMEOUT" "$ASK_SECONDS" "$PKEXEC" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
         else
-            # shellcheck disable=SC2086
-            pkexec "$APT_GET" install $APT_OPTIONS "$FILE" 2> "$TMP/apt.err" || STATUS=$?
+            "$PKEXEC" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
         fi
     else
         STATUS=127
@@ -483,7 +505,7 @@ apt_install() {
     cat "$TMP/apt.err" >&2
     # The bound on the dialog ends the wait, not apt, which runs as root once the password is given: a late answer, or apt
     # waiting on the package lock, may still install the package. Where it did, it is installed.
-    case "$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)" in
+    case "$("$DPKG_QUERY" -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)" in
         ii*"|$WANTED")
             echo "apt went on after the wait ended and installed the package."
             return 0
@@ -506,7 +528,7 @@ apt_install() {
         fail "The password dialog was not answered within $((ASK_SECONDS / 60)) minutes, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
-    elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
+    elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || [ ! -x "$PKEXEC" ]; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
     elif grep -qE 'Message recipient disconnected|No session for cookie' "$TMP/apt.err"; then
         fail "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again."
@@ -521,7 +543,7 @@ install_deb() {
     CARRIED="$DEST/resources/bundle/jason"
     INSTALLED="$LATEST"
     WANTED="$(printf '%s' "$LATEST" | tr '-' '~')"
-    PLACED_STATE="$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)"
+    PLACED_STATE="$("$DPKG_QUERY" -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)"
     PLACED_VERSION=""
     case "$PLACED_STATE" in
         ii*'|'*) PLACED_VERSION="${PLACED_STATE#*|}" ;;
@@ -529,7 +551,7 @@ install_deb() {
     if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
     if [ "$PLACED_VERSION" = "$WANTED" ]; then
         echo "Jason Desktop $LATEST is already installed; nothing to download."
-    elif [ -n "$PLACED_VERSION" ] && dpkg --compare-versions "$PLACED_VERSION" gt "$WANTED"; then
+    elif [ -n "$PLACED_VERSION" ] && "$DPKG" --compare-versions "$PLACED_VERSION" gt "$WANTED"; then
         INSTALLED="$(printf '%s' "$PLACED_VERSION" | tr '~' '-')"
         echo "Jason Desktop $INSTALLED is already installed; it is kept as it is, and nothing is downloaded."
     else
@@ -574,6 +596,10 @@ install_appimage() {
     if [ -e "$DEST" ]; then
         PLACED_VERSION="$(appimage_version "$DEST")"
         [ -n "$PLACED_VERSION" ] || fail "A file of that name that is not Jason Desktop is in $APPIMAGE_PLACE ($DEST); it is left as it is, and nothing was installed."
+        # The floor the move holds the same file to: a jason before 0.49.1 cannot set Linux up, and its own update can.
+        if older_than "$PLACED_VERSION" 0.49.1; then
+            fail "Jason Desktop $PLACED_VERSION at $DEST is older than 0.49.1, so its jason cannot set this machine up, and nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again."
+        fi
         KEPT=1
         INSTALLED="$PLACED_VERSION"
         if [ "$PLACED_VERSION" = "$LATEST" ]; then
@@ -691,6 +717,17 @@ install_linux() {
     if [ -f "$HOME/.local/bin/jason" ] && { [ -f "$HOME/.local/bin/jason-LICENSE" ] || [ -f "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]; }; then
         COMMAND_LINE="$HOME/.local/bin/jason"
     fi
+    # The package manager the system has decides: apt's package where there is apt, else the AppImage. An AppImage already
+    # in its place stays the installation, apt or not, and no deb is installed beside it.
+    DEB_ROUTE=""
+    if [ ! -e "$APPIMAGE_PLACE/$APPIMAGE_ASSET" ] && [ -x "$APT_GET" ] && [ -x "$DPKG" ]; then
+        DEB_ROUTE=1
+    fi
+    # What apt installs runs as root with the person's password, so its feed is one the person typed, never one the
+    # environment of whatever started the line names.
+    if [ -n "$DEB_ROUTE" ] && [ -n "$FEED" ] && [ -z "$FEED_GIVEN" ]; then
+        fail "JASON_INSTALL_FEED names a feed, and where apt installs Jason Desktop's package with your password the feed is taken from --feed alone, so nothing was read from it or installed: give it as --feed, or unset JASON_INSTALL_FEED and run the line again."
+    fi
     fetch manifest.json "$TMP/manifest.json"
     LATEST="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$TMP/manifest.json" | head -n 1)"
     [ -n "$LATEST" ] || fail "$BASE/manifest.json does not name a version"
@@ -701,9 +738,7 @@ install_linux() {
     if older_than "$LATEST" 0.49.1 || ! from_minor 49 "$LATEST"; then
         fail "Jason $LATEST is installed on Linux by its own release's script, not this one, which installs Jason Desktop 0.49.1 and later; nothing was installed"
     fi
-    # The package manager the system has decides: apt's package where there is apt, else the AppImage. An AppImage already
-    # in its place stays the installation, apt or not, and no deb is installed beside it.
-    if [ ! -e "$APPIMAGE_PLACE/$APPIMAGE_ASSET" ] && command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+    if [ -n "$DEB_ROUTE" ]; then
         install_deb
     else
         install_appimage

@@ -217,8 +217,8 @@ public interface IInstallationRemover
 
     /// <summary>
     /// Linux, the deb: <paramref name="package"/> purged by apt, with the one password a system package needs, asked as its
-    /// install asks it: by <c>sudo</c> where this process has a terminal, else by the desktop's own dialog through
-    /// <c>pkexec</c>, waited for up to <paramref name="bound"/>; <paramref name="progress"/> is told which, before either asks.
+    /// install asks it (<see cref="Update.MoveSystem.Asker"/>), waited for up to <paramref name="bound"/>;
+    /// <paramref name="progress"/> is told which, before either asks.
     /// A remover that cannot ask answers that no password could be asked, so nothing is taken off.
     /// </summary>
     Task<Update.PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>

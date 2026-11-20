@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
@@ -307,26 +308,62 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
     /// <summary>
     /// An uninstall that keeps the data takes back the note that a start is owed: with the installation taken off none is,
-    /// and a later install would otherwise start a runtime for an old stop. A dry run leaves it.
+    /// and a later install would otherwise start a runtime for an old stop. It takes back the record of the machine set-up
+    /// Jason Desktop's start ran too, on every system that writes one, the deb's included and with the application kept as
+    /// the Windows uninstaller keeps it: what that set-up placed is taken off, and a start of the same version again, a file
+    /// downloaded anew say, would otherwise read the record as done and place no jason and no skills. A dry run leaves both.
+    /// With no record, as before 0.49.1 or at a second uninstall, nothing is said of it, and the application's jason is never
+    /// looked for as a command-line install's PATH entry.
     /// </summary>
-    [Fact]
-    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed()
+    [Theory]
+    [InlineData("macos", false, true)]
+    [InlineData("macos", true, true)]
+    [InlineData("appimage", false, true)]
+    [InlineData("deb", false, true)]
+    [InlineData("macos", false, false)]
+    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed_and_the_set_ups_record(string system, bool keepApplication, bool recorded)
     {
-        var executable = MacApplication();
+        var places = system == "macos" ? MacPlaces() : LinuxPlaces();
+        var executable = system switch
+        {
+            "appimage" => AppImage().Copy,
+            "deb" => Deb(places),
+            _ => MacApplication(),
+        };
         Directory.CreateDirectory(_dir.Paths.RunDirectory);
         File.WriteAllText(_dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
-        var (env, output, _) = Environment(MacPlaces(), executable);
+        var record = Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json");
+        if (recorded)
+        {
+            Written(record, "{\"ran_for\":\"0.34.0\",\"completed\":true}");
+        }
 
-        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false), Ct));
+        var (env, output, remover) = Environment(places, executable);
+        if (system == "deb")
+        {
+            remover.Purges = _ =>
+            {
+                Directory.Delete(places.DebApplication, recursive: true);
+                return new PackageRun(true, 0, string.Empty);
+            };
+        }
+
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false, KeepApplication: keepApplication), Ct));
         Assert.True(File.Exists(_dir.Paths.StartOwedFile), "a dry run took the note back");
+        Assert.Equal(recorded, File.Exists(record));
 
         output.GetStringBuilder().Clear();
-        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: keepApplication), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
         Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.False(File.Exists(record), "the set-up's record outlived the uninstall, so a start of the same version sets nothing up");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
-        Assert.Contains(JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("start-owed.json", StringComparison.Ordinal));
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.Contains(done, line => line.Contains("start-owed.json", StringComparison.Ordinal));
+        Assert.Equal(recorded, done.Any(line => line.Contains(record, StringComparison.Ordinal)));
+        Assert.DoesNotContain(report.GetProperty("kept").EnumerateArray(), line => line.GetString()!.Contains("no PATH entry was looked for", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1754,6 +1791,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
     [Critical(Family.I3, "on Linux one uninstall takes everything of this account's an AppImage placed, and the file last")]
     public async Task From_an_AppImage_it_takes_off_everything_of_this_accounts_and_deletes_the_file_last(bool purge, bool linePlace, string folder)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows() && folder.Contains('"', StringComparison.Ordinal), "Windows names no folder with a quote.");
         var places = LinuxPlaces();
         var (copy, file) = AppImage(linePlace, folder);
         var bin = places.LocalBin;
@@ -1836,9 +1874,13 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var processes = new FakeProcessControl();
         processes.RunningPids.Add(RuntimeVerbs.Pid);
         var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
+        var registeredAtThePurge = false;
         remover.Purges = _ =>
         {
             // As apt does: the package's files go, the jason this runs as among them.
+            registeredAtThePurge = registrar.State.Registered;
             Directory.Delete(places.DebApplication, recursive: true);
             return new PackageRun(true, 0, string.Empty);
         };
@@ -1852,6 +1894,11 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var purged = log.Steps.IndexOf("package.purge");
         var firstOfTheAccounts = log.Steps.FindIndex(step => step is "file.remove" or "tree.remove" or "directory.remove_if_empty");
         Assert.True(stopped >= 0 && purged > stopped && firstOfTheAccounts > purged, string.Join(" | ", log.Steps));
+
+        // The runtime's start at logon is the account's too: taken only once the package is off, as on macOS after the stop.
+        // Catches a dismissed password dialog that leaves no runtime starting at the next sign-in.
+        Assert.True(registeredAtThePurge, "the runtime's start at logon was taken before the package's removal was granted");
+        Assert.Equal(1, registrar.Removals);
         // apt is waited for longer than the package lock it is told to wait for, so its own answer comes first.
         Assert.True(remover.PurgeBounds.Single() > Jason.Cli.Tests.Update.CommandLineMoveLinuxTests.LockWait(MoveSystem.PurgeArguments(DesktopRemoval.DebPackage)), $"the purge was waited for {remover.PurgeBounds.Single()}");
         foreach (var gone in new[] { atLogin, wrapper, skill })
@@ -1864,11 +1911,55 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
     }
 
+    /// <summary>
+    /// From the deb, a start at logon that cannot be taken away once the package is off ends nothing: what the purge took is
+    /// gone with this account's `jason`, so a refusal naming `jason runtime autostart disable` would leave the rest with no
+    /// command to take it off. The rest goes, and the report names the unit and the commands that take it off by hand; the
+    /// unit itself starts nothing, its program gone. Catches an uninstall that stops half done after the package.
+    /// </summary>
+    [Fact]
+    public async Task From_the_deb_a_start_at_logon_that_cannot_be_taken_after_the_package_is_named_and_the_rest_goes()
+    {
+        var places = LinuxPlaces();
+        var carried = Deb(places);
+        var (atLogin, wrapper, skill, updater) = PlantForTheDeb(places, carried);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
+        remover.Purges = _ =>
+        {
+            Directory.Delete(places.DebApplication, recursive: true);
+            registrar.Refuses = new Jason.Cli.Autostart.AutostartException(Jason.Cli.Autostart.AutostartCodes.Refused, "systemctl could not be run, made up.");
+            return new PackageRun(true, 0, string.Empty);
+        };
+        env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
+
+        await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("refusal_code").ValueKind);
+        var problems = string.Join(" | ", report.GetProperty("problems").EnumerateArray().Select(problem => problem.GetString()));
+        Assert.Contains("systemctl could not be run, made up.", problems, StringComparison.Ordinal);
+        Assert.Contains("systemctl --user disable jason.service", problems, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason runtime autostart disable", problems, StringComparison.Ordinal);
+        foreach (var gone in new[] { atLogin, wrapper, skill })
+        {
+            Assert.False(File.Exists(gone), $"{gone} is still there");
+        }
+
+        Assert.False(Directory.Exists(updater), "the updater's cache is still there");
+    }
+
     [Theory]
     [Critical(Family.I3, "on Linux a package that stays leaves everything of this account's in place")]
     [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
     [InlineData("no session to ask in", false, 127, "")]
     [InlineData("apt not ended", true, PackageRun.TimedOut, "")]
+    [InlineData("no new privileges", true, 127, "pkexec must be setuid root\n")]
     public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again_unless_apt_may_still_run(string row, bool asked, int code, string said)
     {
         var places = LinuxPlaces();
@@ -1885,6 +1976,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
             return new FakeProcessHandle(5151);
         };
         var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
         remover.Purges = _ => new PackageRun(asked, code, said);
         env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
 
@@ -1895,6 +1988,13 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.Equal(CliErrors.UninstallRefused, report.GetProperty("refusal_code").GetString());
         Assert.Contains("sudo apt purge jason-desktop", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         Assert.Equal(["package.purge jason-desktop"], remover.Calls);
+
+        // The runtime's start at logon stays with the rest, and the refusal says nothing of it having gone: catches the next
+        // sign-in starting no runtime after a dismissed dialog.
+        Assert.Equal(0, registrar.Removals);
+        Assert.True(registrar.State.Registered, $"{row}: the runtime's start at logon went");
+        Assert.Contains("Nothing of this account's was removed, the runtime's start at logon included.", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("already been taken away", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         foreach (var stays in new[] { atLogin, wrapper, skill, carried })
         {
             Assert.True(File.Exists(stays), $"{row}: {stays} went");
@@ -1916,6 +2016,14 @@ public sealed partial class UninstallCarriedTests : IDisposable
         {
             Assert.Equal([_dir.Paths.Root], processes.Launches);
             Assert.Equal([carried], processes.Executables.Single());
+        }
+
+        // A window its update restarted cannot gain an administrator's rights, nor can anything it started: the way on is a
+        // window opened anew, never dpkg. Catches pkexec's refusal under no_new_privs said as apt's failure.
+        if (row == "no new privileges")
+        {
+            Assert.Contains("open it again from your applications menu", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("dpkg --configure", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         }
     }
 
@@ -2093,13 +2201,21 @@ public sealed partial class UninstallCarriedTests : IDisposable
             Plant(Path.Combine(XdgCache, "jason-desktop-updater")));
 
     /// <summary>
-    /// Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting a launcher whose path needs
-    /// no escape; or, for one that does, its TryExec and quoted Exec values as given, spelled by the test.
+    /// Open Jason at Login as the application writes it on Linux, an XDG autostart entry starting <paramref name="launcher"/>,
+    /// spelled as <c>autostartEntry</c> spells it (<c>desktop/src/login-item.ts</c>): TryExec with each backslash doubled,
+    /// and Exec's quoted argument with a double quote, a backtick, a dollar sign and a backslash each escaped, that escape's
+    /// backslash doubled too. A launcher under a Windows test home holds backslashes.
     /// </summary>
-    private string OpenAtLoginEntry(string launcher, string? execValue = null) =>
+    private string OpenAtLoginEntry(string launcher) =>
+        OpenAtLoginEntry(
+            launcher.Replace(@"\", @"\\", StringComparison.Ordinal),
+            "\"" + Regex.Replace(launcher, """["`$\\]""", found => @"\\" + (found.Value == @"\" ? @"\\" : found.Value)) + "\"");
+
+    /// <summary>Open Jason at Login with its TryExec and quoted Exec values as the test spells them.</summary>
+    private string OpenAtLoginEntry(string tryExec, string exec) =>
         Written(
             Path.Combine(XdgConfig, "autostart", DesktopRemoval.Identifier + ".desktop"),
-            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={launcher}\nExec={execValue ?? $"\"{launcher}\""} --opened-at-login\n");
+            $"[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec={tryExec}\nExec={exec} --opened-at-login\n");
 
     /// <summary>A runtime that goes when asked: its descriptor, then its process.</summary>
     private FakeHandler StopsWhenAsked(StepLog log, FakeProcessControl processes) => new(_ =>

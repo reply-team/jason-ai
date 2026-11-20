@@ -18,16 +18,17 @@ public class UninstallPathEntryTests
     private const string Directory = "/home/a/.local/bin";
 
     /// <summary>
-    /// The marker has one definition and the install script is held to it. Two copies of a string that has to
-    /// match is how the verb that undoes an installer drifts away from the installer.
+    /// The marker has one definition and the install scripts that wrote it are held to it. Two copies of a string that
+    /// has to match is how the verb that undoes an installer drifts away from the installer.
     /// </summary>
     [Fact]
     public void The_marker_is_what_the_install_script_writes()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
-
-        Assert.Contains($"MARKER=\"{PathEntry.Marker}\"", script, StringComparison.Ordinal);
-        Assert.Contains("export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"", script, StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains($"MARKER=\"{PathEntry.Marker}\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another marker");
+            Assert.True(script.Contains("export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another line");
+        }
     }
 
     [Fact]
@@ -208,17 +209,21 @@ public class UninstallPathEntryTests
     };
 
     /// <summary>
-    /// <c>install.sh</c> carries that rule as the function the C# spells, word for word, and writes the line into the
-    /// file it names as well as into the login profile.
+    /// <c>install.sh</c> carries that rule as the function the C# spells, word for word; and the scripts that wrote the
+    /// lines carried it too, and wrote the line into the file it names as well as into the login profile.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_interactive_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = PathEntry.InteractiveProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-        Assert.Contains(PathEntry.InteractiveProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains("INTERACTIVE=\"$(interactive_profile)\"", script, StringComparison.Ordinal);
-        Assert.Contains("add_to_profile \"$INTERACTIVE\"", script, StringComparison.Ordinal);
+        Assert.Contains(function, CurrentScript(), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(function, StringComparison.Ordinal), $"{tag}'s install.sh carried another interactive_profile");
+            Assert.True(script.Contains("INTERACTIVE=\"$(interactive_profile)\"", StringComparison.Ordinal), $"{tag}'s install.sh did not ask interactive_profile");
+            Assert.True(script.Contains("add_to_profile \"$INTERACTIVE\"", StringComparison.Ordinal), $"{tag}'s install.sh did not write into the interactive file");
+        }
     }
 
     /// <summary>And the function, run in <c>sh</c> under the installer's <c>set -eu</c>, answers what the C# answers.</summary>
@@ -290,6 +295,191 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// A profile comes back from the installer's add and the uninstall's removal byte for byte as it was, whatever it
+    /// ended with.
+    /// </summary>
+    /// <remarks>
+    /// The block is appended as <c>\n&lt;marker&gt;\n&lt;line&gt;\n</c>. After a last line that had no newline, that first
+    /// <c>\n</c> ended the person's line rather than making a blank one, and the removal, which takes a blank line above
+    /// the marker only where there is one, left it: the file came back one newline longer. A Mac's <c>.bash_profile</c>
+    /// ending without one came back changed from an install and an uninstall of Jason Desktop.
+    /// </remarks>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("")]
+    [InlineData("# mine\nexport EDITOR=vim\n\n")]
+    [InlineData("# mine\r\nexport EDITOR=vim\r\n")]
+    [InlineData("# mine\r\nexport EDITOR=vim")]
+    public void A_profile_comes_back_byte_for_byte_whatever_it_ended_with(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// Where the person wrote on after the block, the newline the block began with now separates their own lines, and
+    /// stays: the block goes, and their text after it stays on lines of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    public void A_block_with_the_persons_own_text_after_it_leaves_that_text_on_lines_of_its_own(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+        File.AppendAllText(profile, "export LANG=C\n");
+
+        Assert.Equal(Bytes("# mine\nexport EDITOR=vim\nexport LANG=C\n"), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// A last line of spaces, with no newline after it, is the person's own and not the blank line the installer writes:
+    /// it stays, and the file ends as it began.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\n   ")]
+    [InlineData("# mine\n\t ")]
+    [InlineData("   ")]
+    public void A_last_line_of_spaces_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// A last line that is a lone <c>\r</c>, with no newline after it, is the person's own: the block under it was not
+    /// turned to CRLF, so that <c>\r</c> is no blank line the installer wrote, and it stays.
+    /// </summary>
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("a\n\r")]
+    [InlineData("a\r\n\r")]
+    public void A_last_line_of_a_lone_carriage_return_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// The blank line the installer wrote, turned to a lone <c>\r</c> when the whole file was later turned to CRLF, is
+    /// still the installer's blank line, and goes with the block.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("")]
+    public void A_blank_line_turned_to_crlf_is_still_the_installers_blank(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+        File.WriteAllText(profile, File.ReadAllText(profile).Replace("\n", "\r\n", StringComparison.Ordinal));
+
+        Assert.Equal(Bytes(original.Replace("\n", "\r\n", StringComparison.Ordinal)), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// Two blocks: the same block twice, as a repair appended it before it looked for the line first, both go; and a
+    /// second folder's block above which the first stands comes off in its turn. Either way the file ends as it began.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    public void Two_blocks_come_out_and_leave_the_profile_as_it_began(string original)
+    {
+        using var tree = new TempTree();
+        var twice = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(twice, Directory));
+        File.AppendAllText(twice, $"\n{PathEntry.Marker}\n{PathEntry.ExportLine(Directory)}\n");
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(twice), Directory));
+
+        const string other = "/opt/other/bin";
+        var two = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(two, Directory));
+        Assert.True(PathEntry.AddToProfile(two, other));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(PathEntry.WithoutEntry(File.ReadAllBytes(two), other), Directory));
+    }
+
+    /// <summary>
+    /// The block the repair <c>jason status</c> prints appends, run in <c>sh</c> as the person runs it, comes back out the
+    /// same way.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("")]
+    public void The_repairs_appended_block_comes_back_out_byte_for_byte(string original)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the repair runs in sh, on the platforms it is printed on.");
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(PathEntry.AppendCommand(Directory, profile));
+        using (var process = System.Diagnostics.Process.Start(start)!)
+        {
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.True(process.ExitCode == 0, error);
+        }
+
+        Assert.NotEqual(Bytes(original), File.ReadAllBytes(profile));
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>And over a list of profiles of every shape, removal(add(profile)) is the profile, byte for byte.</summary>
+    [Fact]
+    public void Every_profile_of_a_list_survives_the_add_and_the_removal_byte_for_byte()
+    {
+        string[] originals =
+        [
+            "", "\n", "\n\n\n", "\r\n", "x", "x\n", "x\r", "x\r\n", "a\nb", "a\nb\n", "a\n\nb", "a\n\nb\n\n",
+            "a\r\nb\r\nc", "a\r\nb\r\nc\r\n", "mixed\r\nends\nhere", "\ttabbed\n\tlines", "# é, ü and ß\nexport X=1",
+            "# added by jason install", "# added by jason install\n", $"# {PathEntry.ExportLine(Directory)}",
+            $"x\n{PathEntry.ExportLine("/opt/other/bin")}", "alias ll='ls -l'", "   ", "a\n \t", "a\n   \n",
+        ];
+
+        using var tree = new TempTree();
+        foreach (var original in originals)
+        {
+            var profile = Profile(tree, original);
+            Assert.True(PathEntry.AddToProfile(profile, Directory), original);
+
+            var back = PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory);
+
+            Assert.True(Bytes(original).AsSpan().SequenceEqual(back), $"{Show(original)} came back as {Show(System.Text.Encoding.UTF8.GetString(back))}");
+        }
+
+        static string Show(string text) => text.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+    }
+
+    /// <summary>A profile of its own in the tree, holding exactly those bytes.</summary>
+    private static string Profile(TempTree tree, string text)
+    {
+        var profile = Path.Combine(tree.NewDirectory("home"), ".bash_profile");
+        File.WriteAllBytes(profile, Bytes(text));
+        return profile;
+    }
+
+    private static byte[] Bytes(string text) => System.Text.Encoding.UTF8.GetBytes(text);
+
+    /// <summary>
     /// The profile a repair writes into is the one the running shell reads at login — which for zsh is not
     /// <c>~/.profile</c> at all.
     /// </summary>
@@ -324,16 +514,21 @@ public class UninstallPathEntryTests
     };
 
     /// <summary>
-    /// <c>install.sh</c> carries the rule as the function the C# spells, word for word — and runs it, so the
-    /// installer, the repair and the check cannot disagree about which file a login shell reads.
+    /// <c>install.sh</c> carries the rule as the function the C# spells, word for word; and the scripts that wrote the
+    /// lines carried it too and wrote by it, so the installer, the repair and the check cannot disagree about which file
+    /// a login shell reads.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_login_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = PathEntry.LoginProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-        Assert.Contains(PathEntry.LoginProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains("add_to_profile \"$(login_profile)\"", script, StringComparison.Ordinal);
+        Assert.Contains(function, CurrentScript(), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(function, StringComparison.Ordinal), $"{tag}'s install.sh carried another login_profile");
+            Assert.True(script.Contains("add_to_profile \"$(login_profile)\"", StringComparison.Ordinal), $"{tag}'s install.sh did not write into the login profile");
+        }
     }
 
     /// <summary>
@@ -406,34 +601,37 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
-    /// <c>jason install</c> writes the block on macOS by <see cref="PathEntry.AddToProfile"/>, and <c>install.sh</c> by its
-    /// <c>add_to_profile</c>: one rule with two writers. The script carries the function the C# spells, word for word, with the
-    /// marker and the line it appends.
+    /// <c>jason install</c> writes the block by <see cref="PathEntry.AddToProfile"/>, and <c>install.sh</c> wrote it by its
+    /// <c>add_to_profile</c> until the application's <c>jason install</c> took the lines over: one rule with two writers,
+    /// and <c>jason uninstall</c> takes back what either left. The scripts that wrote the lines carried the function the C#
+    /// spells, word for word, with the marker and the line it appended.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_add_to_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
-
-        Assert.Contains(PathEntry.AddToProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains($"MARKER=\"{PathEntry.Marker}\"", script, StringComparison.Ordinal);
-        Assert.Contains("LINE=\"export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"\"", script, StringComparison.Ordinal);
-        Assert.Contains("INSTALL_DIR=\"$HOME/.local/bin\"", script, StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(PathEntry.AddToProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal), $"{tag}'s install.sh carried another add_to_profile");
+            Assert.True(script.Contains($"MARKER=\"{PathEntry.Marker}\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another marker");
+            Assert.True(script.Contains("LINE=\"export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another line");
+            Assert.True(script.Contains("INSTALL_DIR=\"$HOME/.local/bin\"", StringComparison.Ordinal), $"{tag}'s install.sh installed into another folder");
+        }
     }
 
     /// <summary>
-    /// <c>install.sh</c> writes no profile where the PATH it runs with names the folder already, and <c>jason install</c>
-    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the script carries the test the C# spells, word for word, its
-    /// indentation aside.
+    /// <c>install.sh</c> wrote no profile where the PATH it ran with named the folder already, and <c>jason install</c>
+    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the scripts that wrote the lines carried the test the C#
+    /// spells, word for word, its indentation aside.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_on_path_test_word_for_word()
     {
         static string Unindented(string text) => System.Text.RegularExpressions.Regex.Replace(text.Replace("\r\n", "\n", StringComparison.Ordinal), @"(?m)^[ \t]+", string.Empty);
 
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
-
-        Assert.Contains(Unindented(PathEntry.OnPathTest) + "\n", Unindented(script), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(Unindented(script).Contains(Unindented(PathEntry.OnPathTest) + "\n", StringComparison.Ordinal), $"{tag}'s install.sh tested the PATH another way");
+        }
     }
 
     /// <summary>
@@ -801,6 +999,101 @@ public class UninstallPathEntryTests
                 @"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;%USERPROFILE%\.local\bin;C:\Users\a\AppData\Local\Programs\jason",
                 @"C:\Users\a\AppData\Local\Programs\jason",
                 Expand));
+    }
+
+    /// <summary>
+    /// The releases whose <c>install.sh</c> wrote the PATH lines last: 0.48.7's on macOS and 0.49.0's on Linux. From 0.49.0
+    /// on macOS and 0.49.1 on Linux the script installs Jason Desktop, and the lines are written, where any are, by the
+    /// <c>jason install</c> the application carries. Every release's script from 0.21.0 to these carried the same rule word
+    /// for word.
+    /// </summary>
+    /// <remarks>
+    /// No <c>install.sh</c> writes a profile any more, and <c>jason uninstall</c> still takes back the lines those scripts
+    /// left on every machine they ran on, so the rule it takes them back by is held to theirs, read where they cannot
+    /// change: at their tags.
+    /// </remarks>
+    private static readonly string[] LastWriters = ["v0.48.7", "v0.49.0"];
+
+    private static string CurrentScript() =>
+        File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>install/install.sh</c> as each of <see cref="LastWriters"/> published it. A checkout without those tags skips the
+    /// row outside CI, where a shallow clone is a person's choice; under CI the checkout is the workflow's, and a row that
+    /// skipped there would never run at all, so it fails and names the checkout.
+    /// </summary>
+    private static List<(string Tag, string Script)> ScriptsThatWroteTheLines()
+    {
+        var scripts = new List<(string Tag, string Script)>();
+        foreach (var tag in LastWriters)
+        {
+            var (script, said) = Git("show", $"{tag}:install/install.sh");
+            if (script is not null)
+            {
+                scripts.Add((tag, script.Replace("\r\n", "\n", StringComparison.Ordinal)));
+                continue;
+            }
+
+            var failure = UnreadScriptFailure(Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true", tag, said);
+            Assert.True(failure is null, failure);
+            Assert.Skip($"The install.sh {tag} published cannot be read in this checkout: git said {said}");
+        }
+
+        return scripts;
+    }
+
+    /// <summary>Why a script that cannot be read fails the row, or null where it only skips it.</summary>
+    private static string? UnreadScriptFailure(bool underCi, string tag, string said) => underCi
+        ? $"The install.sh {tag} published cannot be read under CI (git said {said}), so nothing would hold the uninstall to the "
+          + "PATH lines it wrote: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite must keep "
+          + "fetch-depth: 0, which brings the tags."
+        : null;
+
+    /// <summary>
+    /// A checkout without the tags skips the rows above outside CI only: under CI a row that skipped would never run at all,
+    /// so it fails, naming the checkout and what git said.
+    /// </summary>
+    [Fact]
+    public void A_release_s_script_unread_under_ci_fails_naming_the_checkout_and_skips_elsewhere()
+    {
+        var failure = UnreadScriptFailure(underCi: true, "v0.49.0", "fatal: invalid object name 'v0.49.0'.");
+
+        Assert.NotNull(failure);
+        Assert.Contains("actions/checkout", failure, StringComparison.Ordinal);
+        Assert.Contains("fetch-depth: 0", failure, StringComparison.Ordinal);
+        Assert.Contains("fatal: invalid object name 'v0.49.0'.", failure, StringComparison.Ordinal);
+        Assert.Null(UnreadScriptFailure(underCi: false, "v0.49.0", "fatal: invalid object name 'v0.49.0'."));
+    }
+
+    /// <summary>What <c>git</c> printed on success, or null and what it said where it failed or could not be started.</summary>
+    private static (string? Output, string Said) Git(params string[] args)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            WorkingDirectory = RepositoryRoot(),
+        };
+        foreach (var argument in args)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            using var git = System.Diagnostics.Process.Start(start)!;
+            var stdout = git.StandardOutput.ReadToEndAsync();
+            var stderr = git.StandardError.ReadToEndAsync();
+            git.WaitForExit();
+            return git.ExitCode == 0 ? (stdout.Result, string.Empty) : (null, stderr.Result.Trim());
+        }
+        catch (System.ComponentModel.Win32Exception unstarted)
+        {
+            return (null, $"nothing: it could not be started ({unstarted.Message})");
+        }
     }
 
     private static string RepositoryRoot()

@@ -167,3 +167,24 @@ export function approvedSentence(each: Approved): string {
             return `You approved: ${what}. ${not}: the work expired.`;
     }
 }
+
+/** How long a line that reached "It was sent." or "It is done." stays after it first showed that. */
+export const APPROVED_LINE_LEAVES_MS = 5000;
+
+/** Whether a line says its work ended well, the only words that leave; a failure and a parked act stay. */
+export const endedWell = (each: Approved): boolean => each.state === 'done';
+
+/**
+ * The lines still shown at `now`: those that ended well leave once `APPROVED_LINE_LEAVES_MS` passed since `shownFinalAt`
+ * says they first showed that; a line with no such moment has not shown it yet and stays.
+ */
+export function linesStaying(
+    approved: readonly Approved[],
+    shownFinalAt: ReadonlyMap<string, number>,
+    now: number,
+): Approved[] {
+    return approved.filter((each) => {
+        const at = shownFinalAt.get(each.approvalId);
+        return !(endedWell(each) && at !== undefined && now - at >= APPROVED_LINE_LEAVES_MS);
+    });
+}

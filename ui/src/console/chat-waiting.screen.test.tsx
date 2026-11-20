@@ -14,6 +14,7 @@ import { whyWords } from '../screens/send-modes/doubts';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
+import { conversationEnd, followedPlace, fromFoot, layOutChats, scrollAs } from '../test/scroll';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
@@ -557,14 +558,11 @@ describe('what waits in an agent’s chat', () => {
         await drawn(pane, 'apr_1');
         await drawn(pane, 'apr_2');
         await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
-        // The AI's text is drawn as text, in the thread, with nothing to press: the thread's only buttons are the page's
-        // chips under the answer, which send their own words.
+        // The AI's text is drawn as text, in the thread, with nothing to press.
         const thread = pane.querySelector<HTMLElement>('.thread')!;
         expect(words(thread)).toContain('Approve · Edit · Reject · Details (apr_9)');
         expect(thread.querySelector('a, input, form')).toBeNull();
-        expect([...thread.querySelectorAll('button')].filter((each) => each.closest('.sugs.next') === null)).toEqual(
-            [],
-        );
+        expect([...thread.querySelectorAll('button')]).toEqual([]);
         // The cards are the campaign's listed items, each once, and nothing else.
         const ids = [...waiting(pane).querySelectorAll<HTMLElement>('.waiting-card')].map((each) => each.dataset['id']);
         expect(ids).toEqual(['dec_1', 'dec_3', 'dec_2', 'apr_1', 'apr_2']);
@@ -1297,6 +1295,97 @@ describe('the sheet of the chat and its cards', () => {
         ]) {
             expect(dark(selector, 'system')).not.toEqual([]);
             expect(dark(selector, 'system')).toEqual(dark(selector, 'chosen'));
+        }
+    });
+});
+
+describe('a chat followed to the end of its conversation, above what waits under it', () => {
+    /** The chat's scrolling box: its thread, and the cards under it. */
+    const scroller = (pane: HTMLElement) => pane.querySelector<HTMLElement>('.chat-scroll')!;
+
+    /** Lets what a change set going run out: the effects, the observers and the timers already due. */
+    const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+
+    /** Sends `text` from the chat's composer, as a person does, and waits for the desktop to have it. */
+    async function send(pane: HTMLElement, desktop: StubDesktop, text: string): Promise<void> {
+        const before = desktop.calls.filter((each) => each.name === 'chat.send').length;
+        const box = within(pane).getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: text } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'chat.send')).toHaveLength(before + 1));
+    }
+
+    /** The AI's words of the running turn, `n` of them, long enough to take most of a view. */
+    const part = (n: number) => `Part ${n}: ${'words '.repeat(60)}`;
+
+    it('keeps a send and the answer streamed after it at the end of the conversation, above cards taller than the view', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const layout = layOutChats();
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const pane = await openChat('Spring');
+            await drawn(pane, 'apr_1');
+            const box = scroller(pane);
+            expect(box.scrollHeight - conversationEnd(box), 'the cards are taller than the view').toBeGreaterThan(
+                box.clientHeight,
+            );
+
+            await send(pane, desktop, 'Draft the next one');
+            await waitFor(() => expect(box.textContent).toContain('Draft the next one'));
+            // The conversation's last half view at the top, the first cards under it; not the foot of the cards.
+            await waitFor(() => expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2));
+            expect(fromFoot(box)).toBeGreaterThan(0);
+            for (const n of [1, 2, 3]) {
+                flush(() => desktop.emit(spring, { kind: 'text', text: part(n) }));
+                await waitFor(() => expect(box.textContent).toContain(`Part ${n}:`));
+                await waitFor(() => expect(box.scrollTop).toBe(followedPlace(box)));
+                expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2);
+            }
+
+            // Reading the cards, below that place, the person is at the foot; what the answer adds above them moves
+            // nothing, since following only ever moves the view down. (A browser keeps the card read in place as the
+            // answer grows above it; this layout does not, so the answer adds less here than the person stands below.)
+            scrollAs(box, followedPlace(box) + 600);
+            const reading = box.scrollTop;
+            flush(() => desktop.emit(spring, { kind: 'text', text: 'Part 4: a few words more.' }));
+            await waitFor(() => expect(box.textContent).toContain('Part 4:'));
+            expect(followedPlace(box)).toBeLessThan(reading);
+            await settle();
+            expect(box.scrollTop).toBe(reading);
+
+            // A message they send from there goes back up to the end of the conversation.
+            flush(() => desktop.emit(spring, { kind: 'done', error: null }));
+            await waitFor(() => expect(within(pane).queryByText('Thinking…')).toBeNull());
+            scrollAs(box, box.scrollHeight);
+            await send(pane, desktop, 'And the one after');
+            await waitFor(() => expect(box.textContent).toContain('And the one after'));
+            await waitFor(() => expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2));
+        } finally {
+            layout.restore();
+        }
+    });
+
+    it('follows a send and its answer to the box’s own foot while what waits under the conversation is short', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const layout = layOutChats(500, 4, (part) => (part.classList.contains('chat-waiting-for') ? 100 : undefined));
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const pane = await openChat('Spring');
+            await drawn(pane, 'apr_1');
+            const box = scroller(pane);
+            expect(box.scrollHeight - conversationEnd(box)).toBe(100);
+
+            await send(pane, desktop, 'Draft the next one');
+            await waitFor(() => expect(box.textContent).toContain('Draft the next one'));
+            await waitFor(() => expect(fromFoot(box)).toBe(0));
+            expect(box.scrollTop).toBeGreaterThan(0);
+            for (const n of [1, 2]) {
+                flush(() => desktop.emit(spring, { kind: 'text', text: part(n) }));
+                await waitFor(() => expect(box.textContent).toContain(`Part ${n}:`));
+                await waitFor(() => expect(fromFoot(box)).toBe(0));
+            }
+        } finally {
+            layout.restore();
         }
     });
 });

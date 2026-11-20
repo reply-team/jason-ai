@@ -211,8 +211,10 @@ neither `sudo`, `pkexec` nor `fusermount` can act: it says to run the line in yo
 it outside its sandbox. The
 system decides the form:
 
-- **Where there is apt** (Ubuntu, Debian, Mint): the release's `jason-desktop-linux-x64.deb` and `checksums.txt`,
-  **its SHA-256 verified**, installed by apt with the one administrator's password a system package needs. Where the line
+- **Where there is apt** (`/usr/bin/apt-get` and `/usr/bin/dpkg`: Ubuntu, Debian, Mint): the release's
+  `jason-desktop-linux-x64.deb` and `checksums.txt`, **its SHA-256 verified**, installed by apt with the one
+  administrator's password a system package needs; every program this route runs as root is named by its path in
+  `/usr/bin`, never looked up on your PATH. Where the line
   has a terminal, `sudo` asks for it; otherwise, as when an agent runs it in your desktop session, your desktop asks in
   its own password dialog, through `pkexec`; apt waits up to ten minutes for the package system when Ubuntu's own updates
   hold it, and the install is given twenty. A password not given, the dialog left unanswered for those twenty minutes, no
@@ -221,7 +223,9 @@ system decides the form:
   `/opt/Jason` for every account of the computer, `jason` in every terminal as `/usr/bin/jason`, and Jason's apt
   repository in `/etc/apt/sources.list.d/jason-desktop.sources`, signed by the key it carries, so its later updates come
   with the system's (§4). A package already at the version, or a later
-  one, is kept and set up again.
+  one, is kept and set up again. A runtime of an earlier version still running once the package is this one is left
+  running, since a restart ends a turn it may be running: the line says that Restart Jason and Its Runtime to Finish the
+  Update, which Jason Desktop offers when it opens, or `jason runtime restart`, brings it up.
 - **Where there is no apt** (Arch, Fedora and the rest): `jason-desktop-linux-x64.AppImage`, **its SHA-256 verified**,
   for your account alone and with no password: placed at `~/Applications/jason-desktop-linux-x64.AppImage` by one
   rename, its menu entry and icons written under `~/.local/share`, and the `jason` it carries copied under
@@ -229,7 +233,8 @@ system decides the form:
   the system refuses the unprivileged user namespaces the application needs for its sandbox, which Jason never runs without (on Arch,
   the `linux-hardened` kernel or a setting that turns them off), or has no setuid `fusermount`, which opens the file
   (install `fuse3`). A file of that name that is not Jason Desktop is left as it is, and nothing is installed; a Jason
-  AppImage already there stays the installation, apt or not.
+  AppImage already there stays the installation, apt or not, and one older than 0.49.1, whose `jason` cannot set Linux up,
+  is refused before anything is written: update it from its own menu (Check for Updates), then run the line again.
 
 Either way it changes nothing while Jason Desktop runs and the install would change it: it says to quit Jason first.
 Then, as on a Mac, the `jason` the application carries runs `jason install --roles` and the script shows its report:
@@ -239,6 +244,20 @@ command-line install retired, and the role skills, read from the folder beside t
 ends non-zero, saying which act failed, when `jason` was not put in the terminal, and its last line is the full path of
 `jason`. The command-line archive, `jason-linux-x64.tar.gz`, is still published, for the update of a command-line install
 made before; the script does not install it.
+
+**On a Linux machine with no desktop** — a server reached over ssh, a container, an account that is root — this is what
+the line and `jason update apply` do today. The line refuses before anything is read when run as root, which a
+container's shell often is, and where `NoNewPrivs` is set, as an agent's confinement sets it. Where there is apt it
+installs the deb only where the line has a terminal for `sudo` to ask in, an ssh session with one (`ssh -t`) say; with
+none, as when ssh runs the line with no terminal, there is no desktop dialog to ask in either, and it refuses, naming the
+commands that install the deb by hand. Where there is no apt it installs the AppImage only where the system lets it make user namespaces and
+has a setuid `fusermount`, which a container often does not. Once installed, `jason` and its runtime need no display;
+Jason Desktop's window does. `jason update apply`: the deb's `jason` refuses with `update_managed_by_package_manager` and
+prints apt's commands, which `sudo` runs over ssh; an AppImage's refuses with `update_carried_by_desktop` where there is
+no display, since the Jason Desktop it hands the update to needs one, and as root with `update_elevated`, changing
+nothing; a command-line install of an earlier version is updated, and its move into Jason Desktop takes the form the
+line would, refused where the line refuses: the deb's password is asked through `sudo` where there is a terminal, and
+with none, or as root, the move stays pending and the command line answers as before.
 
 On macOS, and for an AppImage on Linux, the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
 `~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
@@ -302,14 +321,14 @@ before 0.49.1 still takes them on Linux, where it installs the command line:
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.0/install.sh | sh -s -- --version 0.49.0
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.2/install.sh | sh -s -- --version 0.49.2
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.49.0/install.ps1))) -Version 0.49.0
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.49.2/install.ps1))) -Version 0.49.2
 ```
 
-These install 0.49.0 with 0.49.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.49.2 with 0.49.2's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share, the entry stays, and so does everything else it
@@ -625,11 +644,12 @@ shell finds that `jason` by name and the agents Jason starts are not given it fi
 answers to `jason`; a line would only write the same split entry again. The check says which character, and the way
 on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
 
-On macOS and Windows, where a machine holds one installation, `path` fails, naming both files, where `jason` by name is
-another file than the `jason` answering — Jason Desktop's own wrapper at `~/.local/bin/jason` counts as the `jason` it
-runs. Typed by name, `jason` runs that other file, so you and every agent use it and not this one, and `ready` is false
-until that file is removed or its folder taken off the PATH. That is also what a published build of this repository
-says, run by its full path while a release answers by name. On Linux the check passes there and says that two
+On macOS, Windows and Linux, where a machine holds one installation, `path` fails, naming both files, where `jason` by
+name is another file than the `jason` answering — Jason Desktop's own wrapper at `~/.local/bin/jason`, and the deb's
+`/usr/bin/jason`, count as the `jason` they run. Typed by name, `jason` runs that other file, so you and every agent use
+it and not this one, and `ready` is false until that file is removed or its folder taken off the PATH. On macOS and
+Windows that is also what a published build of this repository says, run by its full path while a release answers by
+name. On Linux a `jason` Jason Desktop does not carry, such a build among them, passes the check there and says that two
 installations are on this machine.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
@@ -776,7 +796,8 @@ terminal while Jason Desktop is open, it refuses with `desktop_running` before a
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no
 receipt, so it is removed by nobody — including this. The rest of the installation goes by rule, in a fixed
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
-registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
+registered for it — so a logon part-way through cannot start what is going (on macOS just after the runtime, and on
+Linux for the deb just after its package, so a password not given leaves it in place); then the runtime, and if it will not
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
 registration — the AppUserModelID key the toast was shown under, the two entries Windows made for it at the
 first toast, and the `jason:` link where its command names this executable — after the runtime, so its next toast

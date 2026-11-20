@@ -84,8 +84,8 @@ terminal as `/usr/bin/jason`, and adds Jason's apt repository, so its updates co
 from wherever you keep it; it is built on the AppImage runtime that needs no libfuse2. Jason never runs without
 Chromium's sandbox, so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04
 and later, as shipped, the AppImage says so, does not start, and names the deb, whose install brings an AppArmor profile
-for its sandbox there; this release's build machine started both packages sandboxed, and neither has yet been seen on
-such a machine. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
+for its sandbox there. This release's build machine started both packages sandboxed, and on Ubuntu 24.04 and 26.04 as
+shipped the deb has been seen to start sandboxed and the AppImage to refuse. Neither is signed, and neither is the `jason` they carry, as the Linux archive's is not. Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file this release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The `jason` they carry needs the ICU
 library (`libicu`), as the archive's does.
@@ -111,8 +111,11 @@ version left it.
 On Linux the deb's updates come with the system's, from Jason's apt repository: Software Updater offers them and
 installs them when you say so, as `sudo apt update && sudo apt upgrade` does; Ubuntu's automatic updates leave them
 alone, and `sudo apt-mark hold jason-desktop` stops them. Where the system updated the package under a running window, its update item says to restart Jason to finish the
-update. apt keeps no previous version; to go back, install the previous release's `jason-desktop-linux-x64.deb` with
-`sudo apt install --allow-downgrades` and hold it. An AppImage update replaces the file where it is, so you need to be able to
+update, and so does the next start where the system updated it while no window was open and the runtime still runs the
+earlier version; it restarts nothing by itself, and `jason runtime restart` brings the runtime up too. apt keeps no previous version; to go back, install the previous release's `jason-desktop-linux-x64.deb` with
+`sudo apt install --allow-downgrades` and hold it. Going back to a release before 0.49.1, whose package carries no key
+for Jason's apt source, starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`,
+or every `apt update` reports the source. An AppImage update replaces the file where it is, so you need to be able to
 write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
 
 On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command

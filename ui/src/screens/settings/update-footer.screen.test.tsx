@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ApiProvider } from '../../api/context';
 import { consoleShell } from '../../platform/console-shell';
+import type { DesktopUpdateItem } from '../../platform/desktop';
 import { mode } from '../../platform/mode';
 import { stubDesktop, type StubDesktop } from '../../test/desktop';
 import { FakeApi } from '../../test/fake-api';
@@ -64,7 +65,11 @@ describe('the update item at the foot of Settings', () => {
 
     it('draws the item disabled where the menu’s is, and a click on it presses nothing', async () => {
         const desktop = stubDesktop();
-        desktop.updateKept = { version: '0.48.5', item: { label: 'Downloading Jason 0.48.6…', enabled: false } };
+        desktop.updateKept = {
+            version: '0.48.5',
+            item: { label: 'Downloading Jason 0.48.6…', enabled: false },
+            said: null,
+        };
         open(desktop);
         const button = (await footShown()).getByRole('button', { name: 'Downloading Jason 0.48.6…' });
         expect(button).toHaveProperty('disabled', true);
@@ -74,7 +79,7 @@ describe('the update item at the foot of Settings', () => {
 
     it('shows the version alone where the desktop has no item', async () => {
         const desktop = stubDesktop();
-        desktop.updateKept = { version: '0.48.5', item: null };
+        desktop.updateKept = { version: '0.48.5', item: null, said: null };
         open(desktop);
         const shown = await footShown();
         expect(shown.queryByRole('button')).toBeNull();
@@ -85,7 +90,13 @@ describe('the update item at the foot of Settings', () => {
         const desktop = open();
         const shown = await footShown();
         expect(shown.getByRole('button', { name: 'Check for Updates…' })).toBeTruthy();
-        act(() => desktop.updateMoved({ version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true } }));
+        act(() =>
+            desktop.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Download Jason 0.48.6', enabled: true },
+                said: null,
+            }),
+        );
         const download = await shown.findByRole('button', { name: 'Download Jason 0.48.6' });
         expect(download).toHaveProperty('disabled', false);
         // A press names the label the page shows, which the desktop acts on only while its item still says it.
@@ -97,10 +108,69 @@ describe('the update item at the foot of Settings', () => {
             desktop.updateMoved({
                 version: '0.48.5',
                 item: { label: 'Restart Jason and Its Runtime to Install 0.48.6', enabled: true },
+                said: null,
             }),
         );
         await shown.findByRole('button', { name: 'Restart Jason and Its Runtime to Install 0.48.6' });
         expect(shown.queryByRole('button', { name: 'Download Jason 0.48.6' })).toBeNull();
+    });
+
+    it('says what the person’s last check found under the item, as the desktop answers it, and drops it when the desktop does', async () => {
+        const desktop = stubDesktop();
+        desktop.updateKept = {
+            version: '0.48.5',
+            item: { label: 'Check for Updates…', enabled: true },
+            said: 'Jason Desktop 0.48.5 is the latest version.',
+        };
+        open(desktop);
+        const shown = await footShown();
+        const line = shown.getByRole('status');
+        expect(line.textContent).toBe('Jason Desktop 0.48.5 is the latest version.');
+        // Under the item, the last thing in the foot.
+        expect(foot()!.lastElementChild).toBe(line);
+        expect(line.previousElementSibling).toBe(shown.getByRole('button', { name: 'Check for Updates…' }));
+        // A check that found a newer version: the item offers it, and the line says it.
+        act(() =>
+            desktop.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Download Jason 0.48.6', enabled: true },
+                said: 'Version 0.48.6 is available.',
+            }),
+        );
+        await shown.findByText('Version 0.48.6 is available.');
+        expect(shown.getAllByRole('status')).toHaveLength(1);
+        // A check that failed says why, in the desktop's words.
+        act(() =>
+            desktop.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Check for Updates…', enabled: true },
+                said: 'Could not check for updates: the list of releases could not be read.',
+            }),
+        );
+        await shown.findByText('Could not check for updates: the list of releases could not be read.');
+        // The item moved on: the desktop drops the line, and so does the page.
+        act(() =>
+            desktop.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Downloading Jason 0.48.6…', enabled: false },
+                said: null,
+            }),
+        );
+        await shown.findByRole('button', { name: 'Downloading Jason 0.48.6…' });
+        expect(shown.queryByRole('status')).toBeNull();
+    });
+
+    it('shows no line from a desktop of an earlier version, whose answer carries no sentence', async () => {
+        const desktop = stubDesktop();
+        desktop.updateKept = {
+            version: '0.48.5',
+            item: { label: 'Check for Updates…', enabled: true },
+        } as unknown as DesktopUpdateItem;
+        open(desktop);
+        const shown = await footShown();
+        expect(shown.getByRole('button', { name: 'Check for Updates…' })).toBeTruthy();
+        expect(shown.queryByRole('status')).toBeNull();
+        expect(foot()!.textContent).toBe('Jason Desktop 0.48.5Check for Updates…');
     });
 
     it('is not drawn in the Demo, where Settings has no list', async () => {

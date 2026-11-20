@@ -18,13 +18,9 @@ import { attention } from './needs';
 import { chats, conversations, feedId, feedUnseen } from './state';
 import { forgetWaiting } from './waiting';
 
-// The chips under the last answer, as a person meets them: in an agent's chat chosen from the agent's counts as the
-// runtime recorded them (`campaign.summary/card-chips`: Spring launch with two people waiting on the person and work
-// under way, Summer reach with nobody, Winter plan with two people nobody worked on yet, Autumn push with one person
-// worked on and nothing waiting), none in the Feed and a set-up chat, which draw the opening three only while empty; a
-// click sends the chip's words as the
-// person's next message, none stand while a turn runs or a choice is open, and the question just asked is not offered
-// again.
+// The chips as a person meets them: an empty chat draws its opening three; no chat draws any under an answer, whatever
+// the agent's counts, and neither do the Feed and a set-up chat; a click sends the chip's words as the person's first
+// message.
 
 const at = '2026-10-16T09:05:00.000Z';
 const answered: DesktopKeptEntry[] = [
@@ -100,22 +96,6 @@ async function openFeed(): Promise<HTMLElement> {
     return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
 }
 
-/** The words of the chips under the last answer of a pane, in their order; none when no row of them stands. */
-const chips = (pane: HTMLElement) =>
-    Array.from(pane.querySelectorAll<HTMLButtonElement>('.thread .sugs.next .sug'), (chip) => chip.textContent);
-const chip = (pane: HTMLElement, words: string) =>
-    Array.from(pane.querySelectorAll<HTMLButtonElement>('.thread .sugs.next .sug')).find(
-        (each) => each.textContent === words,
-    )!;
-const sends = (desktop: StubDesktop) =>
-    desktop.calls.filter((each) => each.name === 'chat.send').map((each) => each.args[1]);
-const fenced = (value: unknown) => `\`\`\`card\n${JSON.stringify(value)}\n\`\`\``;
-const choice = {
-    kind: 'choice',
-    question: 'Which first?',
-    options: [{ label: 'Founders' }, { label: 'Heads of sales' }],
-};
-
 beforeEach(() => {
     chats.value = {};
     conversations.value = [];
@@ -136,105 +116,22 @@ afterEach(() => {
     mode.value = 'live';
 });
 
-describe('the chips under an agent’s last answer', () => {
-    it('are chosen from its counts, a reopened chat’s as a chat answered here, what waits for the person first', async () => {
-        renderConsole([spring(), summer(), winter(), autumn()]);
-        const want: [string, string[]][] = [
-            ['Spring', ['What is waiting for me?', 'How is it going?', 'Show me the people']],
-            ['Summer', ['Who should this agent reach?', 'Show me the plan', 'What can you do here?']],
-            ['Winter', ['Show me the people', 'What happens when it starts?']],
-            ['Autumn', ['How is it going?', 'Show me the people']],
-        ];
-        for (const [title, words] of want) {
+describe('under an agent’s last answer', () => {
+    it('no chip stands, whatever the agent’s counts, before or after a turn', async () => {
+        const { desktop } = renderConsole([spring(), summer(), winter(), autumn()]);
+        for (const title of ['Spring', 'Summer', 'Winter', 'Autumn']) {
             const pane = await openChat(title);
-            await waitFor(() => expect(chips(pane), title).toEqual(words));
-            // They stand after the answer, as the thread's last row, and hold no number.
-            expect(pane.querySelector('.thread')!.lastElementChild!.matches('.sugs.next')).toBe(true);
-            for (const word of chips(pane)) expect(word).not.toMatch(/\d/);
+            await waitFor(() => within(pane).getByText('Hello.'));
+            expect(pane.querySelector('.sugs'), title).toBeNull();
+            expect(pane.querySelector('.thread .sug'), title).toBeNull();
         }
-        // Back to the first chat: the same chips, read from the same counts, with nothing read again for them.
-        const again = await openChat('Spring');
-        expect(chips(again)).toEqual(want[0]![1]);
-    });
-
-    it('send their words as the person’s next message, the runtime’s word for an agent, and stand again after the answer, not asking it twice', async () => {
-        const { desktop } = renderConsole([summer()]);
         const pane = await openChat('Summer');
-        await waitFor(() => expect(chips(pane)).toHaveLength(3));
-        fireEvent.click(chip(pane, 'Who should this agent reach?'));
-        await waitFor(() => expect(sends(desktop)).toEqual(['Who should this campaign reach?']));
-        // While the turn runs, none stand.
-        await waitFor(() => expect(pane.querySelector('.typing')).not.toBeNull());
-        expect(chips(pane)).toEqual([]);
         flush(() => {
             desktop.emit(summer().id, { kind: 'text', text: 'Founders of small agencies.', at });
             desktop.emit(summer().id, { kind: 'done', error: null });
         });
-        await waitFor(() => expect(chips(pane)).toEqual(['Show me the plan', 'What can you do here?']));
-    });
-
-    it('are buttons a person reaches with the keyboard, each named by its words', async () => {
-        renderConsole([autumn()]);
-        const pane = await openChat('Autumn');
-        await waitFor(() => expect(chips(pane)).toHaveLength(2));
-        const row = pane.querySelector<HTMLElement>('.thread .sugs.next')!;
-        const buttons = within(row).getAllByRole('button');
-        expect(buttons.map((each) => each.getAttribute('type'))).toEqual(['button', 'button']);
-        expect(buttons.some((each) => each.hasAttribute('tabindex') || each.hasAttribute('disabled'))).toBe(false);
-        expect(within(row).getByRole('button', { name: 'How is it going?' })).toBe(buttons[0]);
-    });
-
-    it('wait while a choice the AI asked stands open', async () => {
-        const { fake, desktop } = renderConsole([spring()]);
-        // A choice in an agent's chat reads what the agent has done since.
-        fake.answer('journal.list', 'journal.list/card-choice-acts-none');
-        const pane = await openChat('Spring');
-        await waitFor(() => expect(chips(pane)).toHaveLength(3));
-        flush(() => {
-            desktop.emit(spring().id, {
-                kind: 'text',
-                text: `Two kinds.
-
-${fenced(choice)}`,
-                at,
-            });
-            desktop.emit(spring().id, { kind: 'done', error: null });
-        });
-        await waitFor(() => within(pane).getByRole('group', { name: 'Jason asks' }));
-        expect(chips(pane)).toEqual([]);
-    });
-
-    it('do not stand after an error', async () => {
-        renderConsole([
-            spring([...answered, { kind: 'user', text: 'Go on' }, { kind: 'error', text: 'The AI host stopped.' }]),
-            autumn(),
-        ]);
-        const pane = await openChat('Spring');
-        await waitFor(() => within(pane).getByText('The AI host stopped.'));
-        expect(chips(pane)).toEqual([]);
+        await waitFor(() => within(pane).getByText('Founders of small agencies.'));
         expect(pane.querySelector('.sugs')).toBeNull();
-    });
-
-    it('do not stand in the chat of an archived agent, which the console does not list', async () => {
-        renderConsole([agent('conv_01JDCHIPS0000000000000000E', 'cmp_4', 'Archived one'), autumn()]);
-        const listed = await openChat('Autumn');
-        await waitFor(() => expect(chips(listed)).toHaveLength(2));
-        const pane = await openChat('Archived one');
-        await waitFor(() => within(pane).getByText('Hello.'));
-        expect(chips(pane)).toEqual([]);
-    });
-
-    it('wait while the send waits for a model’s name, and stand again once one is typed', async () => {
-        const { desktop } = renderConsole([autumn()]);
-        const pane = await openChat('Autumn');
-        await waitFor(() => expect(chips(pane)).toHaveLength(2));
-        fireEvent.click(within(pane).getByRole('button', { name: /^Model:/ }));
-        fireEvent.click(within(pane).getByRole('menuitemradio', { name: 'Another model…' }));
-        const name = await waitFor(() => within(pane).getByRole('textbox', { name: 'Model name' }));
-        await waitFor(() => expect(chips(pane)).toEqual([]));
-        expect(sends(desktop)).toEqual([]);
-        fireEvent.change(name, { target: { value: 'claude-opus-5-5' } });
-        await waitFor(() => expect(chips(pane)).toEqual(['How is it going?', 'Show me the people']));
     });
 });
 
@@ -242,6 +139,12 @@ describe('the opening chips', () => {
     const opening = ['What is waiting for me?', 'How are my agents doing?', 'Help me start a new agent.'];
     const drawn = (pane: HTMLElement) =>
         Array.from(pane.querySelectorAll<HTMLButtonElement>('.sugs .sug'), (each) => each.textContent);
+
+    it('are drawn in an empty agent’s chat, still', async () => {
+        renderConsole([agent('conv_01JDCHIPS0000000000000000H', 'cmp_1', 'Spring', [])]);
+        const pane = await openChat('Spring');
+        await waitFor(() => expect(drawn(pane)).toEqual(opening));
+    });
 
     it('are drawn in an empty chat only: an answered Feed and an answered set-up chat draw none', async () => {
         // The Feed's row is in the demo's sidebar.

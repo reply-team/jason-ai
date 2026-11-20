@@ -29,7 +29,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Get(env, actor));
         campaign.Subcommands.Add(List(env, actor));
         campaign.Subcommands.Add(Update(env, actor));
-        campaign.Subcommands.Add(Transition("start", "Start a draft campaign, or resume a paused one.", Operations.CampaignStart, env, actor));
+        campaign.Subcommands.Add(Transition("start", "Start a draft campaign, or resume a paused one. " + ActorOption.RefusedInsideARun, Operations.CampaignStart, env, actor));
         campaign.Subcommands.Add(Transition("pause", "Pause an active campaign.", Operations.CampaignPause, env, actor));
         campaign.Subcommands.Add(Transition("archive", "Archive a campaign. Archiving is final.", Operations.CampaignArchive, env, actor));
         campaign.Subcommands.Add(UpdateContext(env, actor));

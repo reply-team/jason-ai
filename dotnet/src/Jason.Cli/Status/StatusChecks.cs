@@ -508,6 +508,14 @@ internal static partial class StatusChecks
     /// machine up for, <c>&lt;data&gt;/desktop/machine-setup.json</c>, is not the package's). Null elsewhere, and where neither
     /// stands.
     /// </summary>
+    /// <remarks>
+    /// Neither has a command for a repair. The second is finished by Jason Desktop's start, which runs <c>jason install</c> and
+    /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; its Put Back
+    /// runs the same set-up again. The finishing step alone neither sets the machine up nor writes the record, so this check
+    /// would still fail after it, and no <c>jason</c> verb opens the application. A runtime the earlier build still runs is
+    /// left to the person, since a restart ends a running turn: the start offers the restart item, and <c>runtime_version</c>
+    /// names <c>jason runtime restart</c>.
+    /// </remarks>
     private static StatusCheck? PackageUpdates(CliEnvironment env)
     {
         if (env.Setup is not { Platform: SetupSystem.Linux } places || CarriedExecutable.Of(env) is not { } carried || !SetupPlaces.CarriedByDeb(carried.Executable))
@@ -518,7 +526,7 @@ internal static partial class StatusChecks
         string? setUpFor = null;
         try
         {
-            using var record = JsonDocument.Parse(File.ReadAllText(MachineSetupRecordUnder(env.Paths.Root)));
+            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordUnder(env.Paths.Root)));
             setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
         }
         catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
@@ -531,8 +539,8 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. `jason update apply --finish` finishes it, and so does opening Jason Desktop.",
-                "jason update apply --finish");
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop: its start sets this installation up for {carried.Version}, and where the runtime still runs the earlier build it offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} in its Jason menu, which restarts the runtime on it, as `jason runtime restart` does. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
+                null);
         }
 
         string? text = null;
@@ -1303,12 +1311,6 @@ internal static partial class StatusChecks
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
-
-    /// <summary>
-    /// Jason Desktop's record of where and for which version `jason install` last ran, which its start writes in its own folder
-    /// of the data directory; read here, never written.
-    /// </summary>
-    private static string MachineSetupRecordUnder(string dataRoot) => System.IO.Path.Combine(dataRoot, "desktop", "machine-setup.json");
 
     /// <summary>
     /// Whether <paramref name="resolved"/> and <paramref name="own"/> are one file by their final paths, a link in the file or

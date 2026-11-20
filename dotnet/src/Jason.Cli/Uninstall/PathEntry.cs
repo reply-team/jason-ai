@@ -577,15 +577,31 @@ public static class PathEntry
     /// </para>
     /// <para>
     /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
-    /// which is what both the installer and the repair append. A line nobody marked is somebody's own, written
-    /// by hand, and stays: this verb removes only what this installer wrote, on this platform as on the other,
-    /// where an entry the installer did not write is left on the Path too.
+    /// which is what both the installer and the repair append. That blank line is empty, or a lone <c>\r</c> where the
+    /// block itself was later turned to CRLF, its marker line ending in <c>\r</c> too, and nothing else: a line of
+    /// spaces, or a lone <c>\r</c> over a block that was not turned, is the person's own. Appended to a file whose
+    /// last line had no newline, the newline the block begins with ended that line instead of making a blank one: where
+    /// such a block is the last thing in the file, that newline goes with it, and the file ends as it began; where
+    /// anything follows, it stays. A line nobody marked is somebody's own, written by hand, and stays: this verb
+    /// removes only what this installer wrote, on this platform as on the other, where an entry the installer did not
+    /// write is left on the Path too. The desktop's own removal (<c>desktop/src/path-profile.ts</c>) is the same rule
+    /// and is held to the same cases.
     /// </para>
     /// <para>
     /// <b>Every other byte stays as it was.</b> The text is split on <c>\n</c> alone and each line keeps its own
     /// <c>\r</c>: a profile with a single CRLF in it used to come back all CRLF, which puts a carriage return at
     /// the end of every line a shell then reads. <see cref="WithoutEntry(byte[], string)"/> does this over the
     /// file's own bytes.
+    /// </para>
+    /// <para>
+    /// <b>What is promised, and what is not.</b> A profile the installer wrote into comes back byte for byte, the
+    /// person's own lines above and below its blocks included. Three cases are not promised, and in each only white
+    /// space may differ, never a visible character of the person's: in a file that ended without a newline and holds
+    /// blocks for two folders, one under the other, taking the upper block out first keeps the newline it began with,
+    /// since the lower block still follows it, and the lower block's removal then leaves that newline; a file turned
+    /// whole to CRLF after the installer wrote into it is no longer that file, and is not promised back byte for byte:
+    /// what can differ is a line ending at its very end; and where an editor later put spaces on the installer's own
+    /// blank line, that line stays, and the file ends without its final newline.
     /// </para>
     /// </remarks>
     public static string WithoutEntry(string profileText, string installDirectory)
@@ -613,12 +629,25 @@ public static class PathEntry
 
             // Exactly what the script appended, and in that order: a blank line, the marker, the line.
             var first = index - 1;
-            if (first > 0 && lines[first - 1].Trim().Length == 0)
+            // The installer's blank line is empty, or a lone \r where the block itself was later turned to CRLF, its
+            // marker line ending in one too. A line of spaces, or a lone \r over a block that was not turned, is the
+            // person's own.
+            var blankAbove = first > 0 && (lines[first - 1].Length == 0 || (lines[first - 1] == "\r" && lines[first].EndsWith('\r')));
+            if (blankAbove)
             {
                 first--;
             }
 
-            lines.RemoveRange(first, index - first + 1);
+            // With no blank line above, the newline the block began with ended the person's last line, which had none.
+            // Where the block is the last thing in the file, that newline goes with it and the file ends as it began;
+            // where anything follows, it stays, because it now separates the person's own lines.
+            var last = index;
+            if (!blankAbove && first > 0 && index == lines.Count - 2 && lines[^1].Length == 0)
+            {
+                last++;
+            }
+
+            lines.RemoveRange(first, last - first + 1);
             removed = true;
 
             // And carry on above what was just taken out. Without this the walk stepped down into a list

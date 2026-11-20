@@ -288,7 +288,11 @@ function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scr
         if ($whileRunning) { & $whileRunning ((Get-Date) - $started).TotalSeconds }
         Start-Sleep -Milliseconds 500
     }
-    $ended = $process.WaitForExit(0)
+    # Whether it ended is read once, as the loop read it. HasExited answers by the exit code Windows reports, which can come
+    # before the process's handle is signalled, so a zero wait asked after it can say no of a process that ended. Where it
+    # ended, its handle is waited for, bounded, before its exit code is read; it is never ended.
+    $ended = $process.HasExited
+    if ($ended -and -not $process.WaitForExit(10000)) { Write-Host "  the setup, process $($process.Id), had ended by the exit code Windows reports, and its handle was not signalled 10 s after" }
     $result = @{ Ended = $ended; Exit = $(if ($ended) { $process.ExitCode } else { $null }); Seconds = [int]((Get-Date) - $started).TotalSeconds; Windows = @($seen) }
     if (-not $ended) {
         Write-ProcessTree $process
@@ -319,9 +323,9 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
     return $process.ExitCode
 }
 
-# The previous release's runtime started by its own jason. 0.48.5's start gives up after 30 s while the runtime it started
+# The previous release's runtime started by its own jason. Its start gives up after 30 s while the runtime it started
 # still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
-# v0.48.5: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
+# v0.48.7: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
 # answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
 # start failed otherwise.
 function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
@@ -483,8 +487,9 @@ function Write-FeedServerState([System.Diagnostics.Process] $server, [int] $port
 }
 
 # A folder served on 127.0.0.1 at the port by the proof's one feed server (serve-feed.py, which looks no name up between
-# bind and listen), and waited for up to 30 s until its manifest answers 200; the process is returned for the caller to
-# stop. One that never answers is described first, then fails the step.
+# bind and listen), and waited for up to 90 s until its manifest answers 200; the process is returned for the caller to
+# stop. One that never answers is described first, then fails the step. The bound is the proof's own, for its own test
+# server, which a runner's image can start slowly.
 function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     # Each argument quoted, as Start-Process joins them with spaces alone. The server writes every line to the log itself,
     # and to stderr only a usage line.
@@ -493,7 +498,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     $server = Start-Process python -ArgumentList $arguments -PassThru -NoNewWindow -RedirectStandardError "$log.err"
     Register-Scratch "the feed server for 127.0.0.1:$port" $server
     $null = $server.Handle
-    $until = [DateTime]::UtcNow.AddSeconds(30)
+    $until = [DateTime]::UtcNow.AddSeconds(90)
     # An answer counts only once this server says it listens, which on Windows it can only do on a port no other socket
     # holds: before that, or from a server that has ended, the answer came from whatever else holds the port.
     # The log is appended to, so only what this server wrote after the bytes already there counts.
@@ -512,7 +517,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
     if ($answered -and -not $server.HasExited) { return $server }
     Write-FeedServerState $server $port $log
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    Fail $(if ($server.HasExited) { "the feed server for 127.0.0.1:$port ended, with $($server.ExitCode), before it answered: its log above says why" } else { "the feed on 127.0.0.1:$port answering did not happen within 30 s" })
+    Fail $(if ($server.HasExited) { "the feed server for 127.0.0.1:$port ended, with $($server.ExitCode), before it answered: its log above says why" } else { "the feed on 127.0.0.1:$port answering did not happen within 90 s" })
 }
 
 function Get-OwnProcesses([string] $folder) {
@@ -536,8 +541,51 @@ function Get-QuietUninstall($entry) {
     return ''
 }
 
+# Jason's Installed apps entries. A key listed and gone before it is read, removed in between by an uninstaller still at
+# work, is no entry; a key still there that cannot be read fails the step. A defence under Wait-UninstallerEnded, not a
+# replacement for it: every reading after an uninstall waits for its uninstaller to end first.
 function Get-JasonUninstallEntries {
-    @(Get-ChildItem -LiteralPath $uninstallKeys -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { ($_.PSObject.Properties.Name -contains 'DisplayName') -and $_.DisplayName -like 'Jason*' })
+    @(Get-ChildItem -LiteralPath $uninstallKeys -ErrorAction SilentlyContinue | ForEach-Object { $key = $_.PSPath; try { Get-ItemProperty -LiteralPath $key -ErrorAction Stop } catch { if (Test-Path -LiteralPath $key) { throw } } } | Where-Object { ($_.PSObject.Properties.Name -contains 'DisplayName') -and $_.DisplayName -like 'Jason*' })
+}
+
+# The uninstaller an uninstall ran, waited for to its end once the application's folder has gone and before anything of the
+# machine is read: the uninstaller removes the folder before it has finished - its Installed apps entry goes after - so a
+# reading taken when the folder goes races it. Waited for: the runs the caller watched, as processes whose handles it took
+# while they ran, and every uninstaller running now - one named Uninstall Jason*.exe, or the copy of itself NSIS runs on
+# from a ~nsu*.tmp folder of the temporary directory once the program started from the application's folder has returned
+# (an uninstaller given no _?=). That copy is matched as any program in any folder named ~nsu*.tmp, wide on purpose: NSIS
+# has named the copy Au_.exe, Un_A.exe and Un.exe, and the folder ~nsu.tmp or ~nsu<hex>.tmp with the number counting on
+# where a folder is held, and none of this proof's listings has shown one; a narrower pattern could miss a run and say
+# none runs. Each one by its handle, within $seconds of the call - 150 s, the bound of the folder's own watch and the
+# proof's own, never one the product promises; a row runs it with a shorter one - and its exit code is said. One still
+# running at the bound fails the step by its own sentence. $since says what the wait follows. $under keeps the scan to the
+# programs under one folder: the proof never gives it, and the row that runs this helper gives its own folder, so that it
+# never waits on a program of the machine it runs on. The runs are kept as a list with a set of the ids seen: an ordered
+# dictionary indexed by an integer takes it for a position, not a key.
+function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the application folder went', [int] $seconds = 150, [string] $under = '') {
+    $runs = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+    $seen = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($process in @($watched | Where-Object { $_ })) { if ($seen.Add([int] $process.Id)) { $runs.Add($process) } }
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
+        $id = [int] $running.ProcessId
+        if ($seen.Contains($id)) { continue }
+        # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.
+        $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+        if (-not $process) { continue }
+        try { $null = $process.Handle; $null = $seen.Add($id); $runs.Add($process) } catch { Say "the uninstaller run $id ended before its handle could be taken: $($running.CommandLine)" }
+    }
+    if ($runs.Count -eq 0) { Say "no uninstaller runs once $since"; return }
+    $from = Get-Date
+    $until = [DateTime]::UtcNow.AddSeconds($seconds)
+    foreach ($process in $runs) {
+        $id = [int] $process.Id
+        $left = [int][Math]::Max(0, ($until - [DateTime]::UtcNow).TotalMilliseconds)
+        if (-not $process.WaitForExit($left)) {
+            Write-JasonProcesses
+            Fail "the uninstaller, process $id, still runs $seconds s after $since"
+        }
+        Say "the uninstaller, process ${id}, ended $([Math]::Round(((Get-Date) - $from).TotalSeconds, 1)) s into the wait that began once $since, exit $($process.ExitCode)"
+    }
 }
 
 # --- the listing --------------------------------------------------------------------------------------------------
@@ -1197,8 +1245,12 @@ switch ($Step) {
                                     $ended = (-not $process) -or $process.WaitForExit($left)
                                     Add-Content -LiteralPath $resets -Value "  the waiter $waiter the removal named $(if ($ended) { 'has ended' } else { 'had not ended within 300 s' })"
                                 }
+                                # Either way, where the folder went, an uninstaller still at work is waited for before Installed
+                                # apps' door reads the entries.
+                                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
                             } else {
                                 while ([DateTime]::UtcNow -lt $deadline -and ((Test-Path -LiteralPath $app) -or @(Get-JasonUninstallEntries).Count -gt 0)) { Start-Sleep -Seconds 2 }
+                                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
                                 Add-Content -LiteralPath $resets -Value "  the removal named no waiter; the application's folder $(if (Test-Path -LiteralPath $app) { 'still stands' } else { 'is gone' }) and its Installed apps entries number $(@(Get-JasonUninstallEntries).Count), after waiting for both to go"
                             }
                         }
@@ -1539,8 +1591,7 @@ switch ($Step) {
         }
         foreach ($id in $runs.Keys) {
             $run = $runs[$id]
-            $exit = if ($run.Process -and $run.Process.HasExited) { $run.Process.ExitCode } else { 'still running' }
-            Say "an uninstaller run after jason uninstall, $(if ($run.Silent) { 'with /S' } else { 'without /S' }): exit $exit, visible windows: $(if ($run.Windows.Count) { $run.Windows -join '; ' } else { 'none' })"
+            Say "an uninstaller run after jason uninstall, process $id, $(if ($run.Silent) { 'with /S' } else { 'without /S' }): visible windows: $(if ($run.Windows.Count) { $run.Windows -join '; ' } else { 'none' })"
         }
         if ($asked) {
             Write-JasonProcesses
@@ -1550,18 +1601,23 @@ switch ($Step) {
             Stop-Process -Id $asked.Id -Force -ErrorAction SilentlyContinue
             Wait-Until { -not (Get-Process -Id $asked.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
             Say 'that run was ended unanswered; the application stays installed, and Installed apps takes it off in the next leg'
+        } elseif (Test-Path -LiteralPath $app) {
+            Write-JasonProcesses
+            Fail "the application's folder had not gone 150 s after jason uninstall ended"
+        }
+        # Every run watched, ended before anything of the machine is read, each with its exit code: the folder goes before
+        # the uninstaller has finished.
+        Wait-UninstallerEnded @($runs.Values | ForEach-Object { $_.Process }) $(if ($asked) { 'the asking run was ended' } else { 'the application folder went' })
+        if ($asked) {
             $entry = @(Get-JasonUninstallEntries)
             if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                 $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
                 Say "the quiet uninstall Installed apps runs ended $quiet"
                 if ($quiet -ne 0) { Fail-Held "the quiet uninstall Installed apps runs ended $quiet with nothing of Jason running" }
                 Wait-Until { -not (Test-Path -LiteralPath $app) -or $quiet -ne 0 } 120 "the application's folder going after the quiet uninstall"
+                if (-not (Test-Path -LiteralPath $app)) { Wait-UninstallerEnded @() }
             }
             return
-        }
-        if (Test-Path -LiteralPath $app) {
-            Write-JasonProcesses
-            Fail "the application's folder had not gone 150 s after jason uninstall ended"
         }
         Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 "the Installed apps entry going"
         Start-Sleep -Seconds 5
@@ -1582,30 +1638,31 @@ switch ($Step) {
         $previousVersion = Read-Version $carried
         Say "the previous release's Jason Desktop $previousVersion installed by its own setup /S"
 
-        # Open, as a person leaves it. A fresh 0.48.2 opens on the Demo, which starts no runtime; a person who works in it
-        # has one running from the carried jason, which the updater then stops, so one is started from it here.
+        # Open, as a person leaves it. The previous release, installed fresh, opens on the Demo, which starts no runtime
+        # (desktop/src/mode.ts opensOnDemo(), at v0.48.7); a person who works in it has one running from the carried jason,
+        # which the updater then stops, so one is started from it here.
         $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
             if (-not (Start-PreviousRuntime $carried)) { Fail "the previous release's carried jason could not start a runtime" }
         }
         Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
-        # What 0.48.2's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.2): it stops the
-        # runtime the application carries through jason runtime stop, keeps the application aside, and electron-updater
-        # 6.8.11's quitAndInstall() starts the installer with --updated --force-run - not silent, so autoRunAppAfterInstall
-        # decides the force-run - and quits the application at once. The copy kept aside is the Desktop's own, and is not
-        # made here; the quit is the window's processes ended as the installer starts.
+        # What the previous release's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.7):
+        # it stops the runtime the application carries through jason runtime stop, keeps the application aside, and
+        # electron-updater 6.8.11's quitAndInstall() starts the installer with --updated --force-run - not silent, so
+        # autoRunAppAfterInstall decides the force-run - and quits the application at once. The copy kept aside is the
+        # Desktop's own, and is not made here; the quit is the window's processes ended as the installer starts.
         $stopped = Invoke-Program $carried @('runtime', 'stop')
         if ($stopped.Exit -ne 0) { Fail "the previous release's jason runtime stop exited with $($stopped.Exit): $($stopped.Said)" }
         $installer = Start-Process -FilePath (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') -ArgumentList '--updated', '--force-run' -PassThru
         $null = $installer.Handle
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        $new = Wait-Started $installer "this build's setup --updated --force-run, as 0.48.2's updater starts it"
-        if ($new -ne 0) { Fail "this build's setup run as 0.48.2's updater runs it exited with $new" }
+        $new = Wait-Started $installer "this build's setup --updated --force-run, as $previousVersion's updater starts it"
+        if ($new -ne 0) { Fail "this build's setup run as $previousVersion's updater runs it exited with $new" }
         if ((Read-Version $carried) -ne $Version) { Fail "after the update the application is $(Read-Version $carried), not $Version" }
         $stillOpen = @($opened | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
         if ($stillOpen.Count -ne 0) { Fail "the previous window's processes $($stillOpen -join ', ') outlived the update's installer" }
-        Say "this build's setup, started as 0.48.2's updater starts it (runtime stopped, --updated --force-run, the window quitting), put $Version in place"
+        Say "this build's setup, started as $previousVersion's updater starts it (runtime stopped, --updated --force-run, the window quitting), put $Version in place"
 
         # Its own machine set-up ran: the Path names the bundle folder and a new shell finds this version.
         if ((Count-Entry $bundle) -ne 1) { Fail "after the update the user Path holds $bundle $(Count-Entry $bundle) time(s)" }
@@ -1621,9 +1678,9 @@ switch ($Step) {
     }
 
     'InstallOverOpenWindow' {
-        # A shape 0.48.2's updater never makes: this build's setup run by hand, silently, as an update, over an open window,
-        # the Demo a fresh 0.48.2 opens on. The previous release is installed again for it, and taken off after by Installed
-        # apps.
+        # A shape the previous release's updater never makes (desktop/src/updates.ts install(), at v0.48.7): this build's
+        # setup run by hand, silently, as an update, over an open window, the Demo the previous release opens on when
+        # installed fresh. The previous release is installed again for it, and taken off after by Installed apps.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $installed = Wait-Program (Join-Path $Previous 'jason-desktop-windows-x64-setup.exe') @('/S')
         if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
@@ -1650,7 +1707,7 @@ switch ($Step) {
                 Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window''s processes ending'
             }
             $ended = Get-Date
-            Say "the 0.48.2 window ended at $($ended.ToUniversalTime().ToString('HH:mm:ss.fff'))Z: $how"
+            Say "the previous release's window ended at $($ended.ToUniversalTime().ToString('HH:mm:ss.fff'))Z: $how"
             if ($installer.WaitForExit(300000)) {
                 Say "the setup ended $([int]((Get-Date) - $ended).TotalSeconds) s after the window ended, exit $($installer.ExitCode)"
             } else {
@@ -1700,6 +1757,7 @@ switch ($Step) {
                 if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                     $null = Wait-Program $Matches['file'] @($Matches['arguments'])
                     Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
+                    Wait-UninstallerEnded @()
                 }
             }
             $installed = Wait-Program $old @('/S')
@@ -2000,6 +2058,7 @@ switch ($Step) {
         $removed = Invoke-Program $carried @('uninstall', '--purge-data', '--yes')
         if ($removed.Exit -ne 0) { Fail "jason uninstall after the update exited with $($removed.Exit): $($removed.Said)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        Wait-UninstallerEnded @()
         if ($failure) { Fail $failure }
     }
 
@@ -2011,6 +2070,7 @@ switch ($Step) {
         $removal = Wait-Program $Matches['file'] @($Matches['arguments'])
         if ($removal -ne 0) { Fail "the uninstall Installed apps runs exited with $removal" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 60 "the application's folder going"
+        Wait-UninstallerEnded @()
         Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 'the Installed apps entry going after the folder'
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left: the uninstaller did not run jason uninstall --keep-application' }
         foreach ($root in @('.claude\skills', '.agents\skills')) { if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE "$root\.jason-skills.json")) { Fail "the skills record in $root is left" } }
@@ -2193,6 +2253,7 @@ switch ($Step) {
         $removed = Invoke-Program $carried @('uninstall') $quiet 300
         if ($removed.Exit -ne 0) { Fail "jason uninstall with no --purge-data exited with $($removed.Exit): $($removed.Said)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        Wait-UninstallerEnded @()
         if (-not (Test-Path -LiteralPath $data)) { Fail "jason uninstall with no --purge-data took the data directory $data" }
         if (-not (Test-Path -LiteralPath $harnessRoot)) { Fail "jason uninstall with no --purge-data took the harness root $harnessRoot" }
         Say "jason uninstall with no --purge-data took the application off and kept the data directory and the harness root"
@@ -2295,6 +2356,7 @@ switch ($Step) {
             $ran = Invoke-Program $carried @('uninstall', '--purge-data', '--yes') $quiet 300
             if ($ran.Exit -ne 0) { Fail "jason uninstall --purge-data --yes after moving again exited with $($ran.Exit): $($ran.Said)" }
             Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+            Wait-UninstallerEnded @()
             $remover = "the moved install's own uninstall"
             Say "$Version's own uninstall --purge-data --yes, after moving again, ended 0 and the application's folder went"
 
@@ -2487,10 +2549,10 @@ switch ($Step) {
         if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
         # Side by side as that release leaves them: the command-line folder's own entry on the Path, and nothing of the
-        # Desktop's there. Its setup runs no step of its own at install (v0.48.5's desktop/installer holds only uninstall.nsh,
+        # Desktop's there. Its setup runs no step of its own at install (v0.48.7's desktop/installer holds only uninstall.nsh,
         # with no customInstall), and its application places its command, jason.cmd and a Git Bash wrapper in WindowsApps,
-        # only on the person's word and never as a Path entry (v0.48.5's desktop/src/path-command.ts). Held, so that what
-        # this build's setup puts there after is its own doing.
+        # only on the person's word and never as a Path entry (desktop/src/path-command.ts, at the same tag). Held, so that
+        # what this build's setup puts there after is its own doing.
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         $commandFiles = @(Get-WindowsAppsCommandFiles)
         if ((Count-Entry $bundle) -ne 0) { Fail "the previous release's Jason Desktop is named on the user Path ($bundle), which its setup never writes" }

@@ -1396,10 +1396,11 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
         return pwsh!;
     }
 
-    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments)
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments, string? workingDirectory = null)
     {
         var start = new ProcessStartInfo(executable)
         {
+            WorkingDirectory = workingDirectory ?? string.Empty,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,

@@ -431,7 +431,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         status,
         themeKept: null,
         dailyTrendsKept: null,
-        updateKept: { version: '0.48.5', item: { label: 'Check for Updates…', enabled: true } },
+        updateKept: { version: '0.48.5', item: { label: 'Check for Updates…', enabled: true }, said: null },
         updateMoved: (next) => {
             stub.updateKept = next;
             updateHandlers.forEach((handler) => handler());
