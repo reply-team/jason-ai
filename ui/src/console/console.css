@@ -495,15 +495,15 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
-.jc-console .newrow {
+/* New GTM agent and New chat: two light buttons across the width, one above the other. */
+.jc-console .newstack {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     margin: 2px 14px 8px;
 }
-.jc-console .newrow .newbtn {
+.jc-console .newstack .newbtn {
     margin: 0;
-    flex: 1;
     min-width: 0;
     font-weight: 500;
     padding: 8px 10px;
@@ -522,18 +522,6 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
-    color: var(--ink);
-}
-.jc-console .newrow .caret {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-.jc-console .newrow .caret:hover,
-.jc-console .newrow .caret[aria-expanded='true'] {
-    background: var(--panel);
-    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -557,11 +545,6 @@
     border-radius: 12px;
     padding: 4px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-.jc-console .menuwrap.create > .menu {
-    left: 14px;
-    right: 14px;
-    top: calc(100% - 6px);
 }
 .jc-console .menuitem {
     display: grid;
@@ -1441,6 +1424,17 @@ body,
     justify-content: flex-end;
     gap: 6px;
     padding: 8px 16px 0;
+}
+/* Whose chat this is, on one standing line at the bar's start; the bar's buttons stay at its end. */
+.jc-console .chat-whose {
+    margin-right: auto;
+    align-self: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--mute);
+    font-size: 13px;
 }
 .jc-console .chat-bar .btn.ib {
     flex: none;

@@ -1754,6 +1754,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
+                {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
+                {chat.main || chat.campaignId !== null ? null : (
+                    <span className="chat-whose">{t('chat.whose.none')}</span>
+                )}
                 {chat.main ? null : chat.renaming === null ? (
                     !underHead && (
                         <button

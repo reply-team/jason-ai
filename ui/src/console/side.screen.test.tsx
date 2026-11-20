@@ -10,16 +10,17 @@ import { mode, type Mode } from '../platform/mode';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { inFront } from '../test/area';
+import { inFront, shown } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
-import { chats, conversations, here } from './state';
+import { chats, conversations, feedId, feedUnseen, here } from './state';
 
-// The sidebar: the button that makes an agent and its caret's menu, the rows in their order, the number on Needs you,
+// The sidebar: the button that makes an agent and the one under it that makes a chat, the rows in their order, the
+// number on Needs you,
 // More and what is under it, the conversations under Recent, and Settings in the foot. Read against the recorded
 // exchanges of the runtime's own tests.
 
@@ -53,12 +54,13 @@ function renderConsole(desktop: StubDesktop = stubDesktop(), where: Mode = 'demo
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const menu = () => side().getByRole('navigation', { name: 'Menu' });
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
-const caret = () => side().getByRole('button', { name: 'More to create' });
-const more = () => side().getByRole('button', { name: 'More' });
+const newChat = () => side().getByRole('button', { name: 'New chat' });
 const entries = (name: string) => within(side().getByRole('menu', { name })).getAllByRole('menuitem');
+const more = () => side().getByRole('button', { name: 'More' });
 
 beforeEach(() => {
     mode.value = 'live';
+    feedUnseen.value = false;
     chats.value = {};
     conversations.value = [];
     attention.loaded.value = false;
@@ -71,13 +73,14 @@ beforeEach(() => {
 });
 
 describe('the sidebar in Live', () => {
-    it('draws the brand, New GTM agent, Search, Needs you with its count, Recent and Settings, and nothing else', async () => {
+    it('draws the brand, New GTM agent, New chat, Search, Needs you with its count, the Feed, Accounts, Recent and Settings, and nothing else', async () => {
         renderConsole(stubDesktop(), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         await waitFor(() => expect(attention.loaded.value).toBe(true));
         await waitFor(() => expect(side().getByText('Recent')).toBeTruthy());
         expect(side().getAllByRole('img', { name: 'Jason AI, GTM Harness', hidden: true }).length).toBeGreaterThan(0);
         expect(side().getByRole('button', { name: 'New GTM agent' })).toBeTruthy();
+        expect(side().getByRole('button', { name: 'New chat' })).toBeTruthy();
         const names = () =>
             within(menu())
                 .getAllByRole('button')
@@ -89,11 +92,39 @@ describe('the sidebar in Live', () => {
                     .querySelector('.count')?.textContent,
             ).toBe('4'),
         );
-        expect(names()).toEqual(['SearchCtrl K', 'Needs you']);
-        for (const gone of ['Feed', 'Dashboard', 'People', 'Agents', 'Accounts', 'More'])
+        await waitFor(() => expect(names()).toEqual(['SearchCtrl K', 'Needs you', 'Feed', 'Accounts']));
+        for (const gone of ['More to create', 'Dashboard', 'People', 'Agents', 'More'])
             expect(side().queryByRole('button', { name: gone }), gone).toBeNull();
         expect(side().getByRole('navigation', { name: 'Conversations' })).toBeTruthy();
         expect(document.querySelector('.sfoot')?.textContent?.trim()).toBe('Settings');
+    });
+
+    it('opens the Feed from its row under Needs you, marks the row, and takes the dot of unseen lines away', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const feed = () => within(menu()).getByRole('button', { name: /^Feed/ });
+        await waitFor(() => feed());
+        flush(() => {
+            feedUnseen.value = true;
+        });
+        expect(within(feed()).getByLabelText('New lines in the Feed')).toBeTruthy();
+        expect(feed().querySelector('svg')).not.toBeNull();
+        fireEvent.click(feed());
+        await waitFor(() => expect(shown()).toBe(`chat:${feedId.value}`));
+        await waitFor(() => expect(feed().getAttribute('aria-current')).toBe('true'));
+        expect(within(feed()).queryByLabelText('New lines in the Feed')).toBeNull();
+        expect(feedUnseen.value).toBe(false);
+    });
+
+    it('opens the Accounts screen from its row, as Connect an account did, and marks the row', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const accounts = () => within(menu()).getByRole('button', { name: 'Accounts' });
+        expect(accounts().querySelector('svg')).not.toBeNull();
+        fireEvent.click(accounts());
+        await waitFor(() => expect(route.value.screen).toBe('accounts'));
+        expect(inFront()).toBe('page:accounts');
+        expect(accounts().getAttribute('aria-current')).toBe('true');
     });
 
     it('keeps every page it does not draw at its route, and its panels one link away', async () => {
@@ -114,7 +145,7 @@ describe('the sidebar in Live', () => {
 });
 
 describe('the sidebar', () => {
-    it('lists Search, Feed, Dashboard, Needs you, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
+    it('lists Search, Dashboard, Needs you, Feed, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
         renderConsole();
         await waitFor(() => within(menu()).getByRole('button', { name: /^Feed/ }));
         const names = within(menu())
@@ -123,9 +154,9 @@ describe('the sidebar', () => {
         // Search comes first, with the name of its key beside it.
         expect(names).toEqual([
             'SearchCtrl K',
-            'Feed',
             'Dashboard',
             'Needs you',
+            'Feed',
             'People',
             'Agents',
             'Accounts',
@@ -154,44 +185,29 @@ describe('the sidebar', () => {
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });
 
-    it('has a caret of three entries, each a title and a line, and nothing else', async () => {
-        renderConsole();
+    it('draws New chat as a button of its own directly under New GTM agent, with no caret and no menu to create', async () => {
+        renderConsole(stubDesktop(), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
-        expect(side().queryByRole('menu')).toBeNull();
-        fireEvent.click(caret());
-        expect(caret().getAttribute('aria-expanded')).toBe('true');
-        const titles = entries('Create').map((each) => each.querySelector('.mt')?.textContent);
-        expect(titles).toEqual(['New GTM agent', 'New chat', 'Connect an account']);
-        expect(entries('Create').map((each) => each.querySelector('.ms')?.textContent)).toEqual([
-            'Plan and run outreach',
-            'Talk with Jason, with no agent yet',
-            'Link the accounts Jason works through',
-        ]);
-        // Escape and a click beside it close it.
-        fireEvent.keyDown(window, { key: 'Escape' });
-        expect(side().queryByRole('menu')).toBeNull();
+        const agent = side().getByRole('button', { name: 'New GTM agent' });
+        const stack = agent.closest<HTMLElement>('.newstack')!;
+        expect(Array.from(stack.querySelectorAll('button'))).toEqual([agent, newChat()]);
+        expect(newChat().querySelector('svg')).not.toBeNull();
+        expect(newChat().getAttribute('aria-haspopup')).toBeNull();
+        expect(side().queryByRole('button', { name: 'More to create' })).toBeNull();
+        expect(side().queryByRole('menu', { name: 'Create' })).toBeNull();
+        // Both come before Search.
+        const menuStart = within(menu()).getByRole('button', { name: /^Search/ });
+        expect(newChat().compareDocumentPosition(menuStart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('leads the caret’s entries to Start, to a new chat, and to the Accounts screen', async () => {
+    it('makes a chat directly from New chat, without bringing Start forward', async () => {
         const desktop = renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
         await waitFor(() => expect(inFront()).toBe('Agents'));
-        fireEvent.click(caret());
-        fireEvent.click(entries('Create')[0]!);
-        await waitFor(() => expect(inFront()).toBe('Start'));
-        expect(calls(desktop, 'chat.create')).toEqual([]);
-        expect(side().queryByRole('menu')).toBeNull();
-
-        fireEvent.click(caret());
-        fireEvent.click(entries('Create')[1]!);
+        fireEvent.click(newChat());
         await waitFor(() => expect(calls(desktop, 'chat.create')).toHaveLength(1));
-        expect(side().queryByRole('menu')).toBeNull();
-
-        fireEvent.click(caret());
-        fireEvent.click(entries('Create')[2]!);
-        await waitFor(() => expect(route.value.screen).toBe('accounts'));
-        expect(inFront()).toBe('page:accounts');
+        await waitFor(() => expect(shown()).toMatch(/^chat:/));
     });
 
     it('shows no number on Needs you while nothing waits, and the count of approvals and questions when something does', async () => {
@@ -443,37 +459,35 @@ describe('the sidebar’s look', () => {
         expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
     });
 
-    it('draws New GTM agent as a light button beside a drop-down button of its own', async () => {
+    it('draws New GTM agent and New chat as two light buttons, one above the other, across the width', async () => {
         renderConsole(stubDesktop(), 'live');
         await settled();
         const button = () => side().getByRole('button', { name: 'New GTM agent' });
-        const row = () => button().closest<HTMLElement>('.newrow')!;
-        // Two controls in one row, the main one first in the keyboard order, each its own accessible name.
-        const controls = Array.from(row().querySelectorAll('button'));
-        expect(controls).toEqual([button(), caret()]);
-        expect(button()).not.toBe(caret());
+        const stack = () => button().closest<HTMLElement>('.newstack')!;
+        // Two controls, New GTM agent first in the keyboard order, each named by its own words.
+        expect(Array.from(stack().querySelectorAll('button'))).toEqual([button(), newChat()]);
         expect(button().getAttribute('aria-label')).toBeNull();
-        expect(caret().getAttribute('aria-label')).toBe('More to create');
-        expect(row().contains(caret())).toBe(true);
-        // Start is in front: the main button is marked and the drop-down is not.
+        expect(newChat().getAttribute('aria-label')).toBeNull();
+        // Start is in front: New GTM agent is marked and New chat is not.
         expect(button().getAttribute('aria-current')).toBe('true');
+        expect(newChat().getAttribute('aria-current')).toBeNull();
         expect(styleOf(button())).toMatchObject({ 'border-color': 'var(--accent-line)', background: 'var(--hover)' });
         fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
-        expect(styleOf(row())).toMatchObject({ margin: '2px 14px 8px', gap: '8px' });
-        expect(styleOf(button())).toMatchObject({
-            border: '1px solid var(--line)',
-            'border-radius': '10px',
-            background: 'var(--panel)',
-            'font-weight': '500',
-            flex: '1',
+        expect(styleOf(stack())).toMatchObject({
+            display: 'flex',
+            'flex-direction': 'column',
+            margin: '2px 14px 8px',
+            gap: '6px',
         });
-        expect(styleOf(caret())).toMatchObject({
-            border: '1px solid var(--line)',
-            'border-radius': '10px',
-            background: 'var(--panel)',
-            width: '34px',
-        });
+        for (const each of [button(), newChat()])
+            expect(styleOf(each), each.textContent ?? '').toMatchObject({
+                border: '1px solid var(--line)',
+                'border-radius': '10px',
+                background: 'var(--panel)',
+                'font-weight': '500',
+                margin: '0',
+            });
     });
 
     it('leaves the caret of a filter inside the console as it was: no border, no fill', () => {
@@ -535,11 +549,11 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
     });
 
     it('keeps whatever floats over the drag regions out of them: menus, the palette and dialogs', async () => {
-        renderConsole(mac(), 'live');
+        renderConsole(mac(), 'demo');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
-        fireEvent.click(caret());
+        fireEvent.click(more());
         const floating = [
-            side().getByRole('menu', { name: 'Create' }),
+            side().getByRole('menu', { name: 'More' }),
             document.querySelector('.jc-console .menu-away')!,
         ];
         for (const each of floating) expect(styleOf(each)['-webkit-app-region'], each.className).toBe('no-drag');

@@ -156,12 +156,13 @@ afterEach(() => {
 });
 
 describe('the Dashboard', () => {
-    it('is a sidebar row right after the Feed in the demo, and the row opens the panel', async () => {
+    it('is a sidebar row right after Search and before Needs you in the demo, and the row opens the panel', async () => {
         mode.value = 'demo';
         renderConsole();
         await waitFor(() => expect(dashboardRow()).toBeTruthy());
-        const feed = within(side()).getByRole('button', { name: /^Feed/ });
-        expect(feed.nextElementSibling).toBe(dashboardRow());
+        const menu = within(within(side()).getByRole('navigation', { name: 'Menu' }));
+        expect(menu.getByRole('button', { name: /^Search/ }).nextElementSibling).toBe(dashboardRow());
+        expect(dashboardRow().nextElementSibling).toBe(menu.getByRole('button', { name: /^Needs you/ }));
         expect(document.querySelector('.dash')).toBeNull();
         await open();
         expect(document.querySelector('.dash')).toBeTruthy();
