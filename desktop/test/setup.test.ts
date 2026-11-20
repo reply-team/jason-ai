@@ -360,10 +360,12 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
-    // A chat turn writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes it when
-    // the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, and
+    // A chat turn in Ask first writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes
+    // it when the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, places
+    // that text and the recorded skills in the conversation's own folder under desktop/chats/, where the turn runs, and
     // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end.
     const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
+    const ownFolderFile = /^desktop\/chats\/conv_[0-9A-HJKMNP-TV-Z]{26}\/(?:CLAUDE\.md|AGENTS\.md|\.(?:claude|agents)\/skills\/[a-z-]+\/SKILL\.md)$/;
     const conversationFile = /^desktop\/conversations\/conv_[0-9A-HJKMNP-TV-Z]{26}\.json$/;
     const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
     let during: string[] = [];
@@ -392,12 +394,14 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             ...loggedTurns(log),
         });
         const conversation = (await chat.create()).id;
+        // A new chat is in Full access, whose turn also writes the host's settings; this turn is the one Ask first runs.
+        await chat.setMode(conversation, 'ask_first', 'claude');
         await chat.send(conversation, 'hello', { host: 'claude' });
         await done;
         // The set-up chat's naming run, which leaves nothing behind when the host gives no name.
         await chat.idle();
-    }, [...instructionFiles, conversationFile], []);
-    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !conversationFile.test(path));
+    }, [...instructionFiles, ownFolderFile, conversationFile], []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !ownFolderFile.test(path) && !conversationFile.test(path));
     assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');
     assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
     assert.match(turnFiles[0] ?? '', turnFile);
@@ -411,6 +415,14 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         const skills = readdirSync(join(b.paths.chat, host, 'skills')).sort();
         assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['campaign-launch'], host);
         assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's in ${host}: ${skills.join(', ')}`);
+    }
+    // The conversation's own folder, where its turn ran, holds the same: the two memory files and both hosts' skills.
+    const owned = readdirSync(b.paths.chats);
+    assert.equal(owned.length, 1, `one conversation's folder: ${owned.join(', ')}`);
+    const own = join(b.paths.chats, owned[0] ?? '');
+    assert.deepEqual(readdirSync(own).sort(), ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md']);
+    for (const host of ['.claude', '.agents']) {
+        assert.deepEqual(readdirSync(join(own, host, 'skills')).sort(), readdirSync(join(b.paths.chat, host, 'skills')).sort(), host);
     }
 
     assert.deepEqual(readInstallationSettings(b), {
