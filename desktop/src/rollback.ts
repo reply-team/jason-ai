@@ -5,8 +5,8 @@
  * `/opt/Jason` back by hand would need an administrator and leave dpkg's record on the newer version, so its record names
  * no copy and the starting page names the previous release's deb to install again instead. The first launch of the new version settles
  * it: a start that loads the window records the copy as kept; one that does not keeps it too, says where it is, and
- * refuses that version from then on. Either way the copy stays until the next update replaces it, and the Jason menu
- * names it while it is there (`keptLine`). Only the application is copied: nothing of the runtime's data, and nothing
+ * refuses that version from then on. Either way the copy stays until the next update replaces it, and the menus name
+ * its version while it is there (`keptLine`). Only the application is copied: nothing of the runtime's data, and nothing
  * outside the folder the application is installed in.
  */
 
@@ -93,14 +93,16 @@ export function isRejected(state: RollbackState, version: string): boolean {
 }
 
 /**
- * The Jason menu's line while a copy of the previous version is there: the copy a start that worked recorded as kept, or
- * the one a first start that failed left pending. Null when no copy is there, or when it is of the version that runs.
+ * The menus' line while a copy of the previous version is there, the tray's and the window's alike: the copy a start
+ * that worked recorded as kept, or the one a first start that failed left pending. It names the version and never the
+ * folder, whose path would make a menu as wide as itself; a start that failed and an update that was not installed name
+ * the folder, where a person needs it. Null when no copy is there, or when it is of the version that runs.
  */
 export function keptLine(state: RollbackState, currentVersion: string, exists: (path: string) => boolean): string | null {
     const pending = state.pending?.toVersion === currentVersion ? { version: state.pending.fromVersion, directory: state.pending.directory } : undefined;
     const copy = state.kept ?? pending;
     if (copy === undefined || copy.directory === null || copy.version === currentVersion || !exists(copy.directory)) return null;
-    return `The previous version ${copy.version} is kept at ${copy.directory}; put it back by hand.`;
+    return `The previous version ${copy.version} is kept.`;
 }
 
 /** The folder the application is installed as: the `.app` around the executable on macOS, its folder elsewhere. */

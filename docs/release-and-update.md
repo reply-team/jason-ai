@@ -531,7 +531,7 @@ rest to the manager (§9).
 
 Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs
 the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at
-0.48.5, the last release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
+the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
 nothing newer.
 
 The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason
@@ -1095,8 +1095,10 @@ that exit: `jason update apply` sees a setup that ended 3, Jason Desktop still r
 puts a `jason` back at the carried path and the record that stood, starts the runtime again where one was running
 and answers `update_desktop_not_installed` (below). The Desktop's start never starts a runtime, and touches
 no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window holds no updater: it resolves no host
-name, so it could read no feed, and it refuses the request as `demo_open` before anything is checked, so nothing is
-stopped, kept or downloaded; leaving the Demo, or quitting Jason Desktop, and running the verb again takes it. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
+name, so it could read no feed, and it refuses the request as `demo_open` without checking anything itself. The
+terminal's `jason update apply` has read the feed before it hands anything over, so where the feed offers nothing newer
+the answer is the ordinary one, `update_up_to_date`, and where it offers a newer version the Demo refuses it and nothing
+is stopped, kept or downloaded; leaving the Demo, or quitting Jason Desktop, and running the verb again takes it. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
 folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
 installer's publisher by running PowerShell through that shell, and lets the check pass where PowerShell cannot be run
 at all, so the shell and the PowerShell are found where the system keeps them rather than where the caller's `PATH`
@@ -1495,14 +1497,14 @@ build's report never has.
 
 `jason update rollback` does not roll Jason 0.49 back from a move of a command-line install into Jason Desktop: once the
 move is done, it refuses with `update_carried_by_desktop` and points here. Going back is taking Jason off and installing
-0.48.5, with the data directory kept. 0.49 adds no migration to the database and keeps the layout 0.48.5 runs, so 0.48.5
+0.48.7, with the data directory kept. 0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7
 opens the same data as it is, and there is no backup to put back.
 
 Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one "Jason did not deploy,
 under a name Jason ships, left as it is", move that folder out of the skills folder before step 3 and put it back after
-step 3. 0.49 leaves such a folder as it is; 0.48.5's `jason skills install` deploys its own skill over a folder of the
-same name and records it as its own, and 0.48.5's uninstall removes what it recorded. A folder put back after step 3
-differs from what 0.48.5 recorded, and 0.48.5 keeps a file it finds changed since it wrote it.
+step 3. 0.49 leaves such a folder as it is; 0.48.7's `jason skills install` deploys its own skill over a folder of the
+same name and records it as its own, and 0.48.7's uninstall removes what it recorded. A folder put back after step 3
+differs from what 0.48.7 recorded, and 0.48.7 keeps a file it finds changed since it wrote it.
 
 1. Quit Jason Desktop, then take Jason off in a terminal, keeping the data directory:
    ```sh
@@ -1512,14 +1514,14 @@ differs from what 0.48.5 recorded, and 0.48.5 keeps a file it finds changed sinc
    `~/.jason` and the harness root. Where it refuses, its message says why (Jason Desktop still open, on Windows
    another `jason` still running, or on Linux no administrator's password given to take the deb's package off), and
    nothing has been removed.
-2. Install 0.48.5 by its own pinned line, then open a new terminal.
+2. Install 0.48.7 by its own pinned line, then open a new terminal.
    Windows (PowerShell):
    ```powershell
-   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.48.5/install.ps1))) -Version 0.48.5
+   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.48.7/install.ps1))) -Version 0.48.7
    ```
-   macOS and Linux (on Linux 0.48.5's script installs the command line, as it did then):
+   macOS and Linux (on Linux 0.48.7's script installs the command line, as it did then):
    ```sh
-   curl -fsSL https://get.jasonharness.ai/releases/download/v0.48.5/install.sh | sh -s -- --version 0.48.5
+   curl -fsSL https://get.jasonharness.ai/releases/download/v0.48.7/install.sh | sh -s -- --version 0.48.7
    ```
    A later 0.48 release, if the releases page shows one, is installed the same way under its own number.
 3. Put back what the uninstall took and the install does not:
@@ -1530,13 +1532,13 @@ differs from what 0.48.5 recorded, and 0.48.5 keeps a file it finds changed sinc
    ```
    and `jason runtime autostart enable` where the runtime started at logon before.
 
-Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.5 reads
-as it is. What goes is Jason Desktop: under 0.48.5 it was a separate download, and whoever wants it takes it from
-[0.48.5's release page](https://get.jasonharness.ai/releases/tag/v0.48.5) after step 2; on Linux apt keeps no
-previous version of the package, so the deb of 0.48.5 is taken from there too. The same three steps
-also go back from a 0.49 installed fresh rather than moved. Under 0.48.5, `jason update apply` brings 0.49 back and moves
+Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads
+as it is. What goes is Jason Desktop: under 0.48.7 it was a separate download, and whoever wants it takes it from
+[0.48.7's release page](https://get.jasonharness.ai/releases/tag/v0.48.7) after step 2; on Linux apt keeps no
+previous version of the package, so the deb of 0.48.7 is taken from there too. The same three steps
+also go back from a 0.49 installed fresh rather than moved. Under 0.48.7, `jason update apply` brings 0.49 back and moves
 the install into Jason Desktop again, and `jason update rollback` acts on 0.49's update record, putting back the version
-that update replaced over 0.48.5. Run neither until you want 0.49 again.
+that update replaced over 0.48.7. Run neither until you want 0.49 again.
 
 ## 8. Starting at logon
 

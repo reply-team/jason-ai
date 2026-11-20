@@ -137,6 +137,9 @@ public sealed class ConsoleHostExpansionTests
     [InlineData("C:/Program Files/PowerShell/7/pwsh.exe")]
     public void The_block_is_the_environment_the_console_host_is_started_with(string host)
     {
+        // The console host is Windows' own, named by a Windows path, which is no full path on macOS or Linux.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The console host is Windows' own; its path is no full path elsewhere.");
+
         var variables = new Dictionary<string, string> { [JasonPaths.DataDirectoryVariable] = Own.DataDirectory, ["PATH"] = TerminalPlan.SearchPathFirst(TerminalPlatform.Windows, Own.ExecutableFolder!, Own.SearchPath) };
         var start = TerminalStartInfo.For(TerminalPlatform.Windows, ["C:/Windows/System32/conhost.exe", "--", host], "C:/Jason", variables);
 
@@ -166,8 +169,9 @@ public sealed class ConsoleHostExpansionTests
     public void The_console_host_starts_Windows_PowerShell_without_the_inherited_module_path(TerminalPlatform os, string host, bool keeps)
     {
         var inherited = Environment.GetEnvironmentVariable(ChildProcess.ModulePathVariable);
-        // A system tool is started by its full path, and a macOS or Linux one names none on Windows: those rows run on their own systems.
-        Assert.SkipWhen(OperatingSystem.IsWindows() && os != TerminalPlatform.Windows, "A macOS or Linux terminal's path is no full path on Windows.");
+        // A system tool is started by its full path, and a terminal's path is full only on its own kind of system: the console
+        // host's on Windows, a macOS or Linux terminal's elsewhere. Each row runs where its path is full.
+        Assert.SkipWhen(OperatingSystem.IsWindows() != (os == TerminalPlatform.Windows), "A terminal's path is full only on its own kind of system: the console host's on Windows, a macOS or Linux terminal's elsewhere.");
         Assert.SkipWhen(inherited is null, "This process has no PSModulePath to hand on.");
         IReadOnlyList<string> argv = os == TerminalPlatform.Windows ? ["C:/Windows/System32/conhost.exe", "--", host] : ["/usr/bin/x-terminal-emulator", "-e", host];
 

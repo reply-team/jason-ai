@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -635,6 +636,388 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows proof reads whether a process it watched ended once, after its loop, by the reading the loop used.
+    /// <c>HasExited</c> answers by the exit code Windows reports, which can come before the process's handle is signalled,
+    /// so a zero wait asked after a loop on it can say no of a process the loop saw end, and the step then fails a process
+    /// that ended and tries to end it. No loop on <c>HasExited</c> is followed by a zero wait on the same process; the
+    /// setup's watcher takes its one reading from <c>HasExited</c>, waits for the handle, bounded, before it reads the exit
+    /// code where the process ended, and ends the process only where it did not.
+    /// </summary>
+    [Fact]
+    public void The_Windows_proof_reads_once_whether_a_process_it_watched_ended()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        // Every loop on a process's HasExited, its own or Wait-Until's, and what follows it to the end of its function: no
+        // zero wait on that process.
+        var loops = Regex.Matches(windows, @"\n[ ]*(?:while \(|Wait-Until \{)(?<condition>[^\n]*?\$(?<name>\w+)\.HasExited[^\n]*)");
+        Assert.True(loops.Count >= 3, $"Test-InstallationWindows.ps1 has {loops.Count} loop(s) on HasExited; the row reads too few to mean anything.");
+        foreach (Match loop in loops)
+        {
+            var after = windows[(loop.Index + loop.Length)..];
+            var end = after.IndexOf("\n}\n", StringComparison.Ordinal);
+            after = end >= 0 ? after[..end] : after;
+            Assert.False(Regex.IsMatch(after, @"\$" + Regex.Escape(loop.Groups["name"].Value) + @"\.WaitForExit\(\s*0\s*\)"),
+                $"a loop on ${loop.Groups["name"].Value}.HasExited is followed by a zero wait on the same process, a second reading of whether it ended: {loop.Groups["condition"].Value}");
+        }
+        Assert.DoesNotMatch(@"\.WaitForExit\(\s*0\s*\)", windows);
+
+        var watch = windows[windows.IndexOf("\nfunction Watch-Setup(", StringComparison.Ordinal)..];
+        watch = watch[..watch.IndexOf("\n}\n", StringComparison.Ordinal)];
+        var loopAt = watch.IndexOf("    while (-not $process.HasExited -and ", StringComparison.Ordinal);
+        var read = watch.IndexOf("\n    $ended = $process.HasExited\n", StringComparison.Ordinal);
+        var settled = watch.IndexOf("\n    if ($ended -and -not $process.WaitForExit(10000)) { ", StringComparison.Ordinal);
+        var code = watch.IndexOf("Exit = $(if ($ended) { $process.ExitCode } else { $null })", StringComparison.Ordinal);
+        var notEnded = watch.IndexOf("\n    if (-not $ended) {\n", StringComparison.Ordinal);
+        var stop = watch.IndexOf("Stop-Process -Id $process.Id", StringComparison.Ordinal);
+        Assert.True(loopAt >= 0 && read > loopAt && settled > read && code > settled && notEnded > code && stop > notEnded,
+            "Watch-Setup does not read once, after its loop, by HasExited whether the setup ended, wait for its handle where it did before reading its exit code, and end it only where it did not");
+        Assert.Single(Regex.Matches(watch, @"\$ended = "));
+        Assert.Single(Regex.Matches(watch, @"Stop-Process"));
+        // The one Stop-Process is inside the block for a setup that did not end, never after it.
+        var block = watch[notEnded..];
+        block = block[..(block.IndexOf("\n    }\n", StringComparison.Ordinal) + 1)];
+        Assert.True(block.Contains("Stop-Process -Id $process.Id", StringComparison.Ordinal), "Watch-Setup ends the setup outside the block for a setup that did not end");
+    }
+
+    /// <summary>
+    /// The Windows proof reads the machine after an uninstall only once the uninstaller it watched has ended. The uninstaller
+    /// removes the application's folder before it has finished - its Installed apps entry goes after - so a reading taken
+    /// when the folder goes races it, and a key listed can be gone when it is read. After every wait for the application's
+    /// folder to go, one helper, <c>Wait-UninstallerEnded</c>, waits up to 150 s for the uninstaller runs to end and says each
+    /// one's exit code, failing by its own sentence where one still runs; no reading of the machine, no program run, no return
+    /// and no end of the step stands between such a wait and that helper. Listing the Installed apps entries treats a key that
+    /// went between the listing and its read as no entry: a defence under the wait, not a replacement for it.
+    /// </summary>
+    [Fact]
+    public void The_Windows_proof_reads_the_machine_after_an_uninstall_only_once_the_uninstaller_it_watched_has_ended()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        // Comments aside: a word in a comment is neither a wait nor a reading.
+        var code = Regex.Replace(windows, @"(?m)^[ \t]*#.*$", string.Empty);
+
+        // Every wait for the application's folder to go, and what follows it to the end of its step or function: the helper
+        // stands before the first reading of the machine, program run or return, and before the end.
+        var waits = Regex.Matches(code, @"\n[^\n]*(?:Wait-Until \{|while \()[^\n]*Test-Path -LiteralPath \$app\)[^\n]*");
+        Assert.True(waits.Count >= 8, $"Test-InstallationWindows.ps1 has {waits.Count} wait(s) for the application's folder to go; the row reads too few to mean anything.");
+        var ends = Regex.Matches(code, @"\n    '\w+' \{\n|\nfunction |\n}\n").Select(end => end.Index).ToArray();
+        var reading = new Regex(@"Get-JasonUninstallEntries|Count-Entry |Test-Path -LiteralPath \$data|Test-Path -LiteralPath \$harnessRoot|Test-Path -LiteralPath \(Join-Path|Get-OwnProcesses |Get-LeftOver|Read-OwnSkill |Find-InNewShell |Wait-Program |Invoke-Program |\breturn\b");
+        foreach (Match wait in waits)
+        {
+            var from = wait.Index + wait.Length;
+            var to = ends.Where(end => end >= from).DefaultIfEmpty(code.Length).Min();
+            var after = code[from..to];
+            var waited = after.IndexOf("Wait-UninstallerEnded ", StringComparison.Ordinal);
+            var read = reading.Match(after);
+            Assert.True(waited >= 0, $"after the wait '{wait.Value.Trim()}' the step ends without waiting for the uninstaller it watched to end (Wait-UninstallerEnded)");
+            Assert.True(!read.Success || waited < read.Index, $"after the wait '{wait.Value.Trim()}' the machine is read by '{read.Value}' before the wait for the uninstaller it watched to end (Wait-UninstallerEnded)");
+        }
+
+        // The helper: the runs it is given and every uninstaller running now, each waited for by its handle within 150 s,
+        // its exit code said, and one still running at the bound failing the step by its own sentence.
+        var helperAt = code.IndexOf("\nfunction Wait-UninstallerEnded(", StringComparison.Ordinal);
+        Assert.True(helperAt >= 0, "Test-InstallationWindows.ps1 has no Wait-UninstallerEnded, the one wait for an uninstaller's end before the machine is read");
+        var helper = code[helperAt..];
+        helper = helper[..helper.IndexOf("\n}\n", StringComparison.Ordinal)];
+        // The copy NSIS runs on is matched by any program in any ~nsu*.tmp folder, whatever NSIS names the folder or the
+        // copy: a narrower pattern can miss a run and say none runs. PowerShell's -match is .NET's, ignoring case.
+        var copy = Regex.Match(helper, @"""\$\(\$_\.ExecutablePath\)"" -match '(?<pattern>[^']+)'");
+        Assert.True(copy.Success, "Wait-UninstallerEnded no longer matches the copy NSIS runs on by its path");
+        var temporary = @"C:\Users\runneradmin\AppData\Local\Temp\2\";
+        foreach (var path in new[] { "~nsu.tmp\\Au_.exe", "~nsuA.tmp\\Un_A.exe", "~nsu1.tmp\\Un.exe", "~nsuG.tmp\\Un_A.exe", "~NSU1F.TMP\\Un.EXE", "~nsu12.tmp\\other.exe" })
+        {
+            Assert.True(Regex.IsMatch(temporary + path, copy.Groups["pattern"].Value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+                $"Wait-UninstallerEnded's pattern '{copy.Groups["pattern"].Value}' misses an NSIS copy at {temporary}{path}");
+        }
+
+        foreach (var said in new[]
+        {
+            "$seconds = 150",
+            "$_.Name -like 'Uninstall Jason*.exe' -or \"$($_.ExecutablePath)\" -match '\\\\~nsu[^\\\\]*\\.tmp\\\\[^\\\\]+\\.exe$'",
+            "$null = $process.Handle",
+            "if (-not $process.WaitForExit($left)) {",
+            "Fail \"the uninstaller, process $id, still runs $seconds s after $since\"",
+            "exit $($process.ExitCode)",
+        })
+        {
+            Assert.True(helper.Contains(said, StringComparison.Ordinal), $"Wait-UninstallerEnded does not say: {said}");
+        }
+
+        // The leg that watches the uninstaller runs by their ids hands those runs to the helper.
+        Assert.Contains("Wait-UninstallerEnded @($runs.Values | ForEach-Object { $_.Process })", code, StringComparison.Ordinal);
+
+        // A key listed and gone before it is read is no entry; a key still there that cannot be read still fails.
+        var entries = code[code.IndexOf("\nfunction Get-JasonUninstallEntries {", StringComparison.Ordinal)..];
+        entries = entries[..entries.IndexOf("\n}\n", StringComparison.Ordinal)];
+        Assert.Contains("$key = $_.PSPath; try { Get-ItemProperty -LiteralPath $key -ErrorAction Stop } catch { if (Test-Path -LiteralPath $key) { throw } }", entries, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two helpers the Windows proof reads the machine with after an uninstall are run, not only read: a row that reads
+    /// their text let one through that failed the first time it was handed a run, indexing an ordered dictionary by a process
+    /// id, which it takes for a position. Each is taken from the script's own text into a <c>pwsh</c> of the row's own, with
+    /// <c>Say</c>, <c>Fail</c> and the process listing stood in, and the uninstaller runs are stand-ins the row starts, windowed
+    /// programs as an NSIS uninstaller is. <c>Wait-UninstallerEnded</c> is kept by its <c>-under</c> to the row's own folder, so
+    /// that it never waits on a program of the machine the row runs on; the proof gives no <c>-under</c>. A run handed to it that
+    /// ends by itself is said with its exit code, once though the scan sees it too; one still running at a bound of 2 s fails by
+    /// the helper's own sentence, and the row ends that one process by its id, the only one it ends; with no run it says none
+    /// runs, and an <c>Uninstall Jason.exe</c> outside its folder is not taken; an <c>Uninstall Jason … .exe</c> in its folder,
+    /// handed to it by nobody, is found by its scan, its handle taken, waited for and said with its exit code; and so is the
+    /// copy NSIS runs on from a <c>~nsu*.tmp</c> folder. Every other stand-in ends by itself and is waited for.
+    /// <c>Get-JasonUninstallEntries</c> is run against stand-ins
+    /// of the two registry reads, so that no row writes the registry: a key listed and gone before it is read is no entry, a
+    /// key of another application is none, and a key still there that cannot be read fails.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_helpers_after_an_uninstall_run_as_the_proof_runs_them()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The helpers wait on Windows processes and read Windows' Installed apps entries, and the proof runs them on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string opening)
+        {
+            var at = script.IndexOf("\nfunction " + opening, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"Test-InstallationWindows.ps1 has no function {opening}");
+            var end = script.IndexOf("\n}\n", at, StringComparison.Ordinal);
+            return script[(at + 1)..(end + 2)];
+        }
+
+        // The proof's own prelude, taken from its text: the block of lines after param()'s closing parenthesis, up to the first
+        // blank line. Of it, the lines that set the session's own settings, a preference variable or the strict mode, are
+        // taken; the one other line it holds, making the folder of the step's -Out parameter, reads a parameter the row does
+        // not give and writes outside the row's tree, and is left. A line of any other form fails the row, for its author to
+        // decide which side it is on.
+        var paramsEnd = script.IndexOf("\n)\n\n", StringComparison.Ordinal);
+        Assert.True(paramsEnd >= 0, "Test-InstallationWindows.ps1 has no param() block followed by its prelude");
+        var preludeAt = paramsEnd + "\n)\n\n".Length;
+        var block = script[preludeAt..script.IndexOf("\n\n", preludeAt, StringComparison.Ordinal)].Split('\n');
+        var prelude = block.Where(line => Regex.IsMatch(line, @"^(?:\$\w+Preference = .+|Set-StrictMode .+)$")).ToArray();
+        Assert.Equal(["New-Item -ItemType Directory -Force -Path $Out | Out-Null"], block.Except(prelude));
+        Assert.Contains("$ErrorActionPreference = 'Stop'", prelude);
+        Assert.Contains("Set-StrictMode -Version Latest", prelude);
+
+        var standIn = UninstallerRunStandIn.Value;
+        Assert.Equal(Subsystem.WindowsGui, StandInPrograms.SubsystemOf(standIn));
+
+        using var tree = new TempTree();
+        var under = tree.NewDirectory("uninstallers");
+        var outside = tree.NewDirectory("outside");
+        var started = Path.Combine(tree.Root, "started.txt");
+        string[] programs = [Path.Combine(under, "Uninstall Jason.exe"), Path.Combine(under, "Uninstall Jason 0.49.0.exe"), Path.Combine(under, "~nsuT.tmp", "Un.exe"), Path.Combine(outside, "Uninstall Jason.exe")];
+        foreach (var program in programs)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(program)!);
+            File.WriteAllBytes(program, standIn);
+        }
+
+        static string Quoted(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, HelperHarness
+            .Replace("@PRELUDE@", string.Join('\n', prelude), StringComparison.Ordinal)
+            .Replace("@UNDER@", Quoted(under), StringComparison.Ordinal)
+            .Replace("@OUTSIDE@", Quoted(outside), StringComparison.Ordinal)
+            .Replace("@STARTED@", Quoted(started), StringComparison.Ordinal)
+            .Replace("@KEYS@", Quoted(tree.NewDirectory("keys")), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", Function("Wait-UninstallerEnded(") + Function("Get-JasonUninstallEntries {"), StringComparison.Ordinal));
+
+        int exit;
+        string stdout, stderr;
+        try
+        {
+            (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        }
+        finally
+        {
+            EndStandIns(started, programs);
+        }
+
+        var output = "\n" + stdout + stderr;
+        // What each case said, kept with the row's result whether it passes or not.
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var lines = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        string Started(string row) => Regex.Match(stdout, $@"^\({row}\) started (\d+)\r?$", RegexOptions.Multiline).Groups[1].Value;
+        string[] Said(string row) => [.. lines.Where(line => line.StartsWith($"({row}) ", StringComparison.Ordinal) && !line.StartsWith($"({row}) started ", StringComparison.Ordinal))];
+        double Seconds(string line, string pattern)
+        {
+            var match = Regex.Match(line, pattern);
+            Assert.True(match.Success, $"'{line}' is not '{pattern}'{output}");
+            return double.Parse(match.Groups["seconds"].Value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // (a) A run handed to the helper that ends by itself: said once, with its exit code, though the scan sees it too.
+        var a = Started("a");
+        Assert.True(a.Length > 0, output);
+        var saidA = Assert.Single(Said("a"));
+        Seconds(saidA, $@"^\(a\) said: the uninstaller, process {a}, ended (?<seconds>[0-9.]+) s into the wait that began once the application folder went, exit 7$");
+
+        // (b) A run still going at the bound: the processes listed, the helper's own sentence, at the bound and not at 150 s,
+        // and that one process ended by the row, by its id.
+        var b = Started("b");
+        var saidB = Said("b");
+        Assert.True(saidB.Length == 3, output);
+        Assert.Equal("(b) listed the processes", saidB[0]);
+        var waited = Seconds(saidB[1], $@"^\(b\) failed after (?<seconds>[0-9.]+) s: the uninstaller, process {b}, still runs 2 s after the application folder went$");
+        Assert.InRange(waited, 1.5, 30);
+        Assert.Equal($"(b) ended {b}: True", saidB[2]);
+
+        // (c) No run in the helper's folder, while an Uninstall Jason.exe runs outside it: none runs, and that one ends by itself.
+        var c = Started("c");
+        Assert.Equal(["(c) said: no uninstaller runs once the application folder went", $"(c) ended by itself {c}: True"], Said("c"));
+
+        // (d) An Uninstall Jason … .exe in the helper's folder, handed to it by nobody: found by the scan, its handle taken,
+        // waited for, and said with its exit code.
+        var d = Started("d");
+        Seconds(Assert.Single(Said("d")), $@"^\(d\) said: the uninstaller, process {d}, ended (?<seconds>[0-9.]+) s into the wait that began once the application folder went, exit 5$");
+
+        // (e) The copy NSIS runs on from a ~nsu*.tmp folder, handed to the helper by nobody: found by the scan and waited for.
+        var e = Started("e");
+        Seconds(Assert.Single(Said("e")), $@"^\(e\) said: the uninstaller, process {e}, ended (?<seconds>[0-9.]+) s into the wait that began once the asking run was ended, exit 3$");
+
+        // (f) The Installed apps entries: the key that went is no entry, another application's is none, an unreadable one fails.
+        Assert.Equal(["(f) entries: there", "(f) failed on an unreadable key: Requested registry access is not allowed."], Said("f"));
+
+        // Every stand-in the harness started and did not end ended by itself before the harness's end.
+        Assert.DoesNotContain(lines, line => line.StartsWith("left ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The pwsh the helper row runs. Say, Fail and the process listing are stood in, each line said prefixed by its case; every
+    /// stand-in it starts is written to a file by its id, for the row to end by that id should the harness not get to its end.
+    /// The harness ends one process, the stand-in of (b) by its id; every other stand-in ends by itself and is waited for. It
+    /// opens with the settings lines of the proof's own prelude, so the helpers run as strictly as the proof runs them.
+    /// </summary>
+    private const string HelperHarness = """
+        @PRELUDE@
+        $under = @UNDER@
+        $outside = @OUTSIDE@
+        $started = @STARTED@
+        $uninstallKeys = @KEYS@
+        $all = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+        $case = ''
+        function Say([string] $line) { [Console]::Out.WriteLine("$case said: $line") }
+        function Fail([string] $why) { throw $why }
+        function Write-JasonProcesses { [Console]::Out.WriteLine("$case listed the processes") }
+        function Write-Failed($record) { [Console]::Out.WriteLine("$case failed: $($record.Exception.Message)") }
+        function Start-StandIn([string] $file, [int] $milliseconds, [int] $exit) {
+            $process = Start-Process -FilePath $file -ArgumentList "$milliseconds", "$exit" -PassThru
+            $null = $process.Handle
+            Add-Content -LiteralPath $started -Value $process.Id
+            $all.Add($process)
+            [Console]::Out.WriteLine("$case started $($process.Id)")
+            return $process
+        }
+        function Wait-StandIn([System.Diagnostics.Process] $process) {
+            [Console]::Out.WriteLine("$case ended by itself $($process.Id): $($process.WaitForExit(15000))")
+        }
+        function End-StandIn([System.Diagnostics.Process] $process) {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $null = $process.WaitForExit(10000) }
+            [Console]::Out.WriteLine("$case ended $($process.Id): $($process.HasExited)")
+        }
+
+        @FUNCTIONS@
+
+        $case = '(a)'
+        try { $run = Start-StandIn (Join-Path $under 'Uninstall Jason.exe') 500 7; Wait-UninstallerEnded @($run) -under $under } catch { Write-Failed $_ }
+
+        $case = '(b)'
+        $run = Start-StandIn (Join-Path $under 'Uninstall Jason.exe') 20000 0
+        $from = Get-Date
+        try { Wait-UninstallerEnded @($run) -seconds 2 -under $under; [Console]::Out.WriteLine("$case did not fail") } catch { [Console]::Out.WriteLine("$case failed after $([Math]::Round(((Get-Date) - $from).TotalSeconds, 1)) s: $($_.Exception.Message)") }
+        End-StandIn $run
+
+        $case = '(c)'
+        $run = Start-StandIn (Join-Path $outside 'Uninstall Jason.exe') 3000 0
+        try { Wait-UninstallerEnded @() -under $under } catch { Write-Failed $_ }
+        Wait-StandIn $run
+
+        $case = '(d)'
+        try { $null = Start-StandIn (Join-Path $under 'Uninstall Jason 0.49.0.exe') 3000 5; Wait-UninstallerEnded @() -under $under } catch { Write-Failed $_ }
+
+        $case = '(e)'
+        try { $null = Start-StandIn (Join-Path $under '~nsuT.tmp\Un.exe') 3000 3; Wait-UninstallerEnded @() 'the asking run was ended' -under $under } catch { Write-Failed $_ }
+
+        $case = '(f)'
+        & {
+            $there = Join-Path $uninstallKeys 'there'
+            $gone = Join-Path $uninstallKeys 'gone'
+            $other = Join-Path $uninstallKeys 'other'
+            $unreadable = Join-Path $uninstallKeys 'unreadable'
+            $null = New-Item -ItemType Directory -Path $there, $other, $unreadable
+            $listed = @($there, $gone, $other)
+            function Get-ChildItem { [CmdletBinding()] param([string] $LiteralPath) if ($LiteralPath -cne $uninstallKeys) { throw "listed $LiteralPath" }; foreach ($key in $listed) { [pscustomobject]@{ PSPath = $key } } }
+            function Get-ItemProperty {
+                [CmdletBinding()] param([string] $LiteralPath)
+                switch (Split-Path -Leaf $LiteralPath) {
+                    'there' { [pscustomobject]@{ DisplayName = 'Jason Desktop 0.49.0'; PSChildName = 'there' } }
+                    'other' { [pscustomobject]@{ DisplayName = 'Another application'; PSChildName = 'other' } }
+                    'gone' { throw [System.Management.Automation.ItemNotFoundException]::new("Cannot find path '$LiteralPath' because it does not exist.") }
+                    default { throw [System.UnauthorizedAccessException]::new('Requested registry access is not allowed.') }
+                }
+            }
+            try { [Console]::Out.WriteLine("$case entries: $((@(Get-JasonUninstallEntries) | ForEach-Object { $_.PSChildName }) -join ', ')") } catch { Write-Failed $_ }
+            $listed = @($there, $unreadable)
+            try { $found = @(Get-JasonUninstallEntries); [Console]::Out.WriteLine("$case read an unreadable key as $($found.Count) entries") } catch { [Console]::Out.WriteLine("$case failed on an unreadable key: $($_.Exception.Message)") }
+        }
+
+        $case = ''
+        foreach ($process in $all) { if (-not $process.WaitForExit(15000)) { [Console]::Out.WriteLine("left $($process.Id)") } }
+        """;
+
+    /// <summary>
+    /// Every stand-in the helper row's harness wrote down that still runs, ended by its id, and only where the process of that
+    /// id is one of the row's own programs: a harness that did not get to its own end leaves none behind.
+    /// </summary>
+    private static void EndStandIns(string started, string[] programs)
+    {
+        if (!File.Exists(started))
+        {
+            return;
+        }
+
+        foreach (var line in File.ReadAllLines(started))
+        {
+            if (!int.TryParse(line, out var id))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(id);
+                if (!process.HasExited && programs.Contains(process.MainModule?.FileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    process.Kill();
+                    process.WaitForExit(10000);
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Ended already, or no longer one of the row's own.
+            }
+        }
+    }
+
+    /// <summary>
+    /// A stand-in for an uninstaller run, built by the .NET Framework's C# compiler every Windows carries as a program with no
+    /// window, as an NSIS uninstaller is: it waits the milliseconds its first argument gives and ends with the code its second
+    /// gives.
+    /// </summary>
+    private static readonly Lazy<byte[]> UninstallerRunStandIn = new(() =>
+    {
+        var csc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+        Assert.SkipUnless(File.Exists(csc), "This Windows has no .NET Framework C# compiler to build the stand-in with.");
+        using var tree = new TempTree();
+        var source = Path.Combine(tree.Root, "uninstaller.cs");
+        var output = Path.Combine(tree.Root, "uninstaller.exe");
+        File.WriteAllText(source, "static class Program { static int Main(string[] a) { System.Threading.Thread.Sleep(int.Parse(a[0])); return int.Parse(a[1]); } }\n");
+        var (exit, stdout, stderr) = Run(csc, new Dictionary<string, string>(), "/nologo", "/target:winexe", "/out:" + output, source);
+        Assert.True(exit == 0, stdout + stderr);
+        return File.ReadAllBytes(output);
+    });
+
+    /// <summary>
     /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
     /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
     /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
@@ -1235,7 +1618,7 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// The macOS legs serve their feed by serve-feed.py, which does nothing between bind and listen, and wait 30 s for it,
+    /// The macOS legs serve their feed by serve-feed.py, which does nothing between bind and listen, and wait 90 s for it,
     /// printing the server's log, its process and what holds the port where it never answers.
     /// </summary>
     [Fact]
@@ -1247,7 +1630,8 @@ public partial class InstallScriptTests
         Assert.DoesNotContain("http.server 80", macos, StringComparison.Ordinal);
         Assert.Equal(3, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
         Assert.Contains("    python3 \"$(dirname \"$0\")/serve-feed.py\" \"$folder\" 8099 \"$log\" &\n", macos, StringComparison.Ordinal);
-        Assert.Contains("    until=$(( $(date +%s) + 30 ))\n", macos, StringComparison.Ordinal);
+        Assert.Contains("    until=$(( $(date +%s) + 90 ))\n", macos, StringComparison.Ordinal);
+        Assert.Contains("fail \"the feed on 127.0.0.1:8099 answering did not happen within 90 s; ", macos, StringComparison.Ordinal);
         foreach (var said in new[] { "lsof -nP -iTCP:8099", "netstat -anv -p tcp", "cat \"$log\"", "kill -0 \"$server\"" })
         {
             Assert.Contains(said, macos, StringComparison.Ordinal);
@@ -1258,6 +1642,59 @@ public partial class InstallScriptTests
         Assert.DoesNotContain("getfqdn(", server[server.IndexOf("def main", StringComparison.Ordinal)..], StringComparison.Ordinal);
         Assert.Contains("said(f\"bound {address}:", server, StringComparison.Ordinal);
         Assert.Contains("said(f\"listening on {address}:", server, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On Windows the line every real install takes reads its feed over the web in Windows PowerShell 5.1, which a feed in a
+    /// directory never reaches. The proof's Windows job holds it in a leg of its own: the job's feed served on this machine
+    /// by the proof's one feed server, install.ps1 run by <c>powershell.exe</c> with that address and that shell said and
+    /// held to Windows PowerShell 5.1, the server's own record
+    /// of the manifest, the checksums and the setup each answered, and a runtime over the installed role skills saying
+    /// <c>role_skills</c> is ok. The role skills come from the skills beside the application's jason, so their record is
+    /// held to a folder of the application and never to the feed.
+    /// </summary>
+    [Fact]
+    public void The_windows_proof_installs_from_a_feed_served_on_the_machine_in_Windows_PowerShell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
+        var job = ci.IndexOf("\n  union-windows:\n", StringComparison.Ordinal);
+        Assert.True(job >= 0, "ci.yml no longer has the union-windows job.");
+        var leg = ci.IndexOf("- name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal\n", job, StringComparison.Ordinal);
+        Assert.True(leg > job, "union-windows no longer installs from a feed served on this machine in Windows PowerShell 5.1.");
+        var next = ci.IndexOf("\n      - ", leg + 1, StringComparison.Ordinal);
+        var step = next < 0 ? ci[leg..] : ci[leg..next];
+        var begin = step.IndexOf("-Step Begin -Out $env:OUT -Leg $env:LEG -Clean ", StringComparison.Ordinal);
+        var served = step.IndexOf("-Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script ", StringComparison.Ordinal);
+        var end = step.IndexOf("-Step End -Out $env:OUT -Leg $env:LEG", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && served > begin && end > served, $"the served feed's leg is not framed by a clean begin and its end:\n{step}");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).ReplaceLineEndings("\n");
+        var at = script.IndexOf("\n    'ServedFeed' {\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Test-InstallationWindows.ps1 has no ServedFeed step.");
+        var body = script[at..script.IndexOf("\n    }\n", at, StringComparison.Ordinal)];
+        foreach (var said in new[]
+        {
+            "$server = Start-FeedServer $Feed 8099 ",
+            "Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }",
+            "$served = 'http://127.0.0.1:8099'",
+            "Say \"install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition\"",
+            "$shellEdition -cne 'Desktop' -or -not \"$shellVersion\".StartsWith('5.1.')",
+            "@('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')",
+            "' HTTP/1\\.[01]\" 200'",
+            "skills\\roles\\.jason-skills.json",
+            "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
+        })
+        {
+            Assert.True(body.Contains(said, StringComparison.Ordinal), $"Test-InstallationWindows.ps1's ServedFeed step does not say: {said}");
+        }
+
+        // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
+        Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        // Its answer waited for up to 90 s: the server is the proof's own, and a runner's image can start it slowly.
+        Assert.Contains("    $until = [DateTime]::UtcNow.AddSeconds(90)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\"the feed on 127.0.0.1:$port answering did not happen within 90 s\"", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
     }
 
     /// <summary>

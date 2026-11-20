@@ -24,7 +24,9 @@ public static class InsideARun
     /// <summary>
     /// The operations that are a person's own word. A preference is one for every key: what a named person states, where in
     /// a dispatched run no person is there. Refused here by operation, never by key, so a key added later is refused before
-    /// anybody remembers to.
+    /// anybody remembers to. A campaign's start, or its resume, is one: a role may pause a campaign, and only a person, or
+    /// their own session on their word, starts one; a check-in that started its campaign under a role's or a person's name
+    /// would write a start that is not its own line, and that start would summon its successor.
     /// </summary>
     public static IReadOnlySet<string> PersonsWord { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -36,6 +38,7 @@ public static class InsideARun
         Operations.PreferenceSet,
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
+        Operations.CampaignStart,
     };
 
     /// <summary>
@@ -61,6 +64,7 @@ public static class InsideARun
     {
         Operations.ProfileSetDefault or Operations.ProfileUnsetDefault => Domain.DomainErrors.DefaultProfileInsideARun(attempt),
         Operations.NotificationEnable or Operations.NotificationDisable => Domain.DomainErrors.NotificationInsideARun(attempt),
+        Operations.CampaignStart => Domain.DomainErrors.StartInsideARun(attempt),
         _ when ChangesJason.Contains(operation) => Domain.DomainErrors.ChangesJasonInsideARun(attempt),
         _ => Domain.DomainErrors.DecidedInsideARun(attempt),
     };

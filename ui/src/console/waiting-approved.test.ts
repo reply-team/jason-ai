@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Api } from '../api/client';
 import { followApproved, waitingOf } from './waiting';
-import { approvedSentence, type Approved } from './waiting-model';
+import { APPROVED_LINE_LEAVES_MS, approvedSentence, linesStaying, type Approved } from './waiting-model';
 
 const message: Approved = {
     approvalId: 'apr_1',
@@ -130,5 +130,24 @@ describe('following an approved act to the end of its work', () => {
         await followApproved(api, waiting);
         expect(api.reads).toEqual(['wi_2']);
         expect(waiting.approved.value.map((each) => each.state)).toEqual(['done', 'approved']);
+    });
+});
+
+describe('which approved lines stay', () => {
+    const lines: Approved[] = (['approved', 'running', 'held', 'done', 'failed', 'cancelled', 'expired'] as const).map(
+        (state) => ({ ...message, approvalId: `apr_${state}`, state }),
+    );
+    const shown = new Map(lines.map((each) => [each.approvalId, 1000]));
+
+    it('lets only a line that reached "It was sent." or "It is done." leave, five seconds after it first showed that', () => {
+        const stays = (now: number) => linesStaying(lines, shown, now).map((each) => each.state);
+        expect(APPROVED_LINE_LEAVES_MS).toBe(5000);
+        expect(stays(1000 + 4999)).toEqual(lines.map((each) => each.state));
+        expect(stays(1000 + 5000)).toEqual(['approved', 'running', 'held', 'failed', 'cancelled', 'expired']);
+    });
+
+    it('keeps a line whose final words were never shown, whatever the clock says', () => {
+        const done = lines.filter((each) => each.state === 'done');
+        expect(linesStaying(done, new Map(), 1e12)).toEqual(done);
     });
 });

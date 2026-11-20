@@ -22,7 +22,7 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
     private const string TapOffReason =
-        "Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at 0.48.5, the last release it carries; this job comes back, bumping a cask, with the release that carries one.";
+        "Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that carries one.";
 
     /// <summary>
     /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is

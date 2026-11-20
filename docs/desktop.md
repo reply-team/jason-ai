@@ -138,12 +138,17 @@ shows before anything is typed and what you send waits, while the window is open
   line, "You approved: Message to the person." and then how its work stands, read again as the journal moves: "Jason will
   send it." while the work is queued, "Jason is sending it." once a handler runs it, "It is not sent yet:" and why if it parked again, "It was sent." once
   the work succeeded, and "It was not sent:" with "the work failed", "was cancelled" or "expired" otherwise; an act that
-  is no message says "will do it", "is doing it", "not done yet", "is done" or "did not complete". The line is kept while the chat is
-  open; the "Waiting for you" label is drawn only over what waits, never over a read that failed alone.
+  is no message says "will do it", "is doing it", "not done yet", "is done" or "did not complete". A line that says "It was
+  sent." or "It is done." leaves five seconds after it first shows that; a line whose work is still on its way stays until
+  it gets there, and one that says the work was not sent or not done stays while the chat is open, since it is the only
+  sign that something failed. The "Waiting for you" label is drawn only over what waits, never over a read that failed alone.
 - While a turn runs, the line under the conversation says "Thinking…" with a spinner. While a permission card of that
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
-  waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
-  conversation to its foot above the box; opening a chat leaves its place alone.
+  waiting for you and not working. While you are at the foot of the conversation, the end of what was said, it follows
+  what is added there: your message, the AI's words as they come, a card; the cards waiting for you under the
+  conversation stay under it. Scroll up more than a little and it keeps your place until you come back to the foot or
+  send something; a message you send, and a permission card that asks you something, always go to the foot, the first
+  message of a new chat included. Opening a chat leaves its place alone.
 - While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
   **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
   a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
@@ -161,7 +166,9 @@ shows before anything is typed and what you send waits, while the window is open
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
-  System holds.
+  System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
+  it, return to the place you opened Settings from, or to Start when the page does not remember one (after a reload,
+  say); this is kept by the page alone.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
@@ -177,7 +184,11 @@ Beside Quit Jason, two more items of the Jason menu have keys of their own: the 
 Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
 Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
 the tray's menu or the Mac's menu bar, and in the same item at the foot of Settings' list, beside Jason Desktop's
-version, where a click does what a click in the menu does. At the install the key asks
+version, where a click does what a click in the menu does. A check you ask for says what it found, under the item in
+Settings: "Jason Desktop X is the latest version.", "Version Y is available.", that a newer version is out and is not
+offered here because you went back from it, or why it could not check; asked from the tray, the menu or the key, the
+same sentence comes as a notification too. The line goes when the item moves on, and the checks Jason makes by itself
+say nothing. At the install the key asks
 first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
@@ -388,9 +399,11 @@ shows it as it was built. It is not an installation and has nothing to do with t
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
 writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
 Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
-reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply` is
-refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, before anything is checked, so nothing is
-stopped, kept or downloaded: leave the demo or quit the desktop, then run it again) and loads nothing but the application's own files,
+reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply`
+reads the feed first: where the feed offers nothing newer the answer is the ordinary one, `update_up_to_date`, and where
+it offers a newer version it is refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, and nothing
+is stopped, kept or downloaded; leave the demo or quit the desktop, then run it again) and loads nothing but the
+application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
 
@@ -1084,8 +1097,10 @@ runtime that does not stop, or a run file that cannot be read, leaves the update
 started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
-`<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+`<data>/desktop/rollback/<version>/`, and while that copy is there the Jason menu and the tray's show an unclickable line,
+"The previous version `<v>` is kept.", until the next update replaces the copy. The menus name no folder: the copy is
+under `<data>/desktop/rollback/<version>/`, and a start that failed and an update that was not installed name its folder
+again where you need it. The copy is the folder as it is, the
 application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
 installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
 version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing

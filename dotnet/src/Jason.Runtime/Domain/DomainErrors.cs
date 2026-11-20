@@ -383,6 +383,12 @@ public static class DomainErrors
             "decided_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
 
+    /// <summary>A campaign's start, or its resume, sent from inside a run: the same refusal, in a sentence of its own.</summary>
+    public static ForbiddenException StartInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision.");
+
     /// <summary>
     /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
     /// authors, and a review is told apart from them by the name the edit was made under.

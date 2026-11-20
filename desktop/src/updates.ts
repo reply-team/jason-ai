@@ -123,22 +123,82 @@ export function menuItemOf(state: UpdateState, installed: boolean, active: boole
  * a hand on the key sees no label, and the install stops the runtime, which ends a running turn and the work in
  * progress, and restarts the desktop, so the key asks first (`installQuestion`; `ask` answers the index of the button
  * chosen) and installs only on yes; a click on the item, whose label says so, installs at once. The question reads the
- * step again, so a press the menu showed before the step moved on asks nothing.
+ * step again, so a press the menu showed before the step moved on asks nothing. A check is the person's: it answers the
+ * sentence that says what it found (`checkWords`), null when no look was made; every other act answers null.
  */
 export async function pressItem(
     updates: Pick<Updater, 'current' | 'check' | 'download' | 'install'>,
     act: MenuItem['act'],
     byKey: boolean,
     ask: (question: ReturnType<typeof installQuestion>) => Promise<number>,
-): Promise<void> {
-    if (act === 'check') await updates.check();
-    else if (act === 'download') await updates.download();
+): Promise<string | null> {
+    if (act === 'check') return updates.check(true);
+    if (act === 'download') await updates.download();
     else if (act === 'install' && !byKey) await updates.install();
     else if (act === 'install') {
         const state = updates.current;
-        if (state.step !== 'downloaded') return;
+        if (state.step !== 'downloaded') return null;
         if ((await ask(installQuestion(state.version))) === 0) await updates.install();
     }
+    return null;
+}
+
+/** Why a check failed, by the kind of failure; the error's own text is never shown or logged. */
+export type CheckFailure = 'offline' | 'refused' | 'feed' | 'other';
+
+/** What a check the person asked for found. */
+export type CheckFound =
+    | { kind: 'latest'; version: string }
+    | { kind: 'available'; version: string }
+    | { kind: 'held'; version: string }
+    | { kind: 'failed'; failure: CheckFailure };
+
+/** Electron's and Node's words for a connection that was not made, or not answered in time. */
+const noConnection =
+    /net::ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|CONNECTION_[A-Z_]+|TIMED_OUT|NETWORK_[A-Z_]+|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED)\b|\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ENETDOWN)\b|\bRequest timed out\b/;
+
+/**
+ * Pure: the kind of a check's failure, read from what electron-updater threw: an Electron or Node connection error, also
+ * inside electron-updater's own wrapping of a read; an HTTP 403 or 429 (`HttpError`, its `statusCode`, or the same inside
+ * a wrapping), a server refusing for now; any other HTTP status or electron-updater's own `ERR_UPDATER_` codes, a list
+ * of releases that could not be read; anything else. Only the words before electron-updater's `\nXML:\n` are read:
+ * what follows is the feed itself, whose release notes may name any of these words.
+ */
+export function checkFailureOf(error: unknown): CheckFailure {
+    if (typeof error !== 'object' || error === null) return 'other';
+    const { message, code, statusCode } = error as { message?: unknown; code?: unknown; statusCode?: unknown };
+    const words = typeof message === 'string' ? (message.split('\nXML:\n', 1)[0] ?? '') : '';
+    if (noConnection.test(words) || (typeof code === 'string' && noConnection.test(code))) return 'offline';
+    if (statusCode === 403 || statusCode === 429 || /\bHttpError: (403|429)\b/.test(words)) return 'refused';
+    if (typeof statusCode === 'number' || (typeof code === 'string' && code.startsWith('ERR_UPDATER_'))) return 'feed';
+    return 'other';
+}
+
+/** The reason a failed check gives, one per kind of failure. */
+const failureWords: Record<CheckFailure, string> = {
+    offline: 'there is no connection to where releases are published.',
+    refused: 'the release server is refusing requests for now. Try again later.',
+    feed: 'the list of releases could not be read.',
+    other: 'something unexpected went wrong. Try again later.',
+};
+
+/** Pure: the sentence that says what a check the person asked for found. */
+export function checkWords(found: CheckFound): string {
+    switch (found.kind) {
+        case 'latest':
+            return `Jason Desktop ${found.version} is the latest version.`;
+        case 'available':
+            return `Version ${found.version} is available.`;
+        case 'held':
+            return `Version ${found.version} is out. It is not offered here because you went back from it.`;
+        case 'failed':
+            return `Could not check for updates: ${failureWords[found.failure]}`;
+    }
+}
+
+/** Pure: the notification that repeats the sentence when the check was asked for outside Settings, whose menu closes. */
+export function updateNotice(said: string): { title: string; body: string } {
+    return { title: 'Jason Desktop', body: said };
 }
 
 /** Pure: the question the update item's key asks before it installs, naming the version; its default does nothing. */
@@ -356,6 +416,8 @@ export class Updater {
     private readonly deps: UpdaterDeps;
     private readonly timers: Timers;
     private state: UpdateState = { step: 'idle' };
+    /** What the person's last check found, and the state it was said at; in memory only, gone at a restart. */
+    private line: { said: string; failed: boolean; at: UpdateState } | null = null;
     private failures = 0;
     private downloadFailures = 0;
     private handle: unknown = null;
@@ -374,6 +436,15 @@ export class Updater {
 
     get current(): UpdateState {
         return this.state;
+    }
+
+    /**
+     * What the person's last check found, as the item's answer carries it: replaced by their next check, cleared when the
+     * item moves to another step, and a failure cleared by a look on the cadence that succeeds. A look on the cadence
+     * never writes one.
+     */
+    get said(): string | null {
+        return this.line?.said ?? null;
     }
 
     /** Whether electron-updater can replace what runs here; read from it each time. */
@@ -403,34 +474,51 @@ export class Updater {
         this.handle = null;
     }
 
-    /** One look at the releases; on the cadence, or when the person asks. */
-    async check(): Promise<void> {
-        if (!this.active) return;
-        if (this.state.step === 'downloaded' || this.state.step === 'installing') return;
+    /**
+     * One look at the releases; on the cadence, or when the person asks (`asked`). A look the person asked for answers the
+     * sentence that says what it found and keeps it as the item's line (`said`); one on the cadence answers null and writes
+     * none. A look that is not made, where electron-updater is not active or while a step is under way, answers null.
+     */
+    async check(asked = false): Promise<string | null> {
+        if (!this.active) return null;
+        if (this.state.step === 'downloaded' || this.state.step === 'installing') return null;
         if (this.state.step !== 'idle' && this.state.step !== 'offered') {
             this.schedule(nextCheckDelay(this.failures));
-            return;
+            return null;
         }
         const before = this.state;
+        if (asked) this.line = null;
         this.show({ step: 'checking' });
+        let found: CheckFound;
+        let after: UpdateState;
         try {
             const result = await this.deps.updater.checkForUpdates();
             const version = result?.updateInfo.version;
-            const offered = result?.isUpdateAvailable === true && version !== undefined && version !== this.deps.version && !isRejected(readRollback(this.deps.rollback), version);
+            const newer = result?.isUpdateAvailable === true && version !== undefined && version !== this.deps.version;
+            const held = newer && isRejected(readRollback(this.deps.rollback), version);
             this.failures = 0;
-            if (offered) {
+            if (newer && !held) {
                 this.deps.log.info('update_offered', { Version: version });
-                this.show({ step: 'offered', version });
+                after = { step: 'offered', version };
+                found = { kind: 'available', version };
             } else {
                 this.deps.log.info('update_checked', { Available: false });
-                this.show({ step: 'idle' });
+                after = { step: 'idle' };
+                found = held ? { kind: 'held', version } : { kind: 'latest', version: this.deps.version };
             }
-        } catch {
+            // A look on the cadence that succeeds: "could not check" is no longer true.
+            if (!asked && this.line?.failed === true) this.line = null;
+        } catch (error) {
             this.failures += 1;
             this.deps.log.warn('update_failed', { Step: 'check', Failures: this.failures });
-            this.show(before);
+            after = before;
+            found = { kind: 'failed', failure: checkFailureOf(error) };
         }
+        const said = asked ? checkWords(found) : null;
+        if (said !== null) this.line = { said, failed: found.kind === 'failed', at: after };
+        this.show(after);
         this.schedule(nextCheckDelay(this.failures));
+        return said;
     }
 
     /**
@@ -658,8 +746,10 @@ export class Updater {
         return { ok: false, step: 'install', runtimeStopped, kept };
     }
 
+    /** The item's next step: a line said at another step is cleared; a look under way (`checking`) keeps it. */
     private show(state: UpdateState): void {
         this.state = state;
+        if (this.line !== null && state.step !== 'checking' && !sameState(state, this.line.at)) this.line = null;
         this.deps.changed(state);
     }
 
@@ -670,4 +760,9 @@ export class Updater {
             void this.check();
         }, ms);
     }
+}
+
+/** Whether two states are the same step, of the same version where the step names one. */
+function sameState(a: UpdateState, b: UpdateState): boolean {
+    return a.step === b.step && ('version' in a ? a.version : null) === ('version' in b ? b.version : null);
 }

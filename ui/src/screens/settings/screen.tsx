@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { html } from '../../console/html';
 import { svg } from '../../console/icons';
 import { Painted } from '../../console/painted';
+import { escapeFromSettings, leaveSettings } from './way-out';
 import { t } from '../../platform/i18n';
 import { consoleShell, essentials } from '../../platform/console-shell';
 import { setTheme, themeChoice, type ThemeChoice } from '../../platform/theme';
@@ -116,8 +117,36 @@ export function SettingsScreen() {
     const chosen = listed.includes(chosenSection.value) ? chosenSection.value : listed[0]!;
     const root = useRef<HTMLDivElement>(null);
     const { held, said } = useHiddenAlerts(root, chosen);
+    // Escape leaves Settings where nothing else takes the key; the console's Live has a place to leave to.
+    const withWayOut = essentials();
+    useEffect(() => {
+        if (!withWayOut) return;
+        window.addEventListener('keydown', escapeFromSettings);
+        return () => window.removeEventListener('keydown', escapeFromSettings);
+    }, [withWayOut]);
     return (
         <div className="settings" ref={root} data-chosen={essentials() ? chosen : undefined}>
+            {withWayOut && (
+                <div className="settings-back">
+                    <button type="button" onClick={leaveSettings}>
+                        {/* Inline: svg() is markup for Painted, whose div wrapper would break the button's svg-and-text row. */}
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M6 9l6 6 6-6" />
+                        </svg>
+                        {t('settings.back')}
+                    </button>
+                </div>
+            )}
             <h1>{t('settings.title')}</h1>
             {essentials() && (
                 <nav className="settings-list" aria-label={t('settings.title')}>

@@ -424,14 +424,15 @@ wait_until() {
 gone() { [ ! -e "$1" ]; }
 
 # The folder $1 served on 127.0.0.1:8099 by .github/scripts/serve-feed.py, its log in $2 (bound and listening, each with
-# its moment, then every request), its process in $server for the caller's trap to end; waited for for 30 s to answer
-# manifest.json. Where it does not, what was there is printed before anything is ended: the server's log, whether its
-# process lives, what holds the port (lsof and netstat), and a sample of the server where taking one costs under 5 s.
+# its moment, then every request), its process in $server for the caller's trap to end; waited for for 90 s to answer
+# manifest.json, a bound of the proof's own for its own test server, which a runner's image can start slowly. Where it
+# does not, what was there is printed before anything is ended: the server's log, whether its process lives, what holds
+# the port (lsof and netstat), and a sample of the server where taking one costs under 5 s.
 serve_feed() {
     local folder="$1" log="$2" until
     python3 "$(dirname "$0")/serve-feed.py" "$folder" 8099 "$log" &
     server=$!
-    until=$(( $(date +%s) + 30 ))
+    until=$(( $(date +%s) + 90 ))
     while [ "$(date +%s)" -lt "$until" ]; do
         if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json 2> /dev/null; then
             say "the feed at $folder answers on 127.0.0.1:8099 (server process $server): $(grep -E ' (bound|listening) ' "$log" | tr '\n' ' ')"
@@ -450,7 +451,7 @@ serve_feed() {
         echo "--- sample of the feed server $server, for 1 s, given 5 s:"
         ( within 5 "sample of the feed server $server" sample "$server" 1 -mayDie 2>&1 ) || echo '(no sample within 5 s)'
     fi
-    fail "the feed on 127.0.0.1:8099 answering did not happen within 30 s; its server's log, process and port are printed above"
+    fail "the feed on 127.0.0.1:8099 answering did not happen within 90 s; its server's log, process and port are printed above"
 }
 
 # --- the listing -----------------------------------------------------------------------------------------------------

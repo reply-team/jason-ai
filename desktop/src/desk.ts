@@ -17,7 +17,7 @@ import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } 
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, pressItem, restartQuestion, type MenuItem, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, restartQuestion, updateNotice, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -38,7 +38,7 @@ export interface DeskDeps {
     packageMoved?(): string | null;
     /** The desktop starting itself again, which the update item offers once the system updated the deb under this window. */
     restart?(): void;
-    /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
+    /** Which previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
     place?(): string | null;
@@ -127,7 +127,7 @@ export class Desk {
                 this.attention = attention;
                 this.renderTray();
             },
-            notify: (text) => this.notify(text),
+            notify: (text) => this.notify(text, () => this.send('navigate.attention')),
         });
     }
 
@@ -201,7 +201,7 @@ export class Desk {
     }
 
     /**
-     * The update item, and under it, unclickable, where the previous version is kept while it is. A press in the tray's
+     * The update item, and under it, unclickable, which previous version is kept while it is. A press in the tray's
      * menu is always a click: the tray has no key, and on Linux its menu reports a click with no mouse button, which
      * Electron counts as a key's (`triggeredByAccelerator`).
      */
@@ -225,7 +225,7 @@ export class Desk {
                 label: item.label,
                 accelerator: itemKeys.update,
                 enabled: item.enabled,
-                click: (_menuItem, _window, event) => this.pressUpdate(item.act, !inTray && event.triggeredByAccelerator === true),
+                click: (_menuItem, _window, event) => this.pressUpdate(item.act, !inTray && event.triggeredByAccelerator === true, 'menu'),
             },
             ...(kept === null ? [] : [{ label: kept, enabled: false }]),
             ...(place === null ? [] : [{ label: place, enabled: false }]),
@@ -246,9 +246,11 @@ export class Desk {
     /**
      * A press of the update item, on the act of the step it showed: the menu's click and key, and the page's press in
      * Settings (`updates.press`, a click on the label the page drew, `actShown`), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
-     * item is disabled, and a press does nothing either.
+     * item is disabled, and a press does nothing either. What a check found is in the item's answer wherever it was
+     * asked from; asked `from` the menu, the tray or the key, whose menu closes or shows no label, it comes as a
+     * notification too, whose click shows the window.
      */
-    pressUpdate(act: MenuItem['act'], byKey: boolean): void {
+    pressUpdate(act: MenuItem['act'], byKey: boolean, from: 'menu' | 'page'): void {
         if (this.removing()) return;
         if (act === 'restart') {
             const moved = this.deps.packageMoved?.() ?? null;
@@ -258,7 +260,9 @@ export class Desk {
         }
         const { updates } = this.deps;
         if (updates === null) return;
-        void pressItem(updates, act, byKey, (question) => this.box(question));
+        void pressItem(updates, act, byKey, (question) => this.box(question)).then((said) => {
+            if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.show());
+        });
     }
 
     /**
@@ -464,10 +468,11 @@ export class Desk {
         );
     }
 
-    private notify(text: { title: string; body: string }): void {
+    /** A system notification, where the system supports one; its click does what `clicked` says. */
+    private notify(text: { title: string; body: string }, clicked: () => void): void {
         if (!Notification.isSupported()) return;
         const notification = new Notification({ title: text.title, body: text.body });
-        notification.on('click', () => this.send('navigate.attention'));
+        notification.on('click', clicked);
         notification.show();
     }
 }

@@ -40,8 +40,8 @@ public static class ActorOption
 
     /// <summary>
     /// The help of the verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or taking
-    /// back a standing approval, answering, setting or taking back a preference, and setting a campaign's send mode. The
-    /// runtime refuses them a request that names an attempt.
+    /// back a standing approval, answering, setting or taking back a preference, setting a campaign's send mode, and
+    /// starting or resuming a campaign. The runtime refuses them a request that names an attempt.
     /// </summary>
     public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
 
@@ -62,8 +62,8 @@ public static class ActorOption
             + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference "
-            + "and setting a campaign's send mode are refused there, "
+            + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
+            + "setting a campaign's send mode and starting a campaign are refused there, "
             + "and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, "
             + "since nothing inside a run changes Jason itself.",
         Recursive = true,

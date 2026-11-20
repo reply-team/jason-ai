@@ -113,3 +113,109 @@ export function quietDesktop(): void {
         },
     };
 }
+
+/**
+ * The desktop's seam as a chat needs it: it makes and keeps a conversation as the desktop does, records where a message was
+ * sent (`sentTo`), and hands the test the chat's event handler (`chatEvent`), through which the AI's words are streamed as
+ * the desktop streams them. An init script, run before the page's own.
+ */
+export function talkingDesktop(): void {
+    const quiet = () => () => undefined;
+    const done = () => Promise.resolve();
+    type Made = { id: string; campaignId: string | null; title: string; updatedAt: string; running: boolean };
+    const made = new Map<string, Made>();
+    const sentTo: string[] = [];
+    const page = window as unknown as { sentTo: string[]; chatEvent?: (id: string, event: unknown) => void };
+    page.sentTo = sentTo;
+    let count = 0;
+    const notKept = { refused: 'That conversation is not one this desktop keeps.' };
+    const feed = {
+        id: 'conv_01JDFEED000000000000000000',
+        campaignId: null,
+        title: 'Feed',
+        updatedAt: '2026-11-11T00:00:00.000Z',
+        running: false,
+        main: true,
+    };
+    (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
+        platform: 'win32',
+        onCommand: quiet,
+        theme: { get: () => Promise.resolve(null), set: done },
+        links: { take: () => Promise.resolve(null), onOpen: quiet },
+        chat: {
+            send: (id: unknown) => {
+                if (typeof id !== 'string' || !made.has(id)) return Promise.resolve(notKept);
+                sentTo.push(id);
+                return Promise.resolve(null);
+            },
+            stop: done,
+            answer: done,
+            onEvent: (handler: (id: string, event: unknown) => void) => {
+                page.chatEvent = handler;
+                return () => undefined;
+            },
+            list: () => Promise.resolve([...made.values()].filter((each) => sentTo.includes(each.id))),
+            open: (id: unknown) => {
+                if (id === feed.id) return Promise.resolve({ ...feed, entries: [], dropped: 0, chosen: null });
+                const found = typeof id === 'string' ? made.get(id) : undefined;
+                return Promise.resolve(found ? { ...found, entries: [], dropped: 0 } : notKept);
+            },
+            create: (campaignId?: string) => {
+                const one: Made = {
+                    id: `conv_01JD${String(++count).padStart(22, '0')}`,
+                    campaignId: campaignId ?? null,
+                    title: 'New chat',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                };
+                made.set(one.id, one);
+                return Promise.resolve(one);
+            },
+            remove: done,
+            restart: done,
+            attach: done,
+            rename: done,
+            feed: () => Promise.resolve(feed),
+        },
+        setup: {
+            status: () =>
+                Promise.resolve({
+                    hosts: [
+                        {
+                            id: 'claude',
+                            label: 'Claude Code',
+                            kind: 'program',
+                            found: true,
+                            version: '2.1.300',
+                            drivesChat: true,
+                            install: null,
+                            belowFloor: null,
+                            models: [{ id: 'opus', label: 'Opus', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+                            typedModel: true,
+                            modelsUnread: null,
+                            ownServers: [],
+                        },
+                    ],
+                    reply: {
+                        cli: { found: false, version: null, install: null },
+                        signedIn: false,
+                        user: null,
+                        wired: false,
+                        accounts: [],
+                    },
+                    runtimeVersion: null,
+                    bundleVersion: '0.0.0-smoke',
+                    versionsDiffer: null,
+                    plugins: [],
+                    settingsRefused: null,
+                }),
+            connectReply: done,
+            connectReplyWithKey: done,
+            setProviderKey: done,
+            installProgram: done,
+            useProgram: done,
+            configurePlugin: done,
+            onChanged: quiet,
+        },
+    };
+}

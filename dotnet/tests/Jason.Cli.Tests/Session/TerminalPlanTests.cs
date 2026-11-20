@@ -362,9 +362,10 @@ public sealed class TerminalPlanTests : IDisposable
     [Fact]
     public void The_terminals_start_carries_the_launchs_variables()
     {
+        // Every child is started by its full path, so the console host is named by one this machine reads as full.
         var start = TerminalStartInfo.For(
             TerminalPlatform.Windows,
-            ["C:/Windows/System32/conhost.exe", "--", "C:/Tools/claude.exe"],
+            [Path.Combine(Path.GetTempPath(), "conhost.exe"), "--", "C:/Tools/claude.exe"],
             "C:/Jason",
             new Dictionary<string, string> { ["JASON_DATA_DIR"] = "C:/data", ["PATH"] = "C:/jason;C:/bin" });
 
@@ -643,7 +644,9 @@ public sealed class TerminalStartConfinementTests
         try
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, "1");
-            var start = TerminalStartInfo.For(os, ["/usr/bin/x-terminal-emulator", "-e", "/usr/local/bin/codex"], "/home/marta/Jason");
+
+            // Every child is started by its full path, so the terminal is named by one this machine reads as full.
+            var start = TerminalStartInfo.For(os, [Path.Combine(Path.GetTempPath(), "x-terminal-emulator"), "-e", "/usr/local/bin/codex"], "/home/marta/Jason");
 
             // The start's environment is read from this process when it is first asked for, so it is asked while the variable is set.
             carried = start.Environment.ContainsKey(Confinement.Variable);

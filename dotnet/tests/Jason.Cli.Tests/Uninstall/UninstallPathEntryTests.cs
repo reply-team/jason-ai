@@ -290,6 +290,191 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// A profile comes back from the installer's add and the uninstall's removal byte for byte as it was, whatever it
+    /// ended with.
+    /// </summary>
+    /// <remarks>
+    /// The block is appended as <c>\n&lt;marker&gt;\n&lt;line&gt;\n</c>. After a last line that had no newline, that first
+    /// <c>\n</c> ended the person's line rather than making a blank one, and the removal, which takes a blank line above
+    /// the marker only where there is one, left it: the file came back one newline longer. A Mac's <c>.bash_profile</c>
+    /// ending without one came back changed from an install and an uninstall of Jason Desktop.
+    /// </remarks>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("")]
+    [InlineData("# mine\nexport EDITOR=vim\n\n")]
+    [InlineData("# mine\r\nexport EDITOR=vim\r\n")]
+    [InlineData("# mine\r\nexport EDITOR=vim")]
+    public void A_profile_comes_back_byte_for_byte_whatever_it_ended_with(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// Where the person wrote on after the block, the newline the block began with now separates their own lines, and
+    /// stays: the block goes, and their text after it stays on lines of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    public void A_block_with_the_persons_own_text_after_it_leaves_that_text_on_lines_of_its_own(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+        File.AppendAllText(profile, "export LANG=C\n");
+
+        Assert.Equal(Bytes("# mine\nexport EDITOR=vim\nexport LANG=C\n"), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// A last line of spaces, with no newline after it, is the person's own and not the blank line the installer writes:
+    /// it stays, and the file ends as it began.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\n   ")]
+    [InlineData("# mine\n\t ")]
+    [InlineData("   ")]
+    public void A_last_line_of_spaces_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// A last line that is a lone <c>\r</c>, with no newline after it, is the person's own: the block under it was not
+    /// turned to CRLF, so that <c>\r</c> is no blank line the installer wrote, and it stays.
+    /// </summary>
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("a\n\r")]
+    [InlineData("a\r\n\r")]
+    public void A_last_line_of_a_lone_carriage_return_is_the_persons_own_and_stays(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// The blank line the installer wrote, turned to a lone <c>\r</c> when the whole file was later turned to CRLF, is
+    /// still the installer's blank line, and goes with the block.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("")]
+    public void A_blank_line_turned_to_crlf_is_still_the_installers_blank(string original)
+    {
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(profile, Directory));
+        File.WriteAllText(profile, File.ReadAllText(profile).Replace("\n", "\r\n", StringComparison.Ordinal));
+
+        Assert.Equal(Bytes(original.Replace("\n", "\r\n", StringComparison.Ordinal)), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>
+    /// Two blocks: the same block twice, as a repair appended it before it looked for the line first, both go; and a
+    /// second folder's block above which the first stands comes off in its turn. Either way the file ends as it began.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    public void Two_blocks_come_out_and_leave_the_profile_as_it_began(string original)
+    {
+        using var tree = new TempTree();
+        var twice = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(twice, Directory));
+        File.AppendAllText(twice, $"\n{PathEntry.Marker}\n{PathEntry.ExportLine(Directory)}\n");
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(twice), Directory));
+
+        const string other = "/opt/other/bin";
+        var two = Profile(tree, original);
+        Assert.True(PathEntry.AddToProfile(two, Directory));
+        Assert.True(PathEntry.AddToProfile(two, other));
+
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(PathEntry.WithoutEntry(File.ReadAllBytes(two), other), Directory));
+    }
+
+    /// <summary>
+    /// The block the repair <c>jason status</c> prints appends, run in <c>sh</c> as the person runs it, comes back out the
+    /// same way.
+    /// </summary>
+    [Theory]
+    [InlineData("# mine\nexport EDITOR=vim")]
+    [InlineData("# mine\nexport EDITOR=vim\n")]
+    [InlineData("")]
+    public void The_repairs_appended_block_comes_back_out_byte_for_byte(string original)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the repair runs in sh, on the platforms it is printed on.");
+        using var tree = new TempTree();
+        var profile = Profile(tree, original);
+
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(PathEntry.AppendCommand(Directory, profile));
+        using (var process = System.Diagnostics.Process.Start(start)!)
+        {
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.True(process.ExitCode == 0, error);
+        }
+
+        Assert.NotEqual(Bytes(original), File.ReadAllBytes(profile));
+        Assert.Equal(Bytes(original), PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory));
+    }
+
+    /// <summary>And over a list of profiles of every shape, removal(add(profile)) is the profile, byte for byte.</summary>
+    [Fact]
+    public void Every_profile_of_a_list_survives_the_add_and_the_removal_byte_for_byte()
+    {
+        string[] originals =
+        [
+            "", "\n", "\n\n\n", "\r\n", "x", "x\n", "x\r", "x\r\n", "a\nb", "a\nb\n", "a\n\nb", "a\n\nb\n\n",
+            "a\r\nb\r\nc", "a\r\nb\r\nc\r\n", "mixed\r\nends\nhere", "\ttabbed\n\tlines", "# é, ü and ß\nexport X=1",
+            "# added by jason install", "# added by jason install\n", $"# {PathEntry.ExportLine(Directory)}",
+            $"x\n{PathEntry.ExportLine("/opt/other/bin")}", "alias ll='ls -l'", "   ", "a\n \t", "a\n   \n",
+        ];
+
+        using var tree = new TempTree();
+        foreach (var original in originals)
+        {
+            var profile = Profile(tree, original);
+            Assert.True(PathEntry.AddToProfile(profile, Directory), original);
+
+            var back = PathEntry.WithoutEntry(File.ReadAllBytes(profile), Directory);
+
+            Assert.True(Bytes(original).AsSpan().SequenceEqual(back), $"{Show(original)} came back as {Show(System.Text.Encoding.UTF8.GetString(back))}");
+        }
+
+        static string Show(string text) => text.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+    }
+
+    /// <summary>A profile of its own in the tree, holding exactly those bytes.</summary>
+    private static string Profile(TempTree tree, string text)
+    {
+        var profile = Path.Combine(tree.NewDirectory("home"), ".bash_profile");
+        File.WriteAllBytes(profile, Bytes(text));
+        return profile;
+    }
+
+    private static byte[] Bytes(string text) => System.Text.Encoding.UTF8.GetBytes(text);
+
+    /// <summary>
     /// The profile a repair writes into is the one the running shell reads at login — which for zsh is not
     /// <c>~/.profile</c> at all.
     /// </summary>

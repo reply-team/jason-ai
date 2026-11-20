@@ -161,12 +161,12 @@ public class ReleaseAndUpdateDocTests
 
     /// <summary>
     /// Homebrew's formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so no release
-    /// asks the tap to bump it any more: the page says the formula stays at 0.48.5, that the one line is the way to 0.49 on
-    /// a Mac, and how an installation Homebrew made reaches it, the data directory kept. Section 1 no longer says a last
-    /// job asks the tap.
+    /// asks the tap to bump it any more: the page says the formula stays at the last 0.48 release it carries, that the one
+    /// line is the way to 0.49 on a Mac, and how an installation Homebrew made reaches it, the data directory kept.
+    /// Section 1 no longer says a last job asks the tap.
     /// </summary>
     [Fact]
-    public void The_page_says_the_formula_stays_at_0_48_5_and_a_homebrew_install_moves_by_the_one_line()
+    public void The_page_says_the_formula_stays_at_the_last_0_48_release_and_a_homebrew_install_moves_by_the_one_line()
     {
         var installing = Section(Read(), "## 6. Installing");
         var start = installing.IndexOf("### Through a package manager\n", StringComparison.Ordinal);
@@ -174,7 +174,7 @@ public class ReleaseAndUpdateDocTests
         var end = installing.IndexOf("\n### ", start + 1, StringComparison.Ordinal);
         var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
 
-        Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at 0.48.5, the last release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds nothing newer.", package, StringComparison.Ordinal);
+        Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds nothing newer.", package, StringComparison.Ordinal);
         Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
         Assert.Contains("jason uninstall brew uninstall jason curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh", package, StringComparison.Ordinal);
         Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason Desktop, which opens the same data directory as it is.", package, StringComparison.Ordinal);

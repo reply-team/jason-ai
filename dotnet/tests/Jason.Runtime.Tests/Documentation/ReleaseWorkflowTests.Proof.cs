@@ -133,14 +133,15 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The previous release every proof job updates from, named, in ci.yml's union jobs and the release's proof jobs alike.
     /// These legs begin in the world before one installation, where a command-line Jason and Jason Desktop were installed
-    /// apart, and v0.48.5 is the last release of that world: its install puts a command-line Jason of its own where every
-    /// leg that starts from a previous release expects one, then its own <c>jason update apply</c> and the move into Jason
-    /// Desktop. It is never "the latest published release": once 0.49.0 is published that is a release of one
-    /// installation, which installs Jason Desktop alone, and every such leg would fail on it, so the first fix after 0.49
-    /// could not be published, and CI's union jobs would fail on main and on the next release's pull request in the same
-    /// way. When these legs are given a 0.49 release to start from, this value and the legs change together.
+    /// apart, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against: its install puts
+    /// a command-line Jason of its own where every leg that starts from a previous release expects one, then its own
+    /// <c>jason update apply</c> and the move into Jason Desktop. It is never "the latest published release": once 0.49.0
+    /// is published that is a release of one installation, which installs Jason Desktop alone, and every such leg would
+    /// fail on it, so the first fix after 0.49 could not be published, and CI's union jobs would fail on main and on the
+    /// next release's pull request in the same way. When these legs are given a 0.49 release to start from, this value and
+    /// the legs change together.
     /// </summary>
-    private const string PreviousRelease = "v0.48.5";
+    private const string PreviousRelease = "v0.48.7";
 
     /// <summary>
     /// The legs and framing steps that are named otherwise in the release's proof job than in CI's union job, by the
@@ -326,7 +327,7 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Every job that updates from a previous release fetches the one <see cref="PreviousRelease"/> names, given to its
     /// fetch by name, and never reads which release is the latest published one: these legs begin in the world before one
-    /// installation, and v0.48.5 is the last release of that world.
+    /// installation, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a proof job that updates from the latest published release fails every previous-release leg once 0.49.0 is published, and blocks the first fix after it")]
