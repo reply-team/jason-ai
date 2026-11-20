@@ -529,14 +529,18 @@ test('a Codex turn in Plan only leaves the person\'s config.toml unread as every
     assert.equal(args.includes(codexWindowsSandbox), process.platform === 'win32');
 });
 
-test('Start fresh returns a chat in Full access to Ask first', async (t) => {
+test('Start fresh keeps the chat\'s mode: a chat in Full access starts a fresh host session in Full access, and no change of mode is said', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
     await r.turn(id, 'hello', claude);
+    const changes = r.changes.length;
     r.chat.restart(id);
-    assert.equal(r.chat.open(id).mode, 'ask_first');
-    assert.deepEqual(r.changes.at(-1), ['full_access', 'ask_first']);
+    assert.equal(r.chat.open(id).mode, 'full_access', 'Start fresh keeps Full access');
+    assert.equal(r.changes.length, changes, 'no change of mode');
+    await r.turn(id, 'hello again', claude);
+    assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--resume'), undefined, 'a fresh host session');
+    assert.equal(r.started.at(-1), 'full_access', 'its first turn runs in Full access');
 });
 
 test('a planted agent settings file and a local memory file are gone before the next turn, and the host may not edit them', async (t) => {

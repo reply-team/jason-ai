@@ -2,10 +2,10 @@
 // stub hosts: a record that names no mode opens in Full access, Ask first, Auto-edit and Plan only are kept through a
 // restart, choosing Full access takes the mode off the record, a standing choice an earlier desktop left changes no mode
 // and is gone once the desktop has started, and the Feed opens in Full access too, by one named constant, and offers every
-// mode. Then one folder per conversation: every turn of a new conversation runs in its own folder inside the chat folder, in every mode and on
-// every host, with the instruction files and the recorded skills there, and goes with the conversation; a conversation
-// an earlier desktop made, whose record names no folder, keeps running in the shared chat folder; nothing is made for a
-// grant of Full access.
+// mode. Then one folder per conversation: every turn of a new conversation runs in its own folder beside the chat folder,
+// under `chats`, in every mode and on every host, with the instruction files and the recorded skills there, goes with the
+// conversation, and is where a terminal continues it; a conversation an earlier desktop made, whose record names no
+// folder, keeps running and is continued in the shared chat folder; nothing is made for a grant of Full access.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -17,6 +17,8 @@ import { newConversationId } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import * as chatModes from '../src/chat-modes.ts';
 import { type ChatMode } from '../src/chat-modes.ts';
+import { OpenIn, type OpenInDeps } from '../src/open-in.ts';
+import { continueFlags } from '../src/open-in-terminal.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -134,6 +136,25 @@ const real = (path: string): string => {
 };
 /** Whether the folder a host was started in is the one named. */
 const same = (cwd: string | undefined, folder: string): boolean => cwd !== undefined && real(cwd) === real(folder);
+/** A conversation's own folder: beside the chat folder, under `chats`, so no file of the shared folder is above it. */
+const ownFolder = (r: Rig, id: string): string => join(dirname(r.b.paths.chat), 'chats', id);
+
+/** "Open in"'s entry that continues a chat in a terminal, wired to the chat as the main process wires it (`main.ts`). */
+function continuer(r: Rig): { openIn: OpenIn; cwds: (string | undefined)[] } {
+    const cwds: (string | undefined)[] = [];
+    const deps: Partial<OpenInDeps> = {
+        cli: {
+            run: (args, given) => {
+                if (args[0] === 'session') cwds.push(given?.cwd);
+                return Promise.resolve({ exit: 0, stdout: '{}', stderr: '' });
+            },
+        },
+        continuable: (chatId) => r.chat.continuable(chatId),
+        chatFolder: () => r.b.paths.chat,
+        continueFlags,
+    };
+    return { openIn: new OpenIn(deps as OpenInDeps), cwds };
+}
 
 function put(path: string, text: string): void {
     mkdirSync(dirname(path), { recursive: true });
@@ -246,10 +267,10 @@ test('the Feed\'s menu offers every mode as any chat\'s does: Auto-edit and Full
 
 // The folder: one per conversation made from now on.
 
-test('every turn of a new conversation runs in its own folder inside the chat folder, in every mode and on Codex too', async (t) => {
+test('every turn of a new conversation runs in its own folder beside the chat folder, under chats, in every mode and on Codex too', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
-    const own = join(r.b.paths.chat, id);
+    const own = ownFolder(r, id);
     for (const mode of ['full_access', 'ask_first', 'plan_only', 'auto_edit'] as const) {
         await r.chat.setMode(id, mode, 'claude');
         await r.turn(id, `a turn in ${mode}`, claude);
@@ -261,12 +282,13 @@ test('every turn of a new conversation runs in its own folder inside the chat fo
     const cwd = r.hosts().at(-1)?.cwd;
     assert.ok(same(cwd, own), `Codex: the turn ran in ${cwd}`);
     assert.deepEqual(r.started, ['full_access', 'ask_first', 'plan_only', 'auto_edit', 'ask_first']);
+    assert.equal(existsSync(join(r.b.paths.chat, id)), false, 'nothing of it is made inside the chat folder');
 });
 
 test('Ask first, then Full access, then Ask first again: each turn runs in the one folder, and the second and the third resume the one session', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
-    const own = join(r.b.paths.chat, id);
+    const own = ownFolder(r, id);
     await r.chat.setMode(id, 'ask_first');
     await r.turn(id, 'first', claude);
     await r.chat.setMode(id, 'full_access', 'claude');
@@ -302,7 +324,7 @@ test('a new conversation\'s folder holds the instruction files and the recorded 
     }
     const { id } = await r.chat.create();
     await r.turn(id, 'hello', claude);
-    const own = join(r.b.paths.chat, id);
+    const own = ownFolder(r, id);
     assert.notEqual(fence.instructions, null, 'the application carries its instruction text');
     for (const file of ['CLAUDE.md', 'AGENTS.md']) assert.ok(textOf(join(own, file)) === fence.instructions, `${file} in the conversation's folder holds the instruction text`);
     for (const folder of ['.claude', '.agents']) assert.equal(textOf(join(own, folder, 'skills', 'campaign-planning', 'SKILL.md')), 'plan well', `${folder} skills`);
@@ -320,10 +342,10 @@ test('removing a conversation removes its folder, and leaves the chat folder and
     const two = await r.chat.create();
     await r.turn(one.id, 'hello', claude);
     await r.turn(two.id, 'hello', claude);
-    assert.ok(existsSync(join(r.b.paths.chat, one.id)), 'its folder is there while the conversation is kept');
+    assert.ok(existsSync(ownFolder(r, one.id)), 'its folder is there while the conversation is kept');
     r.chat.remove(one.id);
-    await settled(() => !existsSync(join(r.b.paths.chat, one.id)), 'its folder goes with it');
-    assert.ok(existsSync(join(r.b.paths.chat, two.id)));
+    await settled(() => !existsSync(ownFolder(r, one.id)), 'its folder goes with it');
+    assert.ok(existsSync(ownFolder(r, two.id)));
     assert.ok(existsSync(join(r.b.paths.chat, 'CLAUDE.md')));
 });
 
@@ -341,5 +363,19 @@ test('a conversation an earlier desktop made, whose record names no folder, keep
     assert.equal(flag(full?.args ?? [], '--resume'), 'session-made-before');
     assert.equal(flag(asked?.args ?? [], '--resume'), 'session-made-before');
     assert.deepEqual(r.started, ['full_access', 'ask_first']);
-    assert.equal(existsSync(join(r.b.paths.chat, id)), false, 'no folder of its own is made for it');
+    assert.equal(existsSync(ownFolder(r, id)), false, 'no folder of its own is made for it');
+});
+
+test('a terminal continues a conversation in its own folder, and one an earlier desktop made in the shared chat folder', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'hello', claude);
+    const earlier = earlierRecord(r, { sessions: { claude: 'session-made-before' }, plain_sessions: ['claude'], chosen: { host: 'claude', model: null, effort: null } });
+    r.restart();
+    const { openIn, cwds } = continuer(r);
+    assert.equal(await openIn.continueChat(id), null, 'the new conversation is continued');
+    assert.equal(await openIn.continueChat(earlier), null, 'the earlier one is continued');
+    assert.ok(same(cwds[0], ownFolder(r, id)), `the new conversation was continued in ${cwds[0]}`);
+    assert.ok(same(cwds[1], r.b.paths.chat), `the earlier one was continued in ${cwds[1]}`);
 });

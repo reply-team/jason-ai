@@ -8,7 +8,7 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, autoEditElsewhere, elsewhere, fullAccessElsewhere, modeElsewhere, otherModeElsewhere, openOwnPage, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
+import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, autoEditElsewhere, elsewhere, modeElsewhere, otherModeElsewhere, openOwnPage, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { registerChat } from '../src/chat-ipc.ts';
@@ -104,6 +104,8 @@ async function rig(t: { after(fn: () => void | Promise<void>): void }, extra: Pa
 }
 
 const refusals = (r: Rig) => r.log.lines.filter((line) => line.name === 'bridge_refused').map((line) => line.fields);
+/** The refusal a call was answered with as a value, or undefined where it was not refused. */
+const refusedIn = (answer: Answer): string | undefined => (JSON.parse(answer.body) as { result?: { refused?: string } | null }).result?.refused;
 
 // --- every request, before anything is read --------------------------------------------------------------------------
 
@@ -325,17 +327,17 @@ test('a handler that throws is answered 500 with its message, and a refusal it a
 
 // --- chat.send and chat.create ---------------------------------------------------------------------------------------
 
-test('chat.send to a chat in Full access is refused, and the send handler never runs', async (t) => {
+test('chat.send to a chat in Full access is handed to the very send handler, as a send to a chat in Ask first is', async (t) => {
     const r = await rig(t, { listed: () => [{ id: 'cht_full', mode: 'full_access' }] });
     const secret = await r.pair();
-    const answer = await r.call(secret, 'chat.send', ['cht_full', 'delete everything', { host: 'claude' }]);
+    const answer = await r.call(secret, 'chat.send', ['cht_full', 'hello', { host: 'claude' }]);
     assert.equal(answer.status, 200);
-    assert.deepEqual(JSON.parse(answer.body), { result: { refused: fullAccessElsewhere } });
-    assert.deepEqual(r.calls, [], 'nothing was handled');
-    assert.deepEqual(refusals(r).at(-1), { Why: 'full_access', Member: 'chat.send' });
+    assert.equal(refusedIn(answer), undefined, `the send is not refused: ${answer.body}`);
+    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args.slice(0, 2)), [['cht_full', 'hello']]);
+    assert.deepEqual(refusals(r), [], 'nothing was refused');
 });
 
-test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full access and any other mode are refused, each by name', async (t) => {
+test('a tab sends to a chat in Ask first, Plan only or Full access: Auto-edit and any other mode are refused, each by name', async (t) => {
     const r = await rig(t, {
         listed: () => [
             { id: 'cht_ask', mode: 'ask_first' },
@@ -348,7 +350,6 @@ test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full acce
     const secret = await r.pair();
     for (const [chatId, sentence, why] of [
         ['cht_auto', autoEditElsewhere, 'auto_edit'],
-        ['cht_full', fullAccessElsewhere, 'full_access'],
         ['cht_later', otherModeElsewhere, 'other_mode'],
     ]) {
         const answer = await r.call(secret, 'chat.send', [chatId, 'hello', { host: 'claude' }]);
@@ -357,15 +358,17 @@ test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full acce
         assert.deepEqual(refusals(r).at(-1), { Why: why, Member: 'chat.send' }, chatId);
     }
     assert.equal(autoEditElsewhere, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.');
-    assert.equal(fullAccessElsewhere, 'This chat is in Full access. Send messages to it from Jason Desktop.');
     assert.equal(otherModeElsewhere, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.');
     assert.ok(!r.calls.some((call) => call.member === 'chat.send'), 'no refused send was handled');
     await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude' }]);
-    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [
+    await r.call(secret, 'chat.send', ['cht_full', 'hello', { host: 'claude' }]);
+    const handed = r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args);
+    assert.deepEqual(handed.slice(0, 2), [
         ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
         ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
     ]);
+    assert.deepEqual(handed.slice(2).map((args) => args.slice(0, 2)), [['cht_full', 'hello']], 'the send to a chat in Full access is handled');
 });
 
 test('chat.send is held to the chat\'s own mode: a tab naming another is refused, and one naming none sends in the mode the chat has', async (t) => {
@@ -392,6 +395,7 @@ function realChat(t: { after(fn: () => void | Promise<void>): void }) {
     const bundle = join(b.root, 'bundle');
     mkdirSync(bundle, { recursive: true });
     const events = new Map<string, ChatEvent[]>();
+    const started: string[] = [];
     const chat = new Chat({
         paths: b.paths,
         env: b.env,
@@ -405,6 +409,7 @@ function realChat(t: { after(fn: () => void | Promise<void>): void }) {
         sandboxOutside: outsideStandIn,
         fullAccessOffered: true,
         emit: (id, event) => void events.set(id, [...(events.get(id) ?? []), event]),
+        started: (_host, _resumed, mode) => void started.push(mode),
         confirmFullAccess: async () => ({ always: true, newChats: false }),
     });
     const ipc: IpcRegistrar = { handle: () => undefined };
@@ -415,8 +420,18 @@ function realChat(t: { after(fn: () => void | Promise<void>): void }) {
         await chat.idle();
         for (const remove of removals) remove();
     });
-    return { b, chat, events, members: seam.members };
+    return { b, chat, events, started, members: seam.members };
 }
+
+/** Waits until the chat has said the end of as many turns as `count`, and fails saying what it said when it never does. */
+async function turnsEnded(real: ReturnType<typeof realChat>, id: string, count: number): Promise<void> {
+    const ended = () => (real.events.get(id) ?? []).filter((event) => event.kind === 'done').length >= count;
+    const end = Date.now() + 20_000;
+    while (!ended() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.ok(ended(), `turn ${count} never ended; the chat said ${JSON.stringify(real.events.get(id) ?? [])}`);
+}
+
+const noticesOf = (events: ChatEvent[] | undefined) => (events ?? []).flatMap((event) => (event.kind === 'notice' ? [event.text] : []));
 
 test('chat.create under a standing Full access for new chats makes an Ask first chat, whatever host the tab names', async (t) => {
     const real = realChat(t);
@@ -446,18 +461,27 @@ test('the chat\'s own check is the second line: a send read as Ask first while t
     assert.ok(!real.b.record().some((each) => each.stdin.includes('hello') || each.args.some((arg) => arg.includes('hello'))), 'no turn was started');
 });
 
-test('a chat the window made in Full access and never sent to, so not yet kept or listed, takes no message from a tab', async (t) => {
+test('a tab\'s send to a chat in Full access runs that turn in Ask first: the chat is told so once, its record keeps no mode, and the window\'s next turn is in Full access', async (t) => {
     const real = realChat(t);
-    writeStanding(real.b.paths.fullAccess, 'claude', { consent: fullAccessConsent, givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
-    const full = await real.chat.create(undefined, 'claude');
-    assert.equal(full.mode, 'full_access');
-    assert.ok(!real.chat.list().some((each) => each.id === full.id), 'the list holds kept chats alone');
+    const made = await real.chat.create(undefined, 'claude');
+    await real.chat.setMode(made.id, 'full_access', 'claude');
+    assert.equal(real.chat.modeNow(made.id), 'full_access');
+    assert.ok(!real.chat.list().some((each) => each.id === made.id), 'made in the window and never sent to: not yet kept');
     const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
     const secret = await r.pair();
-    const answer = await r.call(secret, 'chat.send', [full.id, 'hello', { host: 'claude' }]);
-    assert.deepEqual(JSON.parse(answer.body), { result: { refused: fullAccessElsewhere } });
-    // The chat said its mode when it was made; it was never asked to send, so it says no end of a turn.
-    assert.ok(!(real.events.get(full.id) ?? []).some((event) => event.kind === 'done'), 'the chat was never asked');
+    const answer = await r.call(secret, 'chat.send', [made.id, 'hello from a tab', { host: 'claude' }]);
+    assert.equal(refusedIn(answer), undefined, `the tab's send is taken: ${answer.body}`);
+    await turnsEnded(real, made.id, 1);
+    await r.call(secret, 'chat.send', [made.id, 'and again', { host: 'claude' }]);
+    await turnsEnded(real, made.id, 2);
+    assert.deepEqual(real.started, ['ask_first', 'ask_first'], 'each turn a tab sent runs in Ask first');
+    assert.equal(noticesOf(real.events.get(made.id)).length, 1, 'the chat is told once');
+    assert.equal(real.chat.modeNow(made.id), 'full_access', 'the chat is in Full access still');
+    const record = JSON.parse(readFileSync(join(real.b.paths.conversations, `${made.id}.json`), 'utf8')) as { mode?: string };
+    assert.equal(record.mode, undefined, 'its record holds no mode');
+    await real.chat.send(made.id, 'from the window', { host: 'claude' });
+    await turnsEnded(real, made.id, 3);
+    assert.deepEqual(real.started, ['ask_first', 'ask_first', 'full_access'], 'the window\'s turn runs in Full access');
 });
 
 test('a send from a tab to a chat the desktop does not hold is refused by the bridge, whatever mode it names, and no turn starts', async (t) => {

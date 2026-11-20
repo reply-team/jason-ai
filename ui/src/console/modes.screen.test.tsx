@@ -111,19 +111,22 @@ describe('a chat’s access mode', () => {
         expect(line()).not.toBeNull();
     });
 
-    it('shows Full access disabled with the desktop’s reason on a host that has none, and choosing that host leaves Full access', async () => {
+    it('shows Full access disabled with the desktop’s reason on a host that has none, and choosing that host asks the desktop for no mode', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => menu());
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
+        const asked = calls(desktop, 'chat.setMode').length;
         chooseHost('codex');
-        await waitFor(() => expect(line()).toBeNull());
-        expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
-        const full = choicesOf('Access mode', 'mode').find((each) => each.value === 'full_access')!;
-        expect(full.disabled).toBe(true);
-        expect([full.text, full.said]).toEqual(['Full access', 'Full access runs on Claude Code only.']);
+        const full = () => choicesOf('Access mode', 'mode').find((each) => each.value === 'full_access')!;
+        await waitFor(() => expect(full().disabled).toBe(true));
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        // The chat's mode is the desktop's to keep: its turns on Codex run in Ask first, and its record is not written.
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
+        expect(value()).toBe('full_access');
+        expect([full().text, full().said]).toEqual(['Full access', 'Full access runs on Claude Code only.']);
     });
 
     it('says under the composer, on Codex alone, that the chat does not read the person’s Codex config.toml', async () => {
@@ -293,24 +296,25 @@ describe('Auto-edit', () => {
         expect(editing()).not.toBeNull();
     });
 
-    it('is disabled with the desktop’s reason on Codex, and choosing Codex takes the chat back to Ask first', async () => {
+    it('is disabled with the desktop’s reason on Codex, and choosing Codex asks the desktop for no mode', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
         await waitFor(() => menu());
         choose('auto_edit');
         await waitFor(() => expect(editing()).not.toBeNull());
-        chooseHost('codex');
-        await waitFor(() => expect(editing()).toBeNull());
-        expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
-        const edit = choicesOf('Access mode', 'mode').find((each) => each.value === 'auto_edit')!;
-        expect(edit.disabled).toBe(true);
-        expect([edit.text, edit.said]).toEqual(['Auto-edit', codexAutoEdit]);
-        // Chosen all the same, it asks nothing of the desktop: the menu's item says why and does nothing.
         const asked = calls(desktop, 'chat.setMode').length;
+        chooseHost('codex');
+        const edit = () => choicesOf('Access mode', 'mode').find((each) => each.value === 'auto_edit')!;
+        await waitFor(() => expect(edit().disabled).toBe(true));
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
+        expect(value()).toBe('auto_edit');
+        expect([edit().text, edit().said]).toEqual(['Auto-edit', codexAutoEdit]);
+        // Chosen all the same, it asks nothing of the desktop: the menu's item says why and does nothing.
         choose('auto_edit');
         expect(calls(desktop, 'chat.setMode')).toHaveLength(asked);
-        expect(value()).toBe('ask_first');
+        expect(value()).toBe('auto_edit');
     });
 
     it('is offered by a desktop that lists it, and disabled by one that does not, saying so', async () => {
