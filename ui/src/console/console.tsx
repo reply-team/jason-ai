@@ -47,7 +47,6 @@ import * as needs from './needs';
 import { reloadWaiting } from './waiting';
 import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
-import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
@@ -604,8 +603,6 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
         };
         const stops = [
-            // The standing choice of Full access, for the mode menu's take-back and the System screen.
-            followStanding(desktop),
             can('links.onOpen') ? desktop.links.onOpen(opened) : () => undefined,
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));

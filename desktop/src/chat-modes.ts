@@ -1,22 +1,23 @@
-// Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat out of the box. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that the six
-// file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by the host's
-// accept-edits mode; it has no confirmation and no standing choice, is held in memory alone, and is chosen on Claude Code
-// only, never for the Feed. Full access runs Claude Code in its default mode with a hook that lets a command run with no
+// Pure: a chat's access mode, chosen per conversation from the menu beside the composer and kept on its record. A
+// conversation whose record names no mode is in Full access, the Feed's included (`feedDefaultMode`), and Full access is
+// given with no confirmation. Full access runs Claude Code in its default mode with a hook that lets a command run with no
 // card where Jason reads it plainly, refuses what Ask first refuses, and puts anything else to the person as Ask first's
-// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. It is
-// chosen through a confirmation that offers this time only or always on this computer, the second with new chats
-// starting in Full access as well; a conversation's Full access is held in memory alone and never remembered past the
-// window, and the standing choice is the main process's own file (`full-access-standing.ts`), under a consent number.
-// Codex has no Full access, nor has the Feed. Nothing here starts a process or reads a file.
+// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. Ask first
+// asks before anything that changes. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that
+// the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by
+// the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
+// access on Codex, on a Claude Code below its floor, sent from a browser tab or while it is not offered; Auto-edit on
+// Codex) runs in Ask first, the chat says why once, and the record keeps the mode. Nothing here starts a process or reads
+// a file.
 
 import { compareVersions } from './host-version.ts';
 
 export type ChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
 /**
- * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
- * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
+ * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, the desktop refuses it
+ * when it is chosen, and a turn of a conversation in it runs in Ask first. Everything else of Full access stays, behind
+ * this one switch.
  */
 export const fullAccessOffered = true;
 
@@ -31,12 +32,15 @@ export const powerShellRunsInFullAccess = false;
 /** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
-/** The modes in the menu's order: the default first, then narrow to wide. */
+/** The modes in the menu's order: Ask first, then narrow to wide, Full access last. */
 export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'auto_edit', 'full_access'];
 
 export function isChatMode(value: unknown): value is ChatMode {
     return typeof value === 'string' && (chatModes as readonly string[]).includes(value);
 }
+
+/** The mode the Feed is made in: the one every chat starts in, so the Feed follows the same rule as any chat. */
+export const feedDefaultMode: ChatMode = 'full_access';
 
 /**
  * The oldest Claude Code a turn in Full access runs on: the version on which a hook's `ask` under `-p`, in the default
@@ -48,7 +52,7 @@ export function isChatMode(value: unknown): value is ChatMode {
 export const fullAccessFloor = '2.1.322';
 
 /**
- * Why Full access cannot be chosen on a Claude Code of this version, read as the chat's floor is read (`floorSentence`);
+ * Why Full access cannot apply on a Claude Code of this version, read as the chat's floor is read (`floorSentence`);
  * null at the floor or above it. A version that could not be read is held as below it.
  */
 export function fullAccessSentence(version: string | null): string | null {
@@ -57,20 +61,70 @@ export function fullAccessSentence(version: string | null): string | null {
     return `Full access needs Claude Code ${fullAccessFloor} or newer; this one is ${version}. Update Claude Code, for example by running \`claude update\` in a terminal.`;
 }
 
-/** Why Full access cannot be chosen on Codex: its own sandbox and hooks hold none of the chat's refusals. */
+/** Why Full access cannot apply on Codex: its own sandbox and hooks hold none of the chat's refusals. */
 export const codexFullAccess = 'Full access runs on Claude Code only.';
 
-/**
- * Why Full access cannot be chosen for the Feed: its turns are handed journal lines by default, words that others and
- * providers wrote, the widest road for a steer.
- */
-export const feedFullAccess = 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
-/** Why Auto-edit cannot be chosen on Codex: it never asks before it acts, so its turns only read. */
+/** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
-/** Why Auto-edit cannot be chosen for the Feed: the reason Full access is not offered there. */
-export const feedAutoEdit = 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+/**
+ * What a conversation in Full access is told, once, when the last listing of the hosts drew its turn in Ask first, having
+ * read Claude Code below the floor of Full access or not read its version, and the version a turn reads is at the floor:
+ * the turn runs in Full access.
+ */
+export const fullAccessCurrent = `Claude Code is now ${fullAccessFloor} or newer, so this turn runs in Full access, the chat's mode.`;
+
+/** Why a message a browser tab sent to a chat in Full access runs in Ask first: the default is for the desktop's window. */
+export const tabFullAccess = "Full access is for Jason Desktop's own window, and this message came from a browser tab.";
+
+/** Why a turn runs in Ask first while its conversation keeps another mode, by its cause. */
+export type AskFirstWhy = 'codex' | 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit';
+
+/** Where a turn is sent from and what is known of the host, which `turnMode` reads beside the mode and the program. */
+export interface TurnPlace {
+    /** Whether it is sent from a browser tab, which the bridge marks, rather than from the desktop's own window. */
+    fromTab: boolean;
+    /** Whether this version offers Full access (`fullAccessOffered`). */
+    offered: boolean;
+    /** Claude Code's version as read, null when it could not be read; undefined when it was not read. */
+    claudeVersion: string | null | undefined;
+}
+
+/**
+ * The mode a turn of a conversation in `recorded` runs in on a host of `program`, sent from `place`, and why when that is
+ * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
+ * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
+ * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab, on
+ * Codex, while this version does not offer it, and on a Claude Code below its floor of Full access or whose version
+ * could not be read, the first of these that holds being the one said; Auto-edit runs in Ask first on Codex. Every other
+ * mode runs as itself.
+ */
+export function turnMode(recorded: ChatMode, program: string, place: TurnPlace): { mode: ChatMode; why: { kind: AskFirstWhy; text: string } | null } {
+    const askFirst = (kind: AskFirstWhy, text: string) => ({ mode: 'ask_first' as const, why: { kind, text } });
+    if (recorded === 'full_access') {
+        if (place.fromTab) return askFirst('tab', tabFullAccess);
+        if (program === 'codex') return askFirst('codex', codexFullAccess);
+        if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
+        const below = place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
+        if (below !== null) return askFirst('floor', below);
+    } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
+    return { mode: recorded, why: null };
+}
+
+/**
+ * What a conversation is told, once, when a turn cannot run in its mode: why, and that the turn runs in Ask first while
+ * the conversation keeps its mode for the turns that can.
+ */
+export function askFirstThisTurn(why: string): string {
+    return `${why} This turn runs in Ask first, and the chat keeps its mode.`;
+}
+
+/**
+ * What a conversation is told, once, when it is opened in Ask first because an earlier Jason Desktop wrote its record last:
+ * that version keeps no mode on a record but Plan only, so the mode the person chose is not known.
+ */
+export const earlierDesktopAskFirst =
+    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access, choose it from its menu.";
 
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
@@ -87,90 +141,7 @@ export const planModeMoved = "The chat's mode changed before the plan was approv
 
 /**
  * The turn's end when a tool ran that the turn's hook never saw, a policy having filtered the hook out, say: that first
- * unchecked tool ends the turn, and the chat goes back to Ask first.
+ * unchecked tool ends the turn, and the chat goes back to Ask first, on its record too.
  */
 export const unguardedSentence =
     'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
-
-/** The same end where the standing choice stood: a check that a policy filtered out would miss every later turn too. */
-export const unguardedStandingSentence =
-    'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
-
-/** Said in the chat when Always was answered and its file could not be written: Full access is given this time only. */
-export const standingUnkeptSentence = 'Always could not be kept: its file could not be written; Full access holds this time only.';
-
-/**
- * Said in the chat when a tool ran unchecked and the file of the standing choice would not let Always be removed: it is
- * held as taken back while this run lasts, and the next start removes it.
- */
-export const standingUnremovedSentence =
-    'Always could not be removed from its file; Jason holds it as taken back and removes it when it next starts. Close anything that has full-access.json open. If the System screen still shows Always after that start, choose Ask each time again there.';
-
-/** Said in a new chat the standing choice would have started in Full access when Full access could not be set up for it. */
-export const newChatAskFirstSentence =
-    'This chat starts in Ask first: Full access could not be set up for it. Choose Full access from the menu to try again.';
-
-/**
- * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
- * other number, lower or higher, is no choice, and the confirmation is shown again. It is raised only by a release that
- * widens what Full access reaches; a change of wording alone, the confirmation's or the page's, does not raise it.
- */
-export const fullAccessConsent = 1;
-
-/**
- * What the confirmation shows, as Electron's message box takes it: Cancel is focused, and Escape answers Cancel. The
- * checkbox counts only with Always (`fullAccessAnswer`); Electron cannot grey it, so its label says so.
- */
-export interface FullAccessDialog {
-    type: 'warning';
-    title: string;
-    message: string;
-    detail: string;
-    buttons: string[];
-    defaultId: number;
-    cancelId: number;
-    checkboxLabel: string;
-    checkboxChecked: false;
-    noLink: true;
-}
-
-export const fullAccessButton = 'Give full access this time';
-export const fullAccessAlwaysButton = 'Always on this computer';
-
-export function fullAccessDialog(): FullAccessDialog {
-    return {
-        type: 'warning',
-        title: 'Full access',
-        message: 'Give this chat full access?',
-        detail: [
-            'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does.',
-            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run.',
-            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving.",
-            'The risk is yours.',
-            'This time, Full access lasts until you change it or close Jason.',
-            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too.',
-            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
-        ].join(' '),
-        buttons: [fullAccessButton, fullAccessAlwaysButton, 'Cancel'],
-        defaultId: 2,
-        cancelId: 2,
-        checkboxLabel: 'With Always, also start new chats in Full access',
-        checkboxChecked: false,
-        noLink: true,
-    };
-}
-
-/**
- * The person's answer to the confirmation, by the button pressed and the checkbox: null for Cancel or anything else;
- * the checkbox is read only with Always.
- */
-export interface FullAccessAnswer {
-    always: boolean;
-    newChats: boolean;
-}
-
-export function fullAccessAnswer(response: number, checkboxChecked: boolean): FullAccessAnswer | null {
-    if (response === 0) return { always: false, newChats: false };
-    if (response === 1) return { always: true, newChats: checkboxChecked === true };
-    return null;
-}

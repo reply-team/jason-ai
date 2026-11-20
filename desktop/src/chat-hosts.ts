@@ -341,13 +341,13 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
  * the jason it carries, `conversations` the record of every conversation, `models.json` the models Codex offered when
  * last asked, `claude-keyed` and `codex-keyed` the hosts' folders for the turns on a provider's key with those turns'
- * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, `full-access.json` the
- * standing choice of Full access, `full-access-taken-back` the mark of a take-back owed and `mode` the record of which
- * installation the desktop runs on, which these rules keep a Claude Code turn from reading or editing. A Codex turn has
- * no fence of the desktop's: only its own read-only sandbox, which the desktop does not narrow, holds it
- * (`codexArguments`).
+ * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, `chats` every
+ * conversation's own folder, `full-access.json` and `full-access-taken-back` what an earlier desktop kept of a standing
+ * choice of Full access, removed at each start, and `mode` the record of which installation the desktop runs on, which
+ * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own
+ * read-only sandbox, which the desktop does not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -356,7 +356,7 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
 
 /**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
- * `desktop` but the chat folder (the turns' configurations among them), the known ones whether they exist or not,
+ * `desktop` but the turn's chat folder (the turns' configurations among them), the known ones whether they exist or not,
  * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
  * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
  * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
@@ -367,17 +367,19 @@ export function dataRules(
     data: string,
     dataEntries: readonly string[],
     desktopEntries: readonly string[],
-    grant?: { id: string; present: readonly string[] },
+    own?: { id: string; present: readonly string[] },
     whole: readonly string[] = [],
 ): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
-    // A Full access turn runs in its grant's folder below `chat-full`: the chat folder is then closed to it as every other
-    // entry is, and so is every other grant's folder; `chat-full` itself is the one entry left open, for its own folder.
+    // A conversation with a folder of its own runs its turns there, below `chats`: the shared chat folder is then closed
+    // to it as every other entry is, and so is every other conversation's folder; `chats` itself is the one entry left
+    // open, for its own folder. A conversation an earlier desktop made runs in the shared chat folder, and `chats` is
+    // closed to it whole.
     const targets = [
         ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
-        ...namesOf(knownDesktopEntries, desktopEntries, grant === undefined ? 'chat' : 'chat-full').map((name) => paths.join(desktop, name)),
-        ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
+        ...namesOf(knownDesktopEntries, desktopEntries, own === undefined ? 'chat' : 'chats').map((name) => paths.join(desktop, name)),
+        ...(own === undefined ? [] : [paths.join(desktop, 'chat'), ...own.present.filter((name) => name !== own.id).map((name) => paths.join(desktop, 'chats', name))]),
         ...whole,
     ];
     // On macOS each folder is also named under the data volume's prefix, which shows the same folder (a firmlink).

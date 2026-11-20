@@ -9,7 +9,6 @@ import type {
     DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
-    DesktopFullAccessStanding,
     DesktopKeptEntry,
     DesktopLink,
     DesktopOpenInAnswer,
@@ -26,7 +25,7 @@ import type {
     DesktopUpdateItem,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
-import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary, FullAccessStanding } from '../src/chat.ts';
+import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { UpdateItemAnswer } from '../src/update-item.ts';
@@ -58,7 +57,6 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['mode'], keyof JasonDesktop['mode']>>,
     Holds<Equal<keyof DesktopPreload['openIn'], keyof JasonDesktop['openIn']>>,
     Holds<Equal<keyof DesktopPreload['pairing'], keyof JasonDesktop['pairing']>>,
-    Holds<Equal<keyof DesktopPreload['fullAccess'], keyof JasonDesktop['fullAccess']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
 ];
 
@@ -81,14 +79,12 @@ type DeclaredCalls =
     | Calls<JasonDesktop['dailyTrends'], 'dailyTrends'>
     | Calls<JasonDesktop['mode'], 'mode'>
     | Calls<JasonDesktop['openIn'], 'openIn'>
-    | Calls<JasonDesktop['pairing'], 'pairing'>
-    | Calls<JasonDesktop['fullAccess'], 'fullAccess'>;
+    | Calls<JasonDesktop['pairing'], 'pairing'>;
 type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop, ''>
     | Subscriptions<JasonDesktop['chat'], 'chat.'>
     | Subscriptions<JasonDesktop['setup'], 'setup.'>
     | Subscriptions<JasonDesktop['links'], 'links.'>
-    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>
     | Subscriptions<JasonDesktop['mode'], 'mode.'>
     | Subscriptions<JasonDesktop['updates'], 'updates.'>;
 
@@ -101,7 +97,6 @@ const eventChannelOf = {
     'chat.onEvent': 'chat.event',
     'setup.onChanged': 'setup.changed',
     'links.onOpen': 'links.open',
-    'fullAccess.onChanged': 'fullAccess.changed',
     'mode.onPreparing': 'mode.preparing',
     'updates.onChanged': 'updates.changed',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
@@ -120,8 +115,12 @@ type ConversationsAreTheSeam = [
 ];
 
 // A turn names the conversation and the host, the model, the effort and the mode it was approved for; never a campaign,
-// which the conversation's record decides.
-type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode'>>];
+// which the conversation's record decides. The mark of a send a browser tab made is the bridge's own, never the page's.
+type SendIsTheSeam = [
+    Holds<Equal<Omit<ChatSendOptions, 'fromTab'>, DesktopChatOptions>>,
+    Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode'>>,
+    Holds<Equal<ChatSendOptions['fromTab'], boolean | undefined>>,
+];
 
 // A turn's end reaches the page as the desktop says it, with the mark of a plan.
 type DoneIsTheSeam = Holds<Equal<Extract<ChatEvent, { kind: 'done' }>, Extract<DesktopChatEvent, { kind: 'done' }>>>;
@@ -138,9 +137,6 @@ type ReplyLinkIsTheSeam = [
     Holds<Equal<keyof DesktopReplyCopied, 'copied' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
     Holds<Equal<keyof DesktopReplyOpened, 'opened' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
 ];
-
-// The standing choice of Full access reaches the page as the chat reads it: when it was given and whether new chats start in it.
-type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStanding>>;
 
 // The update item reaches the page as the desktop's version and the menu's label and whether it is enabled, never the act
 // it names, which a press reads again; a press sends the label the page drew, and nothing else.
@@ -196,9 +192,8 @@ export type SeamHeld = [
     DoneIsTheSeam,
     LinkIsTheSeam,
     UpdateIsTheSeam,
-    StandingIsTheSeam,
 ];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged', 'mode.onPreparing', 'updates.onChanged']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'mode.onPreparing', 'updates.onChanged']);
 });
