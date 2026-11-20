@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { markupOf } from './html';
-import { markdownView } from './markdown-view';
+import { copied, markdownView } from './markdown-view';
 
-/** The markup, without the line breaks and indentation the source puts between two tags. */
-const drawn = (source: string) => markupOf(markdownView(source)).replace(/>\s*\n\s*</g, '><');
+/** A tag's attributes one space apart, however the source broke them over lines. */
+const tagsTidied = (markup: string) =>
+    markup.replace(/<[^>]+>/g, (tag) => tag.replace(/\s+/g, ' ').replace(/ (\/?)>$/, '$1>'));
+
+/** The markup, without the line breaks and indentation the source puts between two tags, and each icon a bare tag. */
+const drawn = (source: string) =>
+    tagsTidied(markupOf(markdownView(source)))
+        .replace(/>\s*\n\s*</g, '><')
+        .replace(/<svg[\s\S]*?<\/svg>/g, '<svg>');
+
+/** A code block's button as drawn, from its opening tag to its closing one. */
+function copyButton(): string {
+    const markup = tagsTidied(markupOf(markdownView('```\na\n```')));
+    return markup.slice(markup.indexOf('<button'), markup.indexOf('</button>'));
+}
 
 describe("the chat's Markdown, drawn", () => {
     it('draws each element of the subset as its own element', () => {
@@ -16,7 +29,7 @@ describe("the chat's Markdown, drawn", () => {
                 '<ul><li><p>e</p></li></ul>' +
                 '<ol start="2"><li><p>f</p></li></ol>' +
                 '<blockquote><p>g</p></blockquote>' +
-                '<div class="chat-md-code"><button type="button" class="chat-md-copy" data-action="chat.copyCode" data-args="[&quot;:0&quot;]">Copy code</button>' +
+                '<div class="chat-md-code"><button type="button" class="chat-md-copy" aria-label="Copy code" title="Copy code" data-action="chat.copyCode" data-args="[&quot;:0&quot;]"><svg></button>' +
                 '<pre><code>h</code></pre></div>' +
                 '<div class="chat-md-table"><table><thead><tr><th>i</th><th>j</th></tr></thead>' +
                 '<tbody><tr><td>k</td><td>l</td></tr></tbody></table></div>' +
@@ -27,6 +40,30 @@ describe("the chat's Markdown, drawn", () => {
     it('gives a code block a Copy code button and inline code none', () => {
         expect(drawn('`a`')).not.toContain('button');
         expect(drawn('```\na\n```').match(/<button/g)).toHaveLength(1);
+    });
+
+    it('draws Copy code as an icon named by its words: the copy mark, a check once copied, a cross when it failed', () => {
+        const marks = (button: string) => ({
+            tick: button.includes('class="chat-md-tick"'),
+            cross: button.includes('class="chat-md-cross"'),
+        });
+        try {
+            const idle = copyButton();
+            expect(idle).toContain('aria-label="Copy code" title="Copy code"');
+            expect(idle).toContain('aria-hidden="true"');
+            expect(idle.replace(/<[^>]*>/g, '').trim(), 'no words of its own, only the icon').toBe('');
+            expect(marks(idle)).toEqual({ tick: false, cross: false });
+            copied.value = { key: ':0', outcome: 'copied' };
+            const done = copyButton();
+            expect(done).toContain('aria-label="Copied" title="Copied"');
+            expect(marks(done)).toEqual({ tick: true, cross: false });
+            copied.value = { key: ':0', outcome: 'refused' };
+            const failed = copyButton();
+            expect(failed).toContain('aria-label="Not copied" title="Not copied"');
+            expect(marks(failed)).toEqual({ tick: false, cross: true });
+        } finally {
+            copied.value = null;
+        }
     });
 
     it('draws a link as its text and its address, as text, and an address alone once', () => {
@@ -73,6 +110,8 @@ describe("the chat's Markdown, drawn", () => {
             'class=chat-md-code',
             'type=button',
             'class=chat-md-copy',
+            'aria-label=Copy code',
+            'title=Copy code',
             'data-action=chat.copyCode',
             `data-args=[&quot;:${n}&quot;]`,
         ];

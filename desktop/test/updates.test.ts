@@ -681,9 +681,11 @@ test('the new version’s first start settles the record: a start that worked ke
     ]);
 });
 
-test('while a copy of the previous version is kept, the Jason menu says where, under the update item', () => {
+// The line is the same in the tray's menu and the window's: the version kept, and never its folder, whose path makes a
+// menu as wide as itself. Where a person needs the folder, a start that failed and an update that was not installed name it.
+test('while a copy of the previous version is kept, both menus say which version, under the update item, and not where', () => {
     const copy = '/data/desktop/rollback/0.34.0/Jason.app';
-    const line = 'The previous version 0.34.0 is kept at /data/desktop/rollback/0.34.0/Jason.app; put it back by hand.';
+    const line = 'The previous version 0.34.0 is kept.';
     const there = (path: string) => path === copy;
     assert.equal(keptLine({ kept: { version: '0.34.0', directory: copy }, rejected: [] }, '0.35.0', there), line);
     // A first start that failed keeps the copy under its pending record.
@@ -1081,7 +1083,7 @@ test('the terminal settle records the update that installed this version as kept
     assert.equal(settleByRequest(s.rollback, '0.35.0', log), false, 'a second settle changes nothing');
     assert.equal(settleStart(s.rollback, '0.35.0', true, log), null, 'nor does the first window start after it');
     assert.deepEqual(log.lines, [{ level: 'info', name: 'update_settled_by_request', fields: { Version: '0.35.0' } }]);
-    assert.equal(keptLine(readRollback(s.rollback), '0.35.0', () => true), `The previous version 0.34.0 is kept at ${copy}; put it back by hand.`);
+    assert.equal(keptLine(readRollback(s.rollback), '0.35.0', () => true), 'The previous version 0.34.0 is kept.');
     // A record with no copy (the deb's) settles into nothing kept.
     writeRollback(s.rollback, { pending: { fromVersion: '0.35.0', toVersion: '0.36.0', directory: null }, rejected: [] });
     assert.equal(settleByRequest(s.rollback, '0.36.0', log), true);
