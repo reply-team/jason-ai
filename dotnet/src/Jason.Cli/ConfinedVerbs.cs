@@ -96,7 +96,17 @@ public static class ConfinedVerbs
         + "A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, "
         + "and an attempt id in the environment is a claim, not a proof, so it changes nothing here.";
 
-    /// <summary>What the help of a person's own word says before <see cref="Help"/>.</summary>
+    /// <summary>
+    /// The entries of a person's own word that a role runs itself, whose help therefore never says the act is the
+    /// person's: <c>workitem review</c>, which the critic sends from its own run, <c>report submit</c>, whose reporter may
+    /// be a role, and <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not.
+    /// </summary>
+    public static IReadOnlyList<string> RunByARole { get; } = ["workitem review", "report submit", "workitem resume"];
+
+    /// <summary>
+    /// What the help of a person's own word says before <see cref="Help"/>, on every entry of that kind but those a role
+    /// runs itself (<see cref="RunByARole"/>).
+    /// </summary>
     public const string PersonsWordHelp =
         "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.";
 
@@ -128,7 +138,8 @@ public static class ConfinedVerbs
                 var path = verb.Length == 0 ? sub.Name : verb + " " + sub.Name;
                 if (Covering(path) is { } covering)
                 {
-                    var help = Table.Single(entry => entry.Command == covering).Kind == Kind.PersonsWord ? PersonsWordHelp + " " + Help : Help;
+                    var personsOwn = Table.Single(entry => entry.Command == covering).Kind == Kind.PersonsWord && !RunByARole.Contains(covering);
+                    var help = personsOwn ? PersonsWordHelp + " " + Help : Help;
                     sub.Description = string.IsNullOrEmpty(sub.Description) ? help : sub.Description + " " + help;
                 }
 
