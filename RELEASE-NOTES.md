@@ -40,23 +40,22 @@ message go without your approval.
   [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
   mode lets the AI do.
 - **Full access is Claude Code's own bypass.** A turn in Full access runs Claude Code in its bypass mode, as a terminal
-  started that way would, with PowerShell among its tools. Jason's check before each tool use refuses three kinds
-  alone, each by a sentence that names the `jason` command that does what was asked: Jason's settings and run files;
-  its data directory outside the conversation's folder; and what Jason itself sets for the turn, meaning its variables
-  and its permission tool. On Windows, a command or a path that names a share of this computer by `localhost`, a
-  `127.x.x.x` address, `::1` or the computer's own host name is read as the drive it shares. Everything else runs, and what Claude Code still asks about
-  in its bypass mode is a card, "Full access asks about this one". Where the bypass is not available (a setting of
-  yours or an administrator's turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or
-  under sudo, or a policy filtered Jason's check out), the chat says "Full access is not available here" once, with the
+  started that way would, with PowerShell among its tools. Jason's check before each tool use refuses a tool use that
+  names one of three kinds: Jason's settings and run files; its data directory outside the conversation's folder; and
+  what Jason itself sets for the turn, meaning its variables and its permission tool. On Windows, a command or a path
+  that names a share of this computer by `localhost`, a `127.x.x.x` address, `::1` or the computer's own host name is
+  read as the drive it shares. Everything else runs, and what Claude Code still asks about in its bypass mode is a
+  card, "Full access asks about this one". Where the bypass is not available (a setting of yours or an administrator's
+  turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or under sudo, or a policy filtered
+  Jason's check out), the chat says "Full access is not available here" once, with the
   cause, and runs in Ask first until Jason Desktop starts again; the conversation keeps Full access. From Claude Code
   2.1.322 on, Ask first and Auto-edit carry the same check; below it, a plain `jason` command that ran with no card still
   does, and one fed the settings or the run file is refused.
 - **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
   `config.toml`, as Codex does in a terminal: Codex acts with no questions and with no sandbox, and none of Jason's own
-  refusals holds there. In its other modes a
-  Codex chat stays in Codex's read-only sandbox and reads and proposes, since Codex cannot ask before it acts; the menu
-  says so. If an administrator's requirement forbids running with no sandbox, Codex refuses the turn or runs a narrower
-  sandbox, and the chat says which.
+  refusals holds there. In its other modes a Codex chat stays in Codex's read-only sandbox and reads and proposes,
+  since Codex cannot ask before it acts; the menu says so. If an administrator's requirement forbids running with no
+  sandbox, the turn ends in Codex's own words, or runs in the sandbox they allow, and the chat says so.
 - **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
   waits for you, answers a decision, starts a campaign, takes back a standing approval, and sets the sender's name or
   tone of voice, with no card; each is recorded under the person the command names, as it would be from a terminal. It
@@ -95,8 +94,22 @@ message go without your approval.
 
 ## Upgrading from 0.49.0
 
-- **0.49.0 takes this release by its own update.** A published 0.49.0 takes it by its own `jason update apply`, on
-  Windows and on an Apple silicon Mac, with signed packages.
+- **Installing this candidate.** A candidate is never the latest release, so no update reaches it: an installed Jason
+  Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.0. It is installed by naming
+  its version. On Windows (PowerShell):
+  ```powershell
+  & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
+  ```
+  Over an installed 0.49.0 it installs this candidate once Jason Desktop is quit, Quit in its tray menu; while Jason
+  Desktop runs it installs nothing and says to quit it. On an Apple silicon Mac the install line keeps an installed
+  Jason Desktop of another version as it is, so take 0.49.0 off first with `jason uninstall`, which keeps your data
+  directory, then run:
+  ```sh
+  curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
+  ```
+- **The road the final release comes by.** In this candidate's release run, a published 0.49.0 took this build by its
+  own `jason update apply`, from a feed served on the runner, on Windows and on an Apple silicon Mac, with signed
+  packages. The final 0.49.2 comes to 0.49.0 the same way.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
   in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
   again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
@@ -112,3 +125,4 @@ message go without your approval.
 - In this candidate the chat does not yet read a file outside its own folders without asking; that comes in a later
   release.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
+- Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet.
