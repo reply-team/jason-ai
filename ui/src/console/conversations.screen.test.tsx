@@ -485,7 +485,7 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(within(listed()).queryByRole('button', { name: 'Go' })).toBeNull());
     });
 
-    it('asks before removing a conversation with a folder of its own, saying its files go seven days later and where they are until then; one an earlier desktop made names no folder', async () => {
+    it('asks before removing a conversation with a folder of its own, saying the folder is kept seven days and where, and what a terminal open in it does; one an earlier desktop made names no folder', async () => {
         const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', title: 'Own folder', ownFolder: true });
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', title: 'Shared folder' });
@@ -506,7 +506,7 @@ describe('the desktop’s conversations', () => {
             expect(asking.textContent).toContain('the AI host keeps its own transcript of it');
             if (own)
                 expect(asking.textContent).toContain(
-                    "The files in its folder go seven days later; until then they are in Jason's data directory, under desktop/chat-full-ended.",
+                    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. If a terminal holds it, it stays where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.",
                 );
             else expect(asking.textContent).not.toMatch(/folder|seven days|chat-full-ended/);
             fireEvent.click(within(asking).getByRole('button', { name: 'Keep it' }));

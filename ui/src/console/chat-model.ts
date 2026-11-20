@@ -309,10 +309,11 @@ function planStands(chat: Chat): boolean {
 
 /**
  * What the question before a removal adds for a conversation with a folder of its own (`ownFolder`): the desktop moves
- * the folder to its ended place, where it is kept seven days.
+ * the folder to its ended place, where it is kept seven days; a folder a terminal holds stays where it is until a later
+ * start moves it, and on macOS and Linux a terminal open in it is moved with it.
  */
 export const removedFolder =
-    "The files in its folder go seven days later; until then they are in Jason's data directory, under desktop/chat-full-ended.";
+    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. If a terminal holds it, it stays where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.";
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
 export const fullAccessLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
