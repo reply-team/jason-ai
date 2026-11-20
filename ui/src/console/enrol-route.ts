@@ -31,8 +31,9 @@ const asked = new Map<string, number>();
 export async function readEnrolRoute(campaignId: string): Promise<void> {
     const mine = (asked.get(campaignId) ?? 0) + 1;
     asked.set(campaignId, mine);
-    // Nothing shows while the route is being read, whatever an earlier read said.
-    enrolReads.value = { ...enrolReads.value, [campaignId]: 'reading' };
+    // Nothing shows while the route is first read; read again, as a panel drawn anew at a send does, the last answer
+    // stands until the new one, so the card stays drawn and changes only when the answer does.
+    if (enrolReads.value[campaignId] === undefined) enrolReads.value = { ...enrolReads.value, [campaignId]: 'reading' };
     let read: EnrolRead;
     try {
         const resolved = await here().api.call<RouteResolution>('route.resolve', {
