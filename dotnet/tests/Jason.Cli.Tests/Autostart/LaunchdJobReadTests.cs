@@ -29,10 +29,14 @@ public sealed class LaunchdJobReadTests
     /// <summary>A job launchd is about to start again, with no process of its own yet: in progress, as a running one is.</summary>
     private const string SpawnScheduled = "gui/501/ai.jasonharness.desktop.ShipIt = {\n\ttype = Submitted\n\tstate = spawn scheduled\n}\n";
 
+    /// <summary>The login domain as launchctl prints one that is there: the domain's own name, then its properties.</summary>
+    private const string DomainThere = "gui/501 = {\n\ttype = login\n\thandle = 501\n}\n";
+
     /// <summary>
     /// Only "not running", with no process of its own, is a job loaded and idle; any other state of its own is one in
-    /// progress. Only launchctl's 113, "Could not find service", says the job is not there; any other exit says launchctl
-    /// could not tell, and the job is not read, which leaves it as it is and says so.
+    /// progress. Only launchctl's 113, "Could not find service", says by itself that the job is not there. Any other exit
+    /// says launchctl could not tell, and the domain itself is then asked about: here it is there, so the job is not read,
+    /// which leaves it as it is and says so.
     /// </summary>
     [Theory]
     [InlineData("not running, a nested state aside", 0, NotRunning, LaunchdJobState.Loaded, null)]
@@ -50,32 +54,85 @@ public sealed class LaunchdJobReadTests
         var job = LaunchdJobs.Read("gui/501", Label, (command, limit) =>
         {
             ran.Add((string.Join(" ", command), limit));
-            return (exit, printed, exit == 0 ? string.Empty : $"Could not find service \"{Label}\" in domain for user gui: 501");
+            return command[^1] == "gui/501"
+                ? (0, DomainThere, string.Empty)
+                : (exit, printed, exit == 0 ? string.Empty : $"Could not find service \"{Label}\" in domain for user gui: 501");
         });
 
         Assert.True(job.State == state && job.Pid == pid, $"{row}: {job}");
-        Assert.Equal([($"/bin/launchctl print gui/501/{Label}", (TimeSpan?)LaunchdJobs.Limit)], ran);
+        var asked = exit is 0 or LaunchdJobs.NotFound
+            ? new[] { $"/bin/launchctl print gui/501/{Label}" }
+            : [$"/bin/launchctl print gui/501/{Label}", "/bin/launchctl print gui/501"];
+        Assert.Equal(asked.Select(command => (command, (TimeSpan?)LaunchdJobs.Limit)), ran);
     }
 
+    /// <summary>
+    /// A launchctl that could not be started, or did not answer in time, about the job leaves it unread; nothing more is
+    /// asked of a launchctl that gave no answer.
+    /// </summary>
     [Fact]
     public void A_launchctl_that_cannot_be_run_or_does_not_answer_leaves_the_job_unread()
     {
-        var job = LaunchdJobs.Read("gui/501", Label, (_, _) => throw new AutostartException(AutostartCodes.Refused, "did not answer within 10 seconds"));
+        var ran = new List<string>();
+        var job = LaunchdJobs.Read("gui/501", Label, (command, _) =>
+        {
+            ran.Add(string.Join(" ", command));
+            throw new AutostartException(AutostartCodes.Refused, "did not answer within 10 seconds");
+        });
 
         Assert.Equal(LaunchdJobState.Unread, job.State);
         Assert.Equal("did not answer within 10 seconds", job.Why);
+        Assert.Equal([$"/bin/launchctl print gui/501/{Label}"], ran);
     }
 
-    /// <summary>An exit other than 113 is said by its code and the first line launchctl wrote about it.</summary>
+    /// <summary>An exit other than 113, in a domain launchd says is there, is said by its code and the first line launchctl wrote about it.</summary>
     [Theory]
     [InlineData("Input/output error\nsecond line\n", "`launchctl print` ended with 5: Input/output error")]
     [InlineData("", "`launchctl print` ended with 5")]
     public void An_exit_other_than_113_says_what_launchctl_said(string error, string why)
     {
-        var job = LaunchdJobs.Read("gui/501", Label, (_, _) => (5, string.Empty, error));
+        var job = LaunchdJobs.Read("gui/501", Label, (command, _) => command[^1] == "gui/501" ? (0, DomainThere, string.Empty) : (5, string.Empty, error));
 
         Assert.Equal(LaunchdJobState.Unread, job.State);
         Assert.Equal(why, job.Why);
+    }
+
+    /// <summary>
+    /// An account with no login session - reached over ssh, or run by a management tool, while it is not signed in at the
+    /// screen - has no login domain, and launchctl, asked about a job there, answers something other than 113. So where
+    /// launchctl cannot answer for the job, launchd is asked about the domain itself, by launchctl's full path and within
+    /// the same limit: a domain launchd says is not there, any exit but 0, holds no job, which is absent. One it says is
+    /// there leaves the job unread, and so does a launchctl that could not be started or did not answer about the domain,
+    /// each said by what launchctl answered about the job. No exit code stands here for one of launchd's own: the
+    /// stand-in's codes are its own, and the release's dry run records what launchd answers.
+    /// </summary>
+    [Theory]
+    [InlineData("the domain not there", 7, 1, false, LaunchdJobState.Absent)]
+    [InlineData("the domain not there, another code", 64, 9, false, LaunchdJobState.Absent)]
+    [InlineData("the domain there", 7, 0, false, LaunchdJobState.Unread)]
+    [InlineData("no answer about the domain", 7, 0, true, LaunchdJobState.Unread)]
+    public void Where_launchctl_cannot_answer_for_the_job_launchd_is_asked_about_the_domain_itself(string row, int jobExit, int domainExit, bool domainUnanswered, LaunchdJobState state)
+    {
+        var ran = new List<(string Command, TimeSpan? Limit)>();
+
+        var job = LaunchdJobs.Read("gui/501", Label, (command, limit) =>
+        {
+            ran.Add((string.Join(" ", command), limit));
+            if (command[^1] != "gui/501")
+            {
+                return (jobExit, string.Empty, "the stand-in's own words about the job\n");
+            }
+
+            return domainUnanswered
+                ? throw new AutostartException(AutostartCodes.Refused, "did not answer within 10 seconds")
+                : (domainExit, domainExit == 0 ? DomainThere : string.Empty, domainExit == 0 ? string.Empty : "the stand-in's own words about the domain\n");
+        });
+
+        Assert.True(job.State == state, $"{row}: {job}");
+        Assert.Equal(state == LaunchdJobState.Unread ? $"`launchctl print` ended with {jobExit}: the stand-in's own words about the job" : null, job.Why);
+        Assert.Equal(
+            [($"/bin/launchctl print gui/501/{Label}", (TimeSpan?)LaunchdJobs.Limit), ("/bin/launchctl print gui/501", (TimeSpan?)LaunchdJobs.Limit)],
+            ran);
     }
 
     /// <summary>

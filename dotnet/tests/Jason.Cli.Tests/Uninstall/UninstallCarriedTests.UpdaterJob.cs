@@ -221,4 +221,60 @@ public sealed partial class UninstallCarriedTests
         Assert.Contains($"Kept the application at {application}: an update of it was being installed.", report.GetProperty("kept").EnumerateArray().Select(line => line.GetString()));
         Assert.True(Directory.Exists(application), "the application was removed");
     }
+
+    /// <summary>
+    /// An account with no login session - reached over ssh, or run by a management tool, while it is not signed in at the
+    /// screen - has no login domain, and so no ShipIt job. launchctl's answers are a stand-in's here, and every read goes
+    /// through the one read the uninstall has (<see cref="LaunchdJobs.Read"/>): the plan's look before anything is removed,
+    /// the job's step and the last look before the application goes each ask about the job, then, where launchctl cannot
+    /// answer for it, about the domain itself. A domain launchd says is not there reads as no job at all three, so the
+    /// uninstall completes, exits 0 and says nothing of the job; a domain it says is there leaves the job unread, and the
+    /// step says so as before. No exit code stands for one of launchd's own: the stand-in's codes are its own.
+    /// </summary>
+    [Theory]
+    [InlineData("no login domain", 1, true)]
+    [InlineData("the login domain there", 0, false)]
+    public async Task On_macOS_an_account_with_no_login_domain_has_no_updaters_job_and_the_uninstall_completes(string row, int domainExit, bool noJob)
+    {
+        var executable = MacApplication();
+        var application = ApplicationOf(executable);
+        var shipIt = Plant(Path.Combine(Home, "Library", "Caches", DesktopRemoval.ShipItCacheName));
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        var label = DesktopRemoval.ShipItLabel;
+        var job = $"/bin/launchctl print gui/501/{label}";
+        var asked = new List<string>();
+        remover.Launchctl = (command, _) =>
+        {
+            var said = string.Join(' ', command);
+            asked.Add(said);
+            return said == job
+                ? (5, string.Empty, "the stand-in's own words about the job\n")
+                : (domainExit, domainExit == 0 ? "gui/501 = {\n\ttype = login\n}\n" : string.Empty, domainExit == 0 ? string.Empty : "the stand-in's own words about the domain\n");
+        };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        var problems = report.GetProperty("problems").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.True(
+            asked.SequenceEqual(new[] { job, "/bin/launchctl print gui/501", job, "/bin/launchctl print gui/501", job, "/bin/launchctl print gui/501" }),
+            $"{row}: the plan's look, the job's step and the last look did not each ask about the job, then the domain: {string.Join(" | ", asked)}");
+        Assert.DoesNotContain($"launchd.bootout {label}", remover.Calls);
+        Assert.False(Directory.Exists(shipIt), $"{row}: ShipIt's state is still there");
+        Assert.False(Directory.Exists(application), $"{row}: the application is still there");
+        if (noJob)
+        {
+            Assert.True(exit == ExitCodes.Success, $"{row}: {output}");
+            Assert.Empty(problems);
+            Assert.DoesNotContain(done, line => line.Contains(label, StringComparison.Ordinal) && !line.Contains(shipIt, StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.True(exit == ExitCodes.ApiError, $"{row}: {output}");
+            Assert.Equal(
+                [$"launchd could not be asked about the job {label} (`launchctl print` ended with 5: the stand-in's own words about the job), so it was left as it was: `launchctl print gui/$(id -u)/{label}` says whether it is loaded, and `launchctl bootout gui/$(id -u)/{label}` takes it out."],
+                problems);
+        }
+    }
 }
