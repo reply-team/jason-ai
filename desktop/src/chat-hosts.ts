@@ -655,8 +655,8 @@ export type HostLine =
     | { kind: 'refused'; forbidden?: true }
     | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
-    /** Codex warned, by a completed item of type `error`, and the turn goes on; its words are not read (`codexLine`). */
-    | { kind: 'warning' }
+    /** Codex said an administrator's requirements put its sandbox below the one the turn asked for (`codexNarrowed`). */
+    | { kind: 'sandbox_narrowed' }
     /**
      * The host said the turn is over: `error` null when it succeeded, else the host's own words; `refused` when it ended
      * on a 401 or 403, and `forbidden` too when on a 403.
@@ -864,6 +864,19 @@ function pathsOf(changes: unknown): string | undefined {
 }
 
 /**
+ * Codex's warning that an administrator's requirements (`requirements.toml`) do not allow the sandbox the turn asked for,
+ * so it runs one they allow. openai/codex at 9f2b87495b, read and not seen: core/src/config/mod.rs,
+ * `apply_requirement_constrained_value`, says "Configured value for `{field_name}` is disallowed by requirements; falling
+ * back to required value {fallback_value:?}. Details: {err}", the sandbox's field being `permission_profile` there and
+ * `sandbox_mode` in an earlier Codex; exec/src/event_processor_with_jsonl_output.rs says such a configuration warning as
+ * an `item.completed` whose item is of type `error`, with that `message`. `codex exec` forces `approval_policy = "never"`
+ * (exec/src/lib.rs), so a forbidden `danger-full-access` makes building the configuration fail instead, and Codex
+ * refuses to start (`codexFullAccessRefused`); this narrowing happens only under an automatic reviewer (AutoReview).
+ * Every other warning of Codex's is dropped.
+ */
+const codexNarrowed = /^Configured value for `(?:permission_profile|sandbox_mode)` is disallowed by requirements/;
+
+/**
  * One line of `codex exec --json`: the thread it runs as (`thread.started`), the agent's message and its tool items
  * (`item.started`, `item.completed`), and the end (`turn.completed`, `turn.failed`, `error`). A tool item is one step,
  * said when it starts; `seen` holds the items already said, so the item's completion says nothing again.
@@ -882,10 +895,9 @@ export function codexLine(line: string, seen: Set<string>): HostLine[] {
     if (event.type === 'item.started' || event.type === 'item.completed') {
         const item = event.item as ({ id?: unknown; type?: unknown; text?: unknown } & Record<string, unknown>) | null;
         if (!item || typeof item.type !== 'string') return [];
-        // A warning: `codex exec --json` says one as a completed item of type `error`, and goes on. Codex documents that an
-        // administrator's requirements.toml that does not allow the sandbox asked for makes it fall back to one it allows
-        // and notify; no event names the sandbox a turn ran in, and the words are no contract, so only the shape is read.
-        if (item.type === 'error') return event.type === 'item.completed' ? [{ kind: 'warning' }] : [];
+        if (item.type === 'error') {
+            return event.type === 'item.completed' && typeof item.message === 'string' && codexNarrowed.test(item.message) ? [{ kind: 'sandbox_narrowed' }] : [];
+        }
         if (item.type === 'agent_message') {
             return event.type === 'item.completed' && typeof item.text === 'string' && item.text.trim() !== '' ? [{ kind: 'text', text: item.text }] : [];
         }

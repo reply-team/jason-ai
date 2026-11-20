@@ -38,8 +38,8 @@
 // as each naming run starts and ends.
 // STUB_CODEX_REFUSE has Codex refuse to start: it writes those words to stderr and exits 1 before any event, as Codex does
 // when its configuration cannot be built.
-// STUB_CODEX_WARNING has Codex say a warning before its thread, as a completed item of type `error`, the shape codex
-// exec --json is documented to give a non-fatal warning.
+// STUB_CODEX_WARNING has Codex say a configuration warning before its thread, as a completed item of type `error`, the
+// shape codex exec --json gives one (codex-rs/exec/src/event_processor_with_jsonl_output.rs).
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');

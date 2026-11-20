@@ -693,12 +693,11 @@ Claude Code.
   `requirements.toml` can forbid Codex to run with no sandbox. Codex's source reads (not seen on a real machine) that
   Codex then refuses to start the turn: the chat shows Codex's own words and after them, every time, **If these words
   say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.**
-  Codex documents that it may instead fall back to a sandbox the requirements allow and notify. No event of Codex's
-  says which sandbox a turn ran in, so the chat cannot tell such a turn from one in Full access: where Codex warns
-  during a Full access turn, or such a turn fails after it started, the chat says once, beside Codex's own words, **Codex reported a warning or an error in Full access. Where an administrator does
-  not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not
-  be acting in Full access here.** and keeps Full access. A fallback Codex does not report goes unseen. This is built
-  on Codex's documentation and not seen on a real machine.
+  Only where your configuration has Codex's automatic reviewer answer its requests does Codex, by the same source,
+  instead run the sandbox the requirements allow and warn that it did; the chat then says once: **Codex could not act in
+  Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the
+  sandbox they allow.** The chat keeps Full access. No event of Codex's names the sandbox a turn ran in, so a narrowing
+  Codex does not warn of goes unseen.
 - **Outside Full access, Codex reads and proposes.** Codex cannot ask before it acts, and the menu says so: **Reads and
   proposes. Codex cannot ask before it acts.** Auto-edit runs in Ask first on Codex. Such a turn runs
   `exec --json --sandbox read-only` and asks for nothing, so no card and no rule of the desktop applies to it. What holds,

@@ -62,14 +62,11 @@ export function fullAccessSentence(version: string | null): string | null {
 }
 
 /**
- * What the chat says, once in a conversation, when Codex warns during a Full access turn or such a turn fails. An
- * administrator's `requirements.toml` that does not allow Codex to run with no sandbox makes it fall back to a sandbox
- * it allows and notify, which `codex exec --json` says as a warning; no event says which sandbox a turn ran in, and a
- * warning's words are no contract, so the desktop cannot tell this warning from another, and a fallback Codex does not
- * say goes unseen. The sentence says what may be so, never that it is.
+ * What the chat says, once in a conversation, when Codex ran a Full access turn in a narrower sandbox because an
+ * administrator's requirements do not allow it to run with none (`codexLine`, `sandbox_narrowed`).
  */
-export const codexFullAccessUnsure =
-    'Codex reported a warning or an error in Full access. Where an administrator does not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not be acting in Full access here.';
+export const codexFullAccessNarrowed =
+    'Codex could not act in Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the sandbox they allow.';
 
 /**
  * What the chat says after Codex's own words, every time, when a Full access turn on Codex ends before Codex said any

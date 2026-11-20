@@ -392,15 +392,13 @@ applies to the turns a person starts by sending, from the next one on.
   (exec/src/lib.rs), so building its configuration fails (core/src/config/mod.rs) with its words on standard error and
   no event. A Full access Codex turn that ends so, before any line on standard output and with a failing exit, ends in
   Codex's own words followed by `codexFullAccessRefused`, every time; the words are not read and nothing is
-  remembered. Codex's managed-configuration documentation says it may instead fall back to a sandbox it allows and
-  notify. `codex exec
-  --json` says a non-fatal warning as `{"type":"item.completed","item":{"type":"error","message":...}}`, a fatal error
-  as `{"type":"error",...}` and a failed turn as `turn.failed`; no event names the sandbox a turn ran in (`thread.started`
-  carries the thread alone), and a warning's words are no contract. So the desktop reads the shape only: a warning in
-  a Full access turn (`codexLine`, `warning`) lets the turn go on, and a Full access turn that ends in an error after
-  Codex said something ends as it would; either has the conversation told once `codexFullAccessUnsure`, which
-  says Codex may not be in Full access, and the chat keeps its mode. A fallback Codex does not report goes unseen.
-  Built on the documented shape, not seen from a real Codex.
+  remembered. Only under an automatic reviewer (AutoReview) does Codex, at the same commit, fall back instead to the
+  sandbox the requirements allow and say so as a configuration warning, an `item.completed` of type `error` beginning
+  "Configured value for `permission_profile` is disallowed by requirements" (`sandbox_mode` in an earlier Codex;
+  core/src/config/mod.rs `apply_requirement_constrained_value`, exec/src/event_processor_with_jsonl_output.rs). The
+  desktop reads that line (`codexLine`, `sandbox_narrowed`), lets the turn go on, keeps the chat's mode and says once in
+  the conversation `codexFullAccessNarrowed`; every other warning is dropped, as before. No event names the sandbox a
+  turn ran in (`thread.started` carries the thread alone), so a narrowing Codex does not warn of goes unseen.
 - **How Full access runs on Claude Code.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
