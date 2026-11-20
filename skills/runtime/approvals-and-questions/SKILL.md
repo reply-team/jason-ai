@@ -162,9 +162,10 @@ jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-
 `--actor human:<their id>` is what makes it theirs: a verdict with no name, a role's, or one typed inside a launched run
 lifts nothing. It lifts the lock and does nothing else: it drafts and sends nothing, and the register's entries stay
 until each is taken off, which is theirs too: `jason suppression remove --channel email --value <the address> --actor
-human:<their id> --reason "<their words>"`. In the chat of Jason Desktop you can do neither: the chat refuses that
-verb, and you cannot lift the lock there either; give the person the `reply record` line, and the `suppression remove`
-line where one is needed, to type in a terminal.
+human:<their id> --reason "<their words>"`. In the chat of Jason Desktop you run both on their word as well, and Jason
+shows each to the person first in Ask first and Auto-edit; in Plan only you run neither: say that this mode does not.
+Where a verdict you record lifts the lock, say plainly in your answer that it lifted that contact's opt-out, and for
+whom.
 
 ## A standing approval is a person's decision made in advance
 
@@ -284,10 +285,10 @@ should every message wait, or go automatically? And the same for people who have
 - **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
   automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
 
-In the chat of Jason Desktop you cannot set a mode: the chat refuses `preference set`, `preference unset` and `campaign
-set-send-mode`. There the approval's card asks the question and the person answers on it. Elsewhere you may set it on
-their word, as below, or give the person the command to type in a terminal instead, as `operating-the-installation`
-does for `jason project link`.
+In the chat of Jason Desktop the approval's card asks the question too, and the person may answer on it, or tell you:
+you set it on their word, as below, and Jason shows each to the person first in Ask first and Auto-edit; in Plan only
+you set none, so say that this mode does not. Elsewhere you may set it on their word, as below, or give the person the
+command to type in a terminal instead.
 
 Offer "remember this" with the answer: where they have said how they want it, offer to keep it so they are not asked
 again, which is exactly setting the key. A "goes automatically" they do not want kept changes nothing: only a key that
@@ -300,8 +301,8 @@ jason preference set send_mode.warm --value '{"mode":"every_message"}' --actor h
 ```
 
 When a person chooses **goes automatically**, say once, as a fact and never as a condition of setting it, that Jason
-then sends messages in their name without them reading each one first, and that their name and tone, set in Settings
-("Your name and tone"), help those messages sound like them. The mode is on at once either way.
+then sends messages in their name without them reading each one first, and that their name and tone, which they set in
+Settings ("Your name and tone") or tell you, help those messages sound like them. The mode is on at once either way.
 
 **Never set one on your own, and never by a role.** "Handle these", a patient person and a long queue are not an answer;
 a request from inside a run is refused whatever name it carries. A person who does not answer is not asked again in the
