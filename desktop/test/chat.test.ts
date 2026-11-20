@@ -481,7 +481,8 @@ test('on Windows the first Codex turn of the run checks the sandbox under the tu
     const line = check.env?.[checkVariable] ?? '';
     assert.match(line, /^echo ran-[0-9a-f]+ & type "C:\\Windows\\System32\\drivers\\etc\\hosts" >nul 2>nul && echo control-[0-9a-f]+ & type "[^"]+runtime\.json" >nul 2>nul && echo read-[0-9a-f]+ & type "[^"]+settings\.json" >nul 2>nul && echo read-[0-9a-f]+$/);
     assert.ok(line.includes(`"${r.b.paths.runFile}"`) && line.includes(`"${r.b.paths.settings}"`));
-    assert.ok(same(check.cwd ?? '', r.b.paths.chat));
+    // The check runs in the folder the turn itself runs in.
+    assert.ok(same(check.cwd ?? '', r.hosts()[0]?.cwd ?? ''), `${check.cwd} beside ${r.hosts()[0]?.cwd}`);
     assert.ok(r.hosts()[0]?.args.includes(codexWindowsSandbox));
 
     const again = await r.turn('c1', words, { host: 'codex' });

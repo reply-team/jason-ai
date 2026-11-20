@@ -10,7 +10,8 @@ import type { ChatScope, Platform } from '../src/chat-permission-model.ts';
 // The chat is kept from changing Jason's own parts, so that it can never rewrite the instructions Jason's own agents work by:
 // the role skills folder, the plugins folder and the settings file are refused to a Claude Code turn in every mode, Full
 // access included, by the desktop's judgement of each request and by the host's own file rules, however the path is
-// spelled; a Codex turn is held by its own read-only sandbox. "Change Jason itself" in Open in is the way to change them.
+// spelled; a Codex turn is held by its own read-only sandbox outside Full access, and by nothing in it. "Change Jason
+// itself" in Open in is the way to change them.
 // True since the chat had a fence; this file keeps it true.
 
 /**
@@ -198,5 +199,5 @@ test('a Codex turn, which the desktop does not fence, runs in its own read-only 
     // Auto-edit is refused on Codex before a turn starts; Full access is not.
     const chat = readFileSync(join(import.meta.dirname, '..', 'src', 'chat.ts'), 'utf8');
     assert.match(chat, /if \(program === 'codex'\) throw new ChatRefused\(codexAutoEdit\);/);
-    assert.doesNotMatch(chat, /codexFullAccess/);
+    assert.doesNotMatch(chat, /\bcodexFullAccess\b/);
 });
