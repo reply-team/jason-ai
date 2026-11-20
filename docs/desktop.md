@@ -183,9 +183,11 @@ reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item, and Uninstall
 Jason… on macOS and Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
-`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
-notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
-them on.
+`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers. On macOS a
+system notification of the desktop's own says when the count rises, with the counts alone, never a name or the words of
+a question; on Windows and Linux the runtime's own notification of each waiting item is the one, its click opening the
+desktop on that item ([notifications.md](notifications.md)), and the desktop adds none. Both login items are off until
+you turn them on.
 
 ## Its own files
 
