@@ -115,9 +115,9 @@ On macOS and Windows, Jason is one installation: the Jason Desktop application, 
 line your terminal and your agents use. It is removed once, by `jason uninstall` in a terminal, by Installed apps on
 Windows, or by Uninstall Jason… in the Jason menu on macOS. The uninstall stops the runtime first, and removes nothing
 when that runtime does not stop. It then takes off what Jason placed - the `jason` command, the skills it recorded in agent
-hosts' folders, Open Jason at Login, the runtime's start at logon, an older command-line install and the updater's cache - and
-last the application, and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root
-(`~/Jason`) always, saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
+hosts' folders, Open Jason at Login, the runtime's start at logon, an older command-line install, the updater's cache and,
+on macOS, the job its updater leaves loaded in launchd - and last the application, and leaves the data directory
+(`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
 carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
 then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
 removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's

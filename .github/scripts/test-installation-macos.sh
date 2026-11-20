@@ -35,7 +35,9 @@
 #   enable-starts-now              jason runtime autostart enable with no runtime running: whether a runtime answers
 #                                  within 30 s after it, said by name and asserted neither way
 #   refuse-while-open              jason uninstall while Jason Desktop runs: refused, nothing removed
-#   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged
+#   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged; the first in a
+#                                  job reads, before it, what launchd answers an account with no login session, a
+#                                  reading for the record, never a failure (read_no_login_domain)
 #   uninstall-menu                 the uninstall the application's Uninstall Jason item starts: the carried jason with
 #                                  --wait-for the application's process, which then quits
 #   from-previous <previous> <feed> <version>
@@ -168,6 +170,38 @@ launchd_records() {
                 print domain "\t" label " " state
             }'
     done
+}
+
+# A reading for the record, never a failure, as the Windows proof reads ModulePath: what launchd answers an account with
+# no login session, asked about Jason Desktop's ShipIt job in that account's own login domain and about the domain
+# itself - the two questions jason uninstall asks there, whose answers no code of jason's assumes (LaunchdJobs.Read). The
+# account is daemon, which no login session has: it has no password, so the login window never signs it in, and a login
+# domain, gui/<uid>, is the domain of a login session. Each question is asked as daemon, of its own domain, as jason asks
+# of its own, through sudo -n, which a GitHub-hosted runner allows without a password, with launchctl by its full path;
+# each is bounded by within inside a subshell, whose exit is kept as the answer's and whose words, within's own
+# included, go to the answer's file, so no answer, refusal or hang ends the step. Each exit and first line are said, and
+# kept in $OUT with the whole answers. Once in a job, at its first uninstall from a terminal, a step CI's union job and
+# the release's proof job both run.
+read_no_login_domain() {
+    [ ! -e "$OUT/no-login-domain.txt" ] || return 0
+    : > "$OUT/no-login-domain.txt" 2> /dev/null || true
+    local uid asked target answer status first
+    uid="$(id -u daemon 2>/dev/null)" || uid=""
+    case "$uid" in
+        '' | *[!0-9]*)
+            say "launchd with no login session, a reading: no account daemon with a user id was found here, so nothing was asked"
+            return 0 ;;
+    esac
+    for asked in "job gui/$uid/ai.jasonharness.desktop.ShipIt" "domain gui/$uid"; do
+        target="${asked#* }"
+        answer="$OUT/no-login-domain-${asked%% *}.txt"
+        status=0
+        ( within 30 "launchctl print $target as daemon" sudo -n -u daemon /bin/launchctl print "$target" ) > "$answer" 2>&1 || status=$?
+        first="$(grep -m 1 . "$answer" 2>/dev/null)" || first=""
+        printf '%s\t%s\t%s\n' "$target" "$status" "$first" >> "$OUT/no-login-domain.txt" 2> /dev/null || true
+        say "launchd with no login session, a reading: launchctl print $target, asked as daemon (uid $uid, which no login session has), ended $status; its first line: ${first:-none}"
+    done
+    return 0
 }
 
 # This job's PATH without ~/.local/bin, which the runner's image puts there and a person's terminal does not have.
@@ -545,14 +579,25 @@ close_leg() {
 # a leg that never ended is closed, and so in the job's summary, that a leg's step and the job are bounded by what a run
 # measured. The job is timed from the start of the runner's worker that runs it, which is the job's own start, read from
 # how long ps says it has run ([[days-]hours:]minutes:seconds); where none is found, from the first leg's begin, and the
-# line that starts the job's clock says which.
+# line that starts the job's clock says which. The worker is Runner.Worker on every system, as the runner's listener
+# starts it, and an ancestor of this script; macOS's pgrep leaves its own ancestors out of what it matches unless -a is
+# given (pgrep(1): "By default, the current pgrep or pkill process and all of its ancestors are excluded"), so without
+# -a no worker was ever found on a Mac. A runner may run a worker for each of several jobs, so of the workers pgrep
+# lists, this job's own is the one this script descends from, found by walking up its parents (ps -o ppid=) to the
+# first process, 64 steps at most; never the first one listed.
 start_leg_clock() {
-    local now worker elapsed began from
+    local now workers worker pid steps elapsed began from
     now="$(date +%s)"
     if [ ! -s "$OUT/job-began.txt" ]; then
         began="$now"
         from="this leg's begin: no runner's worker was found"
-        worker="$(pgrep -x Runner.Worker | head -n 1)" || worker=""
+        workers=" $(pgrep -a -x Runner.Worker | tr '\n' ' ')" || workers=" "
+        worker="" pid="$$" steps=0
+        while [ "$steps" -lt 64 ] && [ -n "$pid" ] && [ "$pid" -gt 1 ] 2> /dev/null; do
+            case "$workers" in *" $pid "*) worker="$pid"; break ;; esac
+            pid="$(ps -o ppid= -p "$pid" | tr -d ' ')" || pid=""
+            steps=$(( steps + 1 ))
+        done
         if [ -n "$worker" ]; then
             elapsed="$(ps -o etime= -p "$worker" | awk '$1 ~ /^([0-9]+-)?([0-9]+:)?[0-9]+:[0-9]+$/ { n = split($1, part, /[-:]/); s = part[n] + 60 * part[n - 1]; if (n > 2) s += 3600 * part[n - 2]; if (n > 3) s += 86400 * part[n - 3]; print s }')" || elapsed=""
             case "$elapsed" in
@@ -1191,6 +1236,7 @@ uninstall-terminal)
     # account's own login shell, and the profiles the product names for that shell held free of the line.
     by="${1:-}"
     case "$by" in ''|account-shell) ;; *) fail "uninstall-terminal takes account-shell or nothing, not '$by'" ;; esac
+    read_no_login_domain
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     # A runtime for the uninstall to stop: the one the application's start left running, once it answers, else one started.
     sleep 5
@@ -1379,7 +1425,7 @@ from-one-installation)
     # it left; and the desktop's log and ShipIt's logs are kept in $OUT, as bundle-swap keeps the desktop's log, before the
     # uninstall the leg runs next takes them with the data directory and the caches.
     server=""
-    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; }; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; } || true; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
 
     # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.sh from its own
     # assets, which opens nothing, then a runtime started from the jason it carries. It is held to be the release its

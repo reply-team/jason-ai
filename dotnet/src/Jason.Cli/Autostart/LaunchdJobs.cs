@@ -3,9 +3,47 @@ namespace Jason.Cli.Autostart;
 /// <summary>Runs one command, waiting for it no longer than the limit: <see cref="AutostartRegistrars.Run(IReadOnlyList{string}, TimeSpan?)"/>, or a test's stub.</summary>
 internal delegate (int Exit, string Output, string Error) BoundedRun(IReadOnlyList<string> command, TimeSpan? limit);
 
+/// <summary>What launchd says of one job in one domain (<see cref="LaunchdJobs.Read"/>).</summary>
+public enum LaunchdJobState
+{
+    /// <summary>
+    /// <c>launchctl print</c> answered 113, "Could not find service": launchd holds no such job there. Or it answered
+    /// another exit, and launchd, asked about the domain itself, says that domain is not there: an account with no login
+    /// session has no login domain, and no job is loaded in a domain that is not there.
+    /// </summary>
+    Absent,
+
+    /// <summary>Loaded and idle: its own state is <c>not running</c>, and it names no process of its own.</summary>
+    Loaded,
+
+    /// <summary>
+    /// Loaded and in progress: it names its process, or its own state is any but <c>not running</c> — <c>running</c>, or
+    /// <c>spawn scheduled</c> as launchd starts it again.
+    /// </summary>
+    Running,
+
+    /// <summary>
+    /// launchctl answered another exit, and launchd, asked about the domain itself, said it is there or gave no answer; or
+    /// launchctl could not be started, did not answer in time, or named no state of the job's own: whether it is there, and
+    /// what it does, cannot be told.
+    /// </summary>
+    Unread,
+}
+
+/// <summary>One job as launchd says it stands.</summary>
+/// <param name="State">Absent, loaded, running, or not read.</param>
+/// <param name="Pid">The process it runs, where launchd names one.</param>
+/// <param name="Why">Why it could not be read, where it could not.</param>
+public sealed record LaunchdJob(LaunchdJobState State, int? Pid = null, string? Why = null)
+{
+    /// <summary>No such job.</summary>
+    public static LaunchdJob Absent { get; } = new(LaunchdJobState.Absent);
+}
+
 /// <summary>
 /// macOS: a LaunchAgent's job taken out of this account's launchd before its file goes, wherever an uninstall or a
-/// disable removes one, so no job is left loaded with its plist gone.
+/// disable removes one, so no job is left loaded with its plist gone; and a job submitted with no file, read and taken out
+/// the same way.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -86,7 +124,142 @@ internal static class LaunchdJobs
     public static IReadOnlyList<string> Domains(uint userId)
     {
         var id = userId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return [$"gui/{id}", $"user/{id}"];
+        return [LoginDomain(userId), $"user/{id}"];
+    }
+
+    /// <summary>
+    /// What <c>launchctl print</c> answers for a job its domain does not hold: 113, with "Could not find service" on standard
+    /// error. Any other exit is no answer about the job, and the domain itself is then asked about
+    /// (<see cref="DomainNotThere"/>).
+    /// </summary>
+    internal const int NotFound = 113;
+
+    /// <summary>The account's login domain, <c>gui/&lt;uid&gt;</c>, where a job its applications submit is loaded.</summary>
+    public static string LoginDomain(uint userId) => $"gui/{userId.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// The job <paramref name="label"/> in <paramref name="domain"/>, as <c>launchctl print &lt;domain&gt;/&lt;label&gt;</c>
+    /// answers, waited for <see cref="Limit"/> at most: absent where it answers <see cref="NotFound"/>, or where it answers
+    /// any other exit and launchd says the domain itself is not there (<see cref="DomainNotThere"/>), as for an account with
+    /// no login session; loaded where the job's own <c>state</c> is <c>not running</c> and it names no process of its own;
+    /// running, in progress, where it names one or its state is any other, <c>spawn scheduled</c> included; and unread where
+    /// launchctl answered any other exit and launchd, asked about the domain, said it is there or gave no answer, said by the
+    /// code and the first line of its answer about the job, or where it could not be started, did not answer in time, or
+    /// named no state of the job's own.
+    /// Each doubt fails toward leaving the job alone: an unread job is never taken out, and one in progress is an update
+    /// being installed.
+    /// </summary>
+    /// <remarks>
+    /// The job's own properties are the lines one step in from its first line, whether a tab or spaces make the step; a
+    /// nested dictionary's, one step further in, are never the job's.
+    /// </remarks>
+    public static LaunchdJob Read(string domain, string label, BoundedRun? run = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+
+        run ??= AutostartRegistrars.Run;
+        string printed;
+        try
+        {
+            var (exit, output, error) = run([Launchctl, "print", $"{domain}/{label}"], Limit);
+            if (exit == NotFound)
+            {
+                return LaunchdJob.Absent;
+            }
+
+            if (exit != 0)
+            {
+                if (DomainNotThere(domain, run))
+                {
+                    return LaunchdJob.Absent;
+                }
+
+                var ended = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"`launchctl print` ended with {exit}");
+                var said = error.ReplaceLineEndings("\n").Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0);
+                return new LaunchdJob(LaunchdJobState.Unread, Why: said is null ? ended : $"{ended}: {said}");
+            }
+
+            printed = output;
+        }
+        catch (AutostartException unread)
+        {
+            return new LaunchdJob(LaunchdJobState.Unread, Why: unread.Message);
+        }
+
+        string? step = null;
+        string? state = null;
+        int? pid = null;
+        foreach (var line in printed.ReplaceLineEndings("\n").Split('\n').Skip(1))
+        {
+            var text = line.TrimStart(' ', '\t');
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            step ??= line[..(line.Length - text.Length)];
+            if (!string.Equals(line[..(line.Length - text.Length)], step, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (text.StartsWith("state = ", StringComparison.Ordinal))
+            {
+                state ??= text["state = ".Length..].Trim();
+            }
+            else if (text.StartsWith("pid = ", StringComparison.Ordinal)
+                && int.TryParse(text["pid = ".Length..].Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+            {
+                pid ??= id;
+            }
+        }
+
+        return state is null
+            ? new LaunchdJob(LaunchdJobState.Unread, Why: "launchctl print named no state of the job's own")
+            : state == "not running" && pid is null
+                ? new LaunchdJob(LaunchdJobState.Loaded)
+                : new LaunchdJob(LaunchdJobState.Running, pid);
+    }
+
+    /// <summary>
+    /// Whether launchd says <paramref name="domain"/> itself is not there: asked with <c>launchctl print &lt;domain&gt;</c>,
+    /// by launchctl's full path through the same run as the job's question, waited for <see cref="Limit"/> at most, it
+    /// answered with any exit but 0. An account with no login session - reached over ssh, or run by a management tool, while
+    /// it is not signed in at the screen - has no login domain, and no job is loaded in a domain that is not there. An exit
+    /// of 0 says the domain is there; a launchctl that could not be started or did not answer in time says nothing of it,
+    /// and neither is read as a domain that is not there.
+    /// </summary>
+    /// <remarks>
+    /// No exit code is assumed for either question. The exit launchctl ends with, asked about a job of a login domain that
+    /// is not there and about that domain itself, is whatever a runner says: the release's dry run records both, in its
+    /// macOS proof's reading of an account with no login session (<c>read_no_login_domain</c> in
+    /// <c>.github/scripts/test-installation-macos.sh</c>), and nothing here hangs on one code.
+    /// </remarks>
+    private static bool DomainNotThere(string domain, BoundedRun run)
+    {
+        try
+        {
+            return run([Launchctl, "print", domain], Limit).Exit != 0;
+        }
+        catch (AutostartException)
+        {
+            // launchctl could not be started, or did not answer in time: nothing is said of the domain.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Takes the job <paramref name="label"/> out of <paramref name="domain"/>: <c>launchctl bootout &lt;domain&gt;/&lt;label&gt;</c>,
+    /// then by its label, through <see cref="TakeOut"/>, the one routine that takes a LaunchAgent's job out. Nothing it is
+    /// answered is an error.
+    /// </summary>
+    public static void BootOut(string domain, string label, BoundedRun? run = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+
+        TakeOut([[Launchctl, "bootout", $"{domain}/{label}"]], label, run);
     }
 
     /// <summary>

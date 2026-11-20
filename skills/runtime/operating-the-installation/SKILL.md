@@ -638,7 +638,9 @@ On macOS and Windows this is the one uninstall: it takes Jason Desktop off with 
 command, the skills it recorded in agent hosts' folders, Open Jason at Login — and an older command-line install, and deletes the
 application last. It is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu on
 macOS. Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed:
-say so, and ask the person to quit Jason, rather than closing it yourself. The harness root is never touched.
+say so, and ask the person to quit Jason, rather than closing it yourself. On macOS, while Jason Desktop's updater
+installs an update, it refuses with `update_in_progress` before anything is removed: say so, and run it again once the
+update has ended. The harness root is never touched.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and the verb removes those skills and nothing else. **A skill somebody copied into a harness by hand has
