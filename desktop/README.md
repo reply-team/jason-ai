@@ -459,7 +459,8 @@ applies to the turns a person starts by sending, from the next one on.
 - **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
   alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
 - **When the bypass is not available.** The turn runs in Ask first and each conversation is told why once in each hold
-  of the cause, in one shape, "Full access is not available here: <why>" (`bypassSentence`), "Full access is not
+  of the cause, by the cause that holds whatever a start found within it, in one shape, "Full access is not available
+  here: <why>" (`bypassSentence`), "Full access is not
   available here right now: <why>" where the cause holds a minute, and "Full access is not available here until Jason
   Desktop starts again: <why>" where a tool ran that the hook never saw. The record keeps Full access, and the box says
   so with what the menu draws: "This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat
@@ -469,7 +470,10 @@ applies to the turns a person starts by sending, from the next one on.
   turn starts again at once in Ask first's own shape: its settings, its environment, no PowerShell, every page asked
   about and the host's rules over the chat's own names. Every start of a turn meets this, the fresh session after a
   resume Claude Code could not find included (`unlessNarrowed` in `Chat`), and each start's environment is built from
-  the mode it starts in as it starts, as its command line is. That word is read from a closed table of Claude Code's modes
+  the mode it starts in as it starts, as its command line is. A resumed turn starts again in a fresh session given the
+  recap (`startAgain`), never in the session it resumed: the stopped start may already have written the message there,
+  which a resume would then hold twice; the record takes the fresh session's id. The word the init line names is read
+  from a closed table of Claude Code's modes
   (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and once the
   start has ended its standard error is matched against Claude Code's own words "Permission mode forced to default"
   (`forcedDefault`), a closed match, nothing else of what it wrote being read: matched, the cause is `forced_default`,

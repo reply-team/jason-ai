@@ -735,6 +735,65 @@ test('a lost resume\'s fresh session meets the verdict a first start meets: one 
     }
 });
 
+test('a resumed Full access turn started again in Ask first starts a fresh session given the recap, never the session its stopped start was given the message in: the session the next turn resumes holds the message once, whether Claude Code named another mode or refused its bypass', async (t) => {
+    const causes = [
+        { env: { STUB_INIT_MODE: 'default' }, why: 'bypass_off' },
+        { env: { STUB_BYPASS: 'refused' }, why: 'bypass_refused' },
+    ] as const;
+    for (const cause of causes) {
+        const r = rig(t);
+        // The stand-in keeps what each session was given, a start stopped at its first line included, as Claude Code does.
+        const sessions = join(r.b.root, 'sessions');
+        mkdirSync(sessions);
+        r.b.env.STUB_SESSIONS = sessions;
+        const { id } = await r.chat.create();
+        await r.turn(id, 'the first message', claude);
+        Object.assign(r.b.env, cause.env);
+        const said = await r.turn(id, 'the second message', claude);
+        const [stopped, again] = r.hosts().slice(1);
+        assert.equal(flag(stopped?.args ?? [], '--resume'), 'stub-session-1', cause.why);
+        assert.equal(flag(again?.args ?? [], '--permission-mode'), 'default', cause.why);
+        assert.ok(!(again?.args ?? []).includes('--resume'), `${cause.why}: started again in a fresh session`);
+        assert.deepEqual(done(said), { kind: 'done', error: null }, cause.why);
+        // The next turn resumes the session the record took, which holds the message once, after the recap it was given.
+        await r.turn(id, 'the third message', claude);
+        const resumed = flag(r.hosts().at(-1)?.args ?? [], '--resume');
+        assert.equal(resumed, 'stub-session-2', `${cause.why}: the record took the fresh session`);
+        const held = readFileSync(join(sessions, resumed ?? ''), 'utf8');
+        assert.equal(held.split('the second message').length - 1, 1, `${cause.why}: the message is held once`);
+        assert.ok(held.indexOf('<earlier-messages>') < held.indexOf('the second message'), `${cause.why}: given the recap first`);
+        assert.equal(r.chat.open(id).mode, 'full_access', cause.why);
+    }
+});
+
+test('while a cause holds, a start that falls for another cause within it is told the cause that holds, once, and the log hears that one alone', async (t) => {
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
+    const forced = askFirstThisTurn(bypassSentence({ why: 'forced_default', named: 'default' }), 'full_access');
+    // One conversation's start asks for the bypass and is refused only once the gate is opened.
+    const gate = join(r.b.root, 'refuse-now');
+    Object.assign(r.b.env, { STUB_BYPASS: 'refused', STUB_BYPASS_HOLD: gate });
+    const other = await r.chat.create();
+    const refusing = r.turn(other.id, 'hello', claude);
+    const until = Date.now() + 10_000;
+    while (r.started.length === 0 && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(r.started, ['full_access']);
+    // Meanwhile another conversation's start is forced to Claude Code's default mode, and that cause comes to hold.
+    delete r.b.env.STUB_BYPASS;
+    delete r.b.env.STUB_BYPASS_HOLD;
+    r.b.env.STUB_FORCED_DEFAULT = 'always';
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', claude);
+    assert.deepEqual(notices(first), [forced]);
+    writeFileSync(gate, '');
+    const refused = await refusing;
+    assert.deepEqual(done(refused), { kind: 'done', error: null });
+    assert.deepEqual(notices(refused), [forced], 'told the cause that holds, once');
+    assert.deepEqual(gone, [['forced_default', 'default']], 'the log hears the cause that holds alone');
+    assert.deepEqual(r.chat.bypassUnavailable(), { why: 'forced_default', named: 'default' });
+    assert.equal(r.chat.open(other.id).mode, 'full_access');
+});
+
 test('a message a browser tab sends to a chat in Full access runs in Ask first, with Ask first\'s environment, and says why once', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();

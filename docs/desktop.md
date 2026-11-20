@@ -939,9 +939,10 @@ Full access on its record, and each conversation is told why once while the caus
 to hold again, the cause after "Full access is not available here right now": Claude Code started the turn in another
 mode, which the chat names as Claude Code named it ("Claude Code did not start in its bypass mode, and named its default
 mode instead."); Claude Code said it forced its permission mode to default; or Claude Code refused the mode in its
-restricted mode or under a policy. The turns of the next minute run in Ask first too, with no bypass asked for, and the
-first Full access turn after that minute asks Claude Code for its bypass again, so a cause that has gone away needs no
-restart of Jason Desktop. Where a tool ran that Jason's check never saw, a policy having filtered the check out, the
+restricted mode or under a policy. While one cause holds, a turn that meets another is told the one that holds. The
+turns of the next minute run in Ask first too, with no bypass asked for, and the first Full access turn after that
+minute asks Claude Code for its bypass again, so a cause that has gone away needs no restart of Jason Desktop. Where a
+tool ran that Jason's check never saw, a policy having filtered the check out, the
 turn it ran in stops, the chat says "Full access is not available here until Jason Desktop starts again" with that
 cause after it, and every later turn on Claude Code runs in Ask first until it does; where Jason Desktop runs as root
 or under sudo, the chat says "Full access is not available here" with that cause, and every turn on Claude Code runs in
@@ -950,7 +951,10 @@ its permission mode to default, which Claude Code 2.1.329 writes while `CLAUDE_C
 it starts. No Full access turn sets that variable, nor passes on one Jason Desktop inherited. Claude Code's own
 settings or an administrator's policy can also turn its bypass off, and the chat names none of them. A turn that
 started in another mode is stopped at its first line and started again in Ask first, as Ask first's own turn is, and
-so is the fresh session that follows a conversation Claude Code could not resume. Jason Desktop's log says each cause
+so is the fresh session that follows a conversation Claude Code could not resume. A conversation Claude Code was
+continuing starts again in a new session of Claude Code's, given the conversation's earlier messages, since the start
+that was stopped may already have kept your message in the one it continued: the session the chat goes on in holds
+your message once. Jason Desktop's log says each cause
 that comes to hold, by the cause and the mode named, and running as root once as Jason Desktop starts, so
 `jason logs --source desktop` shows which it was. A turn you stopped ends with no word of a mode.
 

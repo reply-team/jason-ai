@@ -2271,8 +2271,8 @@ export class Chat {
          * The verdict every start of the turn meets, the first and the fresh session after a resume that was lost alike: a
          * start whose bypass was refused, or was not in force, is started again at once, as `again` starts it, in the mode
          * that leads to (`bypassLeadsTo`), its settings written for it and its command line and its environment that mode's
-         * own, the cause held as long as that says and the conversation told once in the hold why. Any other start stands
-         * as it ended.
+         * own, the cause held as long as that says, and the conversation told once in the hold why: by the cause that holds,
+         * which a cause this start found within it does not replace (`#bypassGone`). Any other start stands as it ended.
          */
         const unlessNarrowed = async (ended: Attempted, again: () => Promise<Attempted>): Promise<Attempted> => {
             // A start that named another mode, whose standard error, read to its end, holds Claude Code's own words that it
@@ -2286,15 +2286,21 @@ export class Chat {
             if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, leads.mode);
             narrowSettings(leads.mode);
             this.#bypassGone(narrowed);
-            this.#tellAskFirst(conversation.id, replyTo, leads.why.kind, leads.why.text, this.#modeOf(conversation));
+            const told = bypassLeadsTo(this.bypassUnavailable() ?? narrowed).why;
+            this.#tellAskFirst(conversation.id, replyTo, told.kind, told.text, this.#modeOf(conversation));
             return running.stopped ? ended : again();
         };
+
+        // A resumed start stopped for its mode may already have written the person's message into the session it resumed, so
+        // it is started again in a fresh session given the recap, never in that session again: the message is held once, and
+        // the record takes the fresh session's id as a fallback's (`attempt`).
+        const startAgain = resume === undefined ? () => attempt(undefined, hostChanged, false) : () => attempt(undefined, true, true);
 
         void (async () => {
             let last: Attempted = { exit: { code: null, startError: 'unknown' }, result: undefined, host: null, again: false };
             let handed: HandOver | null = null;
             try {
-                last = await unlessNarrowed(await attempt(resume, hostChanged, false), () => attempt(resume, hostChanged, false));
+                last = await unlessNarrowed(await attempt(resume, hostChanged, false), startAgain);
                 if (last.again) {
                     this.#fresh(replyTo, 'not_found');
                     if (!running.stopped) last = await unlessNarrowed(await attempt(undefined, true, true), () => attempt(undefined, true, true));
