@@ -8,7 +8,8 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// Moving the harness root is the installation's act, and the planner's first words send the person here for it. It
     /// is a change of the setting and then a link of each project whose folder moved, in that order: nothing moves by
-    /// itself, and a session that only edited the setting would leave every project recorded where it no longer is.
+    /// itself, and a session that only edited the setting would leave every project recorded where it no longer is. The
+    /// chat of Jason Desktop links a project too, with the folder named, since its turns run in a folder of their own.
     /// </summary>
     [Fact]
     public void The_operating_skill_moves_the_root_by_the_setting_and_then_a_link_per_project()
@@ -16,6 +17,7 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
         Assert.Contains("Move it only when the person asks: move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing moves by itself", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder of its own, and Jason shows it to them first in Ask first and Auto-edit; in Plan only you do not run it: say that this mode does not.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>How every place that brings a session to a stop points at the one rule for it.</summary>
@@ -541,7 +543,7 @@ public partial class InteractiveSkillTests
             "Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime sees.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("Those three verbs are the whole plugin vocabulary", skill, StringComparison.Ordinal);
+        Assert.Contains("`install`, `list`, `reload`, `grant` and `revoke` are the whole plugin vocabulary, and **there is no `jason plugin get`**.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
