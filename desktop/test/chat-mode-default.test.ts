@@ -1,8 +1,8 @@
 // Full access by default, and the mode a person chooses kept on the conversation's record, through whole turns against
 // stub hosts: a record that names no mode opens in Full access, Ask first, Auto-edit and Plan only are kept through a
 // restart, choosing Full access takes the mode off the record, a standing choice an earlier desktop left changes no mode
-// and is gone once the desktop has started, and the Feed opens in its own default mode, one named constant. Then one folder per
-// conversation: every turn of a new conversation runs in its own folder inside the chat folder, in every mode and on
+// and is gone once the desktop has started, and the Feed opens in Full access too, by one named constant, and offers every
+// mode. Then one folder per conversation: every turn of a new conversation runs in its own folder inside the chat folder, in every mode and on
 // every host, with the instruction files and the recorded skills there, and goes with the conversation; a conversation
 // an earlier desktop made, whose record names no folder, keeps running in the shared chat folder; nothing is made for a
 // grant of Full access.
@@ -16,7 +16,7 @@ import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { newConversationId } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import * as chatModes from '../src/chat-modes.ts';
-import { isChatMode, type ChatMode } from '../src/chat-modes.ts';
+import { type ChatMode } from '../src/chat-modes.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -27,6 +27,8 @@ interface Rig {
     chat: Chat;
     events: Map<string, ChatEvent[]>;
     started: ChatMode[];
+    /** How many times a box asked the person before Full access. */
+    boxes: number;
     /** Sends and waits for the turn's `done`; the events it said. */
     turn(id: string, text: string, options: unknown): Promise<ChatEvent[]>;
     hosts(): Recorded[];
@@ -53,6 +55,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
         chat: undefined as unknown as Chat,
         events,
         started: [],
+        boxes: 0,
         async turn(id, text, sendOptions) {
             const from = events.get(id)?.length ?? 0;
             const done = until(id, (event) => event.kind === 'done');
@@ -94,7 +97,12 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
         };
         // A desktop that asks before Full access enters it from the menu only on a yes: this box says yes, so a row that
         // chooses Full access reaches what it holds. A desktop that asks nothing never calls it.
-        const box: Record<string, unknown> = { confirmFullAccess: async () => true };
+        const box: Record<string, unknown> = {
+            confirmFullAccess: async () => {
+                r.boxes += 1;
+                return true;
+            },
+        };
         const chat = new Chat(Object.assign(options, box));
         made.push(chat);
         return chat;
@@ -211,16 +219,29 @@ test('a standing choice of Full access an earlier desktop left is gone once the 
     assert.equal((await chat.create(undefined, 'claude')).mode, 'full_access', 'a new chat is in Full access, whatever the file said of new chats');
 });
 
-test('the Feed opens in its own default mode, one named constant: made new, after a restart, and in its first turn', async (t) => {
-    const { feedDefaultMode } = chatModes;
-    assert.ok(isChatMode(feedDefaultMode), `the Feed's default is a mode of the chat: ${String(feedDefaultMode)}`);
+test('the Feed opens in Full access as every chat does, its default one named constant: made new, after a restart, and in its first turn', async (t) => {
     const r = rig(t);
     const feed = r.chat.feed([]);
-    assert.equal(feed.mode, feedDefaultMode);
-    assert.equal(r.chat.open(feed.id).mode, feedDefaultMode);
-    assert.equal(r.restart().open(feed.id).mode, feedDefaultMode, 'after a restart');
+    assert.equal(feed.mode, 'full_access', 'the Feed is made in Full access');
+    assert.equal(r.chat.open(feed.id).mode, 'full_access');
+    assert.equal(r.restart().open(feed.id).mode, 'full_access', 'after a restart');
     await r.turn(feed.id, 'what came in?', claude);
-    assert.deepEqual(r.started, [feedDefaultMode]);
+    assert.deepEqual(r.started, ['full_access']);
+    assert.equal(chatModes.feedDefaultMode, 'full_access', 'the Feed\'s default is one named constant');
+});
+
+test('the Feed\'s menu offers every mode as any chat\'s does: Auto-edit and Full access are chosen for it with no box, and its next turn runs in the mode chosen', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([]);
+    const choose = (mode: ChatMode) => r.chat.setMode(feed.id, mode, 'claude').then((summary) => summary.mode, (error: Error) => error.message);
+    assert.equal(await choose('ask_first'), 'ask_first');
+    assert.equal(await choose('auto_edit'), 'auto_edit', 'Auto-edit is the Feed\'s to choose');
+    await r.turn(feed.id, 'what came in?', claude);
+    assert.equal(await choose('plan_only'), 'plan_only');
+    assert.equal(await choose('full_access'), 'full_access', 'Full access is the Feed\'s to choose');
+    await r.turn(feed.id, 'and since then?', claude);
+    assert.deepEqual(r.started, ['auto_edit', 'full_access']);
+    assert.equal(r.boxes, 0, 'no box asked before Full access');
 });
 
 // The folder: one per conversation made from now on.

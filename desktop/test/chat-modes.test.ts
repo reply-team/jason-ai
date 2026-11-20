@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, readFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -36,9 +36,9 @@ test('the four modes, Ask first first, then narrow to wide with Full access last
     assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
 });
 
-test('Auto-edit says in one sentence why Codex and the Feed have none', () => {
+test('Auto-edit says in one sentence why Codex has none; the Feed is refused no mode, so it has no sentence of refusal', () => {
     assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
-    assert.equal(feedAutoEdit, 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
+    for (const gone of ['feedAutoEdit', 'feedFullAccess']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
 });
 
 test('Ask first starts Claude Code as every turn did before the modes: no permission mode, the settings inline', () => {
