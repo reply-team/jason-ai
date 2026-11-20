@@ -653,6 +653,16 @@ public static partial class DesktopRemoval
         return found;
     }
 
+    /// <summary>
+    /// <c>&lt;data&gt;/desktop/machine-setup.json</c>: the version and the place Jason Desktop's start last set the machine up
+    /// for, which a start of that version from that place reads as done (<c>desktop/src/machine-setup.ts</c>).
+    /// </summary>
+    public static string SetupRecordFile(JasonPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        return Path.Combine(paths.Root, "desktop", "machine-setup.json");
+    }
+
     /// <summary>Linux: Open Jason at Login's XDG autostart entry, under <c>XDG_CONFIG_HOME</c>, <c>~/.config</c> by default (<c>desktop/src/login-item.ts</c>).</summary>
     public static string AutostartEntryFile(SetupPlaces places)
     {

@@ -526,7 +526,7 @@ internal static partial class StatusChecks
         string? setUpFor = null;
         try
         {
-            using var record = JsonDocument.Parse(File.ReadAllText(MachineSetupRecordUnder(env.Paths.Root)));
+            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordFile(env.Paths)));
             setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
         }
         catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
@@ -1311,12 +1311,6 @@ internal static partial class StatusChecks
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
-
-    /// <summary>
-    /// Jason Desktop's record of where and for which version `jason install` last ran, which its start writes in its own folder
-    /// of the data directory; read here, never written.
-    /// </summary>
-    private static string MachineSetupRecordUnder(string dataRoot) => System.IO.Path.Combine(dataRoot, "desktop", "machine-setup.json");
 
     /// <summary>
     /// Whether <paramref name="resolved"/> and <paramref name="own"/> are one file by their final paths, a link in the file or

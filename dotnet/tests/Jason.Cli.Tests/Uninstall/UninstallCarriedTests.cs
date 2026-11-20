@@ -308,26 +308,52 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
     /// <summary>
     /// An uninstall that keeps the data takes back the note that a start is owed: with the installation taken off none is,
-    /// and a later install would otherwise start a runtime for an old stop. A dry run leaves it.
+    /// and a later install would otherwise start a runtime for an old stop. It takes back the record of the machine set-up
+    /// Jason Desktop's start ran too, on every system that writes one, the deb's included and with the application kept as
+    /// the Windows uninstaller keeps it: what that set-up placed is taken off, and a start of the same version again, a file
+    /// downloaded anew say, would otherwise read the record as done and place no jason and no skills. A dry run leaves both.
     /// </summary>
-    [Fact]
-    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed()
+    [Theory]
+    [InlineData("macos", false)]
+    [InlineData("macos", true)]
+    [InlineData("appimage", false)]
+    [InlineData("deb", false)]
+    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed_and_the_set_ups_record(string system, bool keepApplication)
     {
-        var executable = MacApplication();
+        var places = system == "macos" ? MacPlaces() : LinuxPlaces();
+        var executable = system switch
+        {
+            "appimage" => AppImage().Copy,
+            "deb" => Deb(places),
+            _ => MacApplication(),
+        };
         Directory.CreateDirectory(_dir.Paths.RunDirectory);
         File.WriteAllText(_dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
-        var (env, output, _) = Environment(MacPlaces(), executable);
+        var record = Written(Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json"), "{\"ran_for\":\"0.34.0\",\"completed\":true}");
+        var (env, output, remover) = Environment(places, executable);
+        if (system == "deb")
+        {
+            remover.Purges = _ =>
+            {
+                Directory.Delete(places.DebApplication, recursive: true);
+                return new PackageRun(true, 0, string.Empty);
+            };
+        }
 
-        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false), Ct));
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false, KeepApplication: keepApplication), Ct));
         Assert.True(File.Exists(_dir.Paths.StartOwedFile), "a dry run took the note back");
+        Assert.True(File.Exists(record), "a dry run took the set-up's record back");
 
         output.GetStringBuilder().Clear();
-        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: keepApplication), Ct);
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
         Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.False(File.Exists(record), "the set-up's record outlived the uninstall, so a start of the same version sets nothing up");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
-        Assert.Contains(JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("start-owed.json", StringComparison.Ordinal));
+        var done = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.Contains(done, line => line.Contains("start-owed.json", StringComparison.Ordinal));
+        Assert.Contains(done, line => line.Contains(record, StringComparison.Ordinal));
     }
 
     /// <summary>

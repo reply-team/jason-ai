@@ -249,7 +249,8 @@ them on.
   its tokens still valid, until a start that starts the runtime.
 - `<data>/desktop/machine-setup.json`: the version `jason install` last completed for at a start or
   from the Command Line item, the place it ran from (the `jason` the application carries), and what it reported, which the item shows (below). It counts among the desktop's own
-  records, so a new installation's first start, which writes it, still opens on the demo.
+  records, so a new installation's first start, which writes it, still opens on the demo. `jason uninstall` that keeps the
+  data removes it with what that set-up placed, so the next start of any version sets the machine up again.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
   holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
   held before, so the paired list keeps one row for the window.

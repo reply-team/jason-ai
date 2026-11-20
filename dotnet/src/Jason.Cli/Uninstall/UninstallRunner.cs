@@ -198,6 +198,23 @@ public static class UninstallRunner
                 }
             }
 
+            // The record of the machine set-up Jason Desktop's start ran, where the data is kept: what that set-up placed is
+            // taken off below, and a start of the same version from the same place would read the record as done and place
+            // nothing again. A purge takes it with the rest.
+            var setupRecord = DesktopRemoval.SetupRecordFile(env.Paths);
+            if (!purge && desktop is not null && File.Exists(setupRecord))
+            {
+                try
+                {
+                    File.Delete(setupRecord);
+                    done.Add($"Removed {setupRecord}, the record of the set-up Jason Desktop's start ran: with what it set up taken off, the next start sets this machine up again.");
+                }
+                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                {
+                    problems.Add($"{setupRecord}, the record of the set-up Jason Desktop's start ran, could not be removed ({refused.Message}): delete it, or a later start of this version places no jason and no skills.");
+                }
+            }
+
             if (desktop is not null && !demoStopped && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);
