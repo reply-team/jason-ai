@@ -147,15 +147,15 @@ async function claude(args, stdin) {
     }
     const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
     const config = args[args.indexOf('--mcp-config') + 1];
-    // The bypass mode as Claude Code answers it: refused before anything starts in its restricted mode or under a policy,
-    // and turned off by a settings file with no word of it, the init line naming the default mode (seen on 2.1.329).
-    const askedMode = permissionMode(args);
-    if (askedMode === 'bypassPermissions' && process.env.STUB_BYPASS === 'refused') {
+    // The bypass mode refused before anything starts, in Claude Code's restricted mode or under a policy (seen on 2.1.329).
+    if (permissionMode(args) === 'bypassPermissions' && process.env.STUB_BYPASS === 'refused') {
         process.stderr.write('Error: bypassPermissions not supported in restricted mode\n');
         process.exit(1);
     }
-    const mode = askedMode === 'bypassPermissions' && process.env.STUB_BYPASS === 'off' ? 'default' : askedMode;
-    print({ type: 'system', subtype: 'init', session_id: session, permissionMode: mode, ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+    // The mode the init line names is the row's to say (`STUB_INIT_MODE`), never an echo of the mode the start asked for:
+    // what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names none.
+    const named = process.env.STUB_INIT_MODE;
+    print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {

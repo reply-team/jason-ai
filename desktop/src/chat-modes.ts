@@ -113,23 +113,63 @@ export const tabFullAccess = "Full access is for Jason Desktop's own window, and
 
 /**
  * Why Claude Code's bypass, which Full access runs in, is not available here: the desktop runs as root, which Claude Code
- * refuses its bypass under on macOS and Linux; Claude Code's settings turn it off (`disableBypassPermissionsMode`, the
- * person's own or an administrator's), so it starts in its default mode with no word of it, as seen on 2.1.329; it
- * refuses the mode before it starts, in its restricted mode or under a policy ("Error: bypassPermissions not supported in
- * restricted mode", seen on 2.1.329); or a tool ran that Jason's hook never saw, a policy having filtered the hook out.
+ * refuses its bypass under on macOS and Linux; Claude Code started a turn that asked for its bypass in another mode, which
+ * its init line names (`bypass_off`), why it did so not being read; it refuses the mode before it starts, in its
+ * restricted mode or under a policy ("Error: bypassPermissions not supported in restricted mode", seen on 2.1.329); or a
+ * tool ran that Jason's hook never saw, a policy having filtered the hook out.
  */
 export type BypassWhy = 'root' | 'bypass_off' | 'bypass_refused' | 'unguarded';
 
 /**
- * Each cause's sentence, of the one shape: "Full access is not available here: <why>." A cause a turn showed is kept for
- * the rest of this run of the desktop, and its sentence says so: "... until Jason Desktop starts again: <why>."
+ * The words Claude Code names its modes by on its init line, other than its bypass, that Jason knows: a closed table, so
+ * what is said and logged of a mode is one of these words or `another`, never a word Claude Code printed.
  */
-export const bypassSentences: Readonly<Record<BypassWhy, string>> = {
+export const claudeModeWords = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] as const;
+
+/** The mode Claude Code named instead of its bypass: a word of its table (`claudeModeWords`), or `another`. */
+export type NamedMode = (typeof claudeModeWords)[number] | 'another';
+
+/** The mode a word names, read from the closed table: any word outside it is `another`. */
+export function namedMode(word: string): NamedMode {
+    return claudeModeWords.find((known) => known === word) ?? 'another';
+}
+
+/** Why Claude Code's bypass is not available here, and the mode Claude Code named instead where it named one. */
+export interface Bypass {
+    why: BypassWhy;
+    named: NamedMode | null;
+}
+
+/**
+ * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." A cause a turn showed is
+ * kept for the rest of this run of the desktop, and its sentence says so: "... until Jason Desktop starts again: <why>."
+ * A start that named another mode is said by `bypassSentence`, which names that mode.
+ */
+export const bypassSentences: Readonly<Record<Exclude<BypassWhy, 'bypass_off'>, string>> = {
     root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
-    bypass_off: "Full access is not available here until Jason Desktop starts again: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
     bypass_refused: 'Full access is not available here until Jason Desktop starts again: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
     unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
 };
+
+/**
+ * A cause's sentence: the fixed causes' own (`bypassSentences`), and for a start that named another mode what was read,
+ * that Claude Code did not start in its bypass mode here and which mode it named, never why, which is not read.
+ */
+export function bypassSentence(bypass: Bypass): string {
+    if (bypass.why !== 'bypass_off') return bypassSentences[bypass.why];
+    const named = bypass.named === null || bypass.named === 'another' ? 'a mode Jason does not know' : `its ${bypass.named} mode`;
+    return `Full access is not available here until Jason Desktop starts again: Claude Code did not start in its bypass mode here, and named ${named} instead.`;
+}
+
+/**
+ * What Full access on Claude Code leads to where its bypass is not available: the one place it is decided, for the turn
+ * that found the cause and for every later turn while the desktop runs. The turn that found it is started again in the
+ * mode this names (`Chat.send`), and every later turn runs in it (`turnMode`), which the status hands the page for the
+ * menu (`Setup.status`). Today Ask first, the cause said.
+ */
+export function bypassLeadsTo(bypass: Bypass): { mode: 'ask_first'; why: { kind: AskFirstWhy; text: string } } {
+    return { mode: 'ask_first', why: { kind: bypass.why, text: bypassSentence(bypass) } };
+}
 
 /**
  * The end of a Full access turn stopped where a tool ran that the turn's hook never saw: said once, the conversation
@@ -156,7 +196,7 @@ export interface TurnPlace {
     /** Claude Code's version as read, null when it could not be read; undefined when it was not read. */
     claudeVersion: string | null | undefined;
     /** Why Claude Code's bypass is not available here, as the machine or an earlier turn showed it; absent, it is. */
-    bypass?: BypassWhy | null;
+    bypass?: Bypass | null;
 }
 
 /**
@@ -164,8 +204,9 @@ export interface TurnPlace {
  * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
  * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
  * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab,
- * while this version does not offer it, where Claude Code's bypass is not available (`bypass`), and on a Claude Code
- * below its floor of Full access or whose version could not be read, the first of these that holds being the one said;
+ * while this version does not offer it, where Claude Code's bypass is not available (`bypass`, as `bypassLeadsTo`
+ * decides it), and on a Claude Code below its floor of Full access or whose version could not be read, the first of
+ * these that holds being the one said;
  * on Codex it runs as itself, with no sandbox, held to neither Claude Code's bypass nor its floor. Auto-edit runs in Ask
  * first on Codex. Every other mode runs as itself.
  */
@@ -176,19 +217,22 @@ export function turnMode(recorded: ChatMode, program: string, place: TurnPlace):
         if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
         // Codex runs Full access with no sandbox and is held to neither Claude Code's bypass nor its floor; every other
         // program is held to both.
-        if (program !== 'codex' && place.bypass !== undefined && place.bypass !== null) return askFirst(place.bypass, bypassSentences[place.bypass]);
+        if (program !== 'codex' && place.bypass !== undefined && place.bypass !== null) return bypassLeadsTo(place.bypass);
         const below = program === 'codex' || place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
         if (below !== null) return askFirst('floor', below);
     } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
     return { mode: recorded, why: null };
 }
 
+/** The modes by the names the menu gives them. */
+const modeNames: Readonly<Record<ChatMode, string>> = { ask_first: 'Ask first', plan_only: 'Plan only', auto_edit: 'Auto-edit', full_access: 'Full access' };
+
 /**
- * What a conversation is told, once, when a turn cannot run in its mode: why, and that the turn runs in Ask first while
- * the conversation keeps its mode for the turns that can.
+ * What a conversation is told, once, when a turn cannot run in its mode: why, and what the menu draws, that the turn runs
+ * in Ask first and the menu shows the mode each next turn runs in, while the record keeps the chat's own mode, `kept`.
  */
-export function askFirstThisTurn(why: string): string {
-    return `${why} This turn runs in Ask first, and the chat keeps its mode.`;
+export function askFirstThisTurn(why: string, kept: ChatMode): string {
+    return `${why} This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to ${modeNames[kept]}.`;
 }
 
 /**

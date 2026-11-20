@@ -314,6 +314,28 @@ test('a tool the hook never saw is logged by its turn\'s mode alone: a Full acce
     ]);
 });
 
+test('a bypass found not available is logged by its cause and the mode Claude Code named, each a word of a closed table, so the cases are told apart', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.bypassGone('bypass_off', 'default');
+    logged.bypassGone('bypass_off', 'another');
+    logged.bypassGone('bypass_refused', null);
+    logged.bypassGone('unguarded', null);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_bypass_unavailable')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'default' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'another' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_refused', Named: 'none' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'unguarded', Named: 'none' },
+    ]);
+});
+
 test('an ask of the models Codex offers is logged by its host id and a count, or the kind of its failure, and nothing the host said', (t) => {
     const removals: (() => void)[] = [];
     t.after(() => removals.forEach((remove) => remove()));

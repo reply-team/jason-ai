@@ -455,16 +455,22 @@ applies to the turns a person starts by sending, from the next one on.
 - **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
   alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
 - **When the bypass is not available.** The turn runs in Ask first and the chat says why once, in one shape, "Full
-  access is not available here: <why>" (`bypassSentences`), and "Full access is not available here until Jason Desktop
-  starts again: <why>" where a turn showed the cause; the record keeps Full access. The causes: the desktop runs as root
-  (`getuid`), under which Claude Code refuses the mode; Claude Code's settings turn it off
-  (`disableBypassPermissionsMode`, the person's own or an administrator's), which its init line shows by naming the
-  default mode first, so that start is stopped there and the turn starts again at once in Ask first's own shape: its
-  settings, no PowerShell, every page asked about and the host's rules over the chat's own names; Claude Code refuses
-  the mode before it starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so
-  the turn starts again at once in the same shape; or a tool ran that the hook never saw (below). The first cause
-  stands, in memory, until the desktop starts again, and every later Claude Code turn of a Full access chat runs in Ask first
-  meanwhile.
+  access is not available here: <why>" (`bypassSentence`), and "Full access is not available here until Jason Desktop
+  starts again: <why>" where a turn showed the cause; the record keeps Full access, and the box says so with what the
+  menu draws: "This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to
+  Full access." (`askFirstThisTurn`). The causes: the desktop runs as root (`getuid`), under which Claude Code refuses
+  the mode; Claude Code starts the turn in another mode, which its init line names first, so that start is stopped
+  there and the turn starts again at once in Ask first's own shape: its settings, no PowerShell, every page asked about
+  and the host's rules over the chat's own names. Only that word is read, from a closed table of Claude Code's modes
+  (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and the
+  sentence names it, "Claude Code did not start in its bypass mode here, and named its default mode instead.": why
+  Claude Code did so is not read, so no setting is named. Claude Code refuses the mode before it starts, in its
+  restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn starts again at once in
+  the same shape; or a tool ran that the hook never saw (below). The first cause stands, in memory, until the desktop
+  starts again, and every later Claude Code turn of a Full access chat runs in Ask first meanwhile; the desktop's log
+  says it once, by its cause and the mode named (`chat_bypass_unavailable`), so `jason logs --source desktop` tells the
+  cases apart. What a cause leads to, for the turn that found it and for every later one, is decided in one place
+  (`bypassLeadsTo` in `src/chat-modes.ts`).
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.

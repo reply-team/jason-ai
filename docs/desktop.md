@@ -860,7 +860,7 @@ Each chat has an access mode, chosen from a menu beside the composer. The line u
 say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
 a Claude Code older than 2.1.322, in a browser tab, while Full access is not offered or where Claude Code's bypass mode
 is not available, an Auto-edit chat on Codex), when they say Ask first, with the reason under the composer, and the
-chat keeps its mode. Choosing Ask first
+chat stays set to its own mode. Choosing Ask first
 there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
@@ -928,18 +928,21 @@ reaches a turn. A folder an earlier version gave a chat in Full access is moved 
 where it is, with an Open folder button, and Jason removes it after seven days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
-until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once and
-keeps its mode: a turn on a Claude Code older than 2.1.322, sent from a browser tab, or sent while Full access is not
-offered. A turn on Codex runs in Full access with no sandbox. Once you update Claude Code, the next turn runs in Full
-access, says so once and has the composer drawn again. Where Claude Code's bypass mode is not available, that turn and
-every later turn on Claude Code run in Ask first until Jason Desktop starts again, the chat keeping Full access on its
-record, and the chat says why once: "Full access is not
-available here until Jason Desktop starts again", with the cause after it, where a setting of yours or an
-administrator's turns the mode off, Claude Code refuses it in its restricted mode or under a policy, or a tool ran that
-Jason's check never saw, a policy having filtered the check out, which also stops the turn it ran in; and "Full access
-is not available here" where Jason Desktop runs as root or under sudo. A turn whose mode a setting turned off is
-stopped at its first line and started again in Ask first, as Ask first's own turn is. A turn you stopped ends with no
-word of a mode.
+until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once,
+that the menu shows the mode each next turn runs in, and that the chat stays set to Full access: a turn on a Claude
+Code older than 2.1.322, sent from a browser tab, or sent while Full access is not offered. A turn on Codex runs in
+Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the
+composer drawn again. Where Claude Code's bypass mode is not available, that turn and every later turn on Claude Code
+run in Ask first until Jason Desktop starts again, the chat keeping Full access on its record, and the chat says why
+once: "Full access is not available here until Jason Desktop starts again", with the cause after it, where Claude Code
+started the turn in another mode, which the chat names as Claude Code named it ("Claude Code did not start in its
+bypass mode here, and named its default mode instead."), Claude Code refuses the mode in its restricted mode or under a
+policy, or a tool ran that Jason's check never saw, a policy having filtered the check out, which also stops the turn
+it ran in; and "Full access is not available here" where Jason Desktop runs as root or under sudo. Why Claude Code
+started in another mode is not something Jason reads: its own settings or an administrator's policy can turn its
+bypass off, and the chat names none of them. A turn that started in another mode is stopped at its first line and
+started again in Ask first, as Ask first's own turn is, and Jason Desktop's log says the cause and the mode named once,
+so `jason logs --source desktop` shows which it was. A turn you stopped ends with no word of a mode.
 
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
 rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused

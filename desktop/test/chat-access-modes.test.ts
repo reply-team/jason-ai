@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { attemptRefusal, dataRefusal, settingsRefusal } from '../src/chat-permission-model.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
@@ -261,7 +261,7 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
     const other = await r.chat.create();
     const first = await r.turn(other.id, 'hello', claude);
     const second = await r.turn(other.id, 'hello again', claude);
-    assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.unguarded)]);
+    assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.unguarded, 'full_access')]);
     assert.deepEqual(r.started, ['full_access', 'ask_first', 'ask_first', 'ask_first']);
     assert.equal(r.again().open(other.id).mode, 'full_access');
 });
@@ -305,7 +305,7 @@ test('a tool the hook never saw, said while a Full access turn is stopped by Sto
     plan(r, [{ say: 'next' }]);
     const next = await r.turn(id, 'again', claude);
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default');
-    assert.deepEqual(notices(next), [askFirstThisTurn(bypassSentences.unguarded)], 'said once, at the next turn, since the stopped turn said nothing of it');
+    assert.deepEqual(notices(next), [askFirstThisTurn(bypassSentences.unguarded, 'full_access')], 'said once, at the next turn, since the stopped turn said nothing of it');
 });
 
 test('a tool the hook never saw, said while a Full access turn is stopped for Plan only, leaves the chat in Plan only, and the turn\'s end names no mode', async (t) => {
@@ -507,9 +507,10 @@ function keepingSettings(kept: unknown[]): Partial<ChatOptions> {
     };
 }
 
-test('Claude Code\'s settings turn its bypass off: the Full access turn is ended at its first line and started again in Ask first, in Ask first\'s own shape, says why once, and the record keeps Full access', async (t) => {
+test('Claude Code names its default mode on the first line of a Full access start: the turn is ended there and started again in Ask first, in Ask first\'s own shape, says why once by the mode it named, the cause and the mode reach the log, and the record keeps Full access', async (t) => {
     const settings: unknown[] = [];
-    const r = rig(t, { env: { STUB_BYPASS: 'off' }, chat: keepingSettings(settings) });
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_INIT_MODE: 'default' }, chat: { ...keepingSettings(settings), bypassGone: (why, named) => void gone.push([why, named]) } });
     const { id } = await r.chat.create();
     // The first start is stopped at its first line, before the pause ends; the start again runs the plan whole.
     plan(r, [{ sleep: 1500 }, { use: { tool: 'Bash', input: { command: 'frobnicate' }, prompt: true } }, { say: 'after the card' }]);
@@ -525,7 +526,8 @@ test('Claude Code\'s settings turn its bypass off: the Full access turn is ended
     assert.ok(removed(again?.args ?? []).includes('PowerShell'), 'the start again is Ask first\'s: no PowerShell');
     assert.deepEqual((settings[1] as { permissions?: { ask?: string[] } }).permissions?.ask, ['WebFetch(domain:*)'], 'every page asks');
     assert.ok((again?.args ?? []).some((arg) => /^Edit\(.*CLAUDE\.md\)$/.test(arg)), 'the host is denied edits of the folder\'s own names');
-    assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentences.bypass_off)]);
+    assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentence({ why: 'bypass_off', named: 'default' }), 'full_access')]);
+    assert.deepEqual(gone, [['bypass_off', 'default']], 'the cause and the mode named, once');
     assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.equal(r.chat.open(id).mode, 'full_access');
     plan(r, [{ say: 'again' }]);
@@ -534,15 +536,45 @@ test('Claude Code\'s settings turn its bypass off: the Full access turn is ended
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default', 'the next turn asks for no bypass');
 });
 
+test('a Full access start that names a third mode, or one Jason does not know, says which mode it named and leads where the default mode does', async (t) => {
+    for (const [word, named] of [['auto', 'auto'], ['acceptEdits', 'acceptEdits'], ['someNewMode', 'another']] as const) {
+        const gone: [string, string | null][] = [];
+        const r = rig(t, { env: { STUB_INIT_MODE: word }, chat: { bypassGone: (why, mode) => void gone.push([why, mode]) } });
+        const { id } = await r.chat.create();
+        plan(r, [{ sleep: 1500 }, { say: 'answered' }]);
+        const said = await r.turn(id, 'hello', claude);
+        assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default'], word);
+        assert.deepEqual(r.started, ['full_access', 'ask_first'], word);
+        assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentence({ why: 'bypass_off', named }), 'full_access')], word);
+        assert.deepEqual(gone, [['bypass_off', named]], `${word}: the log is given a word of its closed table`);
+        assert.equal(r.chat.open(id).mode, 'full_access', word);
+    }
+});
+
+test('a Full access start whose first line names no mode runs on in Full access: nothing was read that says the bypass is not in force', async (t) => {
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_INIT_MODE: '' }, chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
+    const { id } = await r.chat.create();
+    plan(r, [{ say: 'answered' }]);
+    const said = await r.turn(id, 'hello', claude);
+    assert.ok(texts(said).includes('answered'));
+    assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions']);
+    assert.deepEqual(r.started, ['full_access']);
+    assert.deepEqual(notices(said), []);
+    assert.deepEqual(gone, []);
+});
+
 test('Claude Code refuses its bypass mode before it starts: the turn starts again at once in Ask first, says why once, and the record keeps Full access', async (t) => {
-    const r = rig(t, { env: { STUB_BYPASS: 'refused' } });
+    const gone: [string, string | null][] = [];
+    const r = rig(t, { env: { STUB_BYPASS: 'refused' }, chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
     const { id } = await r.chat.create();
     plan(r, [{ say: 'answered' }]);
     const said = await r.turn(id, 'hello', claude);
     assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.ok(texts(said).includes('answered'));
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
-    assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentences.bypass_refused)]);
+    assert.deepEqual(notices(said), [askFirstThisTurn(bypassSentences.bypass_refused, 'full_access')]);
+    assert.deepEqual(gone, [['bypass_refused', null]], 'the cause, and no mode, since none was named');
     assert.equal(r.chat.open(id).mode, 'full_access');
     const next = await r.turn(id, 'again', claude);
     assert.deepEqual(notices(next), []);
@@ -555,7 +587,7 @@ test('a desktop that runs as root starts Claude Code in Ask first for a Full acc
     const first = await r.turn(id, 'hello', claude);
     const second = await r.turn(id, 'hello again', claude);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['default', 'default']);
-    assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.root)]);
+    assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.root, 'full_access')]);
     assert.equal(r.chat.open(id).mode, 'full_access');
 });
 
