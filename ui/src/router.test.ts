@@ -18,6 +18,7 @@ describe('parseRoute', () => {
         ['#/accounts', { screen: 'accounts' }],
         ['#/settings', { screen: 'settings' }],
         ['#/chat?t=abc', { screen: 'chat' }],
+        ['#/demo', { screen: 'attention' }],
         ['#/nowhere/else', { screen: 'attention' }],
         ['#/attention/approvals/', { screen: 'attention' }],
         ['#/attention/approvals/%E0%A4%A', { screen: 'attention' }],

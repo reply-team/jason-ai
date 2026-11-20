@@ -24,6 +24,29 @@ import { activePanel, chats, currentChat } from './state';
 
 const editorIds: readonly DesktopOpenInPlace[] = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
+/**
+ * Every place this page has words and a glyph for, named once each by the type. A place an older desktop still offers that
+ * this page does not know (its Browser, opening a tab this release no longer draws) is left out of the menu.
+ */
+const knownPlaces: Readonly<Record<DesktopOpenInPlace, true>> = {
+    claude: true,
+    codex: true,
+    terminal: true,
+    vscode: true,
+    cursor: true,
+    antigravity: true,
+    windsurf: true,
+    zed: true,
+    files: true,
+    copy: true,
+};
+
+/** The answer with only the places this page knows. */
+const knownOnly = (answer: DesktopOpenInAnswer): DesktopOpenInAnswer => ({
+    ...answer,
+    places: answer.places.filter((place) => Object.hasOwn(knownPlaces, place.id)),
+});
+
 /** The places that are a command line: the main part draws a prompt's glyph before their name. */
 const terminalPlaces: readonly DesktopOpenInPlace[] = ['claude', 'codex', 'terminal'];
 
@@ -226,13 +249,14 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const read = useCallback(async (): Promise<DesktopOpenInAnswer | null> => {
         const asked = ++reads.current;
         try {
-            const kept = await desktop.openIn.targets(campaignId, chatId);
+            const answered = await desktop.openIn.targets(campaignId, chatId);
             if (asked !== reads.current) return null;
-            if (refused(kept)) {
+            if (refused(answered)) {
                 setAnswer(null);
-                setProblem(kept.refused);
+                setProblem(answered.refused);
                 return null;
             }
+            const kept = knownOnly(answered);
             setAnswer(kept);
             setAnswerChat(chatId);
             setProblem(null);

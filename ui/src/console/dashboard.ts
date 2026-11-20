@@ -113,7 +113,7 @@ async function reloadTrends(): Promise<void> {
     };
 }
 
-/** What the desktop kept of the switch: off only when it was told off; a desktop with no such member shows them, unremembered. */
+/** What the desktop kept of the switch: off only when it was told off; a desktop with no such member shows them, unkept. */
 async function keptTrendsChoice(): Promise<boolean> {
     try {
         return (await here().desktop.dailyTrends.get()) !== false;

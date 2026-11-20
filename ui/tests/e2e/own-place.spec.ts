@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 
 // A plain browser tab at the runtime's `/ui/`, over the release's build and with no web interface of the person's own
 // installed: one sentence and nothing else, no link, no Demo and no console, at a wide window and at a phone's width. It
-// asks the runtime nothing.
+// asks the runtime nothing, so even a pairing link pairs nothing there.
 for (const size of [
     { name: 'wide', width: 1280, height: 800 },
     { name: 'narrow', width: 390, height: 844 },
@@ -16,9 +16,12 @@ for (const size of [
             if (message.type() === 'error' || /Content Security Policy|Refused to/.test(message.text()))
                 problems.push(`${message.type()}: ${message.text()}`);
         });
-        page.on('request', (request) => asked.push(new URL(request.url()).pathname));
+        const sockets: string[] = [];
+        page.on('request', (request) => asked.push(`${request.method()} ${new URL(request.url()).pathname}`));
+        page.on('websocket', (socket) => sockets.push(socket.url()));
 
-        await page.goto(`${jason.origin}/ui/#/attention/approvals/apr_00000000000000000000000000`);
+        const { url } = await jason.uiOpen('--approval', 'apr_00000000000000000000000000');
+        await page.goto(url);
 
         const message = page.locator('#app > p.own-place');
         await expect(message).toHaveText(
@@ -28,7 +31,9 @@ for (const size of [
         for (const selector of ['a', 'button', 'input', 'iframe', 'nav', '.jc-console'])
             await expect(page.locator(selector), selector).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-        expect(asked.filter((path) => !path.startsWith('/ui/'))).toEqual([]);
+        expect(asked.filter((each) => !each.startsWith('GET /ui/'))).toEqual([]);
+        expect(sockets).toEqual([]);
         expect(problems).toEqual([]);
+        expect((await jason.uiTokens()).items).toEqual([]);
     });
 }

@@ -66,7 +66,7 @@ const markOf: Readonly<Record<DesktopChatMode, Mark>> = {
 };
 
 /** The mark of a chat's access mode, drawn where the mode is named: the plain shield for a mode this page does not know. */
-export function ModeMark({ mode }: { mode: DesktopChatMode }) {
+function ModeMark({ mode }: { mode: DesktopChatMode }) {
     return <Glyph name={(markOf as Partial<Record<string, Mark>>)[mode] ?? 'shield'} size={15} />;
 }
 

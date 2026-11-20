@@ -61,8 +61,8 @@ import { ScrollBox } from '../../layout/scroll-box';
 
 /**
  * The key of the desktop's update item as the desktop spells it, where the item can act; null where it cannot (a build
- * that is not installed, or one whose updates come through the package), in a tab, and from a desktop of an earlier
- * version, which has no such key.
+ * that is not installed, or one whose updates come through the package), and from a desktop of an earlier version,
+ * which has no such key.
  */
 function useUpdateKey(): string | null {
     const [key, setKey] = useState<string | null>(null);

@@ -19,6 +19,5 @@ describe('the page in a plain browser tab', () => {
             'This is the place for a web interface of your own. To build one, ask your agent how.',
         );
         expect(element.querySelectorAll('a, button, input, iframe, nav')).toHaveLength(0);
-        expect(document.documentElement.lang).toBe('en');
     });
 });

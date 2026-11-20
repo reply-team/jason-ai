@@ -268,7 +268,7 @@ export function processViolations(path: string, text: string): string[] {
         }
         const opener = openerAt(text, lock.start, match.index);
         if (opener === null || !(opener in navigationOpeners)) {
-            found.push(`${path} hands a URL to the system browser in the navigation lock outside its named openers, ${Object.keys(navigationOpeners).join(' and ')}`);
+            found.push(`${path} hands a URL to the system browser in the navigation lock outside the openers it names: ${Object.keys(navigationOpeners).join(', ')}`);
             continue;
         }
         opened.set(opener, (opened.get(opener) ?? 0) + 1);

@@ -96,7 +96,7 @@ export interface IpcRegistrar {
 }
 
 /** A member's handler, as it is registered: the arguments the page sent, and its answer. */
-export type Handler = (...args: unknown[]) => unknown;
+type Handler = (...args: unknown[]) => unknown;
 
 export class RefusedSender extends Error {
     constructor() {

@@ -1,8 +1,8 @@
 /**
  * The seam between the page and Jason Desktop: what the desktop's preload puts on `window.jasonDesktop`, and all of
  * it. In a browser it is absent, and the page draws one sentence (`src/own-place.ts`). The page is served from the
- * runtime's loopback origin in both; the desktop's main process checks every call's sender against that origin, so the page checks
- * nothing here. Every promise rejects with an Error whose message the page shows as text.
+ * runtime's loopback origin in both; the desktop's main process checks every call's sender against that origin, so the
+ * page checks nothing here. Every promise rejects with an Error whose message the page shows as text.
  */
 export {};
 

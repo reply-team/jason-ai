@@ -1,8 +1,8 @@
 import type { JasonDesktop } from './platform/desktop';
 
-// The console is drawn in Jason Desktop's own window alone, which puts its object on the page before the page runs, and
-// starts at once there, with nothing awaited before it. Any other place, a plain browser tab at the runtime's `/ui/`, gets
-// one short message and nothing else: it reads no pairing and asks the runtime nothing.
+// The console is drawn in Jason Desktop's own window alone, which puts its object on the page before the page runs,
+// and starts at once there, with nothing awaited before it. Any other place, a plain browser tab at the runtime's
+// `/ui/`, gets one short message and nothing else: it reads no pairing and asks the runtime nothing.
 
 export interface Starts {
     /** The window's object, undefined in a browser. */
