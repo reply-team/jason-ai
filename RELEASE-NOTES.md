@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.1-rc.2
+# Jason 0.49.1
 
 On Linux, Jason is now one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries, the command
 line your terminal and your agents use. The one line installs it as a deb where there is apt, updated with the system's
