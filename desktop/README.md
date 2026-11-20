@@ -360,8 +360,11 @@ applies to the turns a person starts by sending, from the next one on.
   them. It is refused where it cannot apply: on Codex, and on a Claude Code older than 2.1.322 or whose version cannot
   be read, the menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that
   is sent to Codex, runs on a Claude Code below that floor, or comes from a browser tab runs in Ask first; the chat says
-  why once a run for each of those reasons, and the record keeps its mode. The page draws a line under the composer from
-  the mode the desktop holds, never from what it asked for.
+  why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
+  mode a turn on it does not run as itself, from the window and from a tab, the mode it runs in and the sentence why,
+  decided by the rule the turn itself runs by (`turnMode`), with Claude Code's version read at that listing. The page
+  draws that mode, the line under the composer and the menu's check, with the sentence under the composer, and never
+  draws from what it asked for; a host an earlier desktop listed hands no `runs`, and the page draws the chat's own mode.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
@@ -490,8 +493,8 @@ applies to the turns a person starts by sending, from the next one on.
   host that does not drive the chat; each host's listing carries `autoEdit`, the
   reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation and no switch;
   it is kept on the conversation's record (`mode`), so a restart keeps it and Start fresh leaves it; a turn sent to
-  Codex runs in Ask first, read-only as every Codex turn, the chat says so once a run, and the record keeps Auto-edit. The page draws its line under the composer from the mode the desktop holds, as it
-  does Full access's. **The limits:** the conversations an earlier desktop made share the chat folder, so such a chat in
+  Codex runs in Ask first, read-only as every Codex turn, the chat says so once a run, and the record keeps Auto-edit. The page draws the mode a turn on the host runs in, from its
+  `runs`, as it does for Full access. **The limits:** the conversations an earlier desktop made share the chat folder, so such a chat in
   Auto-edit can remove a file another of them left there; a hard link already in the folder is not told by its path, so a
   command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
   link put into the folder by something else between the two is the same limit Ask first's Write has.

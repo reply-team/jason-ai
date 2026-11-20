@@ -69,6 +69,40 @@ export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot a
 /** Why a message a browser tab sent to a chat in Full access runs in Ask first: the default is for the desktop's window. */
 export const tabFullAccess = "Full access is for Jason Desktop's own window, and this message came from a browser tab.";
 
+/** Why a turn runs in Ask first while its conversation keeps another mode, by its cause. */
+export type AskFirstWhy = 'codex' | 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit';
+
+/** Where a turn is sent from and what is known of the host, which `turnMode` reads beside the mode and the program. */
+export interface TurnPlace {
+    /** Whether it is sent from a browser tab, which the bridge marks, rather than from the desktop's own window. */
+    fromTab: boolean;
+    /** Whether this version offers Full access (`fullAccessOffered`). */
+    offered: boolean;
+    /** Claude Code's version as read, null when it could not be read; undefined when it was not read. */
+    claudeVersion: string | null | undefined;
+}
+
+/**
+ * The mode a turn of a conversation in `recorded` runs in on a host of `program`, sent from `place`, and why when that is
+ * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
+ * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
+ * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab, on
+ * Codex, while this version does not offer it, and on a Claude Code below its floor of Full access or whose version
+ * could not be read, the first of these that holds being the one said; Auto-edit runs in Ask first on Codex. Every other
+ * mode runs as itself.
+ */
+export function turnMode(recorded: ChatMode, program: string, place: TurnPlace): { mode: ChatMode; why: { kind: AskFirstWhy; text: string } | null } {
+    const askFirst = (kind: AskFirstWhy, text: string) => ({ mode: 'ask_first' as const, why: { kind, text } });
+    if (recorded === 'full_access') {
+        if (place.fromTab) return askFirst('tab', tabFullAccess);
+        if (program === 'codex') return askFirst('codex', codexFullAccess);
+        if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
+        const below = place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
+        if (below !== null) return askFirst('floor', below);
+    } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
+    return { mode: recorded, why: null };
+}
+
 /**
  * What a conversation is told, once, when a turn cannot run in its mode: why, and that the turn runs in Ask first while
  * the conversation keeps its mode for the turns that can.

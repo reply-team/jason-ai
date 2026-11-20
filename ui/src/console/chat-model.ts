@@ -386,19 +386,36 @@ export function modeChoices(
 }
 
 /**
+ * The mode the next turn runs in, which the line under the composer, the menu's check and a tab's label draw, and the
+ * desktop's sentence why when that is not the mode the chat keeps: as the desktop hands it for the host and for the place
+ * the turn is sent from (`DesktopHost.runs`), deciding it as it decides the turn. Where it hands nothing, the chat's own
+ * mode and no sentence: with no host, on a host that runs the mode as itself, and on a desktop of an earlier version.
+ */
+export function drawnMode(
+    chat: Pick<Chat, 'mode'>,
+    host: DesktopHost | null,
+    place: 'window' | 'tab',
+): { mode: DesktopChatMode; why: string | null } {
+    const step = host?.runs[place][chat.mode];
+    return step === undefined ? { mode: chat.mode, why: null } : { mode: step.mode, why: step.why };
+}
+
+/**
  * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
- * models a host offers, and such a host offers none here and takes no typed name.
+ * models a host offers, and such a host offers none here and takes no typed name; nor does it hand what a turn on a host
+ * runs in, and such a host is read as handing nothing, so the chat's own mode is drawn.
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
         const given = host as Partial<
-            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit'>
+            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit' | 'runs'>
         >;
         return Array.isArray(given.models) &&
             typeof given.typedModel === 'boolean' &&
             given.modelsUnread !== undefined &&
             given.fullAccess !== undefined &&
-            given.autoEdit !== undefined
+            given.autoEdit !== undefined &&
+            given.runs !== undefined
             ? host
             : {
                   ...host,
@@ -413,6 +430,7 @@ export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
                       typeof given.autoEdit === 'string' || given.autoEdit === null
                           ? given.autoEdit
                           : olderDesktopAutoEdit,
+                  runs: given.runs ?? { window: {}, tab: {} },
               };
     });
 }

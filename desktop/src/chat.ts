@@ -89,8 +89,9 @@ import {
     fullAccessSentence,
     isChatMode,
     planModeMoved,
-    tabFullAccess,
+    turnMode,
     unguardedSentence,
+    type AskFirstWhy,
     type ChatMode,
 } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
@@ -446,9 +447,6 @@ const busy = 'This chat is still answering. Wait for it to finish, or stop it, t
 export const sweepEveryMs = 24 * 60 * 60 * 1000;
 
 const notAHost = 'That is not an AI host this desktop knows. Choose Claude Code or Codex for the chat.';
-
-/** Why a turn runs in Ask first although its conversation is in another mode, said once per conversation by its kind. */
-type AskFirstWhy = 'codex' | 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit';
 
 /** The program a host the page names runs: a key provider's, or a host that drives the chat; undefined for any other. */
 function programOf(host: unknown): string | undefined {
@@ -1278,17 +1276,15 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
         // A turn its conversation's mode cannot apply to runs in Ask first, and the record keeps the mode for the turns that
-        // can: Full access sent from a browser tab, on Codex or while this version does not offer it, and Auto-edit on
-        // Codex. Full access on a Claude Code below its floor is found once the version is read, below.
+        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab, on Codex or while this
+        // version does not offer it, and Auto-edit on Codex. Full access on a Claude Code below its floor is found once the
+        // version is read, below.
         const recorded = this.#modeOf(conversation);
-        let why: { kind: AskFirstWhy; text: string } | null = null;
-        if (recorded === 'full_access') {
-            if (given.fromTab === true) why = { kind: 'tab', text: tabFullAccess };
-            else if (resolved.program === 'codex') why = { kind: 'codex', text: codexFullAccess };
-            else if (!this.#fullAccessOffered()) why = { kind: 'not_offered', text: fullAccessNotYet };
-        } else if (recorded === 'auto_edit' && resolved.program === 'codex') why = { kind: 'codex_auto_edit', text: codexAutoEdit };
+        const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered() };
+        const first = turnMode(recorded, resolved.program, { ...place, claudeVersion: undefined });
+        let why: { kind: AskFirstWhy; text: string } | null = first.why;
 
-        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode: why === null ? recorded : 'ask_first' };
+        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode: first.mode };
         this.#running.set(conversation.id, running);
         this.#kept.add(conversation.id);
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
@@ -1305,10 +1301,12 @@ export class Chat {
             const below = resolved.program === 'claude' ? floorSentence(hostVersion) : codexFloorSentence(hostVersion);
             // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the turn runs in
             // Ask first.
-            const unhooked = below === null && running.mode === 'full_access' ? fullAccessSentence(version) : null;
-            if (unhooked !== null) {
-                running.mode = 'ask_first';
-                why = { kind: 'floor', text: unhooked };
+            if (below === null && running.mode === 'full_access') {
+                const read = turnMode(recorded, resolved.program, { ...place, claudeVersion: version });
+                if (read.why !== null) {
+                    running.mode = read.mode;
+                    why = read.why;
+                }
             }
             const held = below ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
             // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.

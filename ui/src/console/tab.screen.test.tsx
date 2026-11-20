@@ -320,6 +320,15 @@ describe('A chat in a tab', () => {
         );
     });
 
+    it('shows a chat in Full access as Ask first, the mode a turn sent from a tab runs in, and says why in the desktop’s words', async () => {
+        await shown({ mode: 'full_access' });
+        expect(screen.getByLabelText('Access mode').textContent).toBe('Ask first');
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(
+            "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+        );
+        expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
+    });
+
     it('shows the mode as a label, not a control', async () => {
         await shown();
         expect(screen.queryByRole('button', { name: /^Access mode/ })).toBeNull();
@@ -363,24 +372,28 @@ describe('A chat in a tab', () => {
 });
 
 describe('The start screen in a tab', () => {
-    it('offers only the mode the chat starts in: the other access modes are off, with the sentence', async () => {
+    it('checks the mode its first turn runs in, Ask first, as every turn of a Full access chat sent from a tab does: the other access modes are off, with the sentence', async () => {
         await renderTab({ panel: 'start' });
         const form = screen.getByRole('form', { name: 'Start' });
         fireEvent.click(within(form).getByRole('button', { name: /Access mode/ }));
         const menu = screen.getByRole('menu');
         const items = within(menu).getAllByRole('menuitemradio') as HTMLButtonElement[];
         const current = items.find((each) => each.getAttribute('aria-checked') === 'true')!;
-        expect(words(current)).toContain('Full access');
+        expect(words(current)).toContain('Ask first');
         for (const each of items.filter((one) => one !== current)) {
             expect(each.getAttribute('aria-disabled'), words(each)).toBe('true');
             expect(words(each)).toContain(elsewhere);
         }
     });
 
-    it('starts the chat in the mode the desktop makes it in, Full access, naming no host, and sends the first message', async () => {
+    it('starts the chat in the mode the desktop makes it in, naming no host, draws the mode its first turn runs in and why, and sends the first message', async () => {
         const { desktop, stand } = await renderTab({ panel: 'start' });
         const form = screen.getByRole('form', { name: 'Start' });
-        expect(within(form).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
+        // The desktop makes the chat in Full access, and a turn sent from a tab runs in Ask first, which is drawn.
+        expect(within(form).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(
+            "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+        );
         submitStart('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(stand, 'chat.send')).toHaveLength(1));
         // Nothing is named but the campaign, of which a set-up chat has none.

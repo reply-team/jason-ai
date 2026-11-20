@@ -14,6 +14,7 @@ import {
     sendHeld,
     turnOptions,
     withModels,
+    drawnMode,
     fullAccessLine,
     autoEditLine,
     olderDesktopAutoEdit,
@@ -445,6 +446,7 @@ describe('the model and the effort a chat is sent with', () => {
         belowFloor: null,
         fullAccess: null,
         autoEdit: null,
+        runs: { window: {}, tab: {} },
         models: [
             { id: 'opus', label: 'Opus', efforts: every },
             { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -461,6 +463,29 @@ describe('the model and the effort a chat is sent with', () => {
         models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
         typedModel: false,
     };
+
+    it("draws the mode the next turn runs in as the desktop hands it for the host and the place, and the record's mode where it hands nothing", () => {
+        const chat = { ...newChat('conv_1', 'codex'), mode: 'full_access' as const };
+        const handed: DesktopHost = {
+            ...codex,
+            runs: {
+                window: { full_access: { mode: 'ask_first', why: 'Full access runs on Claude Code only.' } },
+                tab: { full_access: { mode: 'ask_first', why: 'From a tab.' } },
+            },
+        };
+        expect(drawnMode(chat, handed, 'window')).toEqual({
+            mode: 'ask_first',
+            why: 'Full access runs on Claude Code only.',
+        });
+        expect(drawnMode(chat, handed, 'tab')).toEqual({ mode: 'ask_first', why: 'From a tab.' });
+        expect(drawnMode({ ...chat, mode: 'plan_only' }, handed, 'window')).toEqual({ mode: 'plan_only', why: null });
+        expect(drawnMode(chat, codex, 'window')).toEqual({ mode: 'full_access', why: null });
+        expect(drawnMode(chat, null, 'window')).toEqual({ mode: 'full_access', why: null });
+        // A host an earlier desktop listed hands nothing: the record's mode is drawn, as before.
+        const [older] = withModels([{ ...handed, runs: undefined } as unknown as DesktopHost]);
+        expect(older!.runs).toEqual({ window: {}, tab: {} });
+        expect(drawnMode(chat, older!, 'window')).toEqual({ mode: 'full_access', why: null });
+    });
     const fresh = newChat('conv_1', 'claude');
 
     it('names no model and no effort until one is chosen, so the host keeps its own', () => {
@@ -587,6 +612,7 @@ describe('the hosts as a desktop of another version answers them', () => {
             ...older,
             fullAccess: null,
             autoEdit: null,
+            runs: { window: {}, tab: {} },
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
             modelsUnread: null,

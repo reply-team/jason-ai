@@ -42,6 +42,7 @@ import {
     codexConfigLine,
     codexHosts,
     codexReachLine,
+    drawnMode,
     failed,
     fromRecord,
     fullAccessLine,
@@ -1092,11 +1093,13 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 stopped, a provider block holding work. Ask about any of it below.
             </p>
         </div>`;
+    // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
+    const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
-                ${chat.mode === 'ask_first' || chat.mode === 'auto_edit' || chat.mode === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
+                ${drawn === 'ask_first' || drawn === 'auto_edit' || drawn === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);
@@ -1389,7 +1392,7 @@ function Queued({ text, boxEmpty, takeBack }: { text: string; boxEmpty: boolean;
  * The controls in a composer's row: the access mode on the left, and on the right what the next turn runs on (host,
  * model, effort). The chat's own composer and the start screen's draw the same two menus (`start-menus.tsx`); `change`
  * and `choose` say where a choice goes. Nothing here decides what a mode offers: `modeChoices` does. A tab cannot change
- * a chat's mode, and names it instead.
+ * a chat's mode, and names instead the mode a turn sent from it runs in, as the desktop hands it (`drawnMode`).
  */
 export function ChatControls({
     chat,
@@ -1402,12 +1405,14 @@ export function ChatControls({
     choose: (mode: DesktopChatMode) => void;
     modeMenu: RefObject<HTMLButtonElement>;
 }) {
+    const host = hostOf(chat);
+    const drawn = drawnMode(chat, host, 'tab').mode;
     return (
         <>
             {inTab() ? (
                 <span className="cpick acc mode mode-label" aria-label="Access mode">
-                    <ModeMark mode={chat.mode} />
-                    {modeChoices(hostOf(chat)).find((each) => each.mode === chat.mode)?.label ?? chat.mode}
+                    <ModeMark mode={drawn} />
+                    {modeChoices(host).find((each) => each.mode === drawn)?.label ?? drawn}
                 </span>
             ) : (
                 <AccessButton chat={chat} choose={choose} buttonRef={modeMenu} header="Access for this chat" />
@@ -1428,25 +1433,32 @@ const lineOf = (mode: DesktopChatMode, label: string): string | null => {
 };
 
 /**
- * The line under a composer: what the chat's access mode lets the AI do, the mode's name, a dot and what it does (Full
- * access and Auto-edit in their own words, as the desktop holds them), with no link, since the menu beside it changes
- * the mode; and what Codex reads and reaches where Codex runs the chat.
+ * The line under a composer: what the access mode the next turn runs in lets the AI do, the mode's name, a dot and what
+ * it does (Full access and Auto-edit in their own words), with no link, since the menu beside it changes the mode; where
+ * the chat keeps a mode that turn does not run in, the desktop's sentence why (`drawnMode`); and what Codex reads and
+ * reaches where Codex runs the chat.
  */
 export function ChatNotes({ chat }: { chat: Chat }) {
     const host = hostOf(chat);
-    const label = modeChoices(host).find((each) => each.mode === chat.mode)?.label ?? chat.mode;
+    const { mode, why } = drawnMode(chat, host, inTab() ? 'tab' : 'window');
+    const label = modeChoices(host).find((each) => each.mode === mode)?.label ?? mode;
     return (
         <div className="under">
-            {chat.mode === 'full_access' ? (
+            {mode === 'full_access' ? (
                 <span className="accline full-access" role="status" aria-label="Full access is on">
                     {fullAccessLine}
                 </span>
-            ) : chat.mode === 'auto_edit' ? (
+            ) : mode === 'auto_edit' ? (
                 <span className="accline auto-edit" role="status" aria-label="Auto-edit is on">
                     {autoEditLine}
                 </span>
             ) : (
-                lineOf(chat.mode, label) !== null && <span className="accline">{lineOf(chat.mode, label)}</span>
+                lineOf(mode, label) !== null && <span className="accline">{lineOf(mode, label)}</span>
+            )}
+            {why !== null && (
+                <span className="accwhy" role="note" aria-label={`Why the next turn runs in ${label}`}>
+                    {why.replaceAll('`', '')}
+                </span>
             )}
             {host?.id === 'codex' && (
                 <span className="codex-config" role="note" aria-label="What Codex reads">

@@ -383,6 +383,9 @@ export type DesktopChatEvent =
      */
     | { kind: 'done'; error: string | null; plan?: true };
 
+/** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
+export type DesktopTurnSteps = Partial<Record<DesktopChatMode, { mode: DesktopChatMode; why: string }>>;
+
 /** An agent host or a key provider the chat's dropdown lists, found on this machine or not. */
 export interface DesktopHost {
     /**
@@ -417,6 +420,13 @@ export interface DesktopHost {
      * shows the item disabled with this.
      */
     autoEdit: string | null;
+    /**
+     * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`); a mode not named runs as
+     * itself. The desktop decides it as it decides the turn, so the page draws the mode the next turn runs in, and why,
+     * and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is read as handing nothing.
+     */
+    runs: { window: DesktopTurnSteps; tab: DesktopTurnSteps };
     /**
      * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
      * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.

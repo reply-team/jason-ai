@@ -45,6 +45,15 @@ export const setupFound: DesktopSetup = {
             belowFloor: null,
             fullAccess: null,
             autoEdit: null,
+            runs: {
+                window: {},
+                tab: {
+                    full_access: {
+                        mode: 'ask_first',
+                        why: "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+                    },
+                },
+            },
             models: [
                 { id: 'opus', label: 'Opus', efforts: [...every] },
                 { id: 'sonnet', label: 'Sonnet', efforts: [...every] },
@@ -67,6 +76,25 @@ export const setupFound: DesktopSetup = {
             fullAccess: 'Full access runs on Claude Code only.',
             autoEdit:
                 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
+            runs: {
+                window: {
+                    full_access: { mode: 'ask_first', why: 'Full access runs on Claude Code only.' },
+                    auto_edit: {
+                        mode: 'ask_first',
+                        why: 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
+                    },
+                },
+                tab: {
+                    full_access: {
+                        mode: 'ask_first',
+                        why: "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+                    },
+                    auto_edit: {
+                        mode: 'ask_first',
+                        why: 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
+                    },
+                },
+            },
             models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
             typedModel: false,
             modelsUnread: null,
@@ -84,6 +112,7 @@ export const setupFound: DesktopSetup = {
             belowFloor: null,
             fullAccess: null,
             autoEdit: null,
+            runs: { window: {}, tab: {} },
             models: [],
             typedModel: false,
             modelsUnread: null,
@@ -101,6 +130,15 @@ export const setupFound: DesktopSetup = {
             belowFloor: null,
             fullAccess: null,
             autoEdit: null,
+            runs: {
+                window: {},
+                tab: {
+                    full_access: {
+                        mode: 'ask_first',
+                        why: "Full access is for Jason Desktop's own window, and this message came from a browser tab.",
+                    },
+                },
+            },
             models: [
                 { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', efforts: ['low', 'high', 'max'] },
                 { id: 'deepseek-flash', label: 'deepseek-flash', efforts: ['low', 'high', 'max'] },

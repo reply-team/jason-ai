@@ -375,11 +375,11 @@ shows, for as long as the desktop runs. Everything that reads the runtime works 
 Dashboard, Needs you, People, Agents, Accounts as far as the runtime knows them, Performance, Activity, Work items,
 System, Settings and the search, and the chat's list of conversations, a conversation and the box. A tab sends only to a
 chat in Ask first, Plan only or Full access, and a turn it sends to a chat in Full access runs in Ask first, which the
-chat says once; for a chat in any other mode its box is locked, with a sentence naming the mode. A tab never answers a
+tab draws as the mode, with the reason under the box, and the chat says once; for a chat in any other mode its box is locked, with a sentence naming the mode. A tab never answers a
 permission card or a plan card, which say they are answered in Jason Desktop, and never changes a chat's mode; a chat
 started from a tab starts in Full access, as every new chat does. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
 with one sentence, "Done in Jason Desktop's own window.": the account acts of Connect and of the Accounts page, and the
-access modes other than the chat's own. The tab's Demo | Live switch
+access modes other than the one a turn sent from the tab runs in. The tab's Demo | Live switch
 shows the demo page in that tab alone and leaves the desktop's mode as it is
 ([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
 draws no Start fresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
@@ -819,8 +819,10 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 
 ### Access modes
 
-Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
-chat is in. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
+Each chat has an access mode, chosen from a menu beside the composer. The line under the composer and the menu's check
+say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
+Codex, on a Claude Code too old for it or in a browser tab, an Auto-edit chat on Codex), when they say Ask first, with
+the reason under the composer, and the chat keeps its mode. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
 removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
@@ -867,9 +869,9 @@ than the desktop draws the card without a line it has no words for. A held card 
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
 not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
-configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat in Full
-access does not carry the line "Nothing written here reaches a person without your approval." that the empty chat draws
-in the other modes. None of your own MCP servers or connectors reaches a turn. A folder an earlier version gave a chat in Full access is
+configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat whose next
+turn runs in Full access does not carry the line "Nothing written here reaches a person without your approval." that
+the empty chat draws in the other modes. None of your own MCP servers or connectors reaches a turn. A folder an earlier version gave a chat in Full access is
 moved aside when Jason starts; the chat says where it is, with an Open folder button, and Jason removes it after seven
 days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.

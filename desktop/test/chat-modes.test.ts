@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, readFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -34,6 +34,27 @@ test('the four modes, Ask first first, then narrow to wide with Full access last
     assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'auto_edit', 'full_access']);
     assert.ok(isChatMode('plan_only') && isChatMode('auto_edit'));
     assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
+});
+
+test('a turn runs in the mode its chat keeps, but Full access in Ask first from a tab, on Codex, while not offered or below its floor, and Auto-edit in Ask first on Codex, each with its sentence', () => {
+    const at = { fromTab: false, offered: true, claudeVersion: fullAccessFloor };
+    for (const mode of chatModes) assert.deepEqual(turnMode(mode, 'claude', at), { mode, why: null }, mode);
+    const askFirst = (kind: string, text: string | null) => ({ mode: 'ask_first', why: { kind, text } });
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, fromTab: true }), askFirst('tab', tabFullAccess));
+    assert.deepEqual(turnMode('full_access', 'codex', at), askFirst('codex', codexFullAccess));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, offered: false }), askFirst('not_offered', fullAccessNotYet));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: null }), askFirst('floor', fullAccessSentence(null)), 'a version that could not be read');
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: undefined }), { mode: 'full_access', why: null }, 'a version not read is no floor yet');
+    assert.deepEqual(turnMode('auto_edit', 'codex', at), askFirst('codex_auto_edit', codexAutoEdit));
+    assert.deepEqual(turnMode('auto_edit', 'codex', { ...at, fromTab: true }), askFirst('codex_auto_edit', codexAutoEdit));
+    // The first cause that holds is the one said: a tab before Codex, Codex before the switch, the switch before the floor.
+    assert.equal(turnMode('full_access', 'codex', { ...at, fromTab: true, offered: false }).why?.kind, 'tab');
+    assert.equal(turnMode('full_access', 'codex', { ...at, offered: false }).why?.kind, 'codex');
+    assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, claudeVersion: '2.1.200' }).why?.kind, 'not_offered');
+    for (const mode of ['ask_first', 'plan_only'] as const) {
+        for (const program of ['claude', 'codex']) assert.deepEqual(turnMode(mode, program, { fromTab: true, offered: false, claudeVersion: null }), { mode, why: null }, `${mode} on ${program}`);
+    }
 });
 
 test('Auto-edit says in one sentence why Codex has none; the Feed is refused no mode, so it has no sentence of refusal', () => {
