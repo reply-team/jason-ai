@@ -111,8 +111,8 @@ export function turnMode(recorded: ChatMode, program: string, place: TurnPlace):
     if (recorded === 'full_access') {
         if (place.fromTab) return askFirst('tab', tabFullAccess);
         if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
-        // Codex runs Full access with no sandbox and holds no floor of it: Claude Code's floor is its own.
-        const below = program !== 'claude' || place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
+        // Codex runs Full access with no sandbox and holds no floor of it; every other program is held to Claude Code's.
+        const below = program === 'codex' || place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
         if (below !== null) return askFirst('floor', below);
     } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
     return { mode: recorded, why: null };

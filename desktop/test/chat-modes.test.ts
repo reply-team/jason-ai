@@ -43,6 +43,10 @@ test('a turn runs in the mode its chat keeps, on Codex Full access included, but
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, fromTab: true }), askFirst('tab', tabFullAccess));
     assert.deepEqual(turnMode('full_access', 'codex', at), { mode: 'full_access', why: null }, 'Codex acts in Full access, with no sandbox');
     assert.deepEqual(turnMode('full_access', 'codex', { ...at, claudeVersion: '2.1.200' }), { mode: 'full_access', why: null }, 'Claude Code\'s floor is no floor of Codex');
+    // Only Codex is spared Claude Code's floor: a program of any other name is held to it, never given Full access free.
+    for (const program of ['gemini', 'cursor', 'codex-api-key', '']) {
+        assert.deepEqual(turnMode('full_access', program, { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')), program);
+    }
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, offered: false }), askFirst('not_offered', fullAccessNotYet));
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')));
     assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: null }), askFirst('floor', fullAccessSentence(null)), 'a version that could not be read');

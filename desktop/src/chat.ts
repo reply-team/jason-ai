@@ -1319,9 +1319,9 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
         // A turn its conversation's mode cannot apply to runs in Ask first, and the record keeps the mode for the turns that
-        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab, on Codex or while this
-        // version does not offer it, and Auto-edit on Codex. Full access on a Claude Code below its floor is found once the
-        // version is read, below.
+        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab or while this version
+        // does not offer it, and Auto-edit on Codex. Full access on a Claude Code below its floor is found once the version
+        // is read, below; on Codex Full access runs as itself.
         const recorded = this.#modeOf(conversation);
         const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered() };
         const first = turnMode(recorded, resolved.program, { ...place, claudeVersion: undefined });
