@@ -84,7 +84,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("await _run.Cli(\"session\", \"open\", \"--approval\", \"apr_1\");")]
     [InlineData("var session = Read(body); var env = CliEnvironment.Default();")]
     [InlineData("await GoldenPath.JasonAsync(it, \"--version\");")]
-    [InlineData("var self = new ProcessPathLocator().Command; Assert.Equal([.. self, \"jason://attention\"], ToastCommands.LinuxClick(self, link, null));")]
+    [InlineData("var self = new ProcessPathLocator().Command; Assert.Equal([.. self, \"jason://attention\"], Click(self, link));")]
     public void What_acts_on_nothing_is_no_offence(string text) => Assert.Null(Offence("Fine.cs", text));
 
     private static string? Offence(string file, string source)
@@ -165,7 +165,7 @@ public sealed partial class NoTestClicksALinkTests
 
     /// <summary>
     /// The one type whose name <c>new Process</c> would take that starts nothing: it reads this executable's own path. Every
-    /// other type of that name, <c>ProcessToastLauncher</c> among them, still counts as a start.
+    /// other type whose name begins so, the toast's own launcher among them, still counts as a start.
     /// </summary>
     private const string PathLocator = "new ProcessPathLocator(";
 
