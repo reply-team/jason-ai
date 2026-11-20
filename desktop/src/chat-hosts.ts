@@ -266,20 +266,34 @@ export function codexTurnSettings(platform: Platform): string[] {
 export const codexConnectorsOff = 'features.apps=false';
 
 /**
- * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
- * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
+ * The settings a Full access Codex turn sets for the run by `-c`: the search and the connectors as every turn has them
+ * (`codexTurnSettings`), and no sandbox's kind: with `danger-full-access` no sandbox runs, so there is none to choose.
+ */
+export const codexFullAccessSettings: readonly string[] = [...codexSearchSettings, codexConnectorsOff];
+
+/**
+ * The command line of one Codex turn: `codex exec` emitting JSON events, the prompt read from standard input (`-`),
+ * resumed as `codex exec resume <thread>` from the chat's second turn on. In Full access it runs with no sandbox
+ * (`--sandbox danger-full-access`) and reads the person's own `config.toml`, as a terminal's Codex does; in every other
+ * mode it runs in its read-only sandbox, as below. Codex in `exec` never asks a person, so it has no Ask first: a turn
+ * either only reads or acts unasked, and nothing of the desktop's fence or refusals holds on it.
  *
- * Codex is this release's reading host. A Codex turn runs `exec --json --sandbox read-only` and asks no permission, so no
- * card and no fence of the desktop's applies to it: it reads the chat folder, the folders added to it and its skills in
- * `.agents/skills`, and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback
- * address, so a Codex turn reads and advises and acts through nothing.
+ * A Full access turn runs `exec --json --sandbox danger-full-access` and asks no permission: no card, no fence and no
+ * refusal of the desktop's applies to it, the runtime's run file and the turn settings included, and it acts with the
+ * person's own rights and network. It reads the person's `config.toml`, its MCP servers, providers and profiles with
+ * it, as Codex in a terminal does; the search and the connectors are still set for the run (`codexFullAccessSettings`).
  *
- * Every turn, in every mode, leaves the person's `config.toml` unread (`--ignore-user-config`), so none of the MCP
- * servers it names, and none of its providers or profiles, reach the chat: Codex asks no one before a tool of a server
- * runs. Its sign-in is still read from `CODEX_HOME`. The flag is Codex's from `codexFloor` on, and the chat runs no turn
- * on an older one (`codexFloorSentence`).
+ * A turn in any other mode runs `exec --json --sandbox read-only` and asks no permission, so no card and no fence of the
+ * desktop's applies to it either: it reads the chat folder, the folders added to it and its skills in `.agents/skills`,
+ * and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback address, so such a
+ * turn reads and proposes and acts through nothing.
  *
- * On Windows every turn names its sandbox's kind for the run, `elevated` (`codexWindowsSandbox`), never the default and
+ * Such a turn leaves the person's `config.toml` unread (`--ignore-user-config`), so none of the MCP servers it names,
+ * and none of its providers or profiles, reach the chat: Codex asks no one before a tool of a server runs. Its sign-in
+ * is still read from `CODEX_HOME`. The flag is Codex's from `codexFloor` on, and the chat runs no turn on an older one
+ * (`codexFloorSentence`).
+ *
+ * On Windows such a turn names its sandbox's kind for the run, `elevated` (`codexWindowsSandbox`), never the default and
  * never `unelevated`: the person's own choice is in the file the turn leaves unread, and a command in the unelevated
  * sandbox can read the installation's data directory. OpenAI, https://learn.chatgpt.com/docs/windows/windows-sandbox:
  * "`elevated`: ... Requires administrator-approved setup." and "`unelevated`: ... doesn't support denied read paths."
@@ -305,8 +319,11 @@ export const codexConnectorsOff = 'features.apps=false';
  * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
  * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
-export function codexArguments(turn: { platform: Platform; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
+export function codexArguments(turn: { platform: Platform; mode?: ChatMode | undefined; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
+    const args =
+        turn.mode === 'full_access'
+            ? ['exec', '--json', '--sandbox', 'danger-full-access', '--skip-git-repo-check', ...codexFullAccessSettings.flatMap((setting) => ['-c', setting])]
+            : ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));
@@ -347,8 +364,9 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, `chats` every
  * conversation's own folder, `full-access.json` and `full-access-taken-back` what an earlier desktop kept of a standing
  * choice of Full access, removed at each start, and `mode` the record of which installation the desktop runs on, which
- * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own
- * read-only sandbox, which the desktop does not narrow, holds it (`codexArguments`).
+ * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: outside Full
+ * access only its own read-only sandbox, which the desktop does not narrow, holds it, and in Full access nothing does
+ * (`codexArguments`).
  */
 export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
 

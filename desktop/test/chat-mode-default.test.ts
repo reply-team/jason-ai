@@ -339,15 +339,39 @@ test('the records a desktop finds at its first start are taken as they are and s
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.deepEqual(notices(r.events.get(plain)), [], 'nothing is said of either');
     assert.deepEqual(notices(r.events.get(planned)), []);
-    // The file lost: a start stamps again, as a first start does, and a record with no stamp is taken as it is.
+    // The file lost while a record carries its shape: the records say they were stamped, so a record an earlier desktop
+    // wrote again since opens in Ask first, as it does with the file there, and the file is written again.
     keptByEarlier(r, plain);
     rmSync(r.b.paths.conversationsStamped);
-    assert.equal(r.restart().open(plain).mode, 'full_access');
+    assert.equal(r.restart().open(plain).mode, 'ask_first');
     assert.equal(recordOf(r, plain).shape, recordShape);
     assert.ok(existsSync(r.b.paths.conversationsStamped));
 });
 
-test('a first start whose rewrite of a record fails writes no stamp, at no later write either, so the next start is a first start again and takes that record as it is', async (t) => {
+test('the stamp deleted between two starts, as a Full access turn on Codex can, widens nothing a downgrade rewrote: such a record opens in Ask first and says why, one that kept its shape keeps its mode, and the stamp is written again', async (t) => {
+    const r = rig(t);
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    await r.turn(asked.id, 'hello', claude);
+    const full = await r.chat.create();
+    await r.turn(full.id, 'hello', claude);
+    const planned = await r.chat.create();
+    await r.chat.setMode(planned.id, 'plan_only');
+    await r.turn(planned.id, 'hello', claude);
+    assert.ok(existsSync(r.b.paths.conversationsStamped));
+    // A downgrade wrote the first again, dropping its shape and its mode; then the stamp is gone.
+    keptByEarlier(r, asked.id);
+    rmSync(r.b.paths.conversationsStamped);
+    const chat = r.restart();
+    assert.equal(chat.open(asked.id).mode, 'ask_first', 'never Full access, which its record no longer says it is not');
+    await settled(() => notices(r.events.get(asked.id)).length > 0, 'the chat says why');
+    assert.deepEqual(notices(r.events.get(asked.id)), [earlierAskFirst]);
+    assert.equal(chat.open(full.id).mode, 'full_access', 'a record that kept its shape keeps its mode');
+    assert.equal(chat.open(planned.id).mode, 'plan_only');
+    assert.ok(existsSync(r.b.paths.conversationsStamped), 'the stamp is written again');
+});
+
+test('a first start whose rewrite of a record fails writes no stamp, at no later write either; the next start, finding a record with its shape, opens that record in Ask first', async (t) => {
     let failing: string | null = null;
     const r = rig(t, {
         writeRecord: (folder, conversation) => {
@@ -366,11 +390,13 @@ test('a first start whose rewrite of a record fails writes no stamp, at no later
     assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'and writes no stamp: the record found at the start still has none');
     failing = null;
     const again = r.restart();
-    assert.equal(again.open(plain).mode, 'full_access', 'the next start is a first start: the record is taken as it is');
+    // A record carries its shape, so the next start is no first start: the record with none opens in Ask first, as one
+    // an earlier desktop wrote last does, and says why. The records narrow it; they never widen it.
+    assert.equal(again.open(plain).mode, 'ask_first', 'a record with no shape beside one that has it is taken as an earlier desktop\'s');
     assert.equal(recordOf(r, plain).shape, recordShape);
     assert.ok(existsSync(r.b.paths.conversationsStamped));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.deepEqual(notices(r.events.get(plain)), [], 'and nothing is said of it');
+    await settled(() => notices(r.events.get(plain)).length > 0, 'the chat says why');
+    assert.deepEqual(notices(r.events.get(plain)), [earlierAskFirst]);
 });
 
 test('a conversation an earlier desktop kept after the stamp, its record as that desktop\'s own serialize leaves it, opens in Ask first, says why once, and is written with Ask first and the stamp', async (t) => {

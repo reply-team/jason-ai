@@ -82,7 +82,6 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import {
     askFirstThisTurn,
     codexAutoEdit,
-    codexFullAccess,
     earlierDesktopAskFirst,
     feedDefaultMode,
     fullAccessCurrent,
@@ -693,8 +692,13 @@ export class Chat {
             if (conversation.folder === undefined && ownFolderStands(join(paths.chats, conversation.id))) conversation.folder = 'own';
         }
         const unshaped = new Set(unstamped);
+        // The file says the records were stamped, and so does any record that carries its shape, which only a start of this
+        // desktop or a later one writes: a file lost while such a record stands makes no first start, so it never takes a
+        // record an earlier desktop wrote again for one found at the first start, and it is written again.
+        const shaped = kept.some((conversation) => !unshaped.has(conversation.id));
         this.#stamped = standing(paths.conversationsStamped);
-        if (this.#stamped) {
+        if (!this.#stamped && shaped) this.#stamp();
+        if (this.#stamped || shaped) {
             for (const conversation of kept) {
                 if (!unshaped.has(conversation.id)) continue;
                 this.#unshaped.add(conversation.id);
@@ -924,9 +928,9 @@ export class Chat {
         if (mode === 'full_access') {
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
-            if (program === 'codex') throw new ChatRefused(codexFullAccess);
-            if (program !== 'claude') throw new ChatRefused(notAHost);
-            const below = fullAccessSentence(await this.#claudeVersion());
+            if (program !== 'claude' && program !== 'codex') throw new ChatRefused(notAHost);
+            // Codex takes Full access with no floor of it; Claude Code from its floor.
+            const below = program === 'claude' ? fullAccessSentence(await this.#claudeVersion()) : null;
             if (below !== null) throw new ChatRefused(below);
             // A conversation removed or a window closed meanwhile is given nothing, and a choice made meanwhile stands, even
             // one that left the chat in the mode it was in, as does a step down the desktop took.
@@ -1472,9 +1476,10 @@ export class Chat {
      * Returns when Codex's sandbox on Windows has been seen to hold for this Codex, or the turn was stopped meanwhile;
      * throws `SandboxUnproven` with the sentence the person reads otherwise (`codex-sandbox.ts`). The check runs at the
      * first send to a Codex in this run of the desktop, never at the Connect card, since naming the elevated sandbox may
-     * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the chat folder.
+     * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the turn's own
+     * folder (`cwd`).
      */
-    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean): Promise<void> {
+    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean, cwd: string): Promise<void> {
         const named = (wanted: string) => Object.entries(env).find(([name]) => name.toUpperCase() === wanted)?.[1] ?? '';
         const key = sandboxKey(launch, version, named('CODEX_HOME'));
         // A keyed turn runs under a Codex home of the desktop's own, which the setup command may not reach.
@@ -1495,7 +1500,7 @@ export class Chat {
         let answer: 'holds' | 'reads' | 'unproven';
         let opened: readonly boolean[] | null;
         try {
-            const runs = checkRuns(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
+            const runs = checkRuns(launch, check, { env, cwd, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
             const outside = this.#options.sandboxOutside;
             ({ answer, opened } = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal));
         } finally {
@@ -1868,7 +1873,7 @@ export class Chat {
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
-                argsFor = (resumed) => codexArguments({ platform: this.#platform, model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) => codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -1896,9 +1901,10 @@ export class Chat {
             mode: running.mode,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
-        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.
-        if (resolved.program === 'codex' && this.#platform === 'win32') {
-            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
+        // On Windows a read-only Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run
+        // file; a Full access turn runs with no sandbox, so there is nothing to check.
+        if (resolved.program === 'codex' && this.#platform === 'win32' && running.mode !== 'full_access') {
+            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed, folder);
             if (running.stopped) {
                 this.#setupTurns.delete(conversation.id);
                 this.#running.delete(conversation.id);

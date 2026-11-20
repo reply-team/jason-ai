@@ -64,6 +64,17 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
+test('a Codex turn in Full access acts with no sandbox and reads the person\'s own configuration, on every platform; Ask first, Plan only and Auto-edit are the read-only turn', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+        assert.deepEqual(codexArguments({ platform, mode: 'full_access' }), [
+            'exec', '--json', '--sandbox', 'danger-full-access', '--skip-git-repo-check',
+            '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-',
+        ], `${platform}: no --ignore-user-config and no windows.sandbox setting`);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) assert.deepEqual(codexArguments({ platform, mode }), codexArguments({ platform }), `${platform} ${mode}`);
+    }
+    assert.deepEqual(codexArguments({ platform: 'linux', mode: 'full_access', model: 'gpt-5', resume: 'thr-1' }).slice(-5), ['--model', 'gpt-5', 'resume', 'thr-1', '-']);
+});
+
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
     assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
         ...claudeAllowedTools,

@@ -8,7 +8,7 @@ import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessSentence, tabFullAccess } from '../src/chat-modes.ts';
+import { codexAutoEdit, fullAccessNotYet, fullAccessSentence, tabFullAccess } from '../src/chat-modes.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -974,12 +974,12 @@ test('on Linux a key is neither kept nor read where the store is basic_text or n
     assert.equal(elsewhere.keyFor('moonshot'), 'sk-planted-before', 'the backend is Linux’s question only');
 });
 
-test('every host that drives the chat says why Full access cannot be chosen on it, and with the switch off each says it is not offered', async (t) => {
+test('every host that drives the chat says why Full access cannot be chosen on it, Codex none, and with the switch off each says it is not offered', async (t) => {
     const { b, say } = claudeSaying(t);
     say({ stdout: '2.1.290 (Claude Code)\n' });
     const on = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.fullAccess]));
     assert.equal(on.get('claude'), fullAccessSentence('2.1.290'));
-    assert.equal(on.get('codex'), codexFullAccess);
+    assert.equal(on.get('codex'), null, 'Codex takes Full access');
     assert.equal(on.get('gemini'), null, 'a host that does not drive the chat offers no mode');
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.fullAccess]));
     assert.equal(off.get('claude'), fullAccessNotYet);
@@ -1011,7 +1011,7 @@ test('every host hands what a turn on it runs in, by the mode a chat keeps, from
     assert.equal(listing.handedClaudeVersion(), '2.1.290', 'the version the listing read, which a turn holds its own read to');
     assert.deepEqual(below.get('claude'), { window: { full_access: ask(fullAccessSentence('2.1.290')) }, tab: { full_access: ask(tabFullAccess) } });
     assert.deepEqual(below.get('deepseek'), below.get('claude'), 'a key provider on Claude Code runs as Claude Code does');
-    assert.deepEqual(below.get('codex'), { window: { full_access: ask(codexFullAccess), auto_edit: ask(codexAutoEdit) }, tab: { full_access: ask(tabFullAccess), auto_edit: ask(codexAutoEdit) } });
+    assert.deepEqual(below.get('codex'), { window: { auto_edit: ask(codexAutoEdit) }, tab: { full_access: ask(tabFullAccess), auto_edit: ask(codexAutoEdit) } }, 'a Full access Codex turn from the window runs in it');
     assert.deepEqual(below.get('codex-api-key'), below.get('codex'));
     assert.deepEqual(below.get('gemini'), { window: {}, tab: {} }, 'a host that does not drive the chat runs no turn of it');
     say({ stdout: '2.1.322 (Claude Code)\n' });
@@ -1024,7 +1024,7 @@ test('every host hands what a turn on it runs in, by the mode a chat keeps, from
     say({ stdout: '2.1.322 (Claude Code)\n' });
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.runs]));
     assert.deepEqual(off.get('claude'), { window: { full_access: ask(fullAccessNotYet) }, tab: { full_access: ask(tabFullAccess) } });
-    assert.deepEqual(off.get('codex')?.window.full_access, ask(codexFullAccess), 'Codex before the switch, as a turn says it');
+    assert.deepEqual(off.get('codex')?.window.full_access, ask(fullAccessNotYet), 'Codex, with the switch off, as a turn says it');
 });
 
 test('a sign-in whose chat folder cannot be put right keeps its own result: the folder\'s code is logged, never its sentence said', async (t) => {
