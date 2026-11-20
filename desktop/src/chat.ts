@@ -82,7 +82,7 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import {
     askFirstThisTurn,
     codexAutoEdit,
-    codexFullAccessNarrowed,
+    codexFullAccessUnsure,
     earlierDesktopAskFirst,
     feedDefaultMode,
     fullAccessCurrent,
@@ -590,8 +590,8 @@ export class Chat {
     #choices = new Map<string, number>();
     /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
-    /** The conversations already told that Codex ran a Full access turn in a narrower sandbox (`codexFullAccessNarrowed`). */
-    #toldNarrowed = new Set<string>();
+    /** The conversations already told that Codex may not be in Full access here (`codexFullAccessUnsure`). */
+    #toldUnsure = new Set<string>();
     /** The conversations told that a turn runs in Full access since Claude Code is current, where a listing drew Ask first. */
     #toldCurrent = new Set<string>();
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
@@ -985,6 +985,13 @@ export class Chat {
         this.#changeMode(conversation, to, false);
     }
 
+    /** Says once in a conversation that Codex may not be in Full access here (`codexFullAccessUnsure`). */
+    #tellUnsure(conversation: Conversation, replyTo: string): void {
+        if (this.#toldUnsure.has(conversation.id)) return;
+        this.#toldUnsure.add(conversation.id);
+        this.#options.emit(replyTo, { kind: 'notice', text: codexFullAccessUnsure });
+    }
+
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
@@ -1043,7 +1050,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
-        this.#toldNarrowed.delete(conversation.id);
+        this.#toldUnsure.delete(conversation.id);
         this.#toldCurrent.delete(conversation.id);
         this.#choices.delete(conversation.id);
         this.#unshaped.delete(conversation.id);
@@ -1994,12 +2001,10 @@ export class Chat {
                     uses.set(line.id, line.name);
                     return;
                 }
-                if (line.kind === 'sandbox_narrowed') {
-                    // An administrator's requirements kept a Full access turn in a sandbox: the turn goes on there, the chat
-                    // keeps its mode, and the conversation is told once.
-                    if (running.mode !== 'full_access' || this.#toldNarrowed.has(conversation.id)) return;
-                    this.#toldNarrowed.add(conversation.id);
-                    this.#options.emit(replyTo, { kind: 'notice', text: codexFullAccessNarrowed });
+                if (line.kind === 'warning') {
+                    // Codex warned during a Full access turn: it may run in a sandbox an administrator allows. The turn goes
+                    // on, the chat keeps its mode, and the conversation is told once.
+                    if (running.mode === 'full_access') this.#tellUnsure(conversation, replyTo);
                     return;
                 }
                 if (line.kind === 'tool_result') {
@@ -2106,6 +2111,9 @@ export class Chat {
                 const scrub = key === null || last.ours ? (text: string) => text : (text: string) => withoutKey(text, key);
                 const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
+                // A Full access turn on Codex that failed, Codex's refusal to start included, may be one an administrator's
+                // requirements refused: the conversation is told once, beside Codex's own words.
+                if (error !== null && resolved.program === 'codex' && running.mode === 'full_access') this.#tellUnsure(conversation, replyTo);
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
                 this.#markPlan(conversation, running, error === null && handed === null);
                 this.#keep(conversation);

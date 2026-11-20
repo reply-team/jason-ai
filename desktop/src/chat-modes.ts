@@ -61,14 +61,17 @@ export function fullAccessSentence(version: string | null): string | null {
     return `Full access needs Claude Code ${fullAccessFloor} or newer; this one is ${version}. Update Claude Code, for example by running \`claude update\` in a terminal.`;
 }
 
-/** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 /**
- * What the chat says, once in a conversation, when Codex ran a Full access turn in a narrower sandbox because an
- * administrator's requirements do not allow it to run with none (`codexLine`, `sandbox_narrowed`).
+ * What the chat says, once in a conversation, when Codex warns during a Full access turn or such a turn fails. An
+ * administrator's `requirements.toml` that does not allow Codex to run with no sandbox makes it fall back to a sandbox
+ * it allows and notify, which `codex exec --json` says as a warning; no event says which sandbox a turn ran in, and a
+ * warning's words are no contract, so the desktop cannot tell this warning from another, and a fallback Codex does not
+ * say goes unseen. The sentence says what may be so, never that it is.
  */
-export const codexFullAccessNarrowed =
-    'Codex could not act in Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the sandbox they allow.';
+export const codexFullAccessUnsure =
+    'Codex reported a warning or an error in Full access. Where an administrator does not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not be acting in Full access here.';
 
+/** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
 /**

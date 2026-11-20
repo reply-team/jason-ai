@@ -686,11 +686,13 @@ Claude Code.
   refusal to read the runtime's run file, the desktop's settings or the turn's own settings that a Claude Code turn
   keeps in every mode. The line under the composer says **Full access · Codex runs commands on this computer without
   asking, with no sandbox**. Choose Ask first or Plan only for a Codex chat that should only read. An administrator's
-  `requirements.toml` can forbid Codex to run with no sandbox. As Codex's source reads (not seen on a real machine),
-  Codex then refuses to start the turn, in its own words, which end it; where your configuration has Codex's automatic
-  reviewer answer its requests, Codex instead runs the sandbox the requirements allow and says so, and the chat says
-  once: **Codex could not act in Full access here: an administrator does not allow it to run with no sandbox on this
-  computer, so it ran in the sandbox they allow.** The chat keeps Full access.
+  `requirements.toml` can forbid Codex to run with no sandbox; Codex documents that it then falls back to a sandbox
+  the requirements allow and notifies. No event of Codex's says which sandbox a turn ran in, so the chat cannot tell
+  such a turn from one in Full access: where Codex warns during a Full access turn, or such a turn fails, the chat says
+  once, beside Codex's own words, **Codex reported a warning or an error in Full access. Where an administrator does
+  not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not
+  be acting in Full access here.** and keeps Full access. A fallback Codex does not report goes unseen. This is built
+  on Codex's documentation and not seen on a real machine.
 - **Outside Full access, Codex only reads and proposes.** Codex cannot ask before it acts, so Ask first on Codex reads
   and proposes only, and the menu says so: **Reads and proposes only: Codex cannot ask before it acts.** Auto-edit runs
   in Ask first on Codex. Such a turn runs `exec --json --sandbox read-only` and asks for nothing, so no card and no rule

@@ -740,15 +740,15 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     assert.equal(JSON.stringify(settings).includes('hooks'), false);
 });
 
-test('a Codex configuration warning that requirements put the sandbox below the one asked for is read as such, in the field this Codex names and the one an earlier one named; any other warning is not', () => {
-    // The shape at openai/codex 9f2b87495b (read 2026-11-20): core/src/config/mod.rs, `apply_requirement_constrained_value`,
-    // says "Configured value for `{field_name}` is disallowed by requirements; falling back to required value
-    // {fallback_value:?}. Details: {err}", and exec/src/event_processor_with_jsonl_output.rs says a configuration warning
-    // as an `item.completed` whose item is of type `error` with that `message`.
-    const warning = (message: string) => JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } });
-    for (const field of ['permission_profile', 'sandbox_mode']) {
-        assert.deepEqual(codexLine(warning(`Configured value for \`${field}\` is disallowed by requirements; falling back to required value ReadOnly. Details: not allowed`), new Set()), [{ kind: 'sandbox_narrowed' }], field);
+test('a Codex warning, a completed item of type error, is read as a warning whatever its words say, and never as the turn\'s end', () => {
+    // The documented shape of a non-fatal warning in `codex exec --json` (built on the documented shape, not seen from a
+    // real Codex here): {"type":"item.completed","item":{"id":"item_N","type":"error","message":"..."}}. Its words are
+    // never read: what Codex says there is not a contract.
+    const warning = (message: unknown) => JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } });
+    for (const message of ['Configured value for `permission_profile` is disallowed by requirements; falling back.', 'Under-development features enabled: x.', '', undefined]) {
+        assert.deepEqual(codexLine(warning(message), new Set()), [{ kind: 'warning' }], String(message));
     }
-    assert.deepEqual(codexLine(warning('Configured value for `web_search_mode` is disallowed by requirements; falling back to required value Cached.'), new Set()), []);
-    assert.deepEqual(codexLine(warning('Under-development features enabled: x.'), new Set()), []);
+    // An item that only started is not a warning yet; a fatal error and a failed turn end the turn, as before.
+    assert.deepEqual(codexLine(JSON.stringify({ type: 'item.started', item: { id: 'item_0', type: 'error', message: 'x' } }), new Set()), []);
+    assert.deepEqual(codexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'no' } }), new Set()), [{ kind: 'result', error: 'no' }]);
 });
