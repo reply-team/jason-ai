@@ -44,7 +44,7 @@ public sealed class ToastChannel(
     /// <summary>How long a click's handler is given: its own hand-on to the system's opener is ten seconds.</summary>
     public static readonly TimeSpan ClickBound = TimeSpan.FromSeconds(30);
 
-    /// <summary>The most Linux toasts whose click this runtime still takes; another ends the oldest first.</summary>
+    /// <summary>The most Linux toasts whose click this runtime still takes; another that waits ends the oldest first.</summary>
     public const int MaxWaiting = 10;
 
     /// <summary>What a program that ran and said it could not show the toast is recorded as.</summary>
@@ -182,7 +182,6 @@ public sealed class ToastChannel(
         // The item a click opens stays here, made into the toast's link from the counted id; the notification never
         // carries it.
         var link = AttentionLinks.Item(message.Item) ?? AttentionLinks.List;
-        MakeRoom();
         var launch = ToastCommands.LinuxNotifySend(notifySend, message, form.Token);
         var waiting = await launcher.LaunchWaitingAsync(launch with { Environment = Environment(launch) }, Bound, line => ToastCommands.ShownId(line) is not null, cancellationToken).ConfigureAwait(false);
         if (waiting.End is not { } end)
@@ -197,13 +196,16 @@ public sealed class ToastChannel(
             return ToastCommands.ShownId(said.Stdout) == "0" ? NotShown(said) : Ended(said);
         }
 
-        if (ToastCommands.ShownId(waiting.Said.Stdout) == "0")
+        if (ToastCommands.ShownId(waiting.Said.Stdout) is var id && (id == "0" || (id is null && waiting.Said.LastStderrLine is not null)))
         {
-            // notify-send could not show it, and would wait on the bus for nothing.
+            // notify-send could not show it, and would wait on the bus for nothing: 0.8.9 says the id 0, and 0.8.3, which
+            // keeps even that until it ends, says why on stderr alone.
             waiting.Close();
-            return NotShown(await end.ConfigureAwait(false));
+            var ended = await end.ConfigureAwait(false);
+            return NotShown(ended.LastStderrLine is not null ? ended : waiting.Said);
         }
 
+        MakeRoom();
         Hold(waiting, link, notifySend);
         return ChannelOutcome.Delivered(Name, Kind);
     }
@@ -233,7 +235,7 @@ public sealed class ToastChannel(
     private ChannelOutcome NotShown(LaunchResult result) =>
         ChannelOutcome.Failed(Name, Kind, Failed, FailureClass.Permanent, result.LastStderrLine ?? "notify-send showed no notification");
 
-    /// <summary>Room for one more waiting toast: the oldest ended while there are <see cref="MaxWaiting"/>.</summary>
+    /// <summary>Room for one more waiting toast, once it waits: the oldest ended while there are <see cref="MaxWaiting"/>.</summary>
     private void MakeRoom()
     {
         List<WaitingLaunch> oldest;
@@ -253,9 +255,21 @@ public sealed class ToastChannel(
     /// <summary>A shown toast held until its program ends: a click then opens what <paramref name="link"/> names.</summary>
     private void Hold(WaitingLaunch waiting, string link, string notifySend)
     {
+        var held = false;
         lock (_waiting)
         {
-            _waiting.Add(waiting);
+            if (Volatile.Read(ref _stopped) == 0)
+            {
+                _waiting.Add(waiting);
+                held = true;
+            }
+        }
+
+        if (!held)
+        {
+            // Shown after the runtime began to stop: nobody is left to hand its click on.
+            waiting.Close();
+            return;
         }
 
         _ = WatchAsync(waiting, link, notifySend);
@@ -295,7 +309,8 @@ public sealed class ToastChannel(
             var environment = ToastCommands.ClickEnvironment(facts.Environment, session, ToastCommands.ActivationToken(clicked.Stdout));
 
             var scope = facts.Environment.ContainsKey("INVOCATION_ID") ? facts.Which("systemd-run") : null;
-            var result = await launcher.LaunchAsync(new ToastLaunch(ToastCommands.LinuxClick(self.Command, link, scope), null, environment), ClickBound, _stopping.Token).ConfigureAwait(false);
+            // Only the handler ends at the bound or the stop: outside GNOME and KDE xdg-open runs Jason Desktop under it.
+            var result = await launcher.LaunchAsync(new ToastLaunch(ToastCommands.LinuxClick(self.Command, link, scope), null, environment) { KillsTree = false }, ClickBound, _stopping.Token).ConfigureAwait(false);
             if (result is { Started: true, TimedOut: false, ExitCode: 0 })
             {
                 ClickHandedOn(logger, null);

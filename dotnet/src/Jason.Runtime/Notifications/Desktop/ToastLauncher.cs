@@ -110,7 +110,7 @@ public sealed class ProcessToastLauncher : IToastLauncher
             {
                 if (!process.HasExited)
                 {
-                    Kill(process);
+                    Kill(process, launch.KillsTree);
                     await Jason.Runtime.Plugins.Invocation.ChildProcess.EndedWithinAsync(process, KillGraceMs).ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
                     return new LaunchResult(true, true, null, await Settled(stdout).ConfigureAwait(false), await Settled(stderr).ConfigureAwait(false));
@@ -182,7 +182,35 @@ public sealed class ProcessToastLauncher : IToastLauncher
                 return string.Empty;
             },
             CancellationToken.None);
-        var stderr = ReadAsync(process.StandardError, StderrTail, keepEnd: true);
+        // Read line by line too, so what it said by the bound is there to hand back: libnotify 0.8.3 says only there that it
+        // showed nothing.
+        var complained = new StringBuilder();
+        string Complained()
+        {
+            lock (complained)
+            {
+                return complained.ToString();
+            }
+        }
+
+        var stderr = Task.Run(
+            async () =>
+            {
+                while (await process.StandardError.ReadLineAsync(CancellationToken.None).ConfigureAwait(false) is { } line)
+                {
+                    lock (complained)
+                    {
+                        complained.Append(line).Append('\n');
+                        if (complained.Length > StderrTail)
+                        {
+                            complained.Remove(0, complained.Length - StderrTail);
+                        }
+                    }
+                }
+
+                return string.Empty;
+            },
+            CancellationToken.None);
         var exited = process.WaitForExitAsync(CancellationToken.None);
 
         async Task<LaunchResult> EndAsync()
@@ -191,7 +219,8 @@ public sealed class ProcessToastLauncher : IToastLauncher
             {
                 await exited.ConfigureAwait(false);
                 await Settled(stdout).ConfigureAwait(false);
-                return new LaunchResult(true, false, process.ExitCode, Kept(), await Settled(stderr).ConfigureAwait(false));
+                await Settled(stderr).ConfigureAwait(false);
+                return new LaunchResult(true, false, process.ExitCode, Kept(), Complained());
             }
         }
 
@@ -203,14 +232,14 @@ public sealed class ProcessToastLauncher : IToastLauncher
         {
             if (cancellationToken.IsCancellationRequested && !exited.IsCompleted)
             {
-                Kill(process);
+                Kill(process, launch.KillsTree);
             }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         return exited.IsCompleted
             ? new WaitingLaunch(await EndAsync().ConfigureAwait(false), null, () => { })
-            : new WaitingLaunch(new LaunchResult(true, false, null, Kept(), string.Empty), EndAsync(), () => Kill(process));
+            : new WaitingLaunch(new LaunchResult(true, false, null, Kept(), Complained()), EndAsync(), () => Kill(process, launch.KillsTree));
     }
 
     /// <summary>The program started through the one door, or none and why not.</summary>
@@ -238,11 +267,11 @@ public sealed class ProcessToastLauncher : IToastLauncher
         }
     }
 
-    private static void Kill(Process process)
+    private static void Kill(Process process, bool tree)
     {
         try
         {
-            process.Kill(entireProcessTree: true);
+            process.Kill(entireProcessTree: tree);
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
         {

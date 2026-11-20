@@ -461,14 +461,17 @@ public sealed class ToastChannelTests
     }
 
     /// <summary>notify-send that showed the toast and waits: its end is the row's to give; closed, it ends as a killed program.</summary>
-    private static WaitingLaunch Stays(TaskCompletionSource<LaunchResult> end, List<int>? closed = null, int number = 0, string said = "42\n") =>
+    private static WaitingLaunch Stays(TaskCompletionSource<LaunchResult> end, List<int>? closed = null, int number = 0, string said = "42\n", string stderr = "", bool endsOnClose = true) =>
         new(
-            new LaunchResult(true, false, null, said, string.Empty),
+            new LaunchResult(true, false, null, said, stderr),
             end.Task,
             () =>
             {
                 closed?.Add(number);
-                end.TrySetResult(new LaunchResult(true, false, 143, said, string.Empty));
+                if (endsOnClose)
+                {
+                    end.TrySetResult(new LaunchResult(true, false, 143, said, string.Empty));
+                }
             });
 
     /// <summary>notify-send's help, asked before the first toast of a run.</summary>
@@ -512,6 +515,8 @@ public sealed class ToastChannelTests
         var (click, bound) = await clicked.WaitAsync(Hang, Ct);
 
         Assert.Equal(ToastCommands.LinuxClick(new Self().Command, "jason://attention/approvals/" + Approval, inUnit ? "/usr/bin/systemd-run" : null), click.Command);
+        Assert.False(click.KillsTree, "a stop or the bound would end the Jason Desktop xdg-open runs under the handler");
+        Assert.False(click.Environment.ContainsKey("INVOCATION_ID"), "the runtime's unit's own variable reached the desktop");
         Assert.Equal("gnome-shell/Jason/4242-6_TIME9", click.Environment["XDG_ACTIVATION_TOKEN"]);
         Assert.Equal("/home/someone/.jason", click.Environment["JASON_DATA_DIR"]);
         Assert.Equal(("wayland-1", "Hyprland"), (click.Environment["WAYLAND_DISPLAY"], click.Environment["XDG_CURRENT_DESKTOP"]));
@@ -529,20 +534,33 @@ public sealed class ToastChannelTests
     {
         var dismissed = new TaskCompletionSource<LaunchResult>();
         var clickedLater = new TaskCompletionSource<LaunchResult>();
-        var ends = new Queue<TaskCompletionSource<LaunchResult>>([dismissed, clickedLater]);
+        // The third ends within the bound with its click: libnotify 0.8.3 keeps its id until it ends, so an early click
+        // comes back as the launch's own end.
+        var launches = new Queue<Func<WaitingLaunch>>([() => Stays(dismissed), () => Stays(clickedLater), () => new WaitingLaunch(Exit(0, "44\ndefault\n"), null, () => { })]);
         var (toast, launcher, _) = Channel(
             Facts(DesktopPlatform.Linux, 2, "notify-send"),
-            new() { ["click"] = _ => Exit(0), ["notify-send"] = _ => Exit(0, "7\ndefault\n") },
-            new() { ["notify-send"] = _ => Stays(ends.Dequeue()) });
+            new() { ["click"] = _ => Exit(0) },
+            new() { ["notify-send"] = _ => launches.Dequeue()() });
 
         Is(await toast.DeliverAsync(Message, "ntf_1", Ct), ChannelResult.Delivered);
         Is(await toast.DeliverAsync(Message, "ntf_2", Ct), ChannelResult.Delivered);
         dismissed.SetResult(Exit(0, "42\n"));
         clickedLater.SetResult(Exit(0, "43\ndefault\n"));
         var (click, _) = await launcher.Launched(IsClick).WaitAsync(Hang, Ct);
-
         Assert.Equal(AttentionLinks.List, click.Command[^1]);
         Assert.Single(launcher.Launches, launch => IsClick(launch.Launch));
+
+        Is(await toast.DeliverAsync(Message, "ntf_3", Ct), ChannelResult.Delivered);
+        await Task.Run(
+            async () =>
+            {
+                while (launcher.Launches.Count(launch => IsClick(launch.Launch)) < 2)
+                {
+                    await Task.Delay(10, Ct);
+                }
+            },
+            Ct).WaitAsync(Hang, Ct);
+        Assert.All(launcher.Launches.Where(launch => IsClick(launch.Launch)), launch => Assert.Equal(AttentionLinks.List, launch.Launch.Command[^1]));
     }
 
     /// <summary>
@@ -569,33 +587,38 @@ public sealed class ToastChannelTests
     }
 
     /// <summary>
-    /// notify-send that cannot show the toast says the id 0 and would wait on the bus for nothing: it is ended, and the
-    /// toast failed. Breaks if a toast nobody saw is recorded delivered.
+    /// notify-send that cannot show the toast would wait on the bus for nothing: libnotify 0.8.9 says the id 0; 0.8.3 keeps
+    /// even that until it ends and says only on stderr why it showed nothing. Either way it is ended, and the toast failed
+    /// by what it said. Breaks if a toast nobody saw is recorded delivered, and its sender left waiting.
     /// </summary>
-    [Fact]
-    public async Task On_linux_a_toast_notify_send_could_not_show_is_ended_and_failed()
+    [Theory]
+    [InlineData("0\n", "", "notify-send showed no notification")]
+    [InlineData("", "Failed to show notification: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable\n", "Failed to show notification: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable")]
+    public async Task On_linux_a_toast_notify_send_could_not_show_is_ended_and_failed(string said, string stderr, string detail)
     {
         var end = new TaskCompletionSource<LaunchResult>();
         var closed = new List<int>();
         var (toast, _, _) = Channel(
             Facts(DesktopPlatform.Linux, 2, "notify-send"),
             [],
-            new() { ["notify-send"] = _ => Stays(end, closed, said: "0\n") });
+            new() { ["notify-send"] = _ => Stays(end, closed, said: said, stderr: stderr) });
 
-        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Failed, code: "toast_failed", @class: FailureClass.Permanent);
+        Is(await toast.DeliverAsync(Message, "ntf_test", Ct), ChannelResult.Failed, code: "toast_failed", @class: FailureClass.Permanent, detail: detail);
         Assert.Equal([0], closed);
     }
 
     /// <summary>
-    /// The runtime holds at most <see cref="ToastChannel.MaxWaiting"/> waiting toasts, ending the oldest before it shows
-    /// another, and ends every one when it stops; a click that comes after the stop starts nothing. Breaks if waiting
-    /// senders pile up without end, or outlive the runtime that would hand on their clicks.
+    /// The runtime holds at most <see cref="ToastChannel.MaxWaiting"/> waiting toasts, ending the oldest once another
+    /// waits — never for one that did not — and ends every one when it stops; a click that comes after the stop starts
+    /// nothing, and a toast shown after it is ended at once. Breaks if waiting senders pile up without end, a toast that
+    /// never waited costs the oldest its click, or a sender outlives the runtime that would hand on its click.
     /// </summary>
     [Fact]
     public async Task On_linux_waiting_toasts_are_bounded_and_end_with_the_runtime()
     {
         var closed = new List<int>();
         var ends = new List<TaskCompletionSource<LaunchResult>>();
+        var refuse = false;
         var (toast, launcher, _) = Channel(
             Facts(DesktopPlatform.Linux, 2, "notify-send"),
             new() { ["click"] = _ => Exit(0) },
@@ -603,9 +626,25 @@ public sealed class ToastChannelTests
             {
                 ["notify-send"] = _ =>
                 {
+                    if (refuse)
+                    {
+                        return new WaitingLaunch(Exit(1, stderr: "notify-send: refused"), null, () => { });
+                    }
+
                     var end = new TaskCompletionSource<LaunchResult>();
                     ends.Add(end);
-                    return Stays(end, closed, ends.Count);
+                    var number = ends.Count;
+                    if (number == ToastChannel.MaxWaiting + 1)
+                    {
+                        // The last one prints its click as the stop closes it, so its end comes while the runtime stops.
+                        return new WaitingLaunch(new LaunchResult(true, false, null, "52\n", string.Empty), end.Task, () =>
+                        {
+                            closed.Add(number);
+                            end.TrySetResult(Exit(0, "52\ndefault\n"));
+                        });
+                    }
+
+                    return Stays(end, closed, number, endsOnClose: number <= ToastChannel.MaxWaiting);
                 },
             });
 
@@ -614,13 +653,17 @@ public sealed class ToastChannelTests
             Is(await toast.DeliverAsync(Message, "ntf_" + shown, Ct), ChannelResult.Delivered);
         }
 
+        refuse = true;
+        Is(await toast.DeliverAsync(Message, "ntf_refused", Ct), ChannelResult.Failed, code: "toast_failed", @class: FailureClass.Permanent);
         Assert.Empty(closed);
+        refuse = false;
         Is(await toast.DeliverAsync(Message, "ntf_more", Ct), ChannelResult.Delivered);
         Assert.Equal([1], closed);
 
         toast.Dispose();
         Assert.Equal(Enumerable.Range(1, ToastChannel.MaxWaiting + 1), closed.Order());
-        ends[^1].TrySetResult(Exit(0, "52\ndefault\n"));
+        Is(await toast.DeliverAsync(Message, "ntf_after", Ct), ChannelResult.Delivered);
+        Assert.Equal(ToastChannel.MaxWaiting + 2, closed.Count);
         Assert.DoesNotContain(launcher.Launches, launch => IsClick(launch.Launch));
     }
 

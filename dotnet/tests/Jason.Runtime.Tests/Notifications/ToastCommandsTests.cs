@@ -191,7 +191,8 @@ public sealed class ToastCommandsTests
     /// A click starts this executable with the toast's own <c>jason:</c> link and nothing else, as the shell starts it for a
     /// Windows toast; where the runtime runs in a systemd unit, inside a scope of its own, so the Jason Desktop it starts
     /// does not end with the runtime's unit. Breaks if the click names anything but a link of the table, or starts the
-    /// desktop inside the runtime's unit.
+    /// desktop inside the runtime's unit, or the scope's description — the command, by default, which the user journal keeps
+    /// — carries the item's id.
     /// </summary>
     [Fact]
     public void Linux_a_click_starts_this_executable_with_the_toast_s_link()
@@ -200,7 +201,7 @@ public sealed class ToastCommandsTests
 
         Assert.Equal(["/opt/jason/jason", "jason://attention/approvals/apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6"], ToastCommands.LinuxClick(["/opt/jason/jason"], link, null));
         Assert.Equal(
-            ["/usr/bin/systemd-run", "--user", "--scope", "--quiet", "--collect", "--", "/usr/bin/dotnet", "jason.dll", "jason://attention"],
+            ["/usr/bin/systemd-run", "--user", "--scope", "--quiet", "--collect", "--description=Jason Desktop, from a notification", "--", "/usr/bin/dotnet", "jason.dll", "jason://attention"],
             ToastCommands.LinuxClick(["/usr/bin/dotnet", "jason.dll"], AttentionLinks.List, "/usr/bin/systemd-run"));
         Assert.NotNull(AttentionLinks.Parse(ToastCommands.LinuxClick(["/opt/jason/jason"], link, null)[^1]));
     }
@@ -231,16 +232,17 @@ public sealed class ToastCommandsTests
 
     /// <summary>
     /// The click's handler runs in the runtime's environment with the session's as it stands now laid over it, as a
-    /// launcher starts an application, and with an activation token only where the click brought a fresh one: a token the
-    /// session's own environment kept from its start is stale and never travels. Breaks if a stale token is handed on, or
-    /// the session's display does not reach the handler.
+    /// launcher starts an application, without the variables a systemd unit gives its own processes, and with an activation
+    /// token only where the click brought a fresh one: a token the session's own environment kept from its start is stale
+    /// and never travels. Breaks if a stale token is handed on, the session's display does not reach the handler, or a
+    /// Jason Desktop it starts takes itself for part of the runtime's unit.
     /// </summary>
     [Theory]
     [InlineData("fresh-token")]
     [InlineData(null)]
     public void A_click_s_environment_is_the_session_s_now_with_only_a_fresh_token(string? token)
     {
-        var runtime = new Dictionary<string, string> { ["PATH"] = "/usr/bin", ["JASON_DATA_DIR"] = "/data", ["XDG_ACTIVATION_TOKEN"] = "from-the-runtime-s-start" };
+        var runtime = new Dictionary<string, string> { ["PATH"] = "/usr/bin", ["JASON_DATA_DIR"] = "/data", ["XDG_ACTIVATION_TOKEN"] = "from-the-runtime-s-start", ["INVOCATION_ID"] = "0123", ["JOURNAL_STREAM"] = "8:123" };
         var session = new Dictionary<string, string> { ["WAYLAND_DISPLAY"] = "wayland-1", ["XDG_ACTIVATION_TOKEN"] = "from-the-session-s-start", ["DESKTOP_STARTUP_ID"] = "old" };
 
         var environment = ToastCommands.ClickEnvironment(runtime, session, token);
@@ -248,12 +250,14 @@ public sealed class ToastCommandsTests
         Assert.Equal(("/usr/bin", "/data", "wayland-1"), (environment["PATH"], environment["JASON_DATA_DIR"], environment["WAYLAND_DISPLAY"]));
         Assert.Equal(token, environment.GetValueOrDefault("XDG_ACTIVATION_TOKEN"));
         Assert.False(environment.ContainsKey("DESKTOP_STARTUP_ID"));
+        Assert.False(environment.ContainsKey("INVOCATION_ID") || environment.ContainsKey("JOURNAL_STREAM"), "the runtime's unit's own variables reached the handler");
     }
 
     /// <summary>
     /// What notify-send prints is read for three things: the id it printed once the notification was shown, the action a
-    /// click sent, and the activation token its option wrote on the line between them; an empty line there is no token, nor
-    /// is one with a space or a control character. Breaks if a token is read where none was given, or the click is missed.
+    /// click sent, and the activation token its option wrote on a line of its own, before or after the action, as its
+    /// buffering has it; an empty line is no token, nor is one with a space or a control character. Breaks if a token is
+    /// read where none was given, or the click is missed.
     /// </summary>
     [Theory]
     [InlineData("42\n", "42", false, null)]
@@ -262,6 +266,7 @@ public sealed class ToastCommandsTests
     [InlineData("42\ndefault\n", "42", true, null)]
     [InlineData("0\n", "0", false, null)]
     [InlineData("42\ntwo words\ndefault\n", "42", true, null)]
+    [InlineData("42\ndefault\ngnome-shell/Jason/4242-6-host_TIME123\n", "42", true, "gnome-shell/Jason/4242-6-host_TIME123")]
     [InlineData("", null, false, null)]
     public void What_notify_send_prints_says_the_id_the_click_and_the_token(string stdout, string? id, bool clicked, string? token)
     {

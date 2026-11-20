@@ -206,7 +206,10 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "and nothing else opens, never a browser. On macOS a click opens nothing of Jason's; `jason ui open` opens Jason Desktop on the same list or item.")]
     [InlineData("docs/notifications.md", "**On Linux** the toast is shown by notify-send, which stays on the session bus with its notification until it is clicked or dismissed, since GNOME and KDE hand a click only to a sender still there")]
     [InlineData("docs/notifications.md", "With no Jason Desktop that takes its links, or with its links going elsewhere, nothing opens, never a browser, and a notification says why, in the words `jason ui open` would print.")]
-    [InlineData("docs/notifications.md", "The handler runs in the session's environment as the user manager holds it at the click (`systemctl --user show-environment`), as a launcher starts an application, so a runtime the logon unit started before the desktop said its display still hands the handler one.")]
+    [InlineData("docs/notifications.md", "The handler runs in the runtime's environment with the session's laid over it, as the user manager holds it at the click (`systemctl --user show-environment`), and without what systemd sets for the processes of the runtime's own unit, as a launcher starts an application; so a runtime the logon unit started before the desktop said its display still hands the handler one.")]
+    [InlineData("docs/notifications.md", "(`systemd-run --user --scope`, described in fixed words, so the item's id reaches no journal)")]
+    [InlineData("docs/notifications.md", "A stop, or the handler's own bound, ends the handler alone, never a Jason Desktop it started.")]
+    [InlineData("docs/notifications.md", "A toast the notification server would not show is ended at once and recorded `failed`, `toast_failed`, with what notify-send said last.")]
     [InlineData("docs/notifications.md", "said on stderr by its code (`opener_not_started`, `opener_failed`, `opener_timed_out`), and nothing else opens")]
     [InlineData("docs/notifications.md", "after your browser's own confirmation, and it can do nothing a click cannot")]
     [InlineData("docs/notifications.md", "or Jason's own prompt for such an item replaces what was on your clipboard")]
@@ -259,7 +262,7 @@ public sealed partial class NotificationsDocTests
     public void The_page_states_how_many_linux_toasts_wait_for_their_click()
     {
         Assert.Equal(10, ToastChannel.MaxWaiting);
-        Assert.Contains("At most ten toasts wait for their click at once; another ends the oldest one's wait first.", Page(), StringComparison.Ordinal);
+        Assert.Contains("At most ten toasts wait for their click at once; another that waits ends the oldest one's wait first.", Page(), StringComparison.Ordinal);
     }
 
     /// <summary>Every plugin in the marketplace's index is a row of one table: a blank line ends a Markdown table.</summary>

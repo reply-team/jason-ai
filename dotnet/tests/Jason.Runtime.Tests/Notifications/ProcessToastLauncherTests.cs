@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using Jason.Runtime.Notifications.Desktop;
 using Jason.Runtime.Tests.Plugins;
 
@@ -146,5 +147,56 @@ public sealed class ProcessToastLauncherTests
         Assert.False(end.IsCompleted, "the program was not killed at the bound");
         silent.Close();
         Assert.NotEqual(0, (await end.WaitAsync(Hang, Ct)).ExitCode);
+    }
+    /// <summary>
+    /// A launch that keeps its children — a click's handler, under which xdg-open may run Jason Desktop — ends only its own
+    /// process at the bound; every other launch ends its whole tree. Breaks if a runtime that stops, or a handler that
+    /// outlives its bound, takes the Jason Desktop the click just started with it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task A_launch_that_keeps_its_children_ends_only_its_own_process_at_the_bound(bool killsTree)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row: the click's handler is Linux's.");
+        var pidFile = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N") + ".pid");
+        Directory.CreateDirectory(Path.GetDirectoryName(pidFile)!);
+        var launch = new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "hold-with-child", pidFile, "600000"], null, Environment()) { KillsTree = killsTree };
+
+        var result = await new ProcessToastLauncher().LaunchAsync(launch, TimeSpan.FromSeconds(5), Ct);
+
+        Assert.True(result.TimedOut);
+        using var child = Process.GetProcessById(int.Parse(File.ReadAllText(pidFile), CultureInfo.InvariantCulture));
+        try
+        {
+            var ended = child.WaitForExit(TimeSpan.FromSeconds(3));
+            Assert.Equal(killsTree, ended);
+        }
+        finally
+        {
+            if (!child.HasExited)
+            {
+                child.Kill();
+            }
+
+            File.Delete(pidFile);
+        }
+    }
+
+    /// <summary>
+    /// A program that stays and says nothing it is asked for within the bound is handed back with what it said on stderr
+    /// by then: libnotify 0.8.3 says there, and only there, why it showed nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_stays_is_handed_back_with_what_it_said_on_stderr()
+    {
+        var waiting = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "complain-and-hold", "Failed to show notification: no", "600000"], null, Environment()), TimeSpan.FromSeconds(3), _ => false, Ct);
+
+        var end = Assert.IsType<Task<LaunchResult>>(waiting.End, exactMatch: false);
+        Assert.Equal("Failed to show notification: no", waiting.Said.LastStderrLine);
+        waiting.Close();
+        await end.WaitAsync(Hang, Ct);
     }
 }

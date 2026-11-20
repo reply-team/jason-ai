@@ -7,7 +7,14 @@ using Jason.Contracts.Plugins;
 namespace Jason.Runtime.Notifications.Desktop;
 
 /// <summary>One toast launch: the command, what goes on its stdin, and the environment it runs in.</summary>
-public sealed record ToastLaunch(IReadOnlyList<string> Command, string? Stdin, IReadOnlyDictionary<string, string> Environment);
+public sealed record ToastLaunch(IReadOnlyList<string> Command, string? Stdin, IReadOnlyDictionary<string, string> Environment)
+{
+    /// <summary>
+    /// Whether ending the launch at its bound, or at the runtime's stop, ends what it started too: true for every toast, false
+    /// for a click's handler, under which xdg-open may run the Jason Desktop the click asked for.
+    /// </summary>
+    public bool KillsTree { get; init; } = true;
+}
 
 /// <summary>Which toast a notify-send can show: one that waits for its click, and whether it hands on the click's activation token.</summary>
 public sealed record NotifySendForm(bool Waits, bool Token);
@@ -107,7 +114,8 @@ public static class ToastCommands
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentException.ThrowIfNullOrEmpty(link);
-        return systemdRun is null ? [.. self, link] : [systemdRun, "--user", "--scope", "--quiet", "--collect", "--", .. self, link];
+        // A scope's description is its command unless one is given, and the user journal keeps it: the link names the item.
+        return systemdRun is null ? [.. self, link] : [systemdRun, "--user", "--scope", "--quiet", "--collect", "--description=Jason Desktop, from a notification", "--", .. self, link];
     }
 
     /// <summary>The session's environment as the user manager holds it now, which a desktop fills once its session has started.</summary>
@@ -137,10 +145,10 @@ public static class ToastCommands
     }
 
     /// <summary>
-    /// The environment a click's handler runs in: the runtime's own with the session's as it stands now laid over it, as a
-    /// launcher starts an application, so a runtime started at logon before the session said its display still hands the
-    /// handler one; and an activation token only where the click brought a fresh one, since a token either environment kept
-    /// from its own start has long been used or expired.
+    /// The environment a click's handler runs in: the runtime's own with the session's as it stands now laid over it, and
+    /// without what systemd sets for a unit's processes, as a launcher starts an application, so a runtime started at
+    /// logon before the session said its display still hands the handler one; and an activation token only where the click
+    /// brought a fresh one, since a token either environment kept from its own start has long been used or expired.
     /// </summary>
     public static Dictionary<string, string> ClickEnvironment(IReadOnlyDictionary<string, string> runtime, IReadOnlyDictionary<string, string> session, string? token)
     {
@@ -152,6 +160,11 @@ public static class ToastCommands
             environment[name] = value;
         }
 
+        foreach (var name in UnitNames)
+        {
+            environment.Remove(name);
+        }
+
         environment.Remove("XDG_ACTIVATION_TOKEN");
         environment.Remove("DESKTOP_STARTUP_ID");
         if (token is not null)
@@ -161,6 +174,13 @@ public static class ToastCommands
 
         return environment;
     }
+
+    /// <summary>
+    /// What systemd gives the processes of a unit it runs, the runtime's logon unit among them, and a launcher never gives
+    /// an application: a Jason Desktop that carried them would take itself for part of that unit.
+    /// </summary>
+    private static readonly string[] UnitNames =
+        ["INVOCATION_ID", "JOURNAL_STREAM", "MANAGERPID", "SYSTEMD_EXEC_PID", "NOTIFY_SOCKET", "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "WATCHDOG_PID", "WATCHDOG_USEC"];
 
     /// <summary>The inside of a <c>$'…'</c> value with its backslash escapes undone; an escape it does not know is kept as written.</summary>
     private static string Unquoted(string quoted)
@@ -199,22 +219,22 @@ public static class ToastCommands
     public static bool Clicked(string stdout) => Lines(stdout).Contains(DefaultAction, StringComparer.Ordinal);
 
     /// <summary>
-    /// The activation token the server gave with the click: the line <see cref="TokenOption"/> wrote between the id and
-    /// the action; null where there is none, the line is empty, or it is not a token: a short run of printable characters
-    /// with no space.
+    /// The activation token the server gave with the click: the one line after the id that is not the action, which
+    /// <see cref="TokenOption"/> writes straight to the descriptor while the action may still wait in notify-send's buffer,
+    /// so it comes before the action or after it; null where there is none, the line is empty, or it is not a token: a short
+    /// run of printable characters with no space.
     /// </summary>
     public static string? ActivationToken(string stdout)
     {
         var lines = Lines(stdout).ToList();
         var id = lines.FindIndex(IsId);
-        var action = lines.IndexOf(DefaultAction);
-        if (id < 0 || action <= id + 1)
+        if (id < 0 || !lines.Contains(DefaultAction))
         {
             return null;
         }
 
-        var token = lines[action - 1];
-        return token is { Length: > 0 and <= 512 } && token.All(character => character is > ' ' and < '\u007f') ? token : null;
+        var rest = lines.Skip(id + 1).Where(line => line.Length > 0 && line != DefaultAction).ToList();
+        return rest is [var token] && token.Length <= 512 && token.All(character => character is > ' ' and < '\u007f') ? token : null;
     }
 
     private static bool IsId(string line) => line.Length is > 0 and <= 10 && line.All(char.IsAsciiDigit);
