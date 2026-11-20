@@ -590,7 +590,8 @@ guard as a standing approval, and in this order:
    `every_message`, the send parks as it always did.
 3. **Written under the chat's mark?** A send created, or whose input was edited, by a call that carried the chat's mark
    (§The chat's mark) parks for the person: `sent_from_chat`. A send the desktop's chat writes in Ask first, Auto-edit or
-   Full access carries no mark and goes on to the next step, as a send from a terminal does.
+   Full access on Claude Code, or in Full access on Codex, carries no mark and goes on to the next step, as a send from a
+   terminal does.
 4. **A doubt** stands about the send (§Doubts about a send), whoever raised it: `doubted`.
 5. **The contact waits on a verdict**: `awaiting_judgement` where a reply of theirs has not been judged since it moved,
    `awaiting_nature` where it was judged without saying what kind of reply it is.
