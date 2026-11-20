@@ -699,7 +699,9 @@ internal static partial class StatusChecks
             return new StatusCheck(Name, false, CheckState.Unknown, "The runtime is older than this CLI and does not say how its sends go.", null);
         }
 
-        var fact = $"To a contact who has not answered: {ModeInWords(modes.Cold)}. To a contact who has: {ModeInWords(modes.Warm)}.";
+        // Said of the installation, in so many words: read bare, "to a contact who has not answered" was taken for one
+        // campaign's mode, where a campaign may set its own over it.
+        var fact = $"The installation's send modes, which every campaign follows unless it sets its own. To a contact who has not answered: {ModeInWords(modes.Cold)}. To a contact who has: {ModeInWords(modes.Warm)}.";
         return new StatusCheck(Name, false, CheckState.Ok, fact, null) with
         {
             Details = new Dictionary<string, string>(StringComparer.Ordinal)

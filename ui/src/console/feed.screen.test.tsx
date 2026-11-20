@@ -16,7 +16,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, clock, conversations, feedId, feedUnseen, lines } from './state';
 
-// The Feed: asked of the desktop once the console opens and drawn first in the sidebar; each line of the journal's
+// The Feed: asked of the desktop once the console opens and drawn in the sidebar under Needs you; each line of the journal's
 // stream whose kind it takes handed to the desktop as ids, a moment and a kind; each line the desktop took drawn as a row
 // that links to its campaign, and to Needs you for an approval or a question; a line that never starts a turn; and a
 // Feed that is neither renamed nor removed.
@@ -82,15 +82,16 @@ beforeEach(() => {
 });
 
 describe('the Feed', () => {
-    it('is asked of the desktop once as the console opens, and drawn first in the sidebar, above the other rows and apart from the list', async () => {
+    it('is asked of the desktop once as the console opens, and drawn in the sidebar under Needs you, above Recent and apart from the list', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(feedButton().textContent?.trim()).toBe('Feed'));
         // The first ask of the page's load also has the desktop read back what was written while no page followed.
         expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([[[], { catchUp: true }]]);
         const order = Array.from(side().querySelectorAll('button')).map((each) => each.textContent?.trim());
-        // The button, its caret and the Search row come before it.
-        expect(order.indexOf('Feed')).toBe(order.indexOf('New GTM agent') + 3);
-        expect(order.indexOf('Feed')).toBeLessThan(order.findIndex((each) => each?.startsWith('Needs you')));
+        // Directly under Needs you.
+        expect(order.indexOf('Feed')).toBe(order.findIndex((each) => each?.startsWith('Needs you')) + 1);
+        const recent = within(side()).getByText('Recent');
+        expect(feedButton().compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         // The window opens on Start, and no chat is made before the person sends one.
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(calls(desktop, 'chat.create')).toEqual([]);

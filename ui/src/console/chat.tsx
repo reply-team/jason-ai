@@ -1613,11 +1613,17 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     // send: a message they send, and a permission card that asks them something, always go to the foot, the first
     // message of a conversation made at that send included. The foot is the conversation's (`followedOf`), not the
     // box's: the cards waiting under it stay under it, so following only ever moves the view down to that place, a
-    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. Opening a
-    // chat moves nothing. Where the person stands is noted as the box scrolls. The Demo's thread shares the measure.
+    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. What is
+    // followed is the place, not only what is written: a change of size with no word added (the box made shorter by
+    // what stands outside it, a part of the thread that opens) is followed by the same rule. Opening a chat moves
+    // nothing; a pane shown again after it was hidden follows to the end of what came meanwhile when it was left at the
+    // foot, and keeps the place of one left scrolled up past the slack. Where the person stands is noted as the box
+    // scrolls, except at the place the follower itself set, whose scroll is its own and may be read only after the box
+    // changed size. The Demo's thread shares the measure.
     const scroller = useRef<HTMLDivElement>(null);
     const follow = useRef<{ chat: string; sent: ReadonlySet<string>; atFoot: boolean } | null>(null);
     const grown = useRef<MutationObserver | null>(null);
+    const put = useRef<number | null>(null);
     const shownChat = useRef(chatId);
     shownChat.current = chatId;
     const drawn = Boolean(chat);
@@ -1628,21 +1634,43 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         const box = scroller.current;
         if (box === null) return;
         const noted = () => {
+            if (put.current !== null && box.scrollTop === put.current) return;
+            put.current = null;
             if (follow.current) follow.current.atFoot = atFoot(box.scrollTop, followedOf(box));
         };
-        // What is added under the thread, the painter's words and React's cards alike, is followed while the person is
-        // at the foot of the chat shown; a chat being given to the panel is not followed until it is opened.
-        const observer = new MutationObserver(() => {
+        // What is added under the thread, the painter's words and React's cards alike, and what changes the size of the
+        // box or of what it holds, is followed while the person is at the foot of the chat shown; a chat being given to
+        // the panel is not followed until it is opened.
+        const followed = () => {
             const now = follow.current;
             if (now === null || now.chat !== shownChat.current || !now.atFoot) return;
-            const followed = followedOf(box);
-            if (box.scrollTop < followed) box.scrollTop = followed;
+            const place = followedOf(box);
+            if (box.scrollTop < place) {
+                box.scrollTop = place;
+                put.current = box.scrollTop;
+            }
+        };
+        // The sizes watched are the box's and those of the parts it holds now: the thread, the queued line, the cards.
+        const sized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(followed);
+        const watchParts = () => {
+            for (const part of Array.from(box.children)) sized?.observe(part);
+        };
+        sized?.observe(box);
+        watchParts();
+        const observer = new MutationObserver((records) => {
+            for (const record of records)
+                if (record.target === box)
+                    for (const node of Array.from(record.removedNodes))
+                        if (node instanceof Element) sized?.unobserve(node);
+            watchParts();
+            followed();
         });
         observer.observe(box, { childList: true, subtree: true, characterData: true });
         grown.current = observer;
         box.addEventListener('scroll', noted, { passive: true });
         return () => {
             observer.disconnect();
+            sized?.disconnect();
             box.removeEventListener('scroll', noted);
             grown.current = null;
         };
@@ -1659,12 +1687,16 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (before?.chat !== chatId && !made) {
             // Opened, or given another chat: its place is left alone, and decides whether what comes is followed.
             grown.current?.takeRecords();
+            put.current = null;
             follow.current = { chat: chatId, sent, atFoot: atFoot(box.scrollTop, followedOf(box)) };
             return;
         }
         const moved = made || moves.some((key) => !before!.sent.has(key));
         follow.current = { chat: chatId, sent, atFoot: moved || before!.atFoot };
-        if (moved) box.scrollTop = followedOf(box);
+        if (moved) {
+            box.scrollTop = followedOf(box);
+            put.current = box.scrollTop;
+        }
     }, [chatId, movesKey, drawn]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
@@ -1727,6 +1759,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
+                {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
+                {chat.main || chat.campaignId !== null ? null : (
+                    <span className="chat-whose">{t('chat.whose.none')}</span>
+                )}
                 {chat.main ? null : chat.renaming === null ? (
                     !underHead && (
                         <button
@@ -1847,7 +1883,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             {/* Reply is asked for only where the work needs a way to send: the chat of a campaign still a draft, while
                 Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
                 another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows
-                while the route is being read. */}
+                while the route is first read; read again, it stays as it was until the answer changes it. */}
             {!inTab() &&
                 chat.campaignId !== null &&
                 campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&

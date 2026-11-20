@@ -695,6 +695,31 @@ describe('Reply in a chat, by the route of enrolment', () => {
         await waitFor(() => expect(card()).not.toBeNull());
     });
 
+    it('stays drawn at the first send while the made chat reads the route again, and goes only on an answer that says so', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(card()).not.toBeNull());
+        const reads = () => fake.value!.calls.filter((each) => each.operation === 'route.resolve').length;
+        const before = reads();
+
+        // The conversation is made at this send and shown in a panel of its own, which reads the route again.
+        const release = fake.value!.hold('route.resolve');
+        const message = screen.getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(message, { target: { value: 'Find me ten founders' } });
+        fireEvent.keyDown(message, { key: 'Enter' });
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        await waitFor(() => expect(reads()).toBe(before + 1));
+        expect(card(), 'the card stays while the route is read again').not.toBeNull();
+
+        // The read answers that enrolment now goes to another plugin: that changes what the card shows, and it goes.
+        fake.value!.answer('route.resolve', 'route.resolve/elsewhere');
+        release();
+        await waitFor(() => expect(card()).toBeNull());
+    });
+
     it('does not ask the runtime where a campaign that runs is routed', async () => {
         const fake: { value: FakeApi | null } = { value: null };
         const desktop = renderConsole(stubDesktop(noReply), null, (each) => (fake.value = each));

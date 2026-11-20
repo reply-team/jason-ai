@@ -1,6 +1,7 @@
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -50,7 +51,7 @@ public sealed class PatientStartTests : IDisposable
     /// <summary>A program that starts and never publishes anything: a sleeping shell, which is all the runtime is to this helper.</summary>
     private Process StartStandIn()
     {
-        var start = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true };
+        var start = ChildPwsh.StartInfo(_root);
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 600" })
         {
             start.ArgumentList.Add(argument);

@@ -104,15 +104,15 @@ beforeEach(() => {
 });
 
 describe('the Search row', () => {
-    it('is the first row of the menu, before Needs you in Live and before Feed in the demo, with the key named as Ctrl K here', async () => {
+    it('is the first row of the menu, before Needs you in Live and before Dashboard in the demo, with the key named as Ctrl K here', async () => {
         renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
-        await waitFor(() => within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => within(menu()).getByRole('button', { name: /^Feed/ }));
         expect(
             within(menu())
                 .getAllByRole('button')
                 .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, '')),
-        ).toEqual(['SearchCtrl K', 'Needs you']);
+        ).toEqual(['SearchCtrl K', 'Needs you', 'Feed', 'Accounts']);
         cleanup();
         mode.value = 'demo';
         renderConsole();
@@ -121,7 +121,7 @@ describe('the Search row', () => {
         const names = within(menu())
             .getAllByRole('button')
             .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, ''));
-        expect(names.slice(0, 2)).toEqual(['SearchCtrl K', 'Feed']);
+        expect(names.slice(0, 2)).toEqual(['SearchCtrl K', 'Dashboard']);
         const row = within(menu()).getByRole('button', { name: /^Search/ });
         expect(row.querySelector('.kbd')?.textContent).toBe('Ctrl K');
         expect(row.getAttribute('aria-keyshortcuts')).toBe('Control+K');
@@ -427,7 +427,7 @@ describe('where each kind goes', () => {
         await waitFor(() => expect(inFront()).toBe('Connect'));
     });
 
-    it('opens the actions as the button and the caret do: Start, and a new chat', async () => {
+    it('opens the actions as the two buttons do: Start, and a new chat', async () => {
         const { desktop } = renderConsole();
         await opened();
         flush(() => here().dock.show('campaigns'));
