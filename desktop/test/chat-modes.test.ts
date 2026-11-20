@@ -96,7 +96,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
 
 test('Full access starts Claude Code in its own bypass mode, named, every deny rule kept, the PowerShell tool kept, and its settings in the turn\'s own file', () => {
     const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
-    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile });
+    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile, version: fullAccessFloor });
     assert.equal(after(args, '--permission-mode'), 'bypassPermissions');
     assert.equal(after(args, '--settings'), settingsFile);
     const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell');
@@ -109,10 +109,22 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the settings of a turn the hook rides: reads outside the folders still blocked, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
+test('the settings of a turn the hook rides: reads outside the folders still blocked, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and outside Full access a page asked about and the server defences', () => {
     const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
+    // Ask first and Auto-edit are sealed as Plan only is, so their settings keep the person's servers, connectors, browser
+    // and skills' shell commands out; a Full access turn loads the person's own configuration.
     for (const mode of ['ask_first', 'auto_edit'] as const) {
-        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { ...settings, permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] } }, mode);
+        assert.deepEqual(
+            hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'),
+            {
+                ...settings,
+                permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] },
+                disableClaudeAiConnectors: true,
+                deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
+                disableSkillShellExecution: true,
+            },
+            mode,
+        );
     }
     assert.deepEqual(settings, {
         permissions: { blockReadsOutsideWorkingDirectories: true },
@@ -682,10 +694,11 @@ test('Full access is offered, and keeps the PowerShell tool every other mode tak
     assert.deepEqual(fullAccessRemovedTools, ['Monitor']);
 });
 
-test('a Plan only turn\'s settings turn off the shell commands a skill carries, and no other mode\'s do: the person\'s skills run theirs as in a terminal', () => {
+test('every turn\'s settings but a Full access turn\'s turn off the shell commands a skill carries: the person\'s skills run theirs in Full access alone, as in a terminal', () => {
     assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
-    assert.equal('disableSkillShellExecution' in JSON.parse(claudeTurnSettings), false);
-    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) assert.equal('disableSkillShellExecution' in hookedSettings(mode, 'http://127.0.0.1:4100/hook', 's'), false, mode);
+    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+    for (const mode of ['ask_first', 'auto_edit'] as const) assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true, mode);
+    assert.equal('disableSkillShellExecution' in hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 's'), false);
 });
 
 test('Plan only says the AI how it is left, the plan card included, and a go approved for another mode says why it was not sent', () => {

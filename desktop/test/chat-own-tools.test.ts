@@ -1,17 +1,18 @@
 // The fence around the person's own tools: an MCP tool of a server other than the chat's own is a card of its own in Ask
 // first and runs in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
 // never cut; the files and commands that add a server to an agent; what a turn's command line and settings carry in each
-// mode, so that outside Plan only the person's own Claude Code configuration loads as in a terminal and in Plan only none
-// of it does; and the chat's own permission tool, on a server named for each turn alone and refused to the agent by the
-// name's fixed prefix.
+// mode, so that a turn that runs in Full access loads the person's own Claude Code configuration as in a terminal and
+// every other turn loads none of it; and the chat's own permission tool, on a server named for each turn alone and
+// refused to the agent by the name's fixed prefix.
 
 import assert from 'node:assert/strict';
 import { join, posix } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeArguments, claudeTurnSettings, codexArguments, codexWindowsSandbox, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
+import { fullAccessFloor } from '../src/chat-modes.ts';
 import { fullAccessJudgement, judge, personsToolTitle, serversTitle, type ChatScope } from '../src/chat-permission-model.ts';
-import { claudeFloor, codexFloor, codexFloorSentence, noChromeFrom, printedCodexVersion } from '../src/host-version.ts';
+import { claudeFloor, codexFloor, codexFloorSentence, compareVersions, noChromeFrom, printedCodexVersion } from '../src/host-version.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const home = '/home/someone';
@@ -169,49 +170,56 @@ test('claude mcp and codex mcp are a card each time, never "always", and run in 
 const server = 'jason_desktop_0123456789abcdef';
 const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', server, addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: [] };
 const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
-/** The modes whose turns load the person's own Claude Code configuration. */
-const loading = ['ask_first', 'auto_edit', 'full_access'] as const;
+/** Claude Code at the chat's floor, below the floor of Full access, at it, and a current one. */
+const versions = [claudeFloor, '2.1.300', fullAccessFloor, '2.1.329'] as const;
 const after = (args: string[], flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
 const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
+const hookUrl = 'http://127.0.0.1:4100/hook';
 
-test('outside Plan only a Claude Code turn, at any version, passes none of --setting-sources, --strict-mcp-config and --no-chrome, so the person\'s own configuration loads as in a terminal', () => {
-    for (const version of [claudeFloor, '2.1.284', noChromeFrom, '2.1.300', '3.0.0']) {
-        for (const mode of loading) {
-            const args = claudeArguments({ ...base, mode, settingsFile, version });
-            for (const flag of ['--setting-sources', '--strict-mcp-config', '--no-chrome']) assert.ok(!args.includes(flag), `${version} ${mode}: ${flag}`);
-            // The turn's own MCP file still names the prompt tool's server, beside the person's own servers.
+test('every turn that does not run in Full access keeps the sealed line whole, in each mode, at 2.1.257, 2.1.300, 2.1.322 and current: project settings alone, the turn\'s MCP file alone, no browser from the version that knows the flag, and settings that keep the rest out', () => {
+    for (const version of versions) {
+        for (const mode of ['ask_first', 'auto_edit', 'plan_only'] as const) {
+            // Ask first and Auto-edit ride the hook from the floor of Full access on, their settings in the turn's own file.
+            const hooked = mode !== 'plan_only' && compareVersions(version, fullAccessFloor) >= 0;
+            const args = claudeArguments({ ...base, mode, ...(hooked ? { settingsFile } : {}), version });
+            assert.equal(after(args, '--setting-sources'), 'project', `${version} ${mode}`);
+            assert.ok(args.includes('--strict-mcp-config'), `${version} ${mode}`);
+            assert.equal(args.includes('--no-chrome'), compareVersions(version, noChromeFrom) >= 0, `${version} ${mode}`);
+            assert.equal(after(args, '--settings'), hooked ? settingsFile : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings, `${version} ${mode}`);
             assert.equal(after(args, '--mcp-config'), base.mcpConfig, `${version} ${mode}`);
             assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, `${version} ${mode}`);
         }
-        // Below the floor of Full access an Ask first turn carries its settings inline, with no hook.
-        assert.equal(after(claudeArguments({ ...base, mode: 'ask_first', version }), '--settings'), claudeTurnSettings, version);
     }
-});
-
-test('Plan only keeps its sealed command line whole: project settings alone, the turn\'s MCP file alone, no browser from the version that knows the flag, and the settings that keep the rest out', () => {
-    for (const [version, chrome] of [[claudeFloor, false], ['2.1.284', false], [noChromeFrom, true], ['2.1.300', true], ['3.0.0', true]] as const) {
-        const args = claudeArguments({ ...base, mode: 'plan_only', version });
-        assert.equal(after(args, '--setting-sources'), 'project', version);
-        assert.ok(args.includes('--strict-mcp-config'), version);
-        assert.equal(args.includes('--no-chrome'), chrome, version);
-        assert.equal(after(args, '--settings'), planTurnSettings, version);
-        assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, version);
+    // Each of those settings carries the server defences: inline below the floor of Full access and in Plan only, in the
+    // file the hook rides at the floor and above.
+    const sealed = [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), hookedSettings('ask_first', hookUrl, 'the-secret'), hookedSettings('auto_edit', hookUrl, 'the-secret')] as Record<string, unknown>[];
+    for (const each of sealed) {
+        for (const [key, value] of Object.entries(defences)) assert.deepEqual(each[key], value, key);
+        assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
     }
-    const plan = JSON.parse(planTurnSettings) as Record<string, unknown>;
-    for (const [key, value] of Object.entries(defences)) assert.deepEqual(plan[key], value, key);
     assert.equal(noChromeFrom, '2.1.285');
 });
 
-test('outside Plan only the turn\'s settings carry none of the server defences, so the person\'s connectors, browser and skills\' shell commands work; reads outside the folders stay blocked', () => {
-    const settings = [JSON.parse(claudeTurnSettings) as Record<string, unknown>, ...loading.map((mode) => hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret') as Record<string, unknown>)];
-    for (const each of settings) {
-        for (const key of Object.keys(defences)) assert.equal(key in each, false, key);
-        assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
+test('a turn that runs in Full access, at the floor of Full access and above, loads the person\'s own configuration as in a terminal: none of --setting-sources, --strict-mcp-config and --no-chrome, and its hook in settings that carry none of the server defences', () => {
+    for (const version of [fullAccessFloor, '2.1.329']) {
+        const args = claudeArguments({ ...base, mode: 'full_access', settingsFile, version });
+        for (const flag of ['--setting-sources', '--strict-mcp-config', '--no-chrome']) assert.ok(!args.includes(flag), `${version}: ${flag}`);
+        assert.equal(after(args, '--permission-mode'), 'bypassPermissions', version);
+        assert.equal(after(args, '--settings'), settingsFile, version);
+        // The turn's own MCP file still names the prompt tool's server, beside the person's own servers.
+        assert.equal(after(args, '--mcp-config'), base.mcpConfig, version);
+        assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, version);
     }
+    const full = hookedSettings('full_access', hookUrl, 'the-secret') as Record<string, unknown>;
+    for (const key of Object.keys(defences)) assert.equal(key in full, false, key);
+    assert.equal((full['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
+    assert.equal(full['disableAllHooks'], false);
+    assert.deepEqual(full['allowedHttpHookUrls'], [hookUrl]);
+    assert.throws(() => claudeArguments({ ...base, mode: 'full_access', version: fullAccessFloor }), /settings file/, 'never without the file its hook rides in');
 });
 
 test('every turn\'s prompt tool is on a server named for that turn alone, the fixed prefix and a nonce, so a server of the old fixed name in the person\'s own scopes answers no card; a name of any other shape is refused', () => {
-    for (const mode of [...loading, 'plan_only'] as const) {
+    for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
         const args = claudeArguments({ ...base, mode, ...(mode === 'plan_only' ? {} : { settingsFile }), version: '2.1.329' });
         assert.equal(after(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide', mode);
         assert.ok(!args.includes('mcp__jason_desktop__decide'), mode);

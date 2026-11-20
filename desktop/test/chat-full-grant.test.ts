@@ -234,7 +234,7 @@ test('the ended place is kept for exactly seven days', () => {
     assert.equal(keptMs, 7 * day);
 });
 
-test('a Plan only turn\'s settings carry disableSkillShellExecution, and the settings of the modes that load the person\'s own configuration do not', async (t) => {
+test('every turn\'s settings but a Full access turn\'s carry disableSkillShellExecution: the person\'s skills run their shell commands in Full access alone', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'ask_first');
@@ -248,9 +248,8 @@ test('a Plan only turn\'s settings carry disableSkillShellExecution, and the set
     assert.equal(JSON.parse(flag(planned?.args ?? [], '--settings') ?? '{}').disableSkillShellExecution, true);
     // A turn the hook rides has its settings in a file of its own, removed with the turn; their text is the function's.
     for (const hooked of [asked, full]) assert.match(flag(hooked?.args ?? [], '--settings') ?? '', /\.settings\.json$/);
-    for (const mode of ['ask_first', 'auto_edit', 'full_access'] as const) {
-        assert.equal('disableSkillShellExecution' in hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), false, mode);
-    }
+    for (const mode of ['ask_first', 'auto_edit'] as const) assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret').disableSkillShellExecution, true, mode);
+    assert.equal('disableSkillShellExecution' in hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret'), false);
 });
 
 test('a conversation\'s turn is refused the shared chat folder and the other conversations\' folders by the host\'s own rules, and may use its own', async (t) => {

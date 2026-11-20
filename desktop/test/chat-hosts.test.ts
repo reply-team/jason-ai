@@ -39,6 +39,8 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
     const args = claudeArguments(turn);
     assert.deepEqual(args.slice(0, 4), ['-p', '--output-format', 'stream-json', '--verbose']);
     assert.ok(!args.includes('--bare'));
+    assert.ok(args.includes('--strict-mcp-config'));
+    assert.equal(valueOf(args, '--setting-sources'), 'project');
     assert.equal(valueOf(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide');
     assert.equal(valueOf(args, '--mcp-config'), turn.mcpConfig);
 });
@@ -46,7 +48,7 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
 test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
         assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}');
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]},"disableClaudeAiConnectors":true,"deniedMcpServers":[{"serverName":"claude-in-chrome"}],"disableSkillShellExecution":true}');
     }
 });
 

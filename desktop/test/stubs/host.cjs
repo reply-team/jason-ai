@@ -20,6 +20,8 @@
 //   { "end": "error", "text": "words" }               end with a failed result
 //   { "jam": true }                                   Claude Code only: put a folder where the turn's MCP file is, so its removal fails
 //   { "servers": true }                               Claude Code only: say "servers: " and the names the turn's MCP file gives its servers
+//   { "defences": true }                              Claude Code only: say "defences: " and the server defences the turn's settings
+//                                                    carry, inline or in their file, in a fixed order, or "none"
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
@@ -212,6 +214,11 @@ async function claude(args, stdin) {
         } else if (step.servers !== undefined) {
             const named = Object.keys(JSON.parse(readFileSync(config, 'utf8')).mcpServers || {});
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `servers: ${named.join(' ')}` }] } });
+        } else if (step.defences !== undefined) {
+            const given = args[args.indexOf('--settings') + 1];
+            const settings = JSON.parse(given.trimStart().startsWith('{') ? given : readFileSync(given, 'utf8'));
+            const carried = ['disableClaudeAiConnectors', 'deniedMcpServers', 'disableSkillShellExecution'].filter((key) => key in settings);
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `defences: ${carried.join(' ') || 'none'}` }] } });
         } else if (step.wait !== undefined) return wait(step.wait);
         else if (step.jam !== undefined) {
             rmSync(config, { force: true });
