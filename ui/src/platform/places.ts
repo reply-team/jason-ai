@@ -34,7 +34,7 @@ export type PlaceKind = 'window' | 'tab' | 'none';
 export const showsConsole = (kind: PlaceKind = placeKind()): boolean => kind !== 'none';
 
 /** The subscriptions the bridge's event stream feeds: not calls of the table, but a tab has them. */
-const streamed: readonly string[] = ['chat.onEvent', 'setup.onChanged', 'fullAccess.onChanged'];
+const streamed: readonly string[] = ['chat.onEvent', 'setup.onChanged'];
 
 /** Whether a place of this kind can do the member. */
 export function canIn(kind: PlaceKind, member: DesktopMember): boolean {
@@ -132,11 +132,6 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             feed: async () => refused(),
             cardRefused: async () => refused(),
         },
-        fullAccess: {
-            standing: seam.fullAccess.standing,
-            takeBack: async () => refused(),
-            onChanged: seam.fullAccess.onChanged,
-        },
         links: { take: async () => null, onOpen: none },
         setup: {
             status: seam.setup.status,
@@ -165,8 +160,7 @@ const needsReply = (): DesktopReplyRefusal => ({ refused: t('place.needs'), code
 
 /**
  * The object of a tab with no desktop, of the desktop's whole shape: every act refuses in one sentence, and a read says
- * what a page with no desktop can truthfully say: the person's own installation, no conversations, nothing standing, no
- * link held. What the desktop alone knows, the setup, is refused with the sentence, never made up. `platform` is the
+ * what a page with no desktop can truthfully say: the person's own installation, no conversations, no link held. What the desktop alone knows, the setup, is refused with the sentence, never made up. `platform` is the
  * browser's own.
  */
 export function noDesktop(): JasonDesktop {
@@ -205,7 +199,6 @@ export function noDesktop(): JasonDesktop {
             feed: async () => needsRefusal(),
             cardRefused: async () => needsRefusal(),
         },
-        fullAccess: { standing: async () => null, takeBack: async () => needsRefusal(), onChanged: none },
         links: { take: async () => null, onOpen: none },
         setup: {
             status: needs,

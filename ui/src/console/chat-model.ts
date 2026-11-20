@@ -356,31 +356,21 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Full access',
 };
 
-/** Why the desktop refuses Full access for the Feed, in its words. */
-const feedFullAccess =
-    'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /** Why the desktop refuses Auto-edit on Codex, in its words; with no host the menu says it too. */
 const codexAutoEdit =
     'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
-/** Why the desktop refuses Auto-edit for the Feed, in its words. */
-const feedAutoEdit =
-    'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /**
  * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
  * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
- * it; with no host, as on Codex; and for the Feed, in the order the desktop refuses it. Auto-edit is disabled the same
- * way, on Codex and for the Feed; it has no version floor.
+ * it; with no host, as on Codex. Auto-edit is disabled the same way, on Codex; it has no version floor. The Feed is
+ * offered the same as any chat.
  */
 export function modeChoices(
     host: DesktopHost | null,
-    feed = false,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full =
-        host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
-    const edit = host === null ? codexAutoEdit : (host.autoEdit ?? (feed ? feedAutoEdit : null));
+    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    const edit = host === null ? codexAutoEdit : host.autoEdit;
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],

@@ -2,7 +2,6 @@ import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@test
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
-import { fullAccessStanding } from '../platform/full-access';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
@@ -147,7 +146,6 @@ beforeEach(() => {
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
     classicCampaigns.campaign.value = null;
-    fullAccessStanding.value = null;
     forgetWaiting();
 });
 

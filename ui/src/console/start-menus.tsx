@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { can, cannotHere } from '../platform/places';
 import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
-import { fullAccessStanding, readStandingAgain, takeBackWords } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { hostOf, heldHostOf } from './chat';
 import { setVariable } from './html';
@@ -29,7 +28,7 @@ import {
     type Chat,
 } from './chat-model';
 import { chatHosts } from './live';
-import { here, setup } from './state';
+import { setup } from './state';
 
 // The two buttons in a composer's row, each opening a menu: the access mode a chat works in, and what it runs on (host,
 // model, effort). The start screen's box and a chat's own composer draw the same two; `change` and `choose` say where a
@@ -321,22 +320,19 @@ function Item({
 export function AccessButton({
     chat,
     choose,
-    takeBack,
     buttonRef,
     header,
     order,
 }: {
     chat: Chat;
     choose: (mode: DesktopChatMode) => void;
-    takeBack: () => void;
     buttonRef: RefObject<HTMLButtonElement>;
     /** The words over the modes, which say whose mode it is. */
     header: string;
     /** The order the menu lists the modes in; absent, `modeChoices`'s own. */
     order?: readonly DesktopChatMode[];
 }) {
-    const feed = chat.main === true;
-    const listed = modeChoices(hostOf(chat), feed);
+    const listed = modeChoices(hostOf(chat));
     const choices = order ? [...listed].sort((a, b) => order.indexOf(a.mode) - order.indexOf(b.mode)) : listed;
     const current = choices.find((each) => each.mode === chat.mode)?.label ?? chat.mode;
     const tone = chat.mode === 'full_access' ? ' acc-full' : chat.mode === 'plan_only' ? ' acc-plan' : '';
@@ -353,7 +349,6 @@ export function AccessButton({
             menuClassName="accmenu"
             buttonRef={buttonRef}
             disabled={chat.removing}
-            onOpen={() => readStandingAgain(here().desktop)}
         >
             {(close) => (
                 <>
@@ -383,25 +378,6 @@ export function AccessButton({
                             />
                         );
                     })}
-                    {fullAccessStanding.value !== null && (
-                        <>
-                            <hr />
-                            <Item
-                                className="accmi"
-                                kind="mode"
-                                label={takeBackWords}
-                                value="take_back"
-                                checked={false}
-                                command
-                                disabled={!can('fullAccess.takeBack')}
-                                small={can('fullAccess.takeBack') ? undefined : cannotHere()}
-                                onChoose={() => {
-                                    close();
-                                    takeBack();
-                                }}
-                            />
-                        </>
-                    )}
                 </>
             )}
         </MenuButton>
@@ -420,12 +396,10 @@ const whyNot = (host: { belowFloor?: string | null }): string =>
 export function ModelButton({
     chat,
     change,
-    choose,
     header,
 }: {
     chat: Chat;
     change: (next: (each: Chat) => Chat) => void;
-    choose: (mode: DesktopChatMode) => void;
     /** The words over the models, which say whose model it is. */
     header: string;
 }) {
@@ -477,13 +451,8 @@ export function ModelButton({
                     data-value={each.id}
                     onClick={() => {
                         if (each.id === host?.id) return;
+                        // The chat keeps its mode: a turn on a host that cannot take it runs in Ask first, the desktop says.
                         change((chosen) => hostChosen(chosen, each.id));
-                        // A host that cannot take Full access or Auto-edit takes the chat back to Ask first.
-                        if (
-                            (chat.mode === 'full_access' && each.fullAccess !== null) ||
-                            (chat.mode === 'auto_edit' && each.autoEdit !== null)
-                        )
-                            choose('ask_first');
                     }}
                 >
                     {each.label}

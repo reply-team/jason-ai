@@ -201,8 +201,8 @@ describe('what a tab never says yes to', () => {
         expect(screen.queryByRole('button', { name: /Keep planning/ })).toBeNull();
     });
 
-    it('takes no message for a chat in Full access, and says where to send it from', async () => {
-        await shown({ mode: 'full_access' });
+    it('takes no message for a chat in Auto-edit, and says where to send it from', async () => {
+        await shown({ mode: 'auto_edit' });
         expect(screen.getByText(/Send messages to it from Jason Desktop/)).toBeTruthy();
         expect((screen.getByRole('textbox', { name: 'Your message' }) as HTMLTextAreaElement).disabled).toBe(true);
         expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
@@ -213,7 +213,7 @@ describe('what a tab never says yes to', () => {
         ['ask_first', false, null],
         ['plan_only', false, null],
         ['auto_edit', true, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.'],
-        ['full_access', true, 'This chat is in Full access. Send messages to it from Jason Desktop.'],
+        ['full_access', false, null],
         ['some_new_mode', true, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.'],
     ])('with the chat in %s the box is locked: %s', async (mode, locked, sentence) => {
         await shown({ mode: mode as never });
@@ -225,8 +225,8 @@ describe('what a tab never says yes to', () => {
         else expect(screen.getByText(sentence)).toBeTruthy();
     });
 
-    it('sends nothing from a suggestion chip in a Full access chat', async () => {
-        await shown({ mode: 'full_access' });
+    it('sends nothing from a suggestion chip in an Auto-edit chat', async () => {
+        await shown({ mode: 'auto_edit' });
         const chip = await waitFor(() => screen.getByRole('button', { name: 'How are my agents doing?' }));
         fireEvent.click(chip);
         await new Promise((resolve) => setTimeout(resolve, 30));
@@ -239,8 +239,8 @@ describe('what a tab never says yes to', () => {
         await waitFor(() => expect(called('chat.send')).toHaveLength(1));
     });
 
-    it('sends nothing from the outbox of a Full access chat', async () => {
-        await shown({ mode: 'full_access' });
+    it('sends nothing from the outbox of an Auto-edit chat', async () => {
+        await shown({ mode: 'auto_edit' });
         flush(() => {
             chats.value = { ...chats.value, conv_1: { ...chats.value['conv_1']!, outbox: 'queued words' } };
         });

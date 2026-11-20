@@ -672,16 +672,14 @@ describe("a chat's access mode", () => {
             disabled: 'Full access runs on Claude Code only.',
         });
         expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
-        // The Feed is offered every mode a chat on its host is: Full access and Auto-edit included.
-        expect(modeChoices(claude, true)).toEqual(modeChoices(claude));
-        expect(modeChoices(codex, true)).toEqual(modeChoices(codex));
+        // The Feed is offered every mode a chat on its host is, Full access and Auto-edit included: the menu reads the
+        // host alone, and no mark of the Feed.
+        expect(modeChoices.length).toBe(1);
     });
 
     it("disables Auto-edit on Codex and with no host in the desktop's words, and nowhere else, the Feed included", () => {
         expect(modeChoices(codex)[2]).toEqual({ mode: 'auto_edit', label: 'Auto-edit', disabled: codexAutoEdit });
         expect(modeChoices(null)[2]?.disabled).toBe(codexAutoEdit);
-        expect(modeChoices(claude, true)[2]?.disabled).toBeNull();
-        expect(modeChoices(codex, true)[2]?.disabled).toBe(codexAutoEdit);
         // A Claude Code below Full access's floor still offers Auto-edit: it needs no hook.
         const below = { ...claude, fullAccess: 'Full access needs a newer Claude Code.' } as DesktopHost;
         expect(modeChoices(below)[2]?.disabled).toBeNull();

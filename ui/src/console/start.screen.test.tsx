@@ -15,7 +15,6 @@ import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { chosenSection } from '../screens/settings/chosen';
-import { fullAccessStanding } from '../platform/full-access';
 import {
     noteKey,
     notesClosed,
@@ -126,7 +125,6 @@ beforeEach(() => {
     voiceKnown.value = 'unread';
     localStorage.removeItem(noteKey('live'));
     localStorage.removeItem(noteKey('demo'));
-    fullAccessStanding.value = null;
 });
 
 /** Opens the Campaigns panel and the chat of the campaign named, from its row, as a person does. */
@@ -319,7 +317,7 @@ describe('the start screen', () => {
         renderConsole(stubDesktop());
         await ready();
         const form = startForm();
-        expect(within(form).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        expect(within(form).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         expect(within(form).getByRole('button', { name: 'Model: Claude Code default' })).toBeTruthy();
         const buttons = within(form).getAllByRole('button');
         expect(buttons[buttons.length - 1]!.getAttribute('aria-label')).toBe('Send');
@@ -359,9 +357,8 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')[0]!.args[2]).toMatchObject({ model: 'opus', effort: 'high' });
     });
 
-    it('with "start new chats in Full access" shows the access mode as Full access with the chat\'s line, and the chat starts in it', async () => {
+    it("shows the access mode as Full access with the chat's line before any chat is made, and the chat starts in it", async () => {
         const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
         const line = await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
@@ -372,13 +369,14 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'claude'] }]);
+        // The desktop makes it in Full access: no host is named and no mode asked for.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        expect(calls(desktop, 'chat.setMode')).toEqual([]);
         await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
     });
 
     it('choosing Ask first in the access mode makes that chat start in Ask first', async () => {
         const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
         await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
@@ -387,18 +385,10 @@ describe('the start screen', () => {
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Asked of the desktop once the chat is made, before its first message.
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         await waitFor(() => screen.getByRole('form', { name: 'Message' }));
         expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
-    });
-
-    it('shows Ask first and no Full access line without "start new chats"', async () => {
-        const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
-        renderConsole(desktop);
-        await ready();
-        await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
-        expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
-        expect(within(startForm()).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
     });
 
     it('where the host offers no Full access, as in the demo, the access mode refuses it in the own words of the chat', async () => {
@@ -409,6 +399,7 @@ describe('the start screen', () => {
         };
         renderConsole(stubDesktop(demo));
         await ready();
+        fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
         const full = item(openMenu(/Access mode/), /^Full access/) as HTMLButtonElement;
         expect(full.getAttribute('aria-disabled')).toBe('true');
         expect(full.textContent).toContain(refusal);
