@@ -234,7 +234,7 @@ test('the ended place is kept for exactly seven days', () => {
     assert.equal(keptMs, 7 * day);
 });
 
-test('every turn\'s settings, in all three modes, carry disableSkillShellExecution', async (t) => {
+test('a Plan only turn\'s settings carry disableSkillShellExecution, and the settings of the modes that load the person\'s own configuration do not', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'ask_first');
@@ -249,7 +249,7 @@ test('every turn\'s settings, in all three modes, carry disableSkillShellExecuti
     // A turn the hook rides has its settings in a file of its own, removed with the turn; their text is the function's.
     for (const hooked of [asked, full]) assert.match(flag(hooked?.args ?? [], '--settings') ?? '', /\.settings\.json$/);
     for (const mode of ['ask_first', 'auto_edit', 'full_access'] as const) {
-        assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret').disableSkillShellExecution, true, mode);
+        assert.equal('disableSkillShellExecution' in hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), false, mode);
     }
 });
 

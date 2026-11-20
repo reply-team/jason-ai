@@ -159,6 +159,28 @@ test('Ask first\'s hook stands in front of the host\'s allow rules: a verb the h
     assert.equal(r.chat.open(id).mode, 'ask_first');
 });
 
+test('each mode\'s turn, end to end: outside Plan only Claude Code starts with the person\'s own configuration, Plan only sealed; every turn\'s prompt tool is on a server of its own, the one its MCP file names', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    const servers: string[] = [];
+    for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+        if (mode !== 'full_access') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        plan(r, [{ servers: true }]);
+        const said = await r.turn(id, mode, claude);
+        assert.equal(r.started.at(-1), mode, 'the turn ran in its mode');
+        const args = r.hosts().at(-1)?.args ?? [];
+        const sealed = mode === 'plan_only';
+        assert.equal(flag(args, '--setting-sources'), sealed ? 'project' : undefined, mode);
+        assert.equal(args.includes('--strict-mcp-config'), sealed, mode);
+        assert.equal(args.includes('--no-chrome'), sealed, `${mode}: the stand-in says a version above the one that added the flag`);
+        const server = /^mcp__(jason_desktop_[0-9a-f]{16})__decide$/.exec(flag(args, '--permission-prompt-tool') ?? '')?.[1] ?? '';
+        assert.notEqual(server, '', `${mode}: ${flag(args, '--permission-prompt-tool')}`);
+        assert.equal(texts(said).at(-1), `servers: ${server}`, `${mode}: the turn's MCP file names that server alone`);
+        servers.push(server);
+    }
+    assert.equal(new Set(servers).size, servers.length, `no two turns share a server: ${servers.join(' ')}`);
+});
+
 test('Plan only is kept on the conversation\'s record, survives a restart, and starts Claude Code in plan mode', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
@@ -1231,7 +1253,7 @@ for (const mode of fenceModes) {
         await r.turn(id, 'hello', claude);
         assert.deepEqual(r.started, [mode]);
         const args = r.hosts()[0]?.args ?? [];
-        const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+        const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--settings'));
         for (const name of ['setup', 'layout.json', 'config', 'plugins']) {
             const rule = rulePath(platformOf(), join(r.b.paths.data, name));
             for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${mode}: ${each}`);

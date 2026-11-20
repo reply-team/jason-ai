@@ -19,6 +19,7 @@
 //   { "end": "no_result" }                            exit 0 with no result
 //   { "end": "error", "text": "words" }               end with a failed result
 //   { "jam": true }                                   Claude Code only: put a folder where the turn's MCP file is, so its removal fails
+//   { "servers": true }                               Claude Code only: say "servers: " and the names the turn's MCP file gives its servers
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
@@ -124,10 +125,20 @@ async function askHook(hook, session, mode, tool, input, id) {
     }
 }
 
+/**
+ * The permission prompt tool's server and tool, as Claude Code resolves `--permission-prompt-tool`: `mcp__<server>__<tool>`,
+ * the tool after the last `__`.
+ */
+function promptToolOf(args) {
+    const named = args[args.indexOf('--permission-prompt-tool') + 1] || '';
+    const at = named.lastIndexOf('__');
+    return { server: named.slice('mcp__'.length, at), tool: named.slice(at + 2) };
+}
+
 /** Asks the permission prompt tool, as Claude Code does under -p: the tool result's content and whether it is an error. */
-async function prompted(config, tool, input) {
+async function prompted(config, prompt, tool, input) {
     try {
-        const decision = await decide(config, 'jason_desktop', 'decide', tool, input);
+        const decision = await decide(config, prompt.server, prompt.tool, tool, input);
         return decision.behavior === 'allow' ? ['ran', false] : [`refused: ${decision.message}`, true];
     } catch (error) {
         return [`refused: the prompt tool failed: ${error.message}`, true];
@@ -143,6 +154,7 @@ async function claude(args, stdin) {
     }
     const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
     const config = args[args.indexOf('--mcp-config') + 1];
+    const prompt = promptToolOf(args);
     // The bypass mode as Claude Code answers it: refused before anything starts in its restricted mode or under a policy,
     // and turned off by a settings file with no word of it, the init line naming the default mode (seen on 2.1.329).
     const askedMode = permissionMode(args);
@@ -175,14 +187,14 @@ async function claude(args, stdin) {
                 const decided = await askHook(hook, session, permissionMode(args), step.use.tool, step.use.input, id);
                 if (decided.failed && hook.onFailure === 'block') [content, error] = ['blocked: the hook failed', true];
                 else if (decided.decision === 'deny') [content, error] = [`refused: ${decided.reason}`, true];
-                else if (decided.decision === 'ask' || step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
-            } else if (step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
+                else if (decided.decision === 'ask' || step.use.prompt) [content, error] = await prompted(config, prompt, step.use.tool, step.use.input);
+            } else if (step.use.prompt) [content, error] = await prompted(config, prompt, step.use.tool, step.use.input);
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             if (hook !== null) print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content}` }] } });
         } else if (step.unhooked !== undefined) {
             const id = `toolu_unhooked_${++n}`;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
-            const [content, error] = step.unhooked.prompt ? await prompted(config, step.unhooked.tool, step.unhooked.input) : ['ran', false];
+            const [content, error] = step.unhooked.prompt ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input) : ['ran', false];
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content} unhooked` }] } });
         }
@@ -191,12 +203,15 @@ async function claude(args, stdin) {
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_${n}`, name: step.ask.tool, input: step.ask.input }] } });
             let said;
             try {
-                const decision = await decide(config, 'jason_desktop', 'decide', step.ask.tool, step.ask.input);
+                const decision = await decide(config, prompt.server, prompt.tool, step.ask.tool, step.ask.input);
                 said = decision.behavior === 'allow' ? 'decision allow' : `decision deny: ${decision.message}`;
             } catch (error) {
                 said = `decision failed: ${error.message}`;
             }
             print({ type: 'assistant', message: { content: [{ type: 'text', text: said }] } });
+        } else if (step.servers !== undefined) {
+            const named = Object.keys(JSON.parse(readFileSync(config, 'utf8')).mcpServers || {});
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `servers: ${named.join(' ')}` }] } });
         } else if (step.wait !== undefined) return wait(step.wait);
         else if (step.jam !== undefined) {
             rmSync(config, { force: true });

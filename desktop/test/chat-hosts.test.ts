@@ -16,7 +16,7 @@ const fence = readFence(join(here, '..'));
 const entries = fence.commands;
 const fixture = (name: string) => readFileSync(join(here, 'fixtures', name), 'utf8').split(/\r?\n/).filter((line) => line !== '');
 
-const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [], version: '2.1.300' };
+const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [], version: '2.1.300' };
 
 /** The value that follows a flag, once. */
 function valueOf(args: readonly string[], flag: string): string | undefined {
@@ -39,16 +39,14 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
     const args = claudeArguments(turn);
     assert.deepEqual(args.slice(0, 4), ['-p', '--output-format', 'stream-json', '--verbose']);
     assert.ok(!args.includes('--bare'));
-    assert.ok(args.includes('--strict-mcp-config'));
-    assert.equal(valueOf(args, '--setting-sources'), 'project');
-    assert.equal(valueOf(args, '--permission-prompt-tool'), 'mcp__jason_desktop__decide');
+    assert.equal(valueOf(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide');
     assert.equal(valueOf(args, '--mcp-config'), turn.mcpConfig);
 });
 
 test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
         assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]},"disableClaudeAiConnectors":true,"deniedMcpServers":[{"serverName":"claude-in-chrome"}],"disableSkillShellExecution":true}');
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}');
     }
 });
 
@@ -366,7 +364,7 @@ test('the host\'s own rules refuse Read and Edit of setup/ and layout.json, and 
         const rules = dataRules(platform, data, [], []);
         for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
             const args = claudeArguments({ ...turn, mode, dataRules: rules, ...(mode === 'full_access' ? { settingsFile: '/data/desktop/turns/turn-1.settings.json' } : {}) });
-            const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+            const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--settings'));
             for (const name of ['setup', 'layout.json']) {
                 const rule = rulePath(platform, platform === 'win32' ? `${data}\\${name}` : `${data}/${name}`);
                 for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${platform} ${mode}: ${each}`);

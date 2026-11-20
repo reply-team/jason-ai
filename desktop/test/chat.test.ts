@@ -167,7 +167,9 @@ test('a turn with nothing to ask starts Claude Code in the conversation\'s own f
     assert.equal(host.stdin, asked(words));
     assert.ok(host.args.every((arg) => !arg.includes(words)), 'the words are never on the command line');
     assert.ok(same(host.cwd, join(r.b.paths.chats, r.chat.idOf('c1') as string)), `started in ${host.cwd}`);
-    for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
+    for (const flag of ['-p', '--permission-prompt-tool', '--mcp-config', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
+    // An Ask first turn loads the person's own Claude Code configuration, as a terminal does.
+    for (const flag of ['--strict-mcp-config', '--setting-sources', '--no-chrome']) assert.ok(!host.args.includes(flag), flag);
     assert.ok(!host.args.includes('--bare'));
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');
@@ -671,10 +673,10 @@ test('a turn refused on a held Claude Code keeps the chat\'s session, and the tu
     assert.deepEqual(r.started.map((each) => each.resumed), [false, true]);
 });
 
-test('a Claude Code turn on a host that knows --no-chrome carries it', async (t) => {
+test('a Claude Code turn outside Plan only on a host that knows --no-chrome does not carry it: the person\'s browser integration is theirs', async (t) => {
     const r = rig(t);
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
-    assert.ok(r.hosts()[0]?.args.includes('--no-chrome'), 'the stand-in says a version above the one that added it');
+    assert.ok(!r.hosts()[0]?.args.includes('--no-chrome'), 'the stand-in says a version above the one that added it');
 });
 
 test('a turn on a Claude Code whose version cannot be read is refused as below the floor; one exactly at the floor runs', async (t) => {

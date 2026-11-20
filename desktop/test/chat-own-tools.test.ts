@@ -1,7 +1,9 @@
 // The fence around the person's own tools: an MCP tool of a server other than the chat's own is a card of its own in Ask
 // first and runs in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
-// never cut; the files and commands that add a server to an agent; and what every turn's command line and settings carry
-// so that no server, connector or browser of the person's reaches a turn.
+// never cut; the files and commands that add a server to an agent; what a turn's command line and settings carry in each
+// mode, so that outside Plan only the person's own Claude Code configuration loads as in a terminal and in Plan only none
+// of it does; and the chat's own permission tool, on a server named for each turn alone and refused to the agent by the
+// name's fixed prefix.
 
 import assert from 'node:assert/strict';
 import { join, posix } from 'node:path';
@@ -101,6 +103,19 @@ test('the chat\'s own permission tool stays refused to the agent', () => {
     assert.equal(judge('mcp__jason_desktop__approve', { allow: true }, scope).verdict, 'deny');
 });
 
+test('a tool of any server whose name begins with the fixed prefix is the chat\'s own, refused to the agent by the hook and the permission model: a turn\'s, and one of the old fixed name from the person\'s own scopes', () => {
+    const own = /answers the chat's own permission requests/;
+    for (const tool of ['mcp__jason_desktop__decide', 'mcp__jason_desktop__approve', 'mcp__jason_desktop_0123456789abcdef__decide', 'mcp__jason_desktop_fedcba9876543210__other']) {
+        const judged = judge(tool, { tool_name: 'Bash', input: { command: 'ls' } }, scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : judged.verdict, own, tool);
+        const hooked = fullAccessJudgement(tool, { allow: true }, scope);
+        assert.match(hooked.outcome === 'refused' ? hooked.message : hooked.outcome, own, tool);
+    }
+    // A server whose name only starts the same way is another: the person's own, a card in Ask first, and it runs in Full access.
+    assert.equal(judge('mcp__jason_desktopx__run', { text: 'hi' }, scope).verdict === 'ask' && (judge('mcp__jason_desktopx__run', { text: 'hi' }, scope) as { title: string }).title, personsToolTitle);
+    assert.deepEqual(fullAccessJudgement('mcp__jason_desktopx__run', { text: 'hi' }, scope), runs);
+});
+
 test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it but in the shared chat folder', () => {
     const top = { file_path: posix.join(chat, '.mcp.json'), content: '{"mcpServers":{}}' };
     const judged = judge('Write', top, scope);
@@ -151,47 +166,58 @@ test('claude mcp and codex mcp are a card each time, never "always", and run in 
     assert.equal(judge('Bash', { command: 'grep -r mcp notes' }, scope).verdict === 'ask' && (judge('Bash', { command: 'grep -r mcp notes' }, scope) as { title: string }).title, 'Run a command');
 });
 
-const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: [] };
+const server = 'jason_desktop_0123456789abcdef';
+const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', server, addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: [] };
 const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
+/** The modes whose turns load the person's own Claude Code configuration. */
+const loading = ['ask_first', 'auto_edit', 'full_access'] as const;
+const after = (args: string[], flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
 
-test('every Claude Code turn at or above the version that knows it carries --no-chrome, in each mode', () => {
-    for (const version of [noChromeFrom, '2.1.300', '3.0.0']) {
-        for (const mode of ['ask_first', 'plan_only', 'full_access'] as const) {
+test('outside Plan only a Claude Code turn, at any version, passes none of --setting-sources, --strict-mcp-config and --no-chrome, so the person\'s own configuration loads as in a terminal', () => {
+    for (const version of [claudeFloor, '2.1.284', noChromeFrom, '2.1.300', '3.0.0']) {
+        for (const mode of loading) {
             const args = claudeArguments({ ...base, mode, settingsFile, version });
-            assert.ok(args.includes('--no-chrome'), `${version} ${mode}`);
-            assert.ok(args.includes('--strict-mcp-config'), `${version} ${mode}`);
+            for (const flag of ['--setting-sources', '--strict-mcp-config', '--no-chrome']) assert.ok(!args.includes(flag), `${version} ${mode}: ${flag}`);
+            // The turn's own MCP file still names the prompt tool's server, beside the person's own servers.
+            assert.equal(after(args, '--mcp-config'), base.mcpConfig, `${version} ${mode}`);
+            assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, `${version} ${mode}`);
         }
+        // Below the floor of Full access an Ask first turn carries its settings inline, with no hook.
+        assert.equal(after(claudeArguments({ ...base, mode: 'ask_first', version }), '--settings'), claudeTurnSettings, version);
     }
-    for (const version of [claudeFloor, '2.1.284']) {
-        for (const mode of ['ask_first', 'plan_only', 'full_access'] as const) {
-            assert.ok(!claudeArguments({ ...base, mode, settingsFile, version }).includes('--no-chrome'), `below: ${version} ${mode}`);
-        }
+});
+
+test('Plan only keeps its sealed command line whole: project settings alone, the turn\'s MCP file alone, no browser from the version that knows the flag, and the settings that keep the rest out', () => {
+    for (const [version, chrome] of [[claudeFloor, false], ['2.1.284', false], [noChromeFrom, true], ['2.1.300', true], ['3.0.0', true]] as const) {
+        const args = claudeArguments({ ...base, mode: 'plan_only', version });
+        assert.equal(after(args, '--setting-sources'), 'project', version);
+        assert.ok(args.includes('--strict-mcp-config'), version);
+        assert.equal(args.includes('--no-chrome'), chrome, version);
+        assert.equal(after(args, '--settings'), planTurnSettings, version);
+        assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, version);
     }
+    const plan = JSON.parse(planTurnSettings) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(defences)) assert.deepEqual(plan[key], value, key);
     assert.equal(noChromeFrom, '2.1.285');
 });
 
-test('every Claude Code turn\'s settings turn the claude.ai connectors off and deny the browser\'s server, in each mode', () => {
-    const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
-    for (const settings of [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), ...(['full_access', 'ask_first', 'auto_edit'] as const).map((mode) => hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'))]) {
-        assert.equal(settings.disableClaudeAiConnectors, defences.disableClaudeAiConnectors);
-        assert.deepEqual(settings.deniedMcpServers, defences.deniedMcpServers);
+test('outside Plan only the turn\'s settings carry none of the server defences, so the person\'s connectors, browser and skills\' shell commands work; reads outside the folders stay blocked', () => {
+    const settings = [JSON.parse(claudeTurnSettings) as Record<string, unknown>, ...loading.map((mode) => hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret') as Record<string, unknown>)];
+    for (const each of settings) {
+        for (const key of Object.keys(defences)) assert.equal(key in each, false, key);
+        assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
     }
 });
 
-test('Claude Code 2.1.284 gets the settings keys alone, 2.1.285 the keys and --no-chrome', () => {
-    const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
-    for (const [version, flag] of [['2.1.284', false], ['2.1.285', true]] as const) {
-        for (const mode of ['ask_first', 'plan_only'] as const) {
-            const args = claudeArguments({ ...base, mode, version });
-            const settings = JSON.parse(args[args.indexOf('--settings') + 1] ?? '{}') as Record<string, unknown>;
-            assert.equal(settings.disableClaudeAiConnectors, defences.disableClaudeAiConnectors, `${version} ${mode}`);
-            assert.deepEqual(settings.deniedMcpServers, defences.deniedMcpServers, `${version} ${mode}`);
-            assert.equal(args.includes('--no-chrome'), flag, `${version} ${mode}`);
-        }
-        // Full access's settings are a file of the turn's own, written from these, whatever the version.
-        const full = claudeArguments({ ...base, mode: 'full_access', settingsFile, version });
-        assert.equal(full[full.indexOf('--settings') + 1], settingsFile);
-        assert.equal(full.includes('--no-chrome'), flag, `${version} full_access`);
+test('every turn\'s prompt tool is on a server named for that turn alone, the fixed prefix and a nonce, so a server of the old fixed name in the person\'s own scopes answers no card; a name of any other shape is refused', () => {
+    for (const mode of [...loading, 'plan_only'] as const) {
+        const args = claudeArguments({ ...base, mode, ...(mode === 'plan_only' ? {} : { settingsFile }), version: '2.1.329' });
+        assert.equal(after(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide', mode);
+        assert.ok(!args.includes('mcp__jason_desktop__decide'), mode);
+    }
+    for (const named of ['jason_desktop', 'jason_desktop_', 'jason_desktop_0123', 'jason_desktop_0123456789ABCDEF', 'jason_desktop_0123456789abcdef0', 'other_0123456789abcdef', '--strict-mcp-config']) {
+        assert.throws(() => claudeArguments({ ...base, server: named, mode: 'ask_first', version: '2.1.329' }), /server/, named);
     }
 });
 

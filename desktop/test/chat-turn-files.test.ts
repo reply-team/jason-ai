@@ -15,9 +15,9 @@ function data(): string {
     return root;
 }
 
-test('the turn\'s MCP configuration names one HTTP server with the turn\'s secret as a bearer token and a time limit above the broker\'s, and nothing else', () => {
-    assert.deepEqual(turnConfig('http://127.0.0.1:50123/mcp', 's3cret'), {
-        mcpServers: { jason_desktop: { type: 'http', url: 'http://127.0.0.1:50123/mcp', headers: { Authorization: 'Bearer s3cret' }, timeout: 2_100_000 } },
+test('the turn\'s MCP configuration names one HTTP server, by the turn\'s own name for it, with the turn\'s secret as a bearer token and a time limit above the broker\'s, and nothing else', () => {
+    assert.deepEqual(turnConfig('http://127.0.0.1:50123/mcp', 's3cret', 'jason_desktop_0123456789abcdef'), {
+        mcpServers: { jason_desktop_0123456789abcdef: { type: 'http', url: 'http://127.0.0.1:50123/mcp', headers: { Authorization: 'Bearer s3cret' }, timeout: 2_100_000 } },
     });
     assert.ok(hostCallLimitMs > PermissionBroker.unanswered, 'the host must never give up on a call before the broker answers it');
 });
@@ -37,10 +37,10 @@ test('the configuration is written under <data>/desktop/turns/, made when it is 
     const paths = desktopPaths(root);
     const id = newTurnId();
     assert.equal(existsSync(paths.turns), false);
-    const file = writeTurnConfig(paths.turns, id, 'http://127.0.0.1:50123/mcp', 's3cret');
+    const file = writeTurnConfig(paths.turns, id, 'http://127.0.0.1:50123/mcp', 's3cret', 'jason_desktop_0123456789abcdef');
     assert.equal(file, turnConfigPath(paths.turns, id));
     assert.equal(dirname(file), join(root, 'desktop', 'turns'));
-    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), turnConfig('http://127.0.0.1:50123/mcp', 's3cret'));
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), turnConfig('http://127.0.0.1:50123/mcp', 's3cret', 'jason_desktop_0123456789abcdef'));
     if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
 });
 
