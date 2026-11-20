@@ -34,7 +34,7 @@ to update this Jason, as the refusal's own sentence says: `jason update apply`, 
 Desktop. Never restore an older backup over the database, delete anything in the data directory, or start an older
 build on it to get past the refusal: the data is the newer version's, and only that version or a later one reads it.
 
-**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason status`'s optional `move` check says
+**A command-line install moving into Jason Desktop.** On macOS, Windows and Linux, `jason status`'s optional `move` check says
 where the move of a command-line install into Jason Desktop stands. It never stops work: until the move retires it, the
 command-line install answers as `jason`, its runtime with it. Where the check names a command, that is the repair, run
 on the person's word; where it names none, the move waits on something no command typed here changes, and the check says

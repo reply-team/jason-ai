@@ -26,6 +26,7 @@
  * install left pending as kept (`rollback.ts`), as a window's first start would, under the single-instance lock.
  */
 
+import type { LinuxPackage } from './linux-package.ts';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Timers } from './attention.ts';
@@ -345,9 +346,13 @@ export function readRequestFile(file: string): RequestRecord | null {
     }
 }
 
-/** Where this application cannot take a request at all: a development build, or a system it is not updated on so. */
-export function requestSupport(packaged: boolean, platform: NodeJS.Platform): 'not_installed' | 'unsupported_platform' | null {
+/**
+ * Where this application cannot take a request at all: a development build, or a system it is not updated on so. On Linux
+ * only an AppImage takes one, which its own updater installs; the deb's updates are the system's.
+ */
+export function requestSupport(packaged: boolean, platform: NodeJS.Platform, form: LinuxPackage | null = null): 'not_installed' | 'unsupported_platform' | null {
     if (!packaged) return 'not_installed';
+    if (platform === 'linux') return form?.form === 'appimage' ? null : 'unsupported_platform';
     return platform === 'win32' || platform === 'darwin' ? null : 'unsupported_platform';
 }
 

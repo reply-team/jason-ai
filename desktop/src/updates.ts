@@ -25,10 +25,12 @@
  */
 
 import { nextCheckDelay } from './backoff.ts';
+import { compareVersions } from './host-version.ts';
 import { itemKeys, keyWords } from './keybindings.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
+import type { LinuxPackage } from './linux-package.ts';
 import { isRejected, keepPrevious, readRollback } from './rollback.ts';
 
 /** The deb a release publishes, as its packages are named. */
@@ -87,15 +89,19 @@ export type UpdateState =
 export interface MenuItem {
     label: string;
     enabled: boolean;
-    act: 'check' | 'download' | 'install' | null;
+    act: 'check' | 'download' | 'install' | 'restart' | null;
 }
 
 /**
  * The one menu item the updater shows: the next step the person can take, or what is under way; in a build that is not
- * installed none, and where electron-updater is not active (`FeedUpdater.isUpdaterActive`) none either.
+ * installed none, and where electron-updater is not active (`FeedUpdater.isUpdaterActive`) none either: the package's
+ * updates come with the system's. Where the system installed a new version under the running window (`moved`, the
+ * version the package's version.json names now), the item offers the restart, the desktop's own and not the updater's:
+ * the runtime the old build runs stopped and Jason started again, whose start finishes that update (`restartForPackage`).
  */
-export function menuItemOf(state: UpdateState, installed: boolean, active: boolean): MenuItem {
+export function menuItemOf(state: UpdateState, installed: boolean, active: boolean, moved: string | null = null): MenuItem {
     if (!installed) return { label: 'Updates Come to an Installed Build', enabled: false, act: null };
+    if (!active && moved !== null) return { label: `Restart Jason and Its Runtime to Finish the Update to ${moved}`, enabled: true, act: 'restart' };
     if (!active) return { label: 'Updates Come Through the Package', enabled: false, act: null };
     switch (state.step) {
         case 'idle':
@@ -227,6 +233,78 @@ export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: t
     }
     const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;
     return `The update was not installed, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop. ${again}`;
+}
+
+/**
+ * The deb's restart, once the system updated the package under the running window: the runtime the old build runs is
+ * stopped first, as an update's install stops it, so the next start finds none and starts the new build's, then Jason
+ * starts again. A runtime that does not stop, or does not answer, leaves Jason as it is and says so.
+ */
+export async function restartForPackage(deps: PackageRestartDeps): Promise<boolean> {
+    const stopped = await deps.stopRuntime().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
+    if (stopped.kind === 'failed' || stopped.kind === 'unanswered') {
+        deps.refused(packageRestartRefusal(stopped));
+        return false;
+    }
+    deps.relaunch();
+    return true;
+}
+
+export interface PackageRestartDeps {
+    stopRuntime(): Promise<StopOutcome>;
+    relaunch(): void;
+    refused(why: string): void;
+}
+
+/**
+ * The deb's restart once at a time, for the item and the notice alike: a press while one is under way does nothing, and
+ * only a refused one lets the next go.
+ */
+export function restartOnce(deps: PackageRestartDeps): () => Promise<void> {
+    let under = false;
+    return async () => {
+        if (under) return;
+        under = true;
+        if (!(await restartForPackage(deps))) under = false;
+    };
+}
+
+/**
+ * Pure: the version the system installed, which the deb's item and notice name; null where nothing moved. Under a running
+ * window, the one the package's `version.json` names now (`onDisk`, null where it could not be read) where it is not the
+ * version running (`running`). And while no window was open, the version running, where the runtime this application's own
+ * jason started (`runtime`, as the start found it) still runs an older build: the restart brings it up. Null too where this
+ * is no deb, whose updates come with the system's.
+ */
+export function packageMovedTo(form: LinuxPackage | null, running: string | null, onDisk: string | null, runtime: { version: string | null; ours: boolean } | null = null): string | null {
+    if (form?.form !== 'deb' || running === null) return null;
+    if (onDisk !== null && onDisk !== running) return onDisk;
+    const bare = (version: string) => version.split('+')[0] ?? version;
+    return runtime?.ours === true && runtime.version !== null && compareVersions(bare(runtime.version), bare(running)) < 0 ? running : null;
+}
+
+/** The question the restart item's key asks first, as the install's does: the restart ends a running turn. */
+export function restartQuestion(version: string): { type: 'question'; message: string; detail: string; buttons: string[]; defaultId: number; cancelId: number } {
+    return {
+        type: 'question',
+        message: `Restart Jason and its runtime to finish the update to Jason ${version}?`,
+        detail: 'The runtime stops first, which ends a running turn and the work in progress, and Jason starts again on the version your system installed.',
+        buttons: ['Restart', 'Not Now'],
+        defaultId: 1,
+        cancelId: 1,
+    };
+}
+
+/** What the person is told when the runtime did not stop, or did not answer, so the deb's restart did not happen. */
+export function packageRestartRefusal(outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered): string {
+    const again = 'Then choose Restart Jason and Its Runtime to Finish the Update again.';
+    if (outcome.demo) return `Jason was not restarted, because ${demoRuntimeWords}. Jason was left as it was. ${demoRuntimeNext} ${again}`;
+    if (outcome.kind === 'unanswered') {
+        const { why, next } = unansweredWords(outcome);
+        return `Jason was not restarted, because ${why}. Jason was left as it was. ${next} ${again}`;
+    }
+    const how = outcome.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${outcome.exit}`;
+    return `Jason was not restarted, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop. ${again}`;
 }
 
 /**

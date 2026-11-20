@@ -395,21 +395,26 @@ public static class AutostartArtifacts
     /// <summary>
     /// A user unit, enabled into the account's own default target. <c>Restart=no</c> for the same reason the
     /// plist has no <c>KeepAlive</c>: nothing here supervises anything. Given a search path, it carries it as the
-    /// runtime's <c>PATH</c> (<see cref="SystemdPath"/>); given none, it has no environment line.
+    /// runtime's <c>PATH</c> (<see cref="SystemdPath"/>); given none, it has no environment line. It starts only where the
+    /// program it runs is there (<c>ConditionPathExists</c>), so once a removal Jason did not make has taken that file, a
+    /// package purged, the unit is skipped at login rather than failed. An AppImage's program is the copy under the data
+    /// directory, which deleting the AppImage leaves: that unit goes on starting the runtime until <c>jason uninstall</c>.
     /// </summary>
     private static AutostartRegistration Linux(IReadOnlyList<string> line, string home, string? searchPath)
     {
         var unitPath = ArtifactPath(AutostartPlatform.Linux, home, string.Empty);
         var environment = searchPath is null ? string.Empty : "\nEnvironment=" + SystemdPath(searchPath);
+        var start = Systemd(line);
         var unit = $"""
             [Unit]
             Description=The Jason runtime
             Documentation={ProductAddress.Root}
             After=default.target
+            ConditionPathExists={line[0].Replace("%", "%%", StringComparison.Ordinal)}
 
             [Service]
             Type=simple{environment}
-            ExecStart={Systemd(line)}
+            ExecStart={start}
             Restart=no
 
             [Install]

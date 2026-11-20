@@ -100,6 +100,7 @@ public sealed class PlatformUrlOpener : IUrlOpener
 
         try
         {
+            StandardStreams.KeepOutOfChildren();
             return ChildProcess.Start(start);
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
