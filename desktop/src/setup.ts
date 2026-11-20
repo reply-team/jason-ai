@@ -431,6 +431,8 @@ export class Setup {
     #own: OwnServers;
     /** The kind each program's file was last logged as unread with; absent while it lists. */
     #unread = new Map<string, UnreadKind>();
+    /** Claude Code's version as the last listing read it (`handedClaudeVersion`); undefined before one read it. */
+    #handedClaude: string | null | undefined = undefined;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -501,10 +503,21 @@ export class Setup {
         return [];
     }
 
+    /**
+     * Claude Code's version as the last listing of the hosts read it, from which the page drew the mode a turn runs in
+     * (`runs`): null when it could not be read, undefined before a listing read it or when Claude Code was not found. A turn
+     * holds the version it reads itself to it (`Chat.send`), and asks the page to read the hosts again when the two differ
+     * across the floor of Full access.
+     */
+    handedClaudeVersion(): string | null | undefined {
+        return this.#handedClaude;
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
+        this.#handedClaude = claude === null ? undefined : claude.version;
         const kept = this.#deps.models?.lists() ?? new Map();
         const offered = (id: string, label: string) => {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);

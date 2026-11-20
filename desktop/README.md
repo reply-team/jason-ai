@@ -128,7 +128,7 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   one rename, to `chat-full-ended/<conversation id>-<moment>/`, where the sweep removes it seven days later; so does a
   start, for a folder no record names, but only when every record could be read: a record that cannot be read names no
   folder, and then none moves. A folder that cannot be moved, one a terminal holds on Windows, stays where it is, nothing
-  in it removed, for a later start; nothing is moved out of a `chats` that is a link or a junction, and no turn starts in
+  in it removed, for a later start; on macOS and Linux a terminal open in it holds nothing, and the rename takes it along; nothing is moved out of a `chats` that is a link or a junction, and no turn starts in
   one. Before each turn the desktop copies the recorded skills of the shared folder into it, removing whatever stands at
   a name there, a link included, before it writes, and writes the instruction files there.
 - `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier desktop made (no
@@ -223,8 +223,9 @@ desktop does not narrow, so it may read the records.
 Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
 a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
 start that finds records with no `shape` takes each as it is, one with no `mode` in Full access, writes it again with
-its shape and then writes `conversations-stamped`; with no record at all, the first record written writes that file
-first, and a start that finds the file lost is a first start again. From then on a record with no `shape` is one an
+its shape and then writes `conversations-stamped`, only once every one of them was written again: a start that could
+not write one writes no file, at no later write either, so the next start is a first start again. With no record at all,
+the first record written writes that file first, and a start that finds the file lost is a first start again. From then on a record with no `shape` is one an
 earlier desktop wrote last: it opens in Ask first, unless it is in Plan only, says why once when it is opened, and is
 then written again with its mode and its shape. A record with no `folder` whose `chats/<id>/` stands as a folder is
 that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
@@ -359,12 +360,16 @@ applies to the turns a person starts by sending, from the next one on.
   `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
   them. It is refused where it cannot apply: on Codex, and on a Claude Code older than 2.1.322 or whose version cannot
   be read, the menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that
-  is sent to Codex, runs on a Claude Code below that floor, or comes from a browser tab runs in Ask first; the chat says
-  why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
+  is sent to Codex, runs on a Claude Code below that floor, comes from a browser tab, or is sent while Full access is not
+  offered runs in Ask first; the chat says why once a run for each of those reasons, and the record keeps its mode. Each host's listing carries `runs`: for each
   mode a turn on it does not run as itself, from the window and from a tab, the mode it runs in and the sentence why,
   decided by the rule the turn itself runs by (`turnMode`), with Claude Code's version read at that listing. The page
   draws that mode, the line under the composer and the menu's check, with the sentence under the composer, and never
   draws from what it asked for; a host an earlier desktop listed hands no `runs`, and the page draws the chat's own mode.
+  A choice from the menu is of the chat's own mode, the one checked included, so Ask first chosen on Codex stays the
+  chat's on Claude Code. The setup keeps the version its last listing read (`handedClaudeVersion`); a turn whose own read
+  finds Claude Code at the floor where that listing found it below or could not read it runs in Full access, asks the
+  page to read the hosts again (`setup.changed`) and says so once per conversation (`fullAccessCurrent`).
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
@@ -453,7 +458,8 @@ applies to the turns a person starts by sending, from the next one on.
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first, on its record too: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
+  the chat to Ask first, on its record too: that tool has already run. So does one a turn already stopped, by Stop or by
+  a change of mode, still says on its way out; the step only ever narrows, so a narrower mode chosen meanwhile stands. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,

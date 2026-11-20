@@ -625,6 +625,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
+        // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code current.
+        handedClaudeVersion: () => setup.handedClaudeVersion(),
+        setupChanged: () => toPage('setup.changed'),
         skillsGate,
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.

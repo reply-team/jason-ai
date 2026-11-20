@@ -6,8 +6,9 @@
 // asks before anything that changes. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that
 // the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by
 // the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
-// access on Codex, on a Claude Code below its floor or sent from a browser tab; Auto-edit on Codex) runs in Ask first, the
-// chat says why once, and the record keeps the mode. Nothing here starts a process or reads a file.
+// access on Codex, on a Claude Code below its floor, sent from a browser tab or while it is not offered; Auto-edit on
+// Codex) runs in Ask first, the chat says why once, and the record keeps the mode. Nothing here starts a process or reads
+// a file.
 
 import { compareVersions } from './host-version.ts';
 
@@ -66,6 +67,13 @@ export const codexFullAccess = 'Full access runs on Claude Code only.';
 /** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
+/**
+ * What a conversation in Full access is told, once, when the last listing of the hosts drew its turn in Ask first, having
+ * read Claude Code below the floor of Full access or not read its version, and the version a turn reads is at the floor:
+ * the turn runs in Full access.
+ */
+export const fullAccessCurrent = `Claude Code is now ${fullAccessFloor} or newer, so this turn runs in Full access, the chat's mode.`;
+
 /** Why a message a browser tab sent to a chat in Full access runs in Ask first: the default is for the desktop's window. */
 export const tabFullAccess = "Full access is for Jason Desktop's own window, and this message came from a browser tab.";
 
@@ -116,7 +124,7 @@ export function askFirstThisTurn(why: string): string {
  * that version keeps no mode on a record but Plan only, so the mode the person chose is not known.
  */
 export const earlierDesktopAskFirst =
-    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access again, choose Full access from its menu.";
+    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access, choose it from its menu.";
 
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';

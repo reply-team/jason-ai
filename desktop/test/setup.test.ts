@@ -1005,7 +1005,10 @@ test('every host hands what a turn on it runs in, by the mode a chat keeps, from
     const { b, say } = claudeSaying(t);
     const ask = (why: string | null) => ({ mode: 'ask_first', why });
     say({ stdout: '2.1.290 (Claude Code)\n' });
-    const below = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.runs]));
+    const listing = setupOn(b);
+    assert.equal(listing.handedClaudeVersion(), undefined, 'before a listing, no version was handed');
+    const below = new Map((await listing.status()).hosts.map((host) => [host.id, host.runs]));
+    assert.equal(listing.handedClaudeVersion(), '2.1.290', 'the version the listing read, which a turn holds its own read to');
     assert.deepEqual(below.get('claude'), { window: { full_access: ask(fullAccessSentence('2.1.290')) }, tab: { full_access: ask(tabFullAccess) } });
     assert.deepEqual(below.get('deepseek'), below.get('claude'), 'a key provider on Claude Code runs as Claude Code does');
     assert.deepEqual(below.get('codex'), { window: { full_access: ask(codexFullAccess), auto_edit: ask(codexAutoEdit) }, tab: { full_access: ask(tabFullAccess), auto_edit: ask(codexAutoEdit) } });
@@ -1014,6 +1017,11 @@ test('every host hands what a turn on it runs in, by the mode a chat keeps, from
     say({ stdout: '2.1.322 (Claude Code)\n' });
     const at = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.runs]));
     assert.deepEqual(at.get('claude'), { window: {}, tab: { full_access: ask(tabFullAccess) } }, 'at the floor a Full access turn from the window runs in it');
+    say({ stdout: 'not a version\n' });
+    const unread = setupOn(b);
+    await unread.status();
+    assert.equal(unread.handedClaudeVersion(), null, 'a version that could not be read is handed as none');
+    say({ stdout: '2.1.322 (Claude Code)\n' });
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.runs]));
     assert.deepEqual(off.get('claude'), { window: { full_access: ask(fullAccessNotYet) }, tab: { full_access: ask(tabFullAccess) } });
     assert.deepEqual(off.get('codex')?.window.full_access, ask(codexFullAccess), 'Codex before the switch, as a turn says it');

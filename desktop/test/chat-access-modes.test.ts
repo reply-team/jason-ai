@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
@@ -227,27 +227,46 @@ test('a tool that ran without the hook stops the Full access turn and puts the c
     assert.equal(r.unchecked, 1, 'the stop is said to the log by its own word');
 });
 
-test('a tool the hook never saw, said while a Full access turn is stopped for Plan only, leaves the chat in Plan only: the step back to Ask first only ever narrows, and a stopped turn takes none', async (t) => {
-    // A host that says one more tool as it is stopped, which ran without the hook: what a host may still print on its way out.
+/** A host that says one more tool as it is stopped, which ran without the hook: what a host may still print on its way out. */
+function sayingOnStop(): Partial<ChatOptions> {
     const late = [
         JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_late', name: 'Bash', input: { command: 'git status' } }] } }),
         JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_late', content: 'ok', is_error: false }] } }),
     ];
-    const r = rig(t, {
-        chat: {
-            startHost: (launch, args, options) => {
-                const host = startHost(launch, args, options);
-                return {
-                    stop: () => {
-                        for (const line of late) options.onLine(line);
-                        host.stop();
-                    },
-                    exited: host.exited,
-                    stderrTail: () => host.stderrTail(),
-                };
-            },
+    return {
+        startHost: (launch, args, options) => {
+            const host = startHost(launch, args, options);
+            return {
+                stop: () => {
+                    for (const line of late) options.onLine(line);
+                    host.stop();
+                },
+                exited: host.exited,
+                stderrTail: () => host.stderrTail(),
+            };
         },
-    });
+    };
+}
+
+test('a tool the hook never saw, said while a Full access turn is stopped by Stop, puts the chat back to Ask first, on its record too, and is said to the log', async (t) => {
+    const r = rig(t, { chat: sayingOnStop() });
+    const { id } = await r.chat.create();
+    const go = join(r.b.root, 'go');
+    plan(r, [{ say: 'working' }, { hold: go }, { say: 'never shown' }]);
+    const ended = r.until(id, (event) => event.kind === 'done');
+    await r.chat.send(id, 'go', claude);
+    await r.until(id, (event) => event.kind === 'text' && event.text === 'working');
+    r.chat.stop(id);
+    assert.deepEqual(await ended, { kind: 'done', error: null }, 'a turn the person stopped ends with no error');
+    writeFileSync(go, '');
+    assert.equal(r.chat.modeNow(id), 'ask_first');
+    assert.equal(r.again().open(id).mode, 'ask_first', 'on the record too');
+    assert.deepEqual(r.changes, [['full_access', 'ask_first']]);
+    assert.equal(r.unchecked, 1, 'a tool that ran unseen is said to the log, whatever stopped its turn');
+});
+
+test('a tool the hook never saw, said while a Full access turn is stopped for Plan only, leaves the chat in Plan only: the step back to Ask first only ever narrows', async (t) => {
+    const r = rig(t, { chat: sayingOnStop() });
     const { id } = await r.chat.create();
     const go = join(r.b.root, 'go');
     plan(r, [{ say: 'working' }, { hold: go }, { say: 'never shown' }]);
@@ -260,7 +279,7 @@ test('a tool the hook never saw, said while a Full access turn is stopped for Pl
     assert.equal(r.chat.modeNow(id), 'plan_only');
     assert.equal(r.again().open(id).mode, 'plan_only', 'on the record too');
     assert.deepEqual(r.changes, [['full_access', 'plan_only']], 'no step to Ask first after the person\'s choice');
-    assert.equal(r.unchecked, 0, 'a tool said by a stopped turn is not one that ran unchecked');
+    assert.equal(r.unchecked, 1, 'a tool that ran unseen is said to the log, whatever stopped its turn');
 });
 
 test('Full access chosen while the host\'s version is read is not given once another choice came meanwhile, even a choice that left the chat in the mode it was in', async (t) => {
@@ -547,6 +566,41 @@ test('a chat in Full access sent to a Claude Code older than 2.1.322 runs that t
     writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.322 (Claude Code)' }));
     await r.turn(id, 'at the floor', claude);
     assert.equal(r.started.at(-1), 'full_access');
+});
+
+test('a chat in Full access whose last listing read Claude Code below the floor runs its turn in Full access once the version a turn reads is at it: the page is asked to read the hosts again, and the chat says so once', async (t) => {
+    const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+    t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.322 (Claude Code)' }));
+    let handed: string | null | undefined = '2.1.300';
+    let asked = 0;
+    const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile }, chat: { handedClaudeVersion: () => handed, setupChanged: () => void asked++ } });
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', claude);
+    const second = await r.turn(id, 'hello again', claude);
+    assert.deepEqual(r.started, ['full_access', 'full_access']);
+    assert.equal(asked, 2, 'each turn wider than the listing drew asks the page to read the hosts again');
+    assert.deepEqual(notices([...first, ...second]), [fullAccessCurrent], 'said once');
+    // A listing that read the version at the floor drew Full access: nothing is asked or said.
+    handed = '2.1.322';
+    const third = await r.turn(id, 'and again', claude);
+    assert.equal(asked, 2);
+    assert.deepEqual(notices(third), []);
+    // A listing that could not read the version drew Ask first too.
+    handed = null;
+    const other = (await r.chat.create()).id;
+    assert.deepEqual(notices(await r.turn(other, 'hello', claude)), [fullAccessCurrent]);
+    assert.equal(asked, 3);
+    // With no listing yet, the page drew nothing to correct; nor does a turn of another mode, or one sent from a tab.
+    handed = undefined;
+    const fresh = (await r.chat.create()).id;
+    assert.deepEqual(notices(await r.turn(fresh, 'hello', claude)), []);
+    handed = '2.1.300';
+    await r.chat.setMode(fresh, 'ask_first');
+    assert.deepEqual(notices(await r.turn(fresh, 'in Ask first', claude)), []);
+    await r.chat.setMode(fresh, 'full_access', 'claude');
+    assert.ok(!notices(await r.turn(fresh, 'from a tab', { ...claude, fromTab: true })).includes(fullAccessCurrent));
+    assert.equal(asked, 3);
 });
 
 test('the log hears each change of mode by its two modes, and each turn\'s mode', async (t) => {

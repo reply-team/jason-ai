@@ -219,14 +219,15 @@ them on.
   mode. It is made at the conversation's first turn, and before each turn the desktop places in it the skills and the
   instructions the shared folder below holds. When you remove the conversation, its folder moves to
   `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed; one a terminal still holds stays where
-  it is until a later start of the desktop moves it.
+  it is until a later start of the desktop moves it, and on macOS and Linux a terminal open in it follows it there.
 - `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier version of the desktop
   made still run. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each.
 - `<data>/desktop/conversations-stamped`: written once every record carries the shape this version writes, so a
-  record an earlier version of the desktop wrote again is told apart: that chat opens in Ask first and says why.
+  record an earlier version of the desktop wrote again is told apart: that chat opens in Ask first and says why, unless
+  it is in Plan only, which it keeps.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system. On Linux a key is kept and read
   only where the session offers a keyring (GNOME Keyring or KWallet); where Electron would fall back to its fixed-key
   store, the card says so and the key is not kept.
@@ -704,8 +705,9 @@ says before a start how many people the agent holds and how its messages go; it 
 becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
 turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
 conversation's record from this computer after one question, saying that the agent stays as it is and, for a
-conversation with a folder of its own, that the files in it go seven days later and where they are until then; the host
-keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
+conversation with a folder of its own, that the folder is kept seven days and where, that one a terminal holds stays where
+it is until a later start moves it, and that on macOS and Linux a terminal open in it follows it there; the host keeps its
+own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
@@ -825,8 +827,9 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 
 Each chat has an access mode, chosen from a menu beside the composer. The line under the composer and the menu's check
 say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
-Codex, on a Claude Code too old for it or in a browser tab, an Auto-edit chat on Codex), when they say Ask first, with
-the reason under the composer, and the chat keeps its mode. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
+Codex, on a Claude Code too old for it, in a browser tab or while Full access is not offered, an Auto-edit chat on
+Codex), when they say Ask first, with the reason under the composer, and the chat keeps its mode. Choosing Ask first
+there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
 removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
@@ -881,8 +884,10 @@ days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
 until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once and
-keeps its mode: a turn on Codex, on a Claude Code too old for it, or sent from a browser tab. A tool that ran without
-Jason having seen it ends the turn and puts the chat in Ask first.
+keeps its mode: a turn on Codex, on a Claude Code too old for it, sent from a browser tab, or sent while Full access is
+not offered. Once you update Claude Code, the next turn runs in Full access, says so once and has the composer drawn
+again. A tool that ran without Jason having seen it ends the turn and puts the chat in Ask first, a turn you stopped too;
+a mode narrower than Ask first that you chose meanwhile stays.
 
 ### What runs without asking, what is refused, what is a card
 

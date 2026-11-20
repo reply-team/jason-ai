@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameS
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
-import { newConversationId, parseConversation, recordShape, type Conversation } from '../src/chat-conversations.ts';
+import { ConversationUnwritten, newConversationId, parseConversation, recordShape, writeConversation, type Conversation } from '../src/chat-conversations.ts';
 import { registerChat } from '../src/chat-ipc.ts';
 import { readFence } from '../src/chat-deny.ts';
 import * as chatModes from '../src/chat-modes.ts';
@@ -42,7 +42,7 @@ interface Rig {
     restart(): Chat;
 }
 
-function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
+function rig(t: { after(fn: () => void | Promise<void>): void }, more: Partial<ChatOptions> = {}): Rig {
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'] });
     placeSandboxFiles(b);
@@ -100,6 +100,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
                 }
             },
             started: (_host, _resumed, mode) => void r.started.push(mode),
+            ...more,
         };
         // A desktop that asks before Full access enters it from the menu only on a yes: this box says yes, so a row that
         // chooses Full access reaches what it holds. A desktop that asks nothing never calls it.
@@ -318,7 +319,7 @@ function keptByEarlier(r: Rig, id: string): void {
 
 const inode = (r: Rig, id: string) => statSync(join(r.b.paths.conversations, `${id}.json`), { bigint: true }).ino;
 const earlierAskFirst =
-    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access again, choose Full access from its menu.";
+    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access, choose it from its menu.";
 
 test('the records a desktop finds at its first start are taken as they are and stamped with their shape once and only once; the file that says so is its own', async (t) => {
     const r = rig(t);
@@ -344,6 +345,32 @@ test('the records a desktop finds at its first start are taken as they are and s
     assert.equal(r.restart().open(plain).mode, 'full_access');
     assert.equal(recordOf(r, plain).shape, recordShape);
     assert.ok(existsSync(r.b.paths.conversationsStamped));
+});
+
+test('a first start whose rewrite of a record fails writes no stamp, at no later write either, so the next start is a first start again and takes that record as it is', async (t) => {
+    let failing: string | null = null;
+    const r = rig(t, {
+        writeRecord: (folder, conversation) => {
+            if (conversation.id === failing) throw new ConversationUnwritten('EACCES');
+            writeConversation(folder, conversation);
+        },
+    });
+    const plain = earlierRecord(r);
+    failing = plain;
+    const chat = r.restart();
+    assert.equal(recordOf(r, plain).shape, undefined, 'the record could not be written again');
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'so nothing says the records were stamped');
+    const { id } = await chat.create();
+    await r.turn(id, 'hello', claude);
+    assert.equal(recordOf(r, id).shape, recordShape, 'a record written later carries its shape');
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'and writes no stamp: the record found at the start still has none');
+    failing = null;
+    const again = r.restart();
+    assert.equal(again.open(plain).mode, 'full_access', 'the next start is a first start: the record is taken as it is');
+    assert.equal(recordOf(r, plain).shape, recordShape);
+    assert.ok(existsSync(r.b.paths.conversationsStamped));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(notices(r.events.get(plain)), [], 'and nothing is said of it');
 });
 
 test('a conversation an earlier desktop kept after the stamp, its record as that desktop\'s own serialize leaves it, opens in Ask first, says why once, and is written with Ask first and the stamp', async (t) => {

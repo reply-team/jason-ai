@@ -84,6 +84,7 @@ import {
     codexFullAccess,
     earlierDesktopAskFirst,
     feedDefaultMode,
+    fullAccessCurrent,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
@@ -242,6 +243,15 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /**
+     * Claude Code's version as the last listing of the hosts read it (`Setup.handedClaudeVersion`), from which the page
+     * drew the mode a turn runs in: null when it could not be read, undefined before a listing read it.
+     */
+    handedClaudeVersion?(): string | null | undefined;
+    /** Asks the page to read the hosts again (`setup.changed`): a turn found Claude Code newer than the last listing did. */
+    setupChanged?(): void;
+    /** How a conversation's record is written: `writeConversation` unless a row makes a write fail. */
+    writeRecord?(folder: string, conversation: Conversation): void;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
     skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
@@ -574,15 +584,16 @@ export class Chat {
     #choices = new Map<string, number>();
     /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
+    /** The conversations told that a turn runs in Full access since Claude Code is current, where a listing drew Ask first. */
+    #toldCurrent = new Set<string>();
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
     #daily: NodeJS.Timeout;
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
     #leftOut = new Set<string>();
-    /**
-     * Whether the records are known to carry their shape (`recordShape`): the desktop's own file says so, or this run wrote
-     * it. Until then, the first record written writes that file first.
-     */
+    /** Whether the records are known to carry their shape (`recordShape`): the desktop's own file says so, or this run wrote it. */
     #stamped = false;
+    /** Whether this start found no record and no stamp: then the first record written writes the stamp first. */
+    #stampAtFirstWrite = false;
     /** The records with no shape this start read once the records were stamped: each written again when it is opened. */
     #unshaped = new Set<string>();
     /** Of those, the ones put in Ask first for it, which are told why once, when each is opened. */
@@ -662,11 +673,13 @@ export class Chat {
      * Plan only and the folder. A conversation's own folder that such a write dropped from its record is the
      * conversation's again wherever that folder stands, so its turns run there once more. The first start that finds
      * records with no shape takes each as it is, a record with no mode in Full access, and writes it again with its shape;
-     * then it writes its own file that says so (`conversationsStamped`), which no earlier desktop reads or writes. With no
-     * record at all, the first record written writes that file first. A start that finds the file is no first start: a
-     * record with no shape is one an earlier desktop wrote last, and it opens in Ask first, unless it is in Plan only,
-     * which that desktop keeps; it is told why once, and written again with its mode and its shape, when it is opened. A
-     * file that is lost makes the next start a first start again.
+     * then it writes its own file that says so (`conversationsStamped`), which no earlier desktop reads or writes, only once
+     * every one of them was written again: a start that could not write one leaves the file unwritten, through every later
+     * write too, so the next start is a first start again. With no record at all, the first record written writes that
+     * file first. A start that finds the file is no first start: a record with no shape is one an earlier desktop wrote
+     * last, and it opens in Ask first, unless it is in Plan only, which that desktop keeps; it is told why once, and
+     * written again with its mode and its shape, when it is opened. A file that is lost makes the next start a first start
+     * again.
      */
     #settleShapes(kept: readonly Conversation[], unstamped: readonly string[]): void {
         const { paths } = this.#options;
@@ -685,7 +698,10 @@ export class Chat {
             }
             return;
         }
-        if (kept.length === 0) return;
+        if (kept.length === 0) {
+            this.#stampAtFirstWrite = true;
+            return;
+        }
         let all = true;
         for (const conversation of kept) if (unshaped.has(conversation.id)) all = this.#rewrite(conversation) && all;
         // A record that could not be written again is taken up by the next start, which is a first start still.
@@ -709,10 +725,15 @@ export class Chat {
         }
     }
 
+    /** Writes a conversation's record, through the writer a row gives or `writeConversation`. */
+    #write(conversation: Conversation): void {
+        (this.#options.writeRecord ?? writeConversation)(this.#options.paths.conversations, conversation);
+    }
+
     /** Writes a record again as it stands, its time untouched; whether it was written. */
     #rewrite(conversation: Conversation): boolean {
         try {
-            writeConversation(this.#options.paths.conversations, conversation);
+            this.#write(conversation);
             return true;
         } catch (error) {
             this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
@@ -1009,6 +1030,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
+        this.#toldCurrent.delete(conversation.id);
         this.#choices.delete(conversation.id);
         this.#unshaped.delete(conversation.id);
         this.#earlier.delete(conversation.id);
@@ -1327,6 +1349,19 @@ export class Chat {
                     this.#options.emit(chatId, { kind: 'notice', text: askFirstThisTurn(why.text) });
                 }
             }
+            // The page drew this turn from the last listing of the hosts, which read Claude Code below the floor of Full
+            // access or could not read its version, and so drew Ask first; read now, it is at the floor, and the turn runs in
+            // Full access. The page is asked to read the hosts again, and the conversation is told once.
+            if (running.mode === 'full_access' && resolved.program === 'claude') {
+                const handed = this.#options.handedClaudeVersion?.();
+                if (handed !== undefined && turnMode(recorded, 'claude', { ...place, claudeVersion: handed }).why?.kind === 'floor') {
+                    this.#options.setupChanged?.();
+                    if (!this.#toldCurrent.has(conversation.id)) {
+                        this.#toldCurrent.add(conversation.id);
+                        this.#options.emit(chatId, { kind: 'notice', text: fullAccessCurrent });
+                    }
+                }
+            }
             await this.#turn(conversation, text, resolved, launch, running, hostVersion ?? '');
         } catch (error) {
             this.#running.delete(conversation.id);
@@ -1482,10 +1517,10 @@ export class Chat {
         conversation.entries = within.entries;
         conversation.dropped = within.dropped;
         conversation.updated_at = new Date().toISOString();
-        // The first record this desktop writes, with no record before it, says first that the records carry their shape.
-        if (!this.#stamped) this.#stamp();
+        // The first record this desktop writes, where the start found none, says first that the records carry their shape.
+        if (this.#stampAtFirstWrite && !this.#stamped) this.#stamp();
         try {
-            writeConversation(this.#options.paths.conversations, conversation);
+            this.#write(conversation);
         } catch (error) {
             this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
         }
@@ -1917,9 +1952,9 @@ export class Chat {
                     // it ran, or was refused, without the hook: the first tool that runs unchecked ends the turn, and the
                     // chat goes back to Ask first, on its record too, since a check a policy filtered out would miss every
                     // later turn as well. EndConversation is the one tool Claude Code fires no hook for. A turn already
-                    // stopped, by a choice of the person's say, takes no step: what its host says on its way out counts
-                    // for nothing.
-                    if (running.stopped || running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
+                    // stopped, by Stop or by a change of mode, counts such a tool all the same, since it ran: the step back
+                    // only ever narrows (`#stepDown`), so a person's narrower choice meanwhile stands.
+                    if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#options.unchecked?.();
                     stopFor(unguardedSentence);
