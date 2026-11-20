@@ -110,6 +110,88 @@ public static class ToastCommands
         return systemdRun is null ? [.. self, link] : [systemdRun, "--user", "--scope", "--quiet", "--collect", "--", .. self, link];
     }
 
+    /// <summary>The session's environment as the user manager holds it now, which a desktop fills once its session has started.</summary>
+    public static ToastLaunch LinuxSessionEnvironment(string systemctl) => new([systemctl, "--user", "show-environment"], null, Empty);
+
+    /// <summary>
+    /// The assignments <c>systemctl --user show-environment</c> printed: a value as it stands, or, where systemd quoted it as
+    /// <c>$'…'</c>, with the escapes that quoting uses undone; a line that is no assignment is left out.
+    /// </summary>
+    public static Dictionary<string, string> SessionEnvironment(string stdout)
+    {
+        ArgumentNullException.ThrowIfNull(stdout);
+        var read = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in Lines(stdout))
+        {
+            var equals = line.IndexOf('=', StringComparison.Ordinal);
+            if (equals <= 0 || !line[..equals].All(character => char.IsAsciiLetterOrDigit(character) || character == '_') || char.IsAsciiDigit(line[0]))
+            {
+                continue;
+            }
+
+            var value = line[(equals + 1)..];
+            read[line[..equals]] = value.StartsWith("$'", StringComparison.Ordinal) && value.EndsWith('\'') && value.Length >= 3 ? Unquoted(value[2..^1]) : value;
+        }
+
+        return read;
+    }
+
+    /// <summary>
+    /// The environment a click's handler runs in: the runtime's own with the session's as it stands now laid over it, as a
+    /// launcher starts an application, so a runtime started at logon before the session said its display still hands the
+    /// handler one; and an activation token only where the click brought a fresh one, since a token either environment kept
+    /// from its own start has long been used or expired.
+    /// </summary>
+    public static Dictionary<string, string> ClickEnvironment(IReadOnlyDictionary<string, string> runtime, IReadOnlyDictionary<string, string> session, string? token)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(session);
+        var environment = new Dictionary<string, string>(runtime, StringComparer.Ordinal);
+        foreach (var (name, value) in session)
+        {
+            environment[name] = value;
+        }
+
+        environment.Remove("XDG_ACTIVATION_TOKEN");
+        environment.Remove("DESKTOP_STARTUP_ID");
+        if (token is not null)
+        {
+            environment["XDG_ACTIVATION_TOKEN"] = token;
+        }
+
+        return environment;
+    }
+
+    /// <summary>The inside of a <c>$'…'</c> value with its backslash escapes undone; an escape it does not know is kept as written.</summary>
+    private static string Unquoted(string quoted)
+    {
+        var value = new StringBuilder(quoted.Length);
+        for (var at = 0; at < quoted.Length; at++)
+        {
+            if (quoted[at] != '\\' || at + 1 == quoted.Length)
+            {
+                value.Append(quoted[at]);
+                continue;
+            }
+
+            var next = quoted[++at];
+            switch (next)
+            {
+                case 'n': value.Append('\n'); break;
+                case 't': value.Append('\t'); break;
+                case 'r': value.Append('\r'); break;
+                case '\\' or '\'' or '"': value.Append(next); break;
+                case 'x' when at + 2 < quoted.Length && int.TryParse(quoted.AsSpan(at + 1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var code):
+                    value.Append((char)code);
+                    at += 2;
+                    break;
+                default: value.Append('\\').Append(next); break;
+            }
+        }
+
+        return value.ToString();
+    }
+
     /// <summary>The id notify-send printed once it had shown the notification, its first line of digits; null where none is there yet.</summary>
     public static string? ShownId(string stdout) => Lines(stdout).FirstOrDefault(IsId);
 

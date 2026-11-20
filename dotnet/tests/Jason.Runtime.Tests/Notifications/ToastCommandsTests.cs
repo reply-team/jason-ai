@@ -206,6 +206,51 @@ public sealed class ToastCommandsTests
     }
 
     /// <summary>
+    /// The session's environment as the user manager holds it now, read from <c>systemctl --user show-environment</c>: a
+    /// plain value as it is, one systemd quotes as <c>$'…'</c> with its escapes undone, and a line that is no assignment
+    /// left out. Breaks if a click's handler is given the environment a runtime started at logon had, before the session
+    /// said its display, which leaves the handler with no display and the click with nothing opened.
+    /// </summary>
+    [Fact]
+    public void The_session_s_environment_is_read_as_systemctl_prints_it()
+    {
+        Assert.Equal(["/usr/bin/systemctl", "--user", "show-environment"], ToastCommands.LinuxSessionEnvironment("/usr/bin/systemctl").Command);
+
+        var read = ToastCommands.SessionEnvironment("WAYLAND_DISPLAY=wayland-1\nXDG_CURRENT_DESKTOP=Hyprland\nNAME=$'two words\\tand \\'quote\\' \\\\ \\x41'\nnot an assignment\nEMPTY=\n");
+
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["WAYLAND_DISPLAY"] = "wayland-1",
+                ["XDG_CURRENT_DESKTOP"] = "Hyprland",
+                ["NAME"] = "two words\tand 'quote' \\ A",
+                ["EMPTY"] = string.Empty,
+            },
+            read);
+    }
+
+    /// <summary>
+    /// The click's handler runs in the runtime's environment with the session's as it stands now laid over it, as a
+    /// launcher starts an application, and with an activation token only where the click brought a fresh one: a token the
+    /// session's own environment kept from its start is stale and never travels. Breaks if a stale token is handed on, or
+    /// the session's display does not reach the handler.
+    /// </summary>
+    [Theory]
+    [InlineData("fresh-token")]
+    [InlineData(null)]
+    public void A_click_s_environment_is_the_session_s_now_with_only_a_fresh_token(string? token)
+    {
+        var runtime = new Dictionary<string, string> { ["PATH"] = "/usr/bin", ["JASON_DATA_DIR"] = "/data", ["XDG_ACTIVATION_TOKEN"] = "from-the-runtime-s-start" };
+        var session = new Dictionary<string, string> { ["WAYLAND_DISPLAY"] = "wayland-1", ["XDG_ACTIVATION_TOKEN"] = "from-the-session-s-start", ["DESKTOP_STARTUP_ID"] = "old" };
+
+        var environment = ToastCommands.ClickEnvironment(runtime, session, token);
+
+        Assert.Equal(("/usr/bin", "/data", "wayland-1"), (environment["PATH"], environment["JASON_DATA_DIR"], environment["WAYLAND_DISPLAY"]));
+        Assert.Equal(token, environment.GetValueOrDefault("XDG_ACTIVATION_TOKEN"));
+        Assert.False(environment.ContainsKey("DESKTOP_STARTUP_ID"));
+    }
+
+    /// <summary>
     /// What notify-send prints is read for three things: the id it printed once the notification was shown, the action a
     /// click sent, and the activation token its option wrote on the line between them; an empty line there is no token, nor
     /// is one with a space or a control character. Breaks if a token is read where none was given, or the click is missed.

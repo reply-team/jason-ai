@@ -491,10 +491,15 @@ public sealed class ToastChannelTests
     public async Task On_linux_a_shown_toast_waits_and_its_click_opens_jason_desktop_on_the_item(bool inUnit)
     {
         var end = new TaskCompletionSource<LaunchResult>();
-        var facts = LinuxFacts(inUnit ? new() { ["INVOCATION_ID"] = "0123abcd" } : [], "notify-send", "gdbus", "systemd-run");
+        var facts = LinuxFacts(inUnit ? new() { ["INVOCATION_ID"] = "0123abcd" } : [], "notify-send", "gdbus", "systemd-run", "systemctl");
         var (toast, launcher, logs) = Channel(
             facts,
-            new() { ["probe"] = _ => Exit(0, "(true,)\n"), ["click"] = _ => Exit(0, stderr: "Opened in Jason Desktop.") },
+            new()
+            {
+                ["probe"] = _ => Exit(0, "(true,)\n"),
+                ["click"] = _ => Exit(0, stderr: "Opened in Jason Desktop."),
+                ["systemctl"] = _ => Exit(0, "WAYLAND_DISPLAY=wayland-1\nXDG_CURRENT_DESKTOP=Hyprland\nXDG_ACTIVATION_TOKEN=from-the-session-s-start\n"),
+            },
             new() { ["notify-send"] = _ => Stays(end) });
         var one = NotificationComposer.Compose(1, 0, item: Approval);
 
@@ -509,6 +514,8 @@ public sealed class ToastChannelTests
         Assert.Equal(ToastCommands.LinuxClick(new Self().Command, "jason://attention/approvals/" + Approval, inUnit ? "/usr/bin/systemd-run" : null), click.Command);
         Assert.Equal("gnome-shell/Jason/4242-6_TIME9", click.Environment["XDG_ACTIVATION_TOKEN"]);
         Assert.Equal("/home/someone/.jason", click.Environment["JASON_DATA_DIR"]);
+        Assert.Equal(("wayland-1", "Hyprland"), (click.Environment["WAYLAND_DISPLAY"], click.Environment["XDG_CURRENT_DESKTOP"]));
+        Assert.Contains(launcher.Launches, launch => launch.Launch.Command.SequenceEqual(ToastCommands.LinuxSessionEnvironment("/usr/bin/systemctl").Command));
         Assert.Equal(ToastChannel.ClickBound, bound);
         await WhenLogged(logs, "A notification's click was handed to Jason Desktop");
     }

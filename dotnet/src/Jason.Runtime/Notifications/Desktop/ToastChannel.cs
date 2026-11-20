@@ -276,19 +276,23 @@ public sealed class ToastChannel(
     }
 
     /// <summary>
-    /// A click: this executable started with the toast's link, in the runtime's own environment, the session's, as a menu
-    /// would start it, with the activation token the server gave where it gave one; and where it opened nothing, a
-    /// notification of what it said last, its sentence of why. Its words are the handler's own and reach no log.
+    /// A click: this executable started with the toast's link, in the session's environment as the user manager holds it
+    /// now (<see cref="ToastCommands.ClickEnvironment"/>), as a launcher would start it, with the activation token the
+    /// server gave where it gave one; and where it opened nothing, a notification of what it said last, its sentence of
+    /// why. Its words are the handler's own and reach no log.
     /// </summary>
     private async Task ClickAsync(string link, LaunchResult clicked, string notifySend)
     {
         try
         {
-            var environment = new Dictionary<string, string>(facts.Environment, StringComparer.Ordinal);
-            if (ToastCommands.ActivationToken(clicked.Stdout) is { } token)
+            var session = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (facts.Which("systemctl") is { } systemctl
+                && await LaunchAsync(ToastCommands.LinuxSessionEnvironment(systemctl), _stopping.Token).ConfigureAwait(false) is { Started: true, TimedOut: false, ExitCode: 0 } read)
             {
-                environment["XDG_ACTIVATION_TOKEN"] = token;
+                session = ToastCommands.SessionEnvironment(read.Stdout);
             }
+
+            var environment = ToastCommands.ClickEnvironment(facts.Environment, session, ToastCommands.ActivationToken(clicked.Stdout));
 
             var scope = facts.Environment.ContainsKey("INVOCATION_ID") ? facts.Which("systemd-run") : null;
             var result = await launcher.LaunchAsync(new ToastLaunch(ToastCommands.LinuxClick(self.Command, link, scope), null, environment), ClickBound, _stopping.Token).ConfigureAwait(false);

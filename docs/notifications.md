@@ -206,8 +206,11 @@ such a unit exists only while the person is signed in.
   browser, and a notification says why, in the words `jason ui open` would print. Where notify-send hands on the
   activation token the click came with (libnotify 0.8.8 and later, asked of its own help), the handler is given it, so
   the window comes to the front; with an earlier one, GNOME may say the desktop "is ready" instead, and a click on that
-  brings it. Where the runtime runs in a systemd user unit, the handler runs in a scope of its own
-  (`systemd-run --user --scope`), so the Jason Desktop it starts does not end with the runtime. At most ten toasts wait
+  brings it. The handler runs in the session's environment as the user manager holds it at the click
+  (`systemctl --user show-environment`), as a launcher starts an application, so a runtime the logon unit started
+  before the desktop said its display still hands the handler one. Where the runtime runs in a systemd user unit, the
+  handler runs in a scope of its own (`systemd-run --user --scope`), so the Jason Desktop it starts does not end with the
+  runtime. At most ten toasts wait
   for their click at once; another ends the oldest one's wait first. The runtime ends every wait when it stops, so a
   notification shown before a stop opens nothing. notify-send before 0.7.10, and gdbus where there is no notify-send,
   show a toast no click reaches.
