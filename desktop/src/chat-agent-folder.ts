@@ -9,7 +9,7 @@
 // runs in, are removed. Nothing below the top is looked at in this version: an agent folder or a memory file a host may
 // read from a subfolder it works in is not removed. Nothing is followed: a link is removed as a link, a skills folder is
 // deployed into only once it is a real folder, so nothing outside the chat folder is ever deleted or written, the
-// person's own `.claude` anywhere else among it: that is where their own configuration enters a turn outside Plan only.
+// person's own `.claude` anywhere else among it: that is where their own configuration enters a turn that runs in Full access.
 // A turn does not start on a top or a skills folder this could not put right. A conversation's own folder, where its
 // turns run, is put right the same way before each of them, the recorded skills copied in from the chat folder
 // (`ownConversationFolder`).

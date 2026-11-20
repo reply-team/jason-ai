@@ -816,25 +816,18 @@ const withCode = (sentence: string): Html[] =>
 const ownServersShown = 5;
 
 /**
- * Where each program's own servers work, said on its line: Claude Code's in the chat in every mode but Plan only, whose
- * turns load none of the person's own configuration, and Codex's in Full access, whose turns read the person's
- * config.toml; on both, when Jason is opened in that program from Open in.
- */
-const ownServersWhere = { claude: 'connect.ownServers.claude', codex: 'connect.ownServers.codex' } as const;
-
-/**
  * The one line under Claude Code or Codex naming the person's own MCP servers, as the desktop read them from that
- * program's own settings: the first five in the file's order, then how many more, and where they work
- * (`ownServersWhere`). Nothing for another host, a host with none, a host not found, or a file the desktop could not
- * read. The names are the person's own text, drawn as text and nothing else.
+ * program's own settings: the first five in the file's order, then how many more, and where they work: in the chat in
+ * Full access, the one mode whose turns load the person's own configuration on either program, and when Jason is opened
+ * in that program from Open in. Nothing for a host with none, a host not found, or a file the desktop could not read.
+ * The names are the person's own text, drawn as text and nothing else.
  */
 export function ownServersLine(host: DesktopHost): string | null {
     const names = Array.isArray(host.ownServers) ? host.ownServers : [];
-    const where = host.id === 'claude' || host.id === 'codex' ? ownServersWhere[host.id] : null;
-    if (where === null || host.kind !== 'program' || !host.found || names.length === 0) return null;
+    if (host.kind !== 'program' || !host.found || names.length === 0) return null;
     const first = names.slice(0, ownServersShown).join(', ');
     const more = names.length - ownServersShown;
-    return t(where, {
+    return t('connect.ownServers', {
         names: more > 0 ? t('connect.ownServers.more', { names: first, count: String(more) }) : first,
         host: host.label,
     });

@@ -21,7 +21,7 @@ export const protocolVersions: readonly string[] = ['2025-11-25', '2025-06-18', 
 
 /**
  * The fixed part of every turn's name for its permission server: a turn's own name is this, an underscore and a nonce new
- * for the turn (`turnServerName`). A turn outside Plan only loads the person's own MCP servers beside its own, and Claude
+ * for the turn (`turnServerName`). A turn that runs in Full access loads the person's own MCP servers beside its own, and Claude
  * Code connects once to a name defined in more than one place, from the source that ranks highest; no name the person
  * gave a server of theirs, the fixed one an earlier version used among them, is a turn's, so none of theirs answers a card.
  */

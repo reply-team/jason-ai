@@ -1907,7 +1907,7 @@ export class Chat {
                     ...(hooked ? { hook: (tool: string, input: Record<string, unknown>, use: string | null) => this.#broker.hook(id, tool, input, use) } : {}),
                 });
                 // The prompt tool's server is named for this turn alone, so no server of the person's own, which a turn
-                // outside Plan only loads beside it, is ever the one the host asks (`turnServerName`).
+                // in Full access loads beside it, is ever the one the host asks (`turnServerName`).
                 const server = newServerName();
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret, server);
                 const hookUrl = endpoint.hookUrl;

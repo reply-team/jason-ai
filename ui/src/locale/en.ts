@@ -137,9 +137,7 @@ export const en = {
     'place.elsewhere': "Done in Jason Desktop's own window.",
     'place.needs': 'This needs Jason Desktop.',
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
-    'connect.ownServers.claude':
-        'Your MCP servers: {names}. They work in the chat in every mode but Plan only, and when you open Jason in {host} from Open in.',
-    'connect.ownServers.codex':
+    'connect.ownServers':
         'Your MCP servers: {names}. They work in the chat in Full access, and when you open Jason in {host} from Open in.',
     'connect.ownServers.more': '{names} and {count} more',
     'connect.runsRoles': "Your agents' roles run on {host}, by the execution profile {profile}.",

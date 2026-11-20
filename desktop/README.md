@@ -37,9 +37,9 @@ Claude Code's version is read with `claude --version` at each listing of the hos
 remembered: a Claude Code older than 2.1.257 (`src/host-version.ts`), or one whose version cannot be read, is listed on
 the Connect card and in the chat's host list with a sentence naming the version found, that floor and how to update it,
 cannot be chosen there, and has every chat turn sent to it refused before the host starts, a key provider's included.
-From 2.1.285 on (`noChromeFrom`) a Plan only turn also passes `--no-chrome`: Anthropic's changelog does not say which
-version added the flag, and 2.1.285 is the first whose entry names it, so below it that turn's settings alone keep the
-browser out.
+From 2.1.285 on (`noChromeFrom`) a turn that does not run in Full access also passes `--no-chrome`: Anthropic's
+changelog does not say which version added the flag, and 2.1.285 is the first whose entry names it, so below it that
+turn's settings alone keep the browser out.
 
 Codex's version is read with `codex --version` before each chat turn on it, never remembered: a Codex older than 0.122.0
 (`codexFloor`), the first whose `exec` takes `--ignore-user-config`, or one whose version cannot be read, has the turn
@@ -86,23 +86,27 @@ config.toml plus `-c` while the turn leaves that file unread, since `codex sandb
 the desktop does not read the file to say what in it would differ. A set-up chat's naming run on Windows names no
 sandbox kind and gets no check: its shell tool is off, and it is held by the read-only sandbox and those settings alone.
 
-**Outside Plan only a Claude Code turn uses the person's own Claude Code configuration, as a terminal does; in Plan only
-it uses none of it.** In Ask first, Auto-edit and Full access a turn passes no `--setting-sources`, `--strict-mcp-config`
-or `--no-chrome`, and its settings carry no server defences (`claudeArguments`, `claudeTurnSettings`, `hookedSettings`),
-so the person's own settings with their rules and hooks, their MCP servers, their claude.ai connectors, the browser
-integration and their skills, the shell commands a skill carries included, work in the chat as in a terminal; reads
-outside the working folders stay blocked. The turn still carries its own `--mcp-config` beside the person's servers:
-the prompt tool, on a server named for that turn alone, `jason_desktop_` and a nonce (`newServerName`), so no server of
-the person's, the fixed name an earlier version used included, answers a card, and a tool of any server whose name
-begins `jason_desktop_` is refused to the agent (`isOwnTool`). `--permission-mode` is named every time, so the person's
-`defaultMode` never decides the mode; their deny and ask rules keep working in every mode, an ask a card, and their
-hooks run beside the turn's. In Ask first and Auto-edit their allow rules act before Jason's cards, so Ask first asks
-where the person's own Claude Code would ask, plus Jason's own cards. In Full access the turn's hook still sees every
-tool the model asks for; a hook of the person's own that rewrites a tool's input is their configuration acting. A Plan
-only turn keeps its sealed command line whole: `--setting-sources project`, `--strict-mcp-config` with the turn's MCP
-file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true`, deny the browser's server
-by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) and turn off a skill's shell commands
-(`disableSkillShellExecution: true`). Every Codex turn, Plan only
+**In Full access a Claude Code turn uses the person's own Claude Code configuration, as a terminal does: their skills,
+hooks, MCP servers and rules; in the other modes it uses none of it.** A turn that runs in Full access passes no
+`--setting-sources`, `--strict-mcp-config` or `--no-chrome`, and its settings carry no server defences
+(`claudeArguments`, `hookedSettings`), so the person's own settings with their rules and hooks, their skills, the shell
+commands a skill carries included, their MCP servers, their claude.ai connectors and the browser integration work in
+the chat as in a terminal; reads outside the working folders stay blocked. `--permission-mode` is named every time, so
+the person's `defaultMode` never decides the mode; their deny and ask rules keep working, an ask a card, and their hooks
+run beside the turn's, which still sees every tool the model asks for; a hook of the person's own that rewrites a
+tool's input is their configuration acting. A hook or a rule a Full access turn leaves in the person's Claude Code
+configuration acts in every later Full access turn and in their own terminal. Every other turn keeps the sealed command
+line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: Plan only, Ask
+first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
+browser tab, or once the hook was found filtered out. That line is `--setting-sources project`, `--strict-mcp-config`
+with the turn's MCP file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true`, deny
+the browser's server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) and turn off a skill's shell
+commands (`disableSkillShellExecution: true`): `serverDefences`, in `claudeTurnSettings`, `planTurnSettings` and the
+hooked settings of Ask first and Auto-edit. In every mode the turn carries its own `--mcp-config`: the prompt tool, on a
+server named for that turn alone, `jason_desktop_` and a nonce (`newServerName`), so no server of the person's, the
+fixed name an earlier version used included, answers a card, and a tool of any server whose name begins
+`jason_desktop_` is refused to the agent (`isOwnTool`). A turn on a provider's key runs with the desktop's own
+`CLAUDE_CONFIG_DIR` (`keyedFolder`), so the person's configuration does not load there either. Every Codex turn, Plan only
 included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
 there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded, since a Codex turn asks no
 one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which config.toml does not hold: every
@@ -426,14 +430,16 @@ applies to the turns a person starts by sending, from the next one on.
   access is not available here: <why>" (`bypassSentences`), and the record keeps Full access: the desktop runs as root
   (`getuid`), under which Claude Code refuses the mode; Claude Code's settings turn it off
   (`disableBypassPermissionsMode`, the person's own or an administrator's), which its init line shows by naming the
-  default mode, so the turn is judged as Ask first's from its first request; Claude Code refuses the mode before it
-  starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn starts
-  again at once with Ask first's settings; or a tool ran that the hook never saw (below). The first cause stands, in
+  default mode, so the turn is judged as Ask first's from its first request, on the command line it was started with,
+  the person's own configuration loaded for that turn alone; Claude Code refuses the mode before it starts, in its
+  restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn starts again at once with
+  Ask first's settings and its sealed line; or a tool ran that the hook never saw (below). The first cause stands, in
   memory, until the desktop starts again, and every later turn of a Full access chat runs in Ask first meanwhile.
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options), nor what an MCP server or connector of the person's own,
-  which a turn outside Plan only loads, does with the input of one of its tools: that input is read as its strings are
-  (below).
+  which a Full access turn loads, does with the input of one of its tools: that input is read as its strings are
+  (below). Nor are the shell commands a skill of the person's own carries in its `!` lines: Claude Code runs them itself,
+  outside the hook, in a Full access turn, whose settings leave them on.
 - **The AI's folder.** A Full access turn runs in the conversation's working folder, as its other turns do. The folder
   an earlier desktop made for a Full access grant, under `<data>/desktop/chat-full/`, is moved to `chat-full-ended/` at
   start; the conversation says where it is, with an Open folder button, when it is next opened, and the desktop removes
@@ -463,14 +469,15 @@ applies to the turns a person starts by sending, from the next one on.
   `.mcp.json` directly in the chat folder are refused to a shell command as to the file tools, and the host is denied
   edits of them (`chatRules`): in the shared chat folder in every mode, and in a conversation's own folder in every mode
   but Full access, where the folder is the conversation's own and is put right again before the next turn.
-- **The files and commands that add an MCP server are a card each time.** A write of `.mcp.json` anywhere else, or of
+- **The files and commands that add an MCP server are a card each time in Ask first and Auto-edit.** A write of
+  `.mcp.json` anywhere else, or of
   `.claude.json` anywhere (Claude Code keeps the user's and the local scopes' servers there), is a guarded name's card,
   and so is a command that runs `claude` or `codex` with the word `mcp` after it (`claude mcp add`, `codex mcp add`,
   through any folder or `npx` package name, and as the shell would read a re-spelled word). None is covered by "Allow
   for this chat", and Full access runs each.
-- **A tool of the person's own MCP server is a card each time.** Such servers reach a turn outside Plan only (above),
-  where one of the person's own allow rules may run a tool of theirs first. A tool named `mcp__<server>__<tool>` of any
-  server but the chat's own (`isOwnTool`) is judged before the
+- **A tool of the person's own MCP server runs in Full access, the one mode such servers reach (above).** The fence
+  stands in the other modes anyway. A tool named `mcp__<server>__<tool>` of any server but the chat's own (`isOwnTool`)
+  is judged before the
   command check, so an argument named `command` or `file_path` is never read as a shell command or a file tool's path:
   the card is "Use one of your own tools", its detail the server and the tool, then the input exactly as the host sent
   it (`JSON.stringify`), never cut. Before the card, an input whose detail would be longer than the card shows whole
@@ -488,7 +495,7 @@ applies to the turns a person starts by sending, from the next one on.
   there is removed, a settings file and a record beside the skills included; `.codex/`, the memory files the desktop
   does not write (`CLAUDE.local.md`, `AGENTS.override.md`) and a `.mcp.json` are removed. The person's own `.claude`
   anywhere else, in their home folder or a folder of theirs, is never touched: that is where their own configuration
-  enters a turn outside Plan only. Nothing below the top is looked at in this
+  enters a turn that runs in Full access. Nothing below the top is looked at in this
   version: an agent folder or a memory file in a subfolder is not removed, and a host may read instructions from a
   folder it works in (in Ask first every write there is a card). A link is removed as a link, never walked, and a deploy
   never goes through one: `.claude`, `.agents` and their `skills` are each made a real folder before anything is

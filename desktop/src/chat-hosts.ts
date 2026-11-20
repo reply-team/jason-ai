@@ -82,22 +82,24 @@ export interface ClaudeTurn {
     effort?: Effort | undefined;
     /** The session the previous turn of this chat reported; absent on a chat's first turn. */
     resume?: string | undefined;
-    /** The host's version as read before the turn, at or above the floor (`claudeFloor`): it decides Plan only's `--no-chrome`. */
+    /** The host's version as read before the turn, at or above the floor (`claudeFloor`): it decides a sealed turn's `--no-chrome`. */
     version: string;
 }
 
 /**
- * What the settings of a turn in Plan only carry so that nothing of the person's own tools reaches it: the claude.ai
- * connectors off, the browser's built-in server denied by name, and the shell commands a skill carries not run. They stand
- * beside `--setting-sources project`, `--strict-mcp-config` and `--no-chrome` (`claudeArguments`), and the first two are
- * the only defences of their kind on a Claude Code older than `noChromeFrom`, which skips a key it does not know.
+ * What the settings of every turn that does not run in Full access carry so that nothing of the person's own tools
+ * reaches it: the claude.ai connectors off, the browser's built-in server denied by name, and the shell commands a skill
+ * carries not run. They stand beside `--setting-sources project`, `--strict-mcp-config` and `--no-chrome`
+ * (`claudeArguments`), and the first two are the only defences of their kind on a Claude Code older than `noChromeFrom`,
+ * which skips a key it does not know.
  * Anthropic, https://code.claude.com/docs/en/settings-reference (read 2026-11-12): `disableClaudeAiConnectors` "Turn off
  * claude.ai connectors so Claude Code doesn't fetch them" and `deniedMcpServers` "Block specific MCP servers by URL,
  * command, or name", both set in "Any file"; https://code.claude.com/docs/en/settings: `disableClaudeAiConnectors` is
  * honored as "`true` from any scope", and `--settings` "can set any key your user settings file can set". The browser's
  * server is `claude-in-chrome`, the name its tools are called by. https://code.claude.com/docs/en/skills (read
  * 2026-11-12): with `disableSkillShellExecution` set, "each command is replaced with `[shell command execution disabled by
- * policy]`". A turn in any other mode carries none of them: it loads the person's own configuration as a terminal does.
+ * policy]`". A turn that runs in Full access carries none of them: it loads the person's own configuration as a terminal
+ * does.
  */
 function serverDefences() {
     return { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
@@ -119,15 +121,15 @@ function serverDefences() {
  * `allow` takes precedence over the preapproved set, so you can block a preapproved domain or require a prompt for it.";
  * https://code.claude.com/docs/en/permissions#webfetch: "`WebFetch(domain:*)` matches every domain", and "Wildcards in
  * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor. These are the settings of
- * an Ask first or Auto-edit turn; they carry none of Plan only's server defences (`serverDefences`), so the person's own
- * connectors, browser and skills' shell commands work there as in a terminal.
+ * an Ask first or Auto-edit turn the hook does not ride, below the floor of Full access; they carry the server defences
+ * (`serverDefences`), as the settings of every turn that does not run in Full access do.
  */
-export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] } });
+export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] }, ...serverDefences() });
 
 /**
  * The settings of a turn in Plan only: reads outside the working folders blocked, as every turn's are; no classifier in
  * planning, so a command outside Claude Code's read-only set reaches the permission tool, which refuses it; and the server
- * defences (`serverDefences`), which no other mode's settings carry. Anthropic, https://code.claude.com/docs/en/settings
+ * defences (`serverDefences`), as every turn's that does not run in Full access. Anthropic, https://code.claude.com/docs/en/settings
  * (read 2026-11-11), `useAutoModeDuringPlan` is honored as "`false` from any managed source, `--settings`, ..."; and
  * https://code.claude.com/docs/en/permission-modes: with auto mode not available, or `useAutoModeDuringPlan` off,
  * "commands outside the built-in read-only set prompt for approval".
@@ -136,7 +138,8 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
 
 /**
  * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit those of every turn
- * (`claudeTurnSettings`), in Full access those with no rule that a page asks; and a `PreToolUse` hook on every tool that
+ * (`claudeTurnSettings`), the server defences among them, in Full access those with no rule that a page asks and no server
+ * defence; and a `PreToolUse` hook on every tool that
  * posts the tool use to the turn's endpoint, which answers a refusal of the three kinds or nothing (`HookAnswer`).
  * Claude Code's deny rules match a command as written only, so the hook reads what they cannot, and a refusal of it
  * stands in front of an allow rule. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"`
@@ -144,10 +147,11 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
  * of `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
  * `command` or `http` hook. Requires Claude Code v2.1.295 or later."
  *
- * These turns load the person's own configuration, their hooks among it, which run beside this one; a refusal of this one
- * stands whatever theirs answer. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-20): "When multiple
- * PreToolUse hooks return different decisions, precedence is `deny` > `defer` > `ask` > `allow`." The hook sees the tool
- * use as the model asked for it; a hook of the person's own that rewrites the input is their configuration acting.
+ * A turn that runs in Full access loads the person's own configuration, their hooks among it, which run beside this one;
+ * a refusal of this one stands whatever theirs answer. Anthropic, https://code.claude.com/docs/en/hooks (read
+ * 2026-11-20): "When multiple PreToolUse hooks return different decisions, precedence is `deny` > `defer` > `ask` >
+ * `allow`." The hook sees the tool use as the model asked for it; a hook of the person's own that rewrites the input is
+ * their configuration acting. An Ask first or Auto-edit turn the hook rides is sealed as Plan only's (`claudeArguments`).
  */
 export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string) {
     return {
@@ -158,6 +162,7 @@ export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: st
         // hook's address is always on the list.
         disableAllHooks: false,
         allowedHttpHookUrls: [hookUrl],
+        ...(mode === 'full_access' ? {} : serverDefences()),
         hooks: {
             PreToolUse: [
                 {
@@ -239,29 +244,31 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
  * `--bare`, which drops the subscription sign-in and the skills.
  *
- * Outside Plan only the turn loads the person's own Claude Code configuration, as a terminal does: no
- * `--setting-sources`, no `--strict-mcp-config`, no `--no-chrome`, so their settings, rules and hooks, their MCP
- * servers, their claude.ai connectors and the browser integration reach it; the permission mode named every time
+ * A turn that runs in Full access loads the person's own Claude Code configuration, as a terminal does: no
+ * `--setting-sources`, no `--strict-mcp-config`, no `--no-chrome`, so their settings, rules and hooks, their skills, their
+ * MCP servers, their claude.ai connectors and the browser integration reach it; the permission mode named every time
  * overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20: `--permission-mode`
- * "Overrides `defaultMode` from settings files"). A Plan only turn keeps its sealed command line whole:
- * `--setting-sources project`, `--strict-mcp-config`, and from `noChromeFrom` on `--no-chrome`, so none of the person's
- * servers, connectors or browser reaches it (its settings' `serverDefences` hold below that version). In every mode the
- * turn's own `--mcp-config` names the prompt tool's server, under the turn's own name for it (`ownServer`), beside the
- * person's servers outside Plan only, so a question the host asks reaches the prompt tool and never hangs a `-p` turn;
- * reads outside the working folders blocked (`claudeTurnSettings`); each allowed and disallowed rule an argument of its
- * own, the form the CLI reference gives, so a comma in a data path never splits a rule; no prompt argument, so the
- * prompt is read from standard input.
+ * "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole: Plan only, Ask
+ * first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
+ * browser tab, or once the hook was found filtered out: which line a turn gets follows the mode it runs in (`turnMode`),
+ * never the one the chat shows. The sealed line is `--setting-sources project`, `--strict-mcp-config`, and from
+ * `noChromeFrom` on `--no-chrome`, so none of the person's settings, servers, connectors or browser reaches the turn (its
+ * settings' `serverDefences` hold below that version). In every mode the turn's own `--mcp-config` names the prompt
+ * tool's server, under the turn's own name for it (`ownServer`), beside the person's servers in Full access, so a
+ * question the host asks reaches the prompt tool and never hangs a `-p` turn; reads outside the working folders blocked
+ * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives, so a
+ * comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
-    const sealed = mode === 'plan_only';
+    const sealed = mode !== 'full_access';
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(sealed ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(sealed ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     if (sealed) args.push('--setting-sources', 'project');
-    args.push('--settings', sealed ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
+    args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName(ownServer(turn.server)), '--mcp-config', turn.mcpConfig);
