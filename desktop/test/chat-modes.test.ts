@@ -1,6 +1,6 @@
 // A chat's access modes, short of a whole turn: what each mode starts Claude Code with, the Full access turn's hook file,
-// the confirmation's words and the floor, what the broker answers in each mode, and the refusals that must hold under Full
-// access, each driven through the hook's own endpoint as Claude Code calls it.
+// the floor, what the broker answers in each mode, and the refusals that must hold under Full access, each driven through
+// the hook's own endpoint as Claude Code calls it.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -8,9 +8,11 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
+import { Chat } from '../src/chat.ts';
 import { helpNouns, readFence } from '../src/chat-deny.ts';
+import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -34,9 +36,30 @@ test('the four modes, Ask first first, then narrow to wide with Full access last
     assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
 });
 
-test('Auto-edit says in one sentence why Codex and the Feed have none', () => {
+test('a turn runs in the mode its chat keeps, but Full access in Ask first from a tab, on Codex, while not offered or below its floor, and Auto-edit in Ask first on Codex, each with its sentence', () => {
+    const at = { fromTab: false, offered: true, claudeVersion: fullAccessFloor };
+    for (const mode of chatModes) assert.deepEqual(turnMode(mode, 'claude', at), { mode, why: null }, mode);
+    const askFirst = (kind: string, text: string | null) => ({ mode: 'ask_first', why: { kind, text } });
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, fromTab: true }), askFirst('tab', tabFullAccess));
+    assert.deepEqual(turnMode('full_access', 'codex', at), askFirst('codex', codexFullAccess));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, offered: false }), askFirst('not_offered', fullAccessNotYet));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: null }), askFirst('floor', fullAccessSentence(null)), 'a version that could not be read');
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: undefined }), { mode: 'full_access', why: null }, 'a version not read is no floor yet');
+    assert.deepEqual(turnMode('auto_edit', 'codex', at), askFirst('codex_auto_edit', codexAutoEdit));
+    assert.deepEqual(turnMode('auto_edit', 'codex', { ...at, fromTab: true }), askFirst('codex_auto_edit', codexAutoEdit));
+    // The first cause that holds is the one said: a tab before Codex, Codex before the switch, the switch before the floor.
+    assert.equal(turnMode('full_access', 'codex', { ...at, fromTab: true, offered: false }).why?.kind, 'tab');
+    assert.equal(turnMode('full_access', 'codex', { ...at, offered: false }).why?.kind, 'codex');
+    assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, claudeVersion: '2.1.200' }).why?.kind, 'not_offered');
+    for (const mode of ['ask_first', 'plan_only'] as const) {
+        for (const program of ['claude', 'codex']) assert.deepEqual(turnMode(mode, program, { fromTab: true, offered: false, claudeVersion: null }), { mode, why: null }, `${mode} on ${program}`);
+    }
+});
+
+test('Auto-edit says in one sentence why Codex has none; the Feed is refused no mode, so it has no sentence of refusal', () => {
     assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
-    assert.equal(feedAutoEdit, 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
+    for (const gone of ['feedAutoEdit', 'feedFullAccess']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
 });
 
 test('Ask first starts Claude Code as every turn did before the modes: no permission mode, the settings inline', () => {
@@ -123,32 +146,10 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });
 
-test('the confirmation says in plain words what Full access does, whose risk it is and what it cannot see; Cancel is focused and Escape cancels', () => {
-    const dialog = fullAccessDialog();
-    assert.equal(dialog.message, 'Give this chat full access?');
-    assert.equal(
-        dialog.detail,
-        'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
-            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run. ' +
-            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving. " +
-            'The risk is yours. ' +
-            'This time, Full access lasts until you change it or close Jason. ' +
-            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too. ' +
-            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
-    );
-    assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
-    assert.equal(dialog.defaultId, 2);
-    assert.equal(dialog.cancelId, 2);
-});
-
-test('a tool that ran unchecked takes Always back as well, and says so only where Always stood', () => {
+test('a tool that ran unchecked turns Full access off, and the turn\'s end says why and how to go on', () => {
     assert.equal(
         unguardedSentence,
         'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
-    );
-    assert.equal(
-        unguardedStandingSentence,
-        'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
     );
 });
 
@@ -393,10 +394,11 @@ test('in Ask first the broker answers as it always did, and a hook call refuses 
     await card;
 });
 
-test('the main process asks the person itself, with the confirmation\'s own box, and reads its answer by its buttons alone', () => {
+test('the main process asks the person nothing before Full access: no box of its own, no answer to read, and no standing choice to keep or take back', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /const \{ response, checkboxChecked \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return fullAccessAnswer\(response, checkboxChecked\);/);
-    assert.equal(fullAccessDialog().buttons[0], 'Give full access this time');
+    assert.deepEqual(['fullAccessDialog', 'fullAccessAnswer', 'confirmFullAccess'].filter((name) => main.includes(name)), [], 'main.ts shows no box before Full access');
+    for (const gone of ['fullAccessDialog', 'fullAccessAnswer', 'fullAccessConsent']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
+    for (const gone of ['fullAccessStanding', 'takeBackFullAccess']) assert.equal(gone in Chat.prototype, false, `the chat has no ${gone}`);
 });
 
 // Attempts at getting past Full access's refusals, each through the hook as Claude Code calls it, and the same refusals in Ask first.

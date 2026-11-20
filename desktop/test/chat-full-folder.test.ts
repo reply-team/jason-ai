@@ -1,22 +1,23 @@
-// A Full access grant's own folder, and the bounded sweep that removes it seven days after Full access ended: a link in
-// it is unlinked and never walked, a folder swapped after it was looked at is not entered, a failure leaves the folder
-// and says a code, and a pass takes only as many entries as it is given.
+// The folder of a Full access grant an earlier desktop left, which no desktop makes now, and a conversation's own folder:
+// moved to the ended place, never out of a place or into one that is a link, and the bounded sweep that removes either
+// seven days after the move: a link in it is unlinked and never walked, a folder swapped after it was looked at is not
+// entered, a failure leaves the folder and says a code, and a pass takes only as many entries as it is given.
 
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { skillsFolders } from '../src/chat-agent-folder.ts';
+import { newConversationId } from '../src/chat-conversations.ts';
 import {
+    endConversationFolder,
     endGrantFolder,
     endedName,
     endedNameShape,
     grantIdShape,
     keptMs,
-    makeGrantFolder,
     moveLeftovers,
+    moveOwnLeftovers,
     newGrantId,
     sweepEnded,
     sweepOps,
@@ -31,10 +32,12 @@ function rig(t: { after(fn: () => void): void }) {
     const root = mkdtempSync(join(tmpdir(), 'jason-full-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const folders: FullFolders = { full: join(root, 'chat-full'), ended: join(root, 'chat-full-ended'), records: join(root, 'chat-full-records') };
-    const chat = join(root, 'chat');
-    const records = join(root, 'skills-records');
-    mkdirSync(chat);
-    return { root, folders, chat, records };
+    return { root, folders };
+}
+
+/** A grant's folder as an earlier desktop left it. */
+function left(folders: FullFolders, id: string): void {
+    mkdirSync(join(folders.full, id), { recursive: true });
 }
 
 function put(path: string, text = 'x'): void {
@@ -49,9 +52,6 @@ function ended(folders: FullFolders, at: number, id = newGrantId(at)): string {
     return path;
 }
 
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
-const [claude] = skillsFolders as [(typeof skillsFolders)[number]];
-
 test('a grant id is 26 characters, and an ended name is the id, a dash and the moment it moved', () => {
     const id = newGrantId(t0);
     assert.match(id, grantIdShape);
@@ -59,26 +59,12 @@ test('a grant id is 26 characters, and an ended name is the id, a dash and the m
     assert.deepEqual(endedNameShape.exec(endedName(id, t0))?.slice(1), [id, String(t0)]);
 });
 
-test('a grant\'s folder is its own, below the grants\' place, with the recorded skills in it and nothing the records do not name', (t) => {
-    const { folders, chat, records } = rig(t);
-    put(join(chat, claude.folder, 'skills', 'campaign-planning', 'SKILL.md'), 'plan well');
-    put(join(chat, claude.folder, 'skills', 'planted', 'SKILL.md'), 'not recorded');
-    put(join(records, claude.record), JSON.stringify({ version: 1, packs: [{ files: [{ path: 'campaign-planning/SKILL.md', sha256: sha('plan well') }] }] }));
-    const id = newGrantId(t0);
-    const folder = makeGrantFolder(folders, id, chat, records);
-    assert.equal(folder, join(folders.full, id));
-    assert.equal(readFileSync(join(folder, claude.folder, 'skills', 'campaign-planning', 'SKILL.md'), 'utf8'), 'plan well');
-    assert.ok(!existsSync(join(folder, claude.folder, 'skills', 'planted')), 'a skill nobody recorded is not copied in');
-    assert.ok(existsSync(join(chat, claude.folder, 'skills', 'planted')), 'the chat folder is left as it was');
-    assert.throws(() => makeGrantFolder(folders, id, chat, records), { name: 'GrantFolderUnmade' }, 'a folder is made once, for one grant');
-});
-
 test('ending a grant moves its folder to the ended place at once, named with the moment, and the other grants\' folders stay', (t) => {
-    const { folders, chat, records } = rig(t);
+    const { folders } = rig(t);
     const one = newGrantId(t0);
     const two = newGrantId(t0 + 1);
-    makeGrantFolder(folders, one, chat, records);
-    makeGrantFolder(folders, two, chat, records);
+    left(folders, one);
+    left(folders, two);
     put(join(folders.full, one, 'work.txt'), 'the agent\'s file');
     const name = endGrantFolder(folders, one, t0 + 5);
     assert.equal(name, `${one}-${t0 + 5}`);
@@ -88,9 +74,9 @@ test('ending a grant moves its folder to the ended place at once, named with the
 });
 
 test('a folder that cannot be moved is left and a code said; the next start moves every leftover, its seven days counted from then', (t) => {
-    const { folders, chat, records } = rig(t);
+    const { folders } = rig(t);
     const id = newGrantId(t0);
-    makeGrantFolder(folders, id, chat, records);
+    left(folders, id);
     mkdirSync(folders.ended, { recursive: true });
     // A file where the ended place should be makes the move fail.
     rmSync(folders.ended, { recursive: true });
@@ -249,4 +235,81 @@ test('the cap is a parameter: a larger one takes the same tree in one pass', (t)
     for (const name of ['a', 'b', 'c']) put(join(old, 'dir', `${name}.txt`));
     assert.deepEqual(sweepEnded(folders, { now: t0, cap: 100 }), { removed: 1, capped: false });
     assert.ok(!existsSync(old));
+});
+
+// A conversation's own folder, `<data>/desktop/chats/<id>/`, goes to the same ended place when the conversation is
+// removed, or at a start when no record names it, and the same sweep takes it after seven days.
+
+test('a conversation\'s own folder is moved to the ended place under its id and the moment it moved, kept seven days, and then removed by the sweep', (t) => {
+    const { root, folders } = rig(t);
+    const chats = join(root, 'chats');
+    const id = newConversationId(t0);
+    const other = newConversationId(t0 + 1);
+    put(join(chats, id, 'work.txt'), 'the agent\'s file');
+    put(join(chats, other, 'work.txt'), 'another chat\'s file');
+    const name = endConversationFolder(chats, folders, id, t0 + 5);
+    assert.equal(name, `${id}-${t0 + 5}`);
+    assert.deepEqual(endedNameShape.exec(name ?? '')?.slice(1), [id, String(t0 + 5)]);
+    assert.equal(existsSync(join(chats, id)), false, 'gone from its place');
+    assert.equal(readFileSync(join(folders.ended, name ?? '', 'work.txt'), 'utf8'), 'the agent\'s file', 'whole in the ended place');
+    assert.deepEqual(readdirSync(chats), [other], 'the other conversation\'s folder stays');
+    assert.equal(endConversationFolder(chats, folders, id, t0 + 6), null, 'a folder already moved is nothing to move');
+    assert.deepEqual(sweepEnded(folders, { now: t0 + 5 + keptMs - 1, cap: 1000 }), { removed: 0, capped: false }, 'kept for seven days');
+    assert.ok(existsSync(join(folders.ended, name ?? '')));
+    const codes: string[] = [];
+    assert.deepEqual(sweepEnded(folders, { now: t0 + 5 + keptMs, cap: 1000, said: (code) => codes.push(code) }), { removed: 1, capped: false });
+    assert.deepEqual(codes, [], 'its name is one the desktop gave');
+    assert.equal(existsSync(join(folders.ended, name ?? '')), false);
+});
+
+test('a conversation\'s folder that cannot be moved is left where it is with everything in it, and a code said', (t) => {
+    const { root, folders } = rig(t);
+    const chats = join(root, 'chats');
+    const id = newConversationId(t0);
+    put(join(chats, id, 'work.txt'), 'the agent\'s file');
+    // A file where the ended place should be makes the move fail, as a terminal holding the folder does on Windows.
+    writeFileSync(folders.ended, 'in the way');
+    const codes: string[] = [];
+    assert.equal(endConversationFolder(chats, folders, id, t0, (code) => codes.push(code)), null);
+    assert.equal(codes.length, 1);
+    assert.match(codes[0] ?? '', /^E[A-Z]+$/);
+    assert.equal(readFileSync(join(chats, id, 'work.txt'), 'utf8'), 'the agent\'s file');
+});
+
+test('nothing is moved out of a conversations\' place that is a link, nor into an ended place that is one: what each names is left whole', (t) => {
+    const { root, folders } = rig(t);
+    const id = newConversationId(t0);
+    const outside = join(root, 'outside');
+    put(join(outside, id, 'precious.txt'), 'mine');
+    const chats = join(root, 'chats');
+    symlinkSync(outside, chats, 'junction');
+    const codes: string[] = [];
+    assert.equal(endConversationFolder(chats, folders, id, t0, (code) => codes.push(code)), null);
+    assert.equal(moveOwnLeftovers(chats, folders, new Set(), t0, (code) => codes.push(code)).length, 0);
+    assert.equal(readFileSync(join(outside, id, 'precious.txt'), 'utf8'), 'mine', 'the folder the link names is left');
+    assert.equal(existsSync(folders.ended), false, 'nothing reached the ended place');
+    assert.deepEqual(codes, ['ENOTDIR', 'ENOTDIR']);
+    // A real conversations' place, and an ended place that is a link elsewhere: nothing is moved into it.
+    const real = join(root, 'chats-real');
+    put(join(real, id, 'work.txt'), 'the agent\'s file');
+    const elsewhere = join(root, 'elsewhere');
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, folders.ended, 'junction');
+    assert.equal(endConversationFolder(real, folders, id, t0), null);
+    assert.deepEqual(readdirSync(elsewhere), [], 'nothing went through the link');
+    assert.equal(readFileSync(join(real, id, 'work.txt'), 'utf8'), 'the agent\'s file');
+});
+
+test('every conversation\'s folder no record names is moved to the ended place; one a record names, and a name that is no conversation\'s, stay', (t) => {
+    const { root, folders } = rig(t);
+    const chats = join(root, 'chats');
+    const kept = newConversationId(t0);
+    const orphan = newConversationId(t0 + 1);
+    put(join(chats, kept, 'work.txt'));
+    put(join(chats, orphan, 'work.txt'));
+    put(join(chats, 'not-a-conversation', 'work.txt'));
+    const moved = moveOwnLeftovers(chats, folders, new Set([kept]), t0 + 9);
+    assert.deepEqual(moved, [`${orphan}-${t0 + 9}`]);
+    assert.deepEqual(readdirSync(chats).sort(), [kept, 'not-a-conversation'].sort());
+    assert.deepEqual(readdirSync(folders.ended), [`${orphan}-${t0 + 9}`]);
 });

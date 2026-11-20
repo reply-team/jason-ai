@@ -121,7 +121,6 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             feed: 'function',
             cardRefused: 'function',
         },
-        fullAccess: { standing: 'function', takeBack: 'function', onChanged: 'function' },
         theme: { get: 'function', set: 'function' },
         updates: { key: 'function', item: 'function', press: 'function', onChanged: 'function' },
         dailyTrends: { get: 'function', set: 'function' },
@@ -162,7 +161,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.answer', ['c1', 'r1', { allow: true, always: false }]],
         ['chat.list', []],
         ['chat.open', ['conv_01']],
-        ['chat.create', ['cmp_01', 'claude']],
+        ['chat.create', ['cmp_01']],
         ['chat.remove', ['conv_01']],
         ['chat.restart', ['conv_01']],
         ['chat.attach', ['conv_01', 'cmp_01']],
@@ -171,8 +170,6 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.openFolder', ['01JD0000000000000000000000-1788000000000']],
         ['chat.feed', [[], { catchUp: true }]],
         ['chat.cardRefused', ['conv_01', 'choice', 'schema']],
-        ['fullAccess.standing', []],
-        ['fullAccess.takeBack', []],
         ['links.take', []],
         ['pairing.paired', ['uit_01JD0000000000000000000002']],
         ['theme.get', []],
@@ -218,8 +215,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
     void api.chat?.onEvent?.(() => undefined);
     void api.setup?.onChanged?.(() => undefined);
     void api.links?.onOpen?.(() => undefined);
-    void api.fullAccess?.onChanged?.(() => undefined);
     void api.mode?.onPreparing?.(() => undefined);
     void api.updates?.onChanged?.(() => undefined);
-    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open'], eventChannels['fullAccess.changed'], eventChannels['mode.preparing'], eventChannels['updates.changed']]);
+    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open'], eventChannels['mode.preparing'], eventChannels['updates.changed']]);
 });

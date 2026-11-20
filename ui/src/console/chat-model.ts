@@ -327,6 +327,14 @@ function planStands(chat: Chat): boolean {
     );
 }
 
+/**
+ * What the question before a removal adds for a conversation with a folder of its own (`ownFolder`): the desktop moves
+ * the folder to its ended place, where it is kept seven days; a folder a terminal holds stays where it is until a later
+ * start moves it, and on macOS and Linux a terminal open in it is moved with it.
+ */
+export const removedFolder =
+    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. If a terminal holds it, it stays where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.";
+
 /** What the line under the composer says while the desktop holds the chat in Full access. */
 export const fullAccessLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
 
@@ -376,31 +384,21 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Full access',
 };
 
-/** Why the desktop refuses Full access for the Feed, in its words. */
-const feedFullAccess =
-    'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /** Why the desktop refuses Auto-edit on Codex, in its words; with no host the menu says it too. */
 const codexAutoEdit =
     'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
-/** Why the desktop refuses Auto-edit for the Feed, in its words. */
-const feedAutoEdit =
-    'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /**
  * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
  * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
- * it; with no host, as on Codex; and for the Feed, in the order the desktop refuses it. Auto-edit is disabled the same
- * way, on Codex and for the Feed; it has no version floor.
+ * it; with no host, as on Codex. Auto-edit is disabled the same way, on Codex; it has no version floor. The Feed is
+ * offered the same as any chat.
  */
 export function modeChoices(
     host: DesktopHost | null,
-    feed = false,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full =
-        host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
-    const edit = host === null ? codexAutoEdit : (host.autoEdit ?? (feed ? feedAutoEdit : null));
+    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    const edit = host === null ? codexAutoEdit : host.autoEdit;
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
@@ -409,19 +407,36 @@ export function modeChoices(
 }
 
 /**
+ * The mode the next turn runs in, which the line under the composer, the menu's check and a tab's label draw, and the
+ * desktop's sentence why when that is not the mode the chat keeps: as the desktop hands it for the host and for the place
+ * the turn is sent from (`DesktopHost.runs`), deciding it as it decides the turn. Where it hands nothing, the chat's own
+ * mode and no sentence: with no host, on a host that runs the mode as itself, and on a desktop of an earlier version.
+ */
+export function drawnMode(
+    chat: Pick<Chat, 'mode'>,
+    host: DesktopHost | null,
+    place: 'window' | 'tab',
+): { mode: DesktopChatMode; why: string | null } {
+    const step = host?.runs[place][chat.mode];
+    return step === undefined ? { mode: chat.mode, why: null } : { mode: step.mode, why: step.why };
+}
+
+/**
  * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
- * models a host offers, and such a host offers none here and takes no typed name.
+ * models a host offers, and such a host offers none here and takes no typed name; nor does it hand what a turn on a host
+ * runs in, and such a host is read as handing nothing, so the chat's own mode is drawn.
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
         const given = host as Partial<
-            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit'>
+            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit' | 'runs'>
         >;
         return Array.isArray(given.models) &&
             typeof given.typedModel === 'boolean' &&
             given.modelsUnread !== undefined &&
             given.fullAccess !== undefined &&
-            given.autoEdit !== undefined
+            given.autoEdit !== undefined &&
+            given.runs !== undefined
             ? host
             : {
                   ...host,
@@ -436,6 +451,7 @@ export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
                       typeof given.autoEdit === 'string' || given.autoEdit === null
                           ? given.autoEdit
                           : olderDesktopAutoEdit,
+                  runs: given.runs ?? { window: {}, tab: {} },
               };
     });
 }

@@ -7,8 +7,9 @@
  * written into the person's folders.
  *
  * One more entry continues the chat in front in a terminal: the page names the chat and nothing else, and the host and the
- * session the host named are read from the desktop's own record of that chat (`continuableOf`), the working folder from
- * the run. It is offered only for a session of Claude Code or Codex that a plain turn named, and it is never the default.
+ * session the host named are read from the desktop's own record of that chat (`continuableOf`), and so is the working
+ * folder, the one the chat's turns run in. It is offered only for a session of Claude Code or Codex that a plain turn
+ * named, and it is never the default.
  *
  * And one entry opens the person's own AI on Jason itself, "Change Jason itself": the bundled `jason session open --setup`.
  * Where the person has stated a host of their own, the preference `agent.interactive_host`, the command line's own rule
@@ -310,10 +311,11 @@ export interface OpenInDeps {
     log?(event: 'open_in' | 'open_in_refused', fields: { Place: PlaceId }): void;
     /**
      * The session a terminal may continue the chat by, read from the desktop's own record, with whether a turn of it runs
-     * now; null for a chat the desktop does not keep, an id of no shape, or a chat with no such session (`Chat.continuable`).
+     * now and the folder its turns run in; null for a chat the desktop does not keep, an id of no shape, or a chat with no
+     * such session (`Chat.continuable`).
      */
-    continuable(chatId: unknown): { host: ContinueHost; session: string; running: boolean } | null;
-    /** The folder a plain turn of the chat runs in: the working folder of a chat continued in a terminal. */
+    continuable(chatId: unknown): { host: ContinueHost; session: string; running: boolean; folder?: string } | null;
+    /** The shared chat folder: the working folder of a chat continued in a terminal when its record names none. */
     chatFolder(): string;
     continueFlags: ContinueFlags;
     logContinue?(event: 'open_in_continued' | 'open_in_continue_refused', fields: { Host: ContinueHost }): void;
@@ -492,7 +494,7 @@ export class OpenIn {
 
     /**
      * Continues the chat in a terminal: the host and the id of the session it named are read from the desktop's own record
-     * of the chat, and the bundled `jason session open --here` opens it in the folder a plain turn runs in. Nothing the page
+     * of the chat, and the bundled `jason session open --here` opens it in the folder the chat's turns run in. Nothing the page
      * sends but the chat's id is read. Refused, with nothing run, for a chat that may not be continued or whose turn runs;
      * a refusal of the CLI is said in its own sentence. Never kept as the next default.
      */
@@ -501,7 +503,7 @@ export class OpenIn {
         const found = deps.continuable(chatId);
         if (found === null) return { refused: notContinuable };
         if (found.running) return { refused: continueRunning };
-        const answer = await deps.cli.run(['session', 'open', ...deps.continueFlags(found.host, found.session)], { cwd: deps.chatFolder() });
+        const answer = await deps.cli.run(['session', 'open', ...deps.continueFlags(found.host, found.session)], { cwd: found.folder ?? deps.chatFolder() });
         if (answer.exit === 0) {
             deps.logContinue?.('open_in_continued', { Host: found.host });
             return null;

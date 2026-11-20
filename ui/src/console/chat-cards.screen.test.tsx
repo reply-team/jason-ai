@@ -362,7 +362,7 @@ describe('a choice the AI asked for', () => {
         const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
         setPlace('tab', tab);
         await loadMode(tab);
-        desktop.keep({ ...setUp(opened), mode: 'full_access' });
+        desktop.keep({ ...setUp(opened), mode: 'auto_edit' });
         const fake = new FakeApi()
             .answer('plugin.list', 'plugin.list/none')
             .answer('route.list', 'route.list/empty')

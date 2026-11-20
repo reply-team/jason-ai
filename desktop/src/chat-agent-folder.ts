@@ -8,10 +8,12 @@
 // (`CLAUDE.local.md`, `AGENTS.override.md`) are removed. Nothing below the top is looked at in this version: an agent
 // folder or a memory file a host may read from a subfolder it works in is not removed. Nothing is followed: a link is
 // removed as a link, a skills folder is deployed into only once it is a real folder, so nothing outside the chat folder is
-// ever deleted or written. A turn does not start on a top or a skills folder this could not put right.
+// ever deleted or written. A turn does not start on a top or a skills folder this could not put right. A conversation's
+// own folder, where its turns run, is put right the same way before each of them, the recorded skills copied in from the
+// chat folder (`ownConversationFolder`).
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** The memory files a host reads in the chat folder beside the two the desktop writes, which it never writes. */
@@ -139,6 +141,64 @@ export function ownAgentFolder(chat: string, records: string, remove: (path: str
         throw new AgentFolderUnowned((error as NodeJS.ErrnoException | null)?.code);
     }
     return changed;
+}
+
+/**
+ * Copies the regular files and folders below `from` into `to`; a link or anything else is not copied. Nothing is written
+ * through what stands at a name in `to`: a folder is entered only when it is a real folder, and anything else there, a
+ * link or a junction included, is removed as itself and a folder made in its place; a file is removed as itself, a hard
+ * link included, and copied to a name nothing holds.
+ */
+export function copyOwn(from: string, to: string): void {
+    for (const name of readdirSync(from)) {
+        const source = join(from, name);
+        const target = join(to, name);
+        const stat = lstatSync(source);
+        if (stat.isDirectory()) {
+            const there = kind(target);
+            if (there !== 'folder') {
+                if (there !== null) removed(target);
+                mkdirSync(target);
+            }
+            copyOwn(source, target);
+        } else if (stat.isFile()) {
+            removed(target);
+            copyFileSync(source, target, constants.COPYFILE_EXCL);
+        }
+    }
+}
+
+/** Makes a folder of the desktop's own where none stands, and refuses a name that is not a folder itself, a link included. */
+function ownFolder(folder: string): void {
+    mkdirSync(folder, { recursive: true, mode: 0o700 });
+    if (!lstatSync(folder).isDirectory()) throw Object.assign(new Error('not a folder'), { code: 'ENOTDIR' });
+}
+
+/**
+ * Puts a conversation's own folder right before each of its turns, as the chat folder is put right: `folder` is made
+ * where it is not, below `chats`, the recorded skills are copied in from the chat folder, which the turn has put right
+ * first, and then its top holds what the desktop recorded and nothing else (`ownAgentFolder`), so a skill or a settings
+ * file a turn left there is gone before the next one. Throws `AgentFolderUnowned` when that cannot be done.
+ */
+export function ownConversationFolder(chats: string, folder: string, chat: string, records: string): void {
+    try {
+        ownFolder(chats);
+        ownFolder(folder);
+    } catch (error) {
+        throw new AgentFolderUnowned((error as NodeJS.ErrnoException | null)?.code);
+    }
+    // What a turn left at the top goes first, a link among it, so the copy writes into the desktop's own folders alone.
+    ownAgentFolder(folder, records);
+    try {
+        for (const host of skillsFolders) {
+            const skills = join(chat, host.folder, 'skills');
+            if (kind(skills) !== 'folder') continue;
+            copyOwn(skills, realSkillsFolder(folder, host));
+        }
+    } catch (error) {
+        throw new AgentFolderUnowned((error as NodeJS.ErrnoException | null)?.code);
+    }
+    ownAgentFolder(folder, records);
 }
 
 /**

@@ -13,15 +13,16 @@
  * new campaign becomes that campaign's conversation. A conversation is how the work is ordered, not a fence: a turn
  * acts for the person across the installation, as the permission model and the allow list let it.
  *
- * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
- * default; Plan only, kept on the record; and Full access, held in memory only, so a restart opens every chat in Ask
- * first, and so does Start fresh. Full access is chosen through a confirmation, unless the person answered it with
- * Always: that standing choice is the main process's own file (`full-access-standing.ts`), which no turn can read or
- * write, and while it stands the menu enters Full access without the box and, if the person also asked for it, a new
- * chat starts in Full access. Every other check of Full access runs all the same. Leaving Full access stops the turn that runs in
- * it. The first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes
- * back to Ask first. Before every turn the chat folder's agent settings are put right (`chat-agent-folder.ts`). No turn starts without a person's
- * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
+ * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn and kept on its record:
+ * Full access where the record names none, which every new chat starts in with no box, and Ask first, Auto-edit or Plan
+ * only once the person chose one from the menu, through a restart and Start fresh alike. A turn the mode cannot apply to
+ * (Full access on Codex, on a Claude Code below its floor or sent from a browser tab; Auto-edit on Codex) runs in Ask
+ * first, the chat says why once, and the record keeps the mode. Leaving Full access stops the turn that runs in it. The
+ * first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes back to Ask
+ * first. Every turn of a conversation runs in its own folder, `<data>/desktop/chats/<id>/` beside the shared chat folder,
+ * and one an earlier desktop made in the shared chat folder (`Conversation.folder`); before every turn that folder's agent
+ * settings are put right (`chat-agent-folder.ts`). No turn starts without a person's send; the naming run of a set-up
+ * chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
  *
  * One conversation is of its own kind, the Feed (`feed.ts`): the person's main chat, about no campaign, made on the
  * page's first ask, into which the page hands the journal's lines of a closed table of kinds. It is never renamed,
@@ -29,11 +30,11 @@
  * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
-import { AgentFolderUnowned, ownAgentFolder } from './chat-agent-folder.ts';
-import { GrantFolderUnmade, endGrantFolder, endedNameShape, makeGrantFolder, moveLeftovers, newGrantId, sweepCap, sweepEnded } from './chat-full-folder.ts';
+import { dirname, isAbsolute, join } from 'node:path';
+import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
+import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
 import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
@@ -48,6 +49,7 @@ import {
     newConversationId,
     noteMemoryGiven,
     readConversations,
+    recordShape,
     removeConversation,
     writeConversation,
     type Conversation,
@@ -78,28 +80,25 @@ import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles
 import { helpNouns, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
+    askFirstThisTurn,
     codexAutoEdit,
     codexFullAccess,
-    feedAutoEdit,
-    feedFullAccess,
-    fullAccessConsent,
+    earlierDesktopAskFirst,
+    feedDefaultMode,
+    fullAccessCurrent,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
     isChatMode,
-    newChatAskFirstSentence,
     planModeMoved,
-    standingUnkeptSentence,
-    standingUnremovedSentence,
+    turnMode,
     unguardedSentence,
-    unguardedStandingSentence,
+    type AskFirstWhy,
     type ChatMode,
-    type FullAccessAnswer,
 } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
-import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
 import { settingsFilesOf, type DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
@@ -146,9 +145,9 @@ export type ChatEvent =
     /** The lines written while the window was closed were more than one read brings back: the older ones are not shown. */
     | { kind: 'gap' }
     /**
-     * A sentence the desktop says to the person, once: a folder left out of the chat, or the folder a Full access grant
-     * worked in, now kept seven days. `folder` is present for the latter, the name of that ended folder, for the Open
-     * folder button (`openEndedFolder`).
+     * A sentence the desktop says to the person, once: a folder left out of the chat, why a turn runs in Ask first, or the
+     * folder a Full access grant of an earlier desktop worked in, now kept seven days. `folder` is present for the last,
+     * the name of that ended folder, for the Open folder button (`openEndedFolder`).
      */
     | { kind: 'notice'; text: string; folder?: string }
     /**
@@ -156,12 +155,6 @@ export type ChatEvent =
      * the conversation's last entry, are its plan, marked so on the kept entry too (`#markPlan`).
      */
     | { kind: 'done'; error: string | null; plan?: true };
-
-/** The standing choice of Full access as the page reads it: when Always was given, and whether new chats start in it. */
-export interface FullAccessStanding {
-    givenAt: string;
-    newChats: boolean;
-}
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
 export interface ChatSendOptions {
@@ -179,6 +172,11 @@ export interface ChatSendOptions {
      * `/export` (`chat-export.ts`). The page sends it with an export alone.
      */
     typed?: true;
+    /**
+     * Present, and true, on a send a browser tab made, which the bridge marks (`browser-bridge.ts`): a turn of a
+     * conversation in Full access then runs in Ask first.
+     */
+    fromTab?: boolean;
 }
 
 /** A conversation as `chat.list` lists it: `running` whether a turn of it runs now. */
@@ -192,6 +190,11 @@ export interface ConversationSummary {
     running: boolean;
     /** The conversation's access mode, as the desktop holds it now. */
     mode: ChatMode;
+    /**
+     * Present, and true, when its turns run in a folder of its own (`folder: 'own'` on its record), which removing it
+     * moves to the ended place, kept seven days.
+     */
+    ownFolder?: true;
 }
 
 /**
@@ -240,22 +243,21 @@ export interface ChatOptions {
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
-    /**
-     * Asks the person, each time Full access is chosen with no standing choice, whether this chat may act without asking
-     * (`fullAccessDialog`): their answer (`fullAccessAnswer`), true for "This time" alone, and false or null for no.
-     * Absent, Full access is never given by a box.
-     */
-    confirmFullAccess?(): Promise<boolean | FullAccessAnswer | null>;
-    /** Said each time the standing choice of Full access is given or taken back, with what stands after it. */
-    standingChanged?(standing: FullAccessStanding | null, why: 'given' | 'taken_back' | 'unchecked'): void;
-    /** Said when the standing choice could not be written or removed, by the system's error code. */
-    standingUnwritten?(code: string): void;
     /** Said each time a conversation's mode changes, by the two modes alone. */
     modeChanged?(from: ChatMode, to: ChatMode): void;
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw. */
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /**
+     * Claude Code's version as the last listing of the hosts read it (`Setup.handedClaudeVersion`), from which the page
+     * drew the mode a turn runs in: null when it could not be read, undefined before a listing read it.
+     */
+    handedClaudeVersion?(): string | null | undefined;
+    /** Asks the page to read the hosts again (`setup.changed`): a turn found Claude Code newer than the last listing did. */
+    setupChanged?(): void;
+    /** How a conversation's record is written: `writeConversation` unless a row makes a write fail. */
+    writeRecord?(folder: string, conversation: Conversation): void;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
     skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
@@ -266,15 +268,13 @@ export interface ChatOptions {
     sweepEveryMs?: number;
     /** Opens a folder for the person to see (the Open folder button); absent, nothing is opened. */
     openFolder?(path: string): void | Promise<void>;
-    /**
-     * How long an ended grant's folder waits for the host of the turn that runs in it to exit before the move is tried
-     * anyway; absent, `grantEndWaitMs`. A row shortens or lengthens it.
-     */
-    grantEndWaitMs?: number;
     /** Starts a turn's host; absent, `startHost`. A row gives one whose exit it lets through when it chooses. */
     startHost?: typeof startHost;
-    /** Said when a grant's folder could not be made, moved to the ended place or swept, by the system's error code. */
-    fullFolderFailed?(step: 'make' | 'move' | 'sweep', code: string): void;
+    /**
+     * Said when a folder could not be moved to the ended place or swept, by the system's error code: a grant's folder an
+     * earlier desktop left, or a conversation's own folder.
+     */
+    fullFolderFailed?(step: 'move' | 'sweep', code: string): void;
     started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
@@ -342,10 +342,8 @@ interface Running {
     replyTo: string;
     /** The cards of this turn the page holds, by request id, so the answer is kept with the card. */
     cards: Map<string, Extract<KeptEntry, { kind: 'permission' }>>;
-    /** The mode the turn runs in, read when the person's send started it. */
+    /** The mode the turn runs in, read when the person's send started it: Ask first where the conversation's cannot apply. */
     mode: ChatMode;
-    /** The Full access grant whose folder the turn runs in, once the turn has read it: that folder moves only after its host. */
-    grant?: string;
     /** Stops the Windows check of Codex's sandbox while it runs. */
     checking?: AbortController;
 }
@@ -460,20 +458,11 @@ const candidatesOf = (conversation: Conversation): string[] => {
 };
 
 const busy = 'This chat is still answering. Wait for it to finish, or stop it, then send again.';
-/**
- * How long an ended grant's folder waits for the host that works in it to exit. A stop ends a host within its grace of two
- * seconds, so five is room enough. Nothing waits on it at a quit: what the quit leaves is the next start's
- * (`moveLeftovers`).
- */
-export const grantEndWaitMs = 5_000;
 
 /** How often the ended place is swept while the desktop runs, beside the sweep at each start: once a day. */
 export const sweepEveryMs = 24 * 60 * 60 * 1000;
 
 const notAHost = 'That is not an AI host this desktop knows. Choose Claude Code or Codex for the chat.';
-
-/** Why the standing choice of Full access could not be taken back. */
-const standingKept = 'Always could not be taken back: its file could not be changed. Close anything that has it open, then try again.';
 
 /** The program a host the page names runs: a key provider's, or a host that drives the chat; undefined for any other. */
 function programOf(host: unknown): string | undefined {
@@ -483,12 +472,6 @@ function programOf(host: unknown): string | undefined {
 /** How much each mode lets a turn do without asking: a change to a narrower mode stops the turn running in a wider one. */
 const breadth: Readonly<Record<ChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
 
-/** The confirmation's answer as the chat reads it: true is "This time" alone; false, null or nothing is no. */
-function answerOf(answer: boolean | FullAccessAnswer | null | undefined): FullAccessAnswer | null {
-    if (answer === true) return { always: false, newChats: false };
-    if (answer === false || answer === null || answer === undefined) return null;
-    return answer;
-}
 const notAConversation = 'That conversation is not one this desktop keeps.';
 const stillAnswering = (act: string) => `This conversation is still answering. Wait for it to finish, or stop it, then ${act}.`;
 
@@ -546,6 +529,26 @@ function unmarkPlans(entries: KeptEntry[]): boolean {
     return had;
 }
 
+/** Whether anything stands at a name, by `lstat`: one that cannot be looked at counts as standing. */
+function standing(path: string): boolean {
+    try {
+        lstatSync(path);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException | null)?.code !== 'ENOENT';
+    }
+}
+
+/** Whether a conversation's own folder stands at its place: a folder itself, never a link or a junction to one. */
+function ownFolderStands(path: string): boolean {
+    try {
+        const stat = lstatSync(path);
+        return stat.isDirectory() && !stat.isSymbolicLink();
+    } catch {
+        return false;
+    }
+}
+
 function objectOf(text: string): Record<string, unknown> | null {
     try {
         const value: unknown = JSON.parse(text);
@@ -579,32 +582,30 @@ export class Chat {
     #closed = false;
     /** The naming run that runs now, its stop and its folder; null while none runs. */
     #namingNow: { stop: AbortController; folder: string } | null = null;
-    /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
-    #fullAccess = new Set<string>();
-    /** The conversations in Auto-edit, by id. In memory only, as Full access: never on a record, gone with the window. */
-    #autoEdit = new Set<string>();
-    /** The folder of each conversation's Full access grant, by conversation id: the grant's id. In memory only. */
-    #grants = new Map<string, string>();
     /**
-     * The grants that ended and whose folder has not moved yet, by grant id: the conversation, whether its page is told
-     * once the folder moves, and whether the host of a turn in it may still be running (`held`).
+     * How many times the person chose a mode for each conversation, by conversation id, counting every call of
+     * `setMode`, a choice of the mode it is in and one refused included: a choice of Full access that waited on the
+     * host's version is given only when no other choice came meanwhile.
      */
-    #endingGrants = new Map<string, { conversation: string; say: boolean; held: boolean }>();
+    #choices = new Map<string, number>();
+    /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
+    #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
+    /** The conversations told that a turn runs in Full access since Claude Code is current, where a listing drew Ask first. */
+    #toldCurrent = new Set<string>();
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
     #daily: NodeJS.Timeout;
-    /** The conversations whose Full access confirmation is open: a second request while it is opens no second box. */
-    #asking = new Set<string>();
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
     #leftOut = new Set<string>();
-    /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
+    /** Whether the records are known to carry their shape (`recordShape`): the desktop's own file says so, or this run wrote it. */
+    #stamped = false;
+    /** Whether this start found no record and no stamp: then the first record written writes the stamp first. */
+    #stampAtFirstWrite = false;
+    /** The records with no shape this start read once the records were stamped: each written again when it is opened. */
+    #unshaped = new Set<string>();
+    /** Of those, the ones put in Ask first for it, which are told why once, when each is opened. */
+    #earlier = new Set<string>();
+    /** Folders an earlier desktop's grants left that this start moved, by conversation: said once, when it is opened. */
     #movedAtStart = new Map<string, string>();
-    /** A line for a campaign's new conversation, said once the page opens it. */
-    #unsaid = new Map<string, string>();
-    /**
-     * The standing choice held as taken back for this run although its file would not let it be removed; the mark beside
-     * the file (`takeBackOwed`) holds it the same way across a restart.
-     */
-    #takenBack = false;
     /**
      * What the Windows check of Codex's sandbox found, for this run of the desktop, by Codex's file, its version and the
      * Codex home the turn names: true where the sandbox held, false where a command in it read the run file. A check
@@ -627,12 +628,15 @@ export class Chat {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
-        // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
-        // choice taken back for this run too.
-        if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
-        // A standing choice is in force only while its take-back could be recorded: where its folder takes no new file,
-        // it is held as taken back for this run.
-        if (!this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
+        // The standing choice of Full access an earlier desktop kept, and its mark of a take-back owed, mean nothing now:
+        // every chat starts in Full access with no box. Both files are unlinked, and neither ever changes a mode.
+        for (const left of [options.paths.fullAccess, join(dirname(options.paths.fullAccess), 'full-access-taken-back')]) {
+            try {
+                unlinkSync(left);
+            } catch {
+                // Not there, or left for the next start; nothing reads it.
+            }
+        }
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -646,6 +650,7 @@ export class Chat {
             this.#conversations.set(conversation.id, conversation);
             this.#kept.add(conversation.id);
         }
+        this.#settleShapes(read.kept, read.unstamped);
         this.#settleFeed();
         options.conversationsRead?.(read.kept.length, read.unreadable);
         this.#broker = new PermissionBroker({
@@ -656,18 +661,90 @@ export class Chat {
             ...(options.decided ? { decided: options.decided } : {}),
             ...(options.answerWindowMs !== undefined ? { timeoutMs: options.answerWindowMs } : {}),
         });
-        this.#sweepAtStart();
+        // A conversation's own folder no record names is known only once every record was read: one that cannot be read
+        // names no folder.
+        this.#sweepAtStart(read.listed && read.unreadable === 0 ? new Set(read.kept.map((each) => each.id)) : null);
         // A desktop left running sweeps each day too, so an ended folder goes within a day of its seven days, start or no
-        // start; a grant whose move failed with no host in its folder is tried again first.
-        this.#daily = setInterval(() => {
-            for (const [id, ending] of [...this.#endingGrants]) if (!ending.held) this.#moveEnded(id);
-            this.#sweepLater();
-        }, options.sweepEveryMs ?? sweepEveryMs);
+        // start.
+        this.#daily = setInterval(() => this.#sweepLater(), options.sweepEveryMs ?? sweepEveryMs);
         this.#daily.unref();
     }
 
     #now(): number {
         return this.#options.now?.() ?? Date.now();
+    }
+
+    /**
+     * The records' shape (`recordShape`), which an earlier desktop drops when it writes a record again, with the mode but
+     * Plan only and the folder. A conversation's own folder that such a write dropped from its record is the
+     * conversation's again wherever that folder stands, so its turns run there once more. The first start that finds
+     * records with no shape takes each as it is, a record with no mode in Full access, and writes it again with its shape;
+     * then it writes its own file that says so (`conversationsStamped`), which no earlier desktop reads or writes, only once
+     * every one of them was written again: a start that could not write one leaves the file unwritten, through every later
+     * write too, so the next start is a first start again. With no record at all, the first record written writes that
+     * file first. A start that finds the file is no first start: a record with no shape is one an earlier desktop wrote
+     * last, and it opens in Ask first, unless it is in Plan only, which that desktop keeps; it is told why once, and
+     * written again with its mode and its shape, when it is opened. A file that is lost makes the next start a first start
+     * again.
+     */
+    #settleShapes(kept: readonly Conversation[], unstamped: readonly string[]): void {
+        const { paths } = this.#options;
+        for (const conversation of kept) {
+            if (conversation.folder === undefined && ownFolderStands(join(paths.chats, conversation.id))) conversation.folder = 'own';
+        }
+        const unshaped = new Set(unstamped);
+        this.#stamped = standing(paths.conversationsStamped);
+        if (this.#stamped) {
+            for (const conversation of kept) {
+                if (!unshaped.has(conversation.id)) continue;
+                this.#unshaped.add(conversation.id);
+                if (conversation.mode === 'plan_only') continue;
+                conversation.mode = 'ask_first';
+                this.#earlier.add(conversation.id);
+            }
+            return;
+        }
+        if (kept.length === 0) {
+            this.#stampAtFirstWrite = true;
+            return;
+        }
+        let all = true;
+        for (const conversation of kept) if (unshaped.has(conversation.id)) all = this.#rewrite(conversation) && all;
+        // A record that could not be written again is taken up by the next start, which is a first start still.
+        if (all) this.#stamp();
+    }
+
+    /** Writes the desktop's own file that says the records carry their shape, never through anything at its name. */
+    #stamp(): void {
+        const { conversationsStamped } = this.#options.paths;
+        try {
+            mkdirSync(dirname(conversationsStamped), { recursive: true });
+            const handle = openSync(conversationsStamped, 'wx', 0o600);
+            try {
+                writeSync(handle, `${recordShape}\n`);
+            } finally {
+                closeSync(handle);
+            }
+            this.#stamped = true;
+        } catch (error) {
+            this.#options.conversationUnwritten?.((error as NodeJS.ErrnoException | null)?.code ?? 'unknown');
+        }
+    }
+
+    /** Writes a conversation's record, through the writer a row gives or `writeConversation`. */
+    #write(conversation: Conversation): void {
+        (this.#options.writeRecord ?? writeConversation)(this.#options.paths.conversations, conversation);
+    }
+
+    /** Writes a record again as it stands, its time untouched; whether it was written. */
+    #rewrite(conversation: Conversation): boolean {
+        try {
+            this.#write(conversation);
+            return true;
+        } catch (error) {
+            this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
+            return false;
+        }
     }
 
     #fullFolders() {
@@ -676,18 +753,23 @@ export class Chat {
     }
 
     /**
-     * At the start no grant runs, so a grants' folder still standing is a leftover (a window closed on a turn that held
-     * it, or a move that failed): it moves to the ended place, its seven days counted from now. Then the ended place is
-     * swept, off the send path and bounded; a failure leaves the folder and says a code, and a turn is never refused for it.
+     * A grant's folder an earlier desktop left is a leftover (no grant is made now): it moves to the ended place, its
+     * seven days counted from now, and the conversation it was for is told so once, when it is opened. So does a
+     * conversation's own folder that no record names, when `recorded` names every record (a removal that found the folder
+     * held by a terminal leaves it for a start); while a record cannot be read, `recorded` is null and no such folder
+     * moves. Then the ended place is swept, off the send path and bounded; a failure leaves the folder where it is and
+     * says a code, and a turn is never refused for it.
      */
-    #sweepAtStart(): void {
+    #sweepAtStart(recorded: ReadonlySet<string> | null): void {
+        const said = (code: string) => this.#options.fullFolderFailed?.('move', code);
         try {
-            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), (code) => this.#options.fullFolderFailed?.('move', code))) {
+            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), said)) {
                 if (each.conversation !== null && conversationIdShape.test(each.conversation)) this.#movedAtStart.set(each.conversation, each.name);
             }
         } catch {
             // Nothing to move.
         }
+        if (recorded !== null) moveOwnLeftovers(this.#options.paths.chats, this.#fullFolders(), recorded, this.#now(), said);
         this.#sweepLater();
     }
 
@@ -702,99 +784,10 @@ export class Chat {
         timer.unref();
     }
 
-    /**
-     * Makes the folder of a new Full access grant, with the recorded skills in it, before the mode is given. The chat
-     * folder's agent settings are put right first, so the copy is of what the desktop placed.
-     */
-    #openGrant(conversation: Conversation): void {
+    /** The folder every turn of a conversation runs in: its own, below `chats`, or the shared chat folder for one an earlier desktop made. */
+    #folderOf(conversation: Conversation): string {
         const { paths } = this.#options;
-        try {
-            ownAgentFolder(paths.chat, paths.skillsRecords);
-        } catch (error) {
-            if (error instanceof AgentFolderUnowned) throw new ChatRefused(error.message);
-            throw error;
-        }
-        // A grant is never overwritten unended: one the conversation still holds ends first.
-        this.#endGrant(conversation.id, true);
-        const id = newGrantId(this.#now());
-        try {
-            makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords, conversation.id);
-        } catch (error) {
-            if (error instanceof GrantFolderUnmade) {
-                this.#options.fullFolderFailed?.('make', error.code);
-                throw new ChatRefused(error.message);
-            }
-            throw error;
-        }
-        this.#grants.set(conversation.id, id);
-    }
-
-    /**
-     * A grant ends: no turn starts in it from now on, and its folder moves to the ended place once no host works there.
-     * Every caller has stopped the turn that runs in it first; the move waits for that turn's host to exit, at most
-     * `grantEndWaitMs`, since on Windows a running host holds its working folder and elsewhere it would go on working in
-     * a folder that moved. A move that fails is not forgotten: the grant stays ending, and the move is tried again when the
-     * host has exited and at each daily sweep; what a quit leaves is the next start's (`moveLeftovers`). Once the folder
-     * moved the chat says so once, with its path; nothing is said of a folder that did not move. `say` false when no page
-     * is to hear it.
-     */
-    #endGrant(conversationId: string, say: boolean): void {
-        const id = this.#grants.get(conversationId);
-        if (id === undefined) return;
-        this.#grants.delete(conversationId);
-        const holder = [...this.#running.values()].find((running) => running.grant === id)?.process ?? null;
-        this.#endingGrants.set(id, { conversation: conversationId, say, held: holder !== null });
-        if (holder === null) {
-            this.#moveEnded(id);
-            return;
-        }
-        let timer: NodeJS.Timeout | undefined;
-        const bound = new Promise<false>((resolve) => {
-            timer = setTimeout(() => resolve(false), this.#options.grantEndWaitMs ?? grantEndWaitMs);
-            timer.unref();
-        });
-        const exited = holder.exited.then(
-            () => true as const,
-            () => true as const,
-        );
-        void Promise.race([exited, bound]).then((gone) => {
-            clearTimeout(timer);
-            if (gone) this.#released(id);
-            this.#moveEnded(id);
-            if (!gone)
-                void exited.then(() => {
-                    this.#released(id);
-                    this.#moveEnded(id);
-                });
-        });
-    }
-
-    /** The host that worked in an ending grant's folder has exited. */
-    #released(id: string): void {
-        const ending = this.#endingGrants.get(id);
-        if (ending !== undefined) ending.held = false;
-    }
-
-    /** Tries the move of an ending grant's folder; once it moved, the chat says so once, where a page is to hear it. */
-    #moveEnded(id: string): void {
-        const ending = this.#endingGrants.get(id);
-        if (ending === undefined) return;
-        const folders = this.#fullFolders();
-        if (!existsSync(join(folders.full, id))) {
-            this.#endingGrants.delete(id);
-            return;
-        }
-        const name = endGrantFolder(folders, id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
-        if (name === null) return;
-        this.#endingGrants.delete(id);
-        this.#sweepLater();
-        if (!ending.say || this.#closed) return;
-        const path = join(this.#options.paths.chatFullEnded, name);
-        this.#options.emit(ending.conversation, {
-            kind: 'notice',
-            text: `Full access has ended. The folder the AI worked in is kept for seven days and then removed: ${path}`,
-            folder: name,
-        });
+        return conversation.folder === 'own' ? join(paths.chats, conversation.id) : paths.chat;
     }
 
     /** The Open folder button of that notice: opens the ended folder of that name, and no other path. */
@@ -843,13 +836,14 @@ export class Chat {
     }
 
     /**
-     * The session a terminal may continue this chat by (`continuableOf`), with whether a turn of it runs now; null for a
-     * chat the desktop does not keep, an id of no shape, or a chat with no such session.
+     * The session a terminal may continue this chat by (`continuableOf`), with whether a turn of it runs now and the
+     * folder its turns run in, where the host finds that session; null for a chat the desktop does not keep, an id of no
+     * shape, or a chat with no such session.
      */
-    continuable(chatId: unknown): { host: ContinuableHost; session: string; running: boolean } | null {
+    continuable(chatId: unknown): { host: ContinuableHost; session: string; running: boolean; folder: string } | null {
         const conversation = typeof chatId === 'string' && conversationIdShape.test(chatId) ? this.#conversations.get(chatId) : undefined;
         const found = conversation === undefined ? null : continuableOf(conversation);
-        return conversation === undefined || found === null ? null : { ...found, running: this.#running.has(conversation.id) };
+        return conversation === undefined || found === null ? null : { ...found, running: this.#running.has(conversation.id), folder: this.#folderOf(conversation) };
     }
 
     /** Whether a turn of this chat is running. */
@@ -886,6 +880,7 @@ export class Chat {
             updatedAt: conversation.updated_at,
             running: this.#running.has(conversation.id),
             mode: this.#modeOf(conversation),
+            ...(conversation.folder === 'own' ? { ownFolder: true as const } : {}),
         };
     }
 
@@ -903,87 +898,63 @@ export class Chat {
     }
 
     #modeOf(conversation: Conversation): ChatMode {
-        if (this.#fullAccess.has(conversation.id)) return 'full_access';
-        return this.#autoEdit.has(conversation.id) ? 'auto_edit' : (conversation.mode ?? 'ask_first');
+        return conversation.mode ?? 'full_access';
     }
 
     /**
-     * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to.
-     * Full access is refused before any confirmation where it cannot apply: on Codex, on a host that does not drive the
-     * chat, on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it, and for
-     * the Feed.
-     * Otherwise it is given once the person said yes to the confirmation, asked again each time it is chosen unless they
-     * answered it with Always, which this then keeps (`full-access-standing.ts`); a no leaves the mode as it was. Leaving
-     * Full access stops a turn that runs in it. Auto-edit is refused on Codex, on a host that does not drive the chat and
-     * for the Feed, and otherwise given with no box: it has no confirmation and no standing choice. Plan only is kept on
-     * the record; Auto-edit and Full access never are.
+     * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to,
+     * kept on its record. Full access is given with no confirmation, and refused where it cannot apply: on Codex, on a
+     * host that does not drive the chat, and on a Claude Code older than its floor or whose version cannot be read, read
+     * now as a turn reads it. Auto-edit is refused on Codex and on a host that does not drive the chat. A change to a
+     * narrower mode stops a turn that runs in a wider one.
      */
     async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
+        // Every choice counts, whatever it is: the latest one the person made is the one that stands.
+        const choice = (this.#choices.get(conversation.id) ?? 0) + 1;
+        this.#choices.set(conversation.id, choice);
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
-        if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
+        const before = this.#modeOf(conversation);
+        if (mode === before) return this.#summaryOf(conversation);
         if (mode === 'auto_edit') {
             const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexAutoEdit);
             if (program !== 'claude') throw new ChatRefused(notAHost);
-            if (conversation.main === true) throw new ChatRefused(feedAutoEdit);
         }
-        // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
-        let unkept = false;
         if (mode === 'full_access') {
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
             if (program !== 'claude') throw new ChatRefused(notAHost);
-            // One box at a time for a conversation: a request while one is open is answered with the mode as it is.
-            if (this.#asking.has(conversation.id)) return this.#summaryOf(conversation);
-            this.#asking.add(conversation.id);
-            try {
-                const below = fullAccessSentence(await this.#claudeVersion());
-                if (below !== null) throw new ChatRefused(below);
-                if (conversation.main === true) throw new ChatRefused(feedFullAccess);
-                if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-                // While the standing choice stands the box is not shown; every check above has run all the same.
-                if (this.#standingFor('full_access', program) === null) {
-                    const answer = answerOf(await this.#options.confirmFullAccess?.());
-                    // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
-                    if (answer === null || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-                    if (answer.always) unkept = !this.#giveStanding(answer.newChats);
-                }
-                this.#openGrant(conversation);
-            } finally {
-                this.#asking.delete(conversation.id);
+            const below = fullAccessSentence(await this.#claudeVersion());
+            if (below !== null) throw new ChatRefused(below);
+            // A conversation removed or a window closed meanwhile is given nothing, and a choice made meanwhile stands, even
+            // one that left the chat in the mode it was in, as does a step down the desktop took.
+            if (this.#closed || this.#conversations.get(conversation.id) !== conversation || this.#choices.get(conversation.id) !== choice || this.#modeOf(conversation) !== before) {
+                return this.#summaryOf(conversation);
             }
         }
         this.#changeMode(conversation, mode, true);
-        if (unkept) this.#options.emit(conversation.id, { kind: 'notice', text: standingUnkeptSentence });
         return this.#summaryOf(conversation);
     }
 
     /**
-     * Puts a conversation in a mode, says so to its page and to the log, and keeps Plan only on its record. A change to a
-     * mode narrower than the running turn's stops that turn, unless the caller stops it in its own words (`stopTurn`
-     * false). Nothing enters Auto-edit here but the person's choice from the menu (`setMode`): Plan only's approval of a
-     * plan goes to Ask first, and the standing choice of Full access never names Auto-edit.
+     * Puts a conversation in a mode, keeps it on its record, and says so to its page and to the log. A change to a mode
+     * narrower than the running turn's stops that turn, unless the caller stops it in its own words (`stopTurn` false).
+     * Nothing enters Auto-edit here but the person's choice from the menu (`setMode`): Plan only's approval of a plan goes
+     * to Ask first. Only the person's choice widens the mode the record keeps; a step down the desktop takes on its own
+     * only ever narrows it (`#stepDown`).
      */
     #changeMode(conversation: Conversation, to: ChatMode, stopTurn: boolean): void {
         const from = this.#modeOf(conversation);
         if (from === to) return;
         // Leaving Plan only ends its plan's card, kept so: an approved plan is never offered again, after a reload or a
         // restart, nor one the person left by the menu.
-        const unplanned = from === 'plan_only' && unmarkPlans(conversation.entries);
-        if (to === 'full_access') this.#fullAccess.add(conversation.id);
-        else this.#fullAccess.delete(conversation.id);
-        if (to === 'auto_edit') this.#autoEdit.add(conversation.id);
-        else this.#autoEdit.delete(conversation.id);
-        // The record keeps Plan only alone: entering Auto-edit leaves Plan only, so its record says Ask first, and a
-        // restart opens the chat there.
-        if (to !== 'full_access') {
-            const before = conversation.mode;
-            if (to === 'plan_only') conversation.mode = 'plan_only';
-            else delete conversation.mode;
-            if ((before !== conversation.mode || unplanned) && this.#kept.has(conversation.id)) this.#keep(conversation);
-        } else if (unplanned && this.#kept.has(conversation.id)) this.#keep(conversation);
+        if (from === 'plan_only') unmarkPlans(conversation.entries);
+        // A record that names no mode is in Full access, so a step back up to it clears the field.
+        if (to === 'full_access') delete conversation.mode;
+        else conversation.mode = to;
+        if (this.#kept.has(conversation.id)) this.#keep(conversation);
         this.#options.modeChanged?.(from, to);
         this.#options.emit(conversation.id, { kind: 'mode', mode: to });
         const running = this.#running.get(conversation.id);
@@ -996,17 +967,23 @@ export class Chat {
             running.process?.stop();
             running.checking?.abort();
         }
-        // The turn is stopped first; the grant's folder moves once its host has exited (`#endGrant`).
-        if (from === 'full_access') this.#endGrant(conversation.id, true);
+    }
+
+    /**
+     * A step down the desktop takes on its own, never the person's choice: it only ever narrows the mode the record keeps,
+     * so a narrower mode the person chose meanwhile, Plan only say, stands. The caller stops the turn in its own words.
+     */
+    #stepDown(conversation: Conversation, to: ChatMode): void {
+        if (breadth[to] >= breadth[this.#modeOf(conversation)]) return;
+        this.#changeMode(conversation, to, false);
     }
 
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
-        const unsaid = this.#unsaid.get(conversation.id);
-        if (unsaid !== undefined) {
-            this.#unsaid.delete(conversation.id);
-            queueMicrotask(() => this.#options.emit(conversation.id, { kind: 'notice', text: unsaid }));
+        if (this.#unshaped.delete(conversation.id)) {
+            if (this.#earlier.delete(conversation.id)) queueMicrotask(() => this.#options.emit(conversation.id, { kind: 'notice', text: earlierDesktopAskFirst }));
+            this.#rewrite(conversation);
         }
         const moved = this.#movedAtStart.get(conversation.id);
         if (moved !== undefined) {
@@ -1025,10 +1002,11 @@ export class Chat {
 
     /**
      * A conversation to start in: a new set-up chat when no campaign is named, else the campaign's conversation, the
-     * one it has or a new one named after it. A new conversation is kept once its first turn has started.
+     * one it has or a new one named after it. A new conversation is in Full access, works in a folder of its own, and is
+     * kept once its first turn has started.
      */
-    async create(campaignId?: unknown, host?: unknown): Promise<ConversationSummary> {
-        if (campaignId === undefined || campaignId === null) return this.#summaryOf(await this.#startsNew(this.#made(null, 'New chat'), host));
+    async create(campaignId?: unknown): Promise<ConversationSummary> {
+        if (campaignId === undefined || campaignId === null) return this.#summaryOf(this.#made(null, 'New chat'));
         if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const existing = this.#ofCampaign(campaignId);
         if (existing !== undefined) return this.#summaryOf(existing);
@@ -1036,121 +1014,15 @@ export class Chat {
         const name = read.about.campaign?.name;
         const again = this.#ofCampaign(campaignId);
         if (again !== undefined) return this.#summaryOf(again);
-        return this.#summaryOf(await this.#startsNew(this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId), host));
+        return this.#summaryOf(this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId));
     }
 
     /**
-     * A conversation just made, put in Full access when the standing choice says new chats start in it and the host the
-     * page will send to could take Full access now, with every check of a choice from the menu but the box; otherwise
-     * left in Ask first with no word said, since its menu shows the mode it has. Never the Feed, which is made elsewhere.
+     * Removes a conversation's record, and moves its own folder, with what its turns left there, to the ended place, where
+     * the sweep removes it seven days later; the host's own transcript stays the host's. A folder that cannot be moved now
+     * (a terminal "Continue in" opened holds it, on Windows) stays where it is, nothing in it removed, for a later start to
+     * move. One whose turn runs is refused.
      */
-    async #startsNew(conversation: Conversation, host: unknown): Promise<Conversation> {
-        const program = programOf(host);
-        if (!this.#fullAccessOffered() || this.#closed || this.#standingFor('full_access', program)?.newChats !== true) return conversation;
-        if (fullAccessSentence(await this.#claudeVersion()) !== null) return conversation;
-        if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return conversation;
-        // Read again after the last wait: a take-back meanwhile reaches this chat too.
-        if (this.#standingFor('full_access', program)?.newChats !== true) return conversation;
-        try {
-            this.#openGrant(conversation);
-        } catch (error) {
-            if (!(error instanceof ChatRefused)) throw error;
-            // The person asked for new chats in Full access, so the chat says why this one is not.
-            this.#sayWhenShown(conversation, newChatAskFirstSentence);
-            return conversation;
-        }
-        this.#changeMode(conversation, 'full_access', true);
-        return conversation;
-    }
-
-    /**
-     * The standing choice that lets a mode be entered without its box on a host program: Full access on Claude Code
-     * alone, and null for every other mode and host, Auto-edit among them. A mode added later has none unless it is named
-     * here.
-     */
-    #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
-        if (mode !== 'full_access' || program !== 'claude') return null;
-        if (this.#takenBack || takeBackOwed(this.#options.paths.fullAccess)) return null;
-        return readStanding(this.#options.paths.fullAccess, 'claude');
-    }
-
-    /**
-     * A line a new conversation is told as soon as the page can draw it: a set-up chat's page holds it once `create` has
-     * answered, a campaign's once it has opened it.
-     */
-    #sayWhenShown(conversation: Conversation, text: string): void {
-        if (conversation.campaign_id !== null) {
-            this.#unsaid.set(conversation.id, text);
-            return;
-        }
-        setTimeout(() => {
-            if (!this.#closed) this.#options.emit(conversation.id, { kind: 'notice', text });
-        }, 0);
-    }
-
-    /**
-     * Gives the standing choice: the new choice is written first, and only then does the mark of a take-back owed go. A
-     * mark removed before a write that fails would let the old choice back at the next start; a mark that will not go
-     * after the write keeps the new one out of force, and the next start removes it. Either failure gives this time only.
-     */
-    #giveStanding(newChats: boolean): boolean {
-        const file = this.#options.paths.fullAccess;
-        const standing: Standing = { consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats };
-        try {
-            writeStanding(file, 'claude', standing);
-            if (takeBackOwed(file)) settleTakeBack(file);
-        } catch (error) {
-            this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
-            return false;
-        }
-        this.#takenBack = false;
-        this.#options.standingChanged?.({ givenAt: standing.givenAt, newChats }, 'given');
-        return true;
-    }
-
-    /** The take-back the last run owed, done at the start; held for this run where the file still will not take it. */
-    #settleOwed(): void {
-        const file = this.#options.paths.fullAccess;
-        if (!this.#writeStanding(null, 'unchecked')) {
-            this.#takenBack = true;
-            return;
-        }
-        try {
-            settleTakeBack(file);
-        } catch {
-            // The mark left keeps the choice taken back, and the next start tries again.
-        }
-    }
-
-    /** The standing choice of Full access, for the menu and the System screen; null when none stands. */
-    fullAccessStanding(): FullAccessStanding | null {
-        const standing = this.#standingFor('full_access', 'claude');
-        return standing === null ? null : { givenAt: standing.givenAt, newChats: standing.newChats };
-    }
-
-    /**
-     * The person takes the standing choice back, from the menu or the System screen: the box is shown at the next entry
-     * and new chats start in Ask first. A chat in Full access now stays in it, its line under the composer saying so.
-     */
-    takeBackFullAccess(): null {
-        if (this.#standingFor('full_access', 'claude') === null) return null;
-        if (!this.#writeStanding(null, 'taken_back')) throw new ChatRefused(standingKept);
-        return null;
-    }
-
-    /** Writes or removes the standing choice and says so; false, and said by its code, when the file would not take it. */
-    #writeStanding(standing: Standing | null, why: 'given' | 'taken_back' | 'unchecked'): boolean {
-        try {
-            writeStanding(this.#options.paths.fullAccess, 'claude', standing);
-        } catch (error) {
-            this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
-            return false;
-        }
-        this.#options.standingChanged?.(standing === null ? null : { givenAt: standing.givenAt, newChats: standing.newChats }, why);
-        return true;
-    }
-
-    /** Removes a conversation's record; the host's own transcript stays the host's. One whose turn runs is refused. */
     remove(id: unknown): void {
         const conversation = this.#own(id);
         if (conversation.main === true) throw new ChatRefused(feedKept);
@@ -1163,12 +1035,18 @@ export class Chat {
         }
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
-        this.#fullAccess.delete(conversation.id);
-        this.#autoEdit.delete(conversation.id);
-        this.#endGrant(conversation.id, false);
+        this.#toldAskFirst.delete(conversation.id);
+        this.#toldCurrent.delete(conversation.id);
+        this.#choices.delete(conversation.id);
+        this.#unshaped.delete(conversation.id);
+        this.#earlier.delete(conversation.id);
+        if (conversation.folder === 'own') endConversationFolder(this.#options.paths.chats, this.#fullFolders(), conversation.id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
     }
 
-    /** "Start fresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
+    /**
+     * "Start fresh": the hosts' sessions are dropped, and the entries, the campaign and the mode kept. One whose turn runs
+     * is refused.
+     */
     restart(id: unknown): void {
         const conversation = this.#own(id);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it fresh'));
@@ -1178,9 +1056,6 @@ export class Chat {
         delete conversation.memory_given;
         // A plan the host no longer remembers is no card to approve.
         unmarkPlans(conversation.entries);
-        // A chat in Full access started fresh goes back to Ask first; Plan only stays, as on its record, and so does
-        // Auto-edit, which has no grant and no box.
-        if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
         // One never sent to has no session to drop, and no record to write.
         if (this.#kept.has(conversation.id)) this.#keep(conversation);
     }
@@ -1265,6 +1140,8 @@ export class Chat {
         if (known !== undefined) return known;
         const feed = this.#made(null, feedTitle);
         feed.main = true;
+        // The Feed starts in the mode every chat starts in, named once (`feedDefaultMode`).
+        if (feedDefaultMode !== 'full_access') feed.mode = feedDefaultMode;
         this.#feedId = feed.id;
         this.#kept.add(feed.id);
         this.#keep(feed);
@@ -1430,13 +1307,16 @@ export class Chat {
         if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
-        // Codex has no Full access, nor does a version that does not offer it: a chat in it goes back to Ask first, and its
-        // turn runs there. Codex has no Auto-edit either.
-        if ((resolved.program === 'codex' || !this.#fullAccessOffered()) && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
-        if (resolved.program === 'codex' && this.#modeOf(conversation) === 'auto_edit') this.#changeMode(conversation, 'ask_first', true);
-        const mode = this.#modeOf(conversation);
+        // A turn its conversation's mode cannot apply to runs in Ask first, and the record keeps the mode for the turns that
+        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab, on Codex or while this
+        // version does not offer it, and Auto-edit on Codex. Full access on a Claude Code below its floor is found once the
+        // version is read, below.
+        const recorded = this.#modeOf(conversation);
+        const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered() };
+        const first = turnMode(recorded, resolved.program, { ...place, claudeVersion: undefined });
+        let why: { kind: AskFirstWhy; text: string } | null = first.why;
 
-        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode };
+        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode: first.mode };
         this.#running.set(conversation.id, running);
         this.#kept.add(conversation.id);
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
@@ -1451,10 +1331,16 @@ export class Chat {
             const hostVersion = resolved.program === 'claude' ? await this.#claudeVersion() : await this.#codexVersion();
             const version = resolved.program === 'claude' ? hostVersion : null;
             const below = resolved.program === 'claude' ? floorSentence(hostVersion) : codexFloorSentence(hostVersion);
-            // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the chat goes
-            // back to Ask first and the send is refused, saying why.
-            const unhooked = below === null && mode === 'full_access' ? fullAccessSentence(version) : null;
-            const held = below ?? unhooked ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
+            // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the turn runs in
+            // Ask first.
+            if (below === null && running.mode === 'full_access') {
+                const read = turnMode(recorded, resolved.program, { ...place, claudeVersion: version });
+                if (read.why !== null) {
+                    running.mode = read.mode;
+                    why = read.why;
+                }
+            }
+            const held = below ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
             // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
             if (running.stopped) {
                 this.#running.delete(conversation.id);
@@ -1462,8 +1348,29 @@ export class Chat {
             }
             if (held !== null) {
                 this.#running.delete(conversation.id);
-                if (unhooked !== null) this.#changeMode(conversation, 'ask_first', false);
                 return refuse(held);
+            }
+            // Said once per conversation for each reason, before the turn's first words.
+            if (why !== null) {
+                const told = this.#toldAskFirst.get(conversation.id) ?? new Set<AskFirstWhy>();
+                if (!told.has(why.kind)) {
+                    told.add(why.kind);
+                    this.#toldAskFirst.set(conversation.id, told);
+                    this.#options.emit(chatId, { kind: 'notice', text: askFirstThisTurn(why.text) });
+                }
+            }
+            // The page drew this turn from the last listing of the hosts, which read Claude Code below the floor of Full
+            // access or could not read its version, and so drew Ask first; read now, it is at the floor, and the turn runs in
+            // Full access. The page is asked to read the hosts again, and the conversation is told once.
+            if (running.mode === 'full_access' && resolved.program === 'claude') {
+                const handed = this.#options.handedClaudeVersion?.();
+                if (handed !== undefined && turnMode(recorded, 'claude', { ...place, claudeVersion: handed }).why?.kind === 'floor') {
+                    this.#options.setupChanged?.();
+                    if (!this.#toldCurrent.has(conversation.id)) {
+                        this.#toldCurrent.add(conversation.id);
+                        this.#options.emit(chatId, { kind: 'notice', text: fullAccessCurrent });
+                    }
+                }
             }
             await this.#turn(conversation, text, resolved, launch, running, hostVersion ?? '');
         } catch (error) {
@@ -1538,11 +1445,6 @@ export class Chat {
             running.checking?.abort();
             if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
         }
-        // Full access is gone with the window, as every "always" is. The turns are stopped first; each grant's folder moves
-        // to the ended place once the host in it has exited, and one the quit leaves behind is the next start's to move.
-        this.#fullAccess.clear();
-        this.#autoEdit.clear();
-        for (const id of [...this.#grants.keys()]) this.#endGrant(id, false);
         const naming = this.#namingNow;
         if (naming !== null) {
             naming.stop.abort();
@@ -1621,9 +1523,10 @@ export class Chat {
         return undefined;
     }
 
+    /** A conversation made now: in Full access, which its record names by naming no mode, and with a folder of its own. */
     #made(campaignId: string | null, title: string): Conversation {
         const now = new Date().toISOString();
-        const conversation: Conversation = { id: newConversationId(), campaign_id: campaignId, title, created_at: now, updated_at: now, sessions: {}, entries: [], dropped: 0 };
+        const conversation: Conversation = { id: newConversationId(), campaign_id: campaignId, title, created_at: now, updated_at: now, sessions: {}, entries: [], dropped: 0, folder: 'own' };
         this.#conversations.set(conversation.id, conversation);
         return conversation;
     }
@@ -1648,8 +1551,10 @@ export class Chat {
         conversation.entries = within.entries;
         conversation.dropped = within.dropped;
         conversation.updated_at = new Date().toISOString();
+        // The first record this desktop writes, where the start found none, says first that the records carry their shape.
+        if (this.#stampAtFirstWrite && !this.#stamped) this.#stamp();
         try {
-            writeConversation(this.#options.paths.conversations, conversation);
+            this.#write(conversation);
         } catch (error) {
             this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
         }
@@ -1878,11 +1783,10 @@ export class Chat {
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
         const headFor = (resumed: string | undefined): string =>
             [header(about), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
-        // A Full access turn runs in its grant's own folder, and nothing else does; every other turn, and a Full access turn
-        // with no grant to run in, in the chat folder.
-        const grantId = running.mode === 'full_access' ? this.#grants.get(conversation.id) : undefined;
-        const folder = grantId === undefined ? paths.chat : join(paths.chatFull, grantId);
-        if (grantId !== undefined) running.grant = grantId;
+        // Every turn of a conversation runs in its folder, in every mode and on every host: its own, or the shared chat
+        // folder for one an earlier desktop made.
+        const own = conversation.folder === 'own';
+        const folder = this.#folderOf(conversation);
         const hostChanged = resume === undefined && Object.keys(conversation.sessions).length > 0;
         mkdirSync(paths.chat, { recursive: true });
 
@@ -1908,11 +1812,11 @@ export class Chat {
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
             // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`), and so does the
-            // top of a grant's folder, which gets the memory files too.
+            // top of a conversation's own folder, which gets the memory files and the recorded skills too.
             ownAgentFolder(paths.chat, paths.skillsRecords);
-            if (grantId !== undefined) {
+            if (own) {
+                ownConversationFolder(paths.chats, folder, paths.chat, paths.skillsRecords);
                 this.#placeInstructions(fence, folder);
-                ownAgentFolder(folder, paths.skillsRecords);
             }
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
@@ -1952,10 +1856,11 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
-                // The host's data rules name the grants present at this turn's start; a grant opened later is refused by the
-                // permission model's data rule alone, since a deny wins over an allow and no rule says "all of chat-full but mine".
+                // The host's data rules name the conversations' folders present at this turn's start; one made later is
+                // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
+                // chats but mine".
                 const rules = [
-                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
+                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), own ? { id: conversation.id, present: entriesOf(paths.chats) } : undefined),
                     ...chatRules(this.#platform, folder),
                 ];
                 argsFor = (resumed) =>
@@ -2047,11 +1952,11 @@ export class Chat {
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
             let host: HostProcess | null = null;
-            // Beside the session the record keeps whether this turn was plain: the person's own login, outside Full access.
-            // Only such a session is one a terminal may continue (`continuableOf`).
+            // Beside the session the record keeps whether this turn was plain: the person's own login, in any mode. Only
+            // such a session is one a terminal may continue (`continuableOf`).
             // The session this start was given the memory files in holds, from then on, the files read for this turn.
             const name = (session: string) => {
-                const named = nameSession(conversation, resolved.host, session, !resolved.keyed && running.mode !== 'full_access');
+                const named = nameSession(conversation, resolved.host, session, !resolved.keyed);
                 if (noteMemoryGiven(conversation, resolved.host, session, held) || named) this.#keep(conversation);
             };
             const stopFor = (sentence: string) => {
@@ -2079,22 +1984,15 @@ export class Chat {
                 if (line.kind === 'tool_result') {
                     // In Full access every tool use passes the turn's hook first. One whose result comes back unseen by
                     // it ran, or was refused, without the hook: the first tool that runs unchecked ends the turn, and the
-                    // chat goes back to Ask first. EndConversation is the one tool Claude Code fires no hook for.
+                    // chat goes back to Ask first, on its record too, since a check a policy filtered out would miss every
+                    // later turn as well. EndConversation is the one tool Claude Code fires no hook for. A turn already
+                    // stopped, by Stop or by a change of mode, counts such a tool all the same, since it ran: the step back
+                    // only ever narrows (`#stepDown`), so a person's narrower choice meanwhile stands.
                     if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#options.unchecked?.();
-                    // A check a policy filtered out would miss every later turn too: the standing choice goes with it. A file
-                    // that will not let it go leaves it taken back for this run, and marked for the next start to remove.
-                    const stood = this.#standingFor('full_access', 'claude') !== null;
-                    const unremoved = stood && !this.#writeStanding(null, 'unchecked');
-                    if (unremoved) {
-                        this.#takenBack = true;
-                        oweTakeBack(this.#options.paths.fullAccess);
-                        this.#options.standingChanged?.(null, 'unchecked');
-                    }
-                    stopFor(stood ? unguardedStandingSentence : unguardedSentence);
-                    if (unremoved) this.#options.emit(conversation.id, { kind: 'notice', text: standingUnremovedSentence });
-                    this.#changeMode(conversation, 'ask_first', false);
+                    stopFor(unguardedSentence);
+                    this.#stepDown(conversation, 'ask_first');
                     return;
                 }
                 if (line.kind === 'session') {

@@ -144,10 +144,14 @@ describe('the console', () => {
                 ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
             );
         });
-        // What the empty chat promises holds whatever the send mode: what is written here waits for the person.
-        const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
-        expect(hero.querySelector('p')?.textContent).toBe(
-            'Nothing written here reaches a person without your approval.',
+        // What the empty chat promises holds whatever the send mode: what is written here waits for the person. It is
+        // promised in Ask first; a new chat starts in Full access, which promises nothing of it.
+        chooseIn('Access mode', 'mode', 'ask_first');
+        const hero = () => screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
+        await waitFor(() =>
+            expect(hero().querySelector('p')?.textContent).toBe(
+                'Nothing written here reaches a person without your approval.',
+            ),
         );
         // What waits is a page of its own, chosen from the sidebar.
         const needs = await openNeeds();

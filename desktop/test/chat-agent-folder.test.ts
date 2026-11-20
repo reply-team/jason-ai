@@ -4,11 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, ownAgentFolder, realSkillsFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
+import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, copyOwn, ownAgentFolder, realSkillsFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
 import { deployReplySkills } from '../src/reply-skills.ts';
 import { desktopPaths } from '../src/paths.ts';
 
@@ -259,4 +259,29 @@ test('with a record kept, a link standing at the record\'s name beside the skill
     assert.equal(readFileSync(join(person, 'precious.json'), 'utf8'), 'the person\'s own');
     assert.ok(lstatSync(at).isFile() && !lstatSync(at).isSymbolicLink());
     assert.equal(readFileSync(at, 'utf8'), readFileSync(join(records, claude.record), 'utf8'));
+});
+
+test('a skill copied into a conversation\'s own folder never writes through what stands at its name: a link or a hard link there is removed as itself first', (t) => {
+    const { root } = folders(t);
+    const from = join(root, 'from');
+    const to = join(root, 'to');
+    put(join(from, 'campaign-planning', 'SKILL.md'), 'plan well');
+    put(join(from, 'campaign-planning', 'notes', 'deep.md'), 'deeper');
+    put(join(from, 'inbox-triage', 'SKILL.md'), 'triage well');
+    const outside = join(root, 'outside');
+    put(join(outside, 'precious.txt'), 'mine');
+    put(join(root, 'shared.md'), 'mine too');
+    mkdirSync(join(to, 'inbox-triage'), { recursive: true });
+    // A folder link at a skill's name, and a hard link at a file's: a copy over either would write what it names.
+    symlinkSync(outside, join(to, 'campaign-planning'), 'junction');
+    linkSync(join(root, 'shared.md'), join(to, 'inbox-triage', 'SKILL.md'));
+    copyOwn(from, to);
+    assert.deepEqual(readdirSync(outside), ['precious.txt'], 'nothing is written through the link');
+    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'mine');
+    assert.equal(readFileSync(join(root, 'shared.md'), 'utf8'), 'mine too', 'nor into the file the hard link shares');
+    const placed = lstatSync(join(to, 'campaign-planning'));
+    assert.ok(placed.isDirectory() && !placed.isSymbolicLink(), 'a real folder stands at the skill\'s name');
+    assert.equal(readFileSync(join(to, 'campaign-planning', 'SKILL.md'), 'utf8'), 'plan well');
+    assert.equal(readFileSync(join(to, 'campaign-planning', 'notes', 'deep.md'), 'utf8'), 'deeper');
+    assert.equal(readFileSync(join(to, 'inbox-triage', 'SKILL.md'), 'utf8'), 'triage well');
 });

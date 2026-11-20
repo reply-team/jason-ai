@@ -8,7 +8,7 @@ import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessSentence, tabFullAccess } from '../src/chat-modes.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -360,12 +360,16 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
-    // A chat turn writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes it when
-    // the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, and
-    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end.
+    // A chat turn in Ask first writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes
+    // it when the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, places
+    // that text and the recorded skills in the conversation's own folder under desktop/chats/, where the turn runs, and
+    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end; the
+    // first record kept writes desktop/conversations-stamped beside them, which says the records carry their shape.
     const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
+    const ownFolderFile = /^desktop\/chats\/conv_[0-9A-HJKMNP-TV-Z]{26}\/(?:CLAUDE\.md|AGENTS\.md|\.(?:claude|agents)\/skills\/[a-z-]+\/SKILL\.md)$/;
     const conversationFile = /^desktop\/conversations\/conv_[0-9A-HJKMNP-TV-Z]{26}\.json$/;
     const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
+    const stampFile = 'desktop/conversations-stamped';
     let during: string[] = [];
     await act('a chat turn', async () => {
         b.env.STUB_HOST_PLAN = JSON.stringify([{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
@@ -392,12 +396,14 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             ...loggedTurns(log),
         });
         const conversation = (await chat.create()).id;
+        // A new chat is in Full access, whose turn also writes the host's settings; this turn is the one Ask first runs.
+        await chat.setMode(conversation, 'ask_first', 'claude');
         await chat.send(conversation, 'hello', { host: 'claude' });
         await done;
         // The set-up chat's naming run, which leaves nothing behind when the host gives no name.
         await chat.idle();
-    }, [...instructionFiles, conversationFile], []);
-    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !conversationFile.test(path));
+    }, [...instructionFiles, stampFile, ownFolderFile, conversationFile], []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && path !== stampFile && !ownFolderFile.test(path) && !conversationFile.test(path));
     assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');
     assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
     assert.match(turnFiles[0] ?? '', turnFile);
@@ -411,6 +417,14 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         const skills = readdirSync(join(b.paths.chat, host, 'skills')).sort();
         assert.deepEqual(skills.filter((name) => !name.startsWith('reply-')), ['campaign-launch'], host);
         assert.ok(skills.some((name) => name.startsWith('reply-')), `the Reply skills beside Jason's in ${host}: ${skills.join(', ')}`);
+    }
+    // The conversation's own folder, where its turn ran, holds the same: the two memory files and both hosts' skills.
+    const owned = readdirSync(b.paths.chats);
+    assert.equal(owned.length, 1, `one conversation's folder: ${owned.join(', ')}`);
+    const own = join(b.paths.chats, owned[0] ?? '');
+    assert.deepEqual(readdirSync(own).sort(), ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md']);
+    for (const host of ['.claude', '.agents']) {
+        assert.deepEqual(readdirSync(join(own, host, 'skills')).sort(), readdirSync(join(b.paths.chat, host, 'skills')).sort(), host);
     }
 
     assert.deepEqual(readInstallationSettings(b), {
@@ -752,7 +766,7 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, autoEdit: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null, ownServers: [], runsRoles: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, autoEdit: null, runs: { window: {}, tab: { full_access: { mode: 'ask_first', why: tabFullAccess } } }, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null, ownServers: [], runsRoles: null });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
@@ -818,7 +832,7 @@ test('a Claude Code below the floor is listed and marked with the version found,
     const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     const sentence = floorSentence('2.1.200');
     assert.ok(sentence);
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), autoEdit: null, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null, ownServers: [], runsRoles: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), autoEdit: null, runs: { window: { full_access: { mode: 'ask_first', why: fullAccessSentence('2.1.200') } }, tab: { full_access: { mode: 'ask_first', why: tabFullAccess } } }, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null, ownServers: [], runsRoles: null });
     assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
     assert.equal(byId.get('deepseek')?.belowFloor, sentence);
     assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');
@@ -985,6 +999,32 @@ test('every host that drives the chat says whether Auto-edit can be chosen on it
     }
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.autoEdit]));
     assert.equal(off.get('claude'), null, 'Full access\'s switch is not Auto-edit\'s');
+});
+
+test('every host hands what a turn on it runs in, by the mode a chat keeps, from the window and from a browser tab, each with the desktop\'s sentence why, so the page draws the mode the next turn runs in', async (t) => {
+    const { b, say } = claudeSaying(t);
+    const ask = (why: string | null) => ({ mode: 'ask_first', why });
+    say({ stdout: '2.1.290 (Claude Code)\n' });
+    const listing = setupOn(b);
+    assert.equal(listing.handedClaudeVersion(), undefined, 'before a listing, no version was handed');
+    const below = new Map((await listing.status()).hosts.map((host) => [host.id, host.runs]));
+    assert.equal(listing.handedClaudeVersion(), '2.1.290', 'the version the listing read, which a turn holds its own read to');
+    assert.deepEqual(below.get('claude'), { window: { full_access: ask(fullAccessSentence('2.1.290')) }, tab: { full_access: ask(tabFullAccess) } });
+    assert.deepEqual(below.get('deepseek'), below.get('claude'), 'a key provider on Claude Code runs as Claude Code does');
+    assert.deepEqual(below.get('codex'), { window: { full_access: ask(codexFullAccess), auto_edit: ask(codexAutoEdit) }, tab: { full_access: ask(tabFullAccess), auto_edit: ask(codexAutoEdit) } });
+    assert.deepEqual(below.get('codex-api-key'), below.get('codex'));
+    assert.deepEqual(below.get('gemini'), { window: {}, tab: {} }, 'a host that does not drive the chat runs no turn of it');
+    say({ stdout: '2.1.322 (Claude Code)\n' });
+    const at = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.runs]));
+    assert.deepEqual(at.get('claude'), { window: {}, tab: { full_access: ask(tabFullAccess) } }, 'at the floor a Full access turn from the window runs in it');
+    say({ stdout: 'not a version\n' });
+    const unread = setupOn(b);
+    await unread.status();
+    assert.equal(unread.handedClaudeVersion(), null, 'a version that could not be read is handed as none');
+    say({ stdout: '2.1.322 (Claude Code)\n' });
+    const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.runs]));
+    assert.deepEqual(off.get('claude'), { window: { full_access: ask(fullAccessNotYet) }, tab: { full_access: ask(tabFullAccess) } });
+    assert.deepEqual(off.get('codex')?.window.full_access, ask(codexFullAccess), 'Codex before the switch, as a turn says it');
 });
 
 test('a sign-in whose chat folder cannot be put right keeps its own result: the folder\'s code is logged, never its sentence said', async (t) => {
