@@ -22,10 +22,11 @@ let laid: { part: (element: Element) => number; view: number } | null = null;
  * `heights` sizes a part of a box by its own measure instead of its words, where it answers a number.
  */
 export function layOutChats(
-    view = 500,
+    initialView = 500,
     perCharacter = 4,
     heights: (part: Element) => number | undefined = () => undefined,
-): { restore: () => void } {
+): { restore: () => void; setView: (pixels: number) => void } {
+    let view = initialView;
     const proto = HTMLElement.prototype;
     const above = Object.getPrototypeOf(proto) as object;
     const saved = names.map((name) => [name, Object.getOwnPropertyDescriptor(proto, name)] as const);
@@ -38,6 +39,10 @@ export function layOutChats(
         );
     const place = (element: Element) => Math.min(Math.max(places.get(element) ?? 0, 0), height(element) - view);
     laid = { part, view };
+    const setView = (pixels: number) => {
+        view = pixels;
+        laid = { part, view };
+    };
     Object.defineProperty(proto, 'scrollHeight', {
         configurable: true,
         get(this: HTMLElement) {
@@ -77,6 +82,7 @@ export function layOutChats(
         },
     });
     return {
+        setView,
         restore: () => {
             laid = null;
             for (const [name, descriptor] of saved) {
@@ -114,4 +120,47 @@ export function followedPlace(element: HTMLElement): number {
 export function scrollAs(element: HTMLElement, top: number): void {
     element.scrollTop = top;
     element.dispatchEvent(new Event('scroll'));
+}
+
+/**
+ * Stands in for the page's ResizeObserver until `restore` is called: happy-dom never reports a size, so a test says
+ * when an element's size changed (`resized`) and each observer watching it is called, as a browser calls it after a layout.
+ */
+export function watchSizes(): { resized: (element: Element) => void; restore: () => void } {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    const live = new Set<StandInResizeObserver>();
+    class StandInResizeObserver {
+        readonly watched = new Set<Element>();
+        constructor(private readonly callback: ResizeObserverCallback) {
+            live.add(this);
+        }
+        observe(element: Element) {
+            this.watched.add(element);
+        }
+        unobserve(element: Element) {
+            this.watched.delete(element);
+        }
+        disconnect() {
+            this.watched.clear();
+            live.delete(this);
+        }
+        report(element: Element) {
+            if (this.watched.has(element))
+                this.callback([{ target: element } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+        configurable: true,
+        writable: true,
+        value: StandInResizeObserver,
+    });
+    return {
+        resized: (element) => {
+            for (const each of [...live]) each.report(element);
+        },
+        restore: () => {
+            if (saved) Object.defineProperty(globalThis, 'ResizeObserver', saved);
+            else delete (globalThis as Record<string, unknown>).ResizeObserver;
+        },
+    };
 }

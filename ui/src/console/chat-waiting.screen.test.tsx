@@ -14,7 +14,7 @@ import { whyWords } from '../screens/send-modes/doubts';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
-import { conversationEnd, followedPlace, fromFoot, layOutChats, scrollAs } from '../test/scroll';
+import { conversationEnd, followedPlace, fromFoot, layOutChats, scrollAs, watchSizes } from '../test/scroll';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
@@ -1368,6 +1368,102 @@ describe('a chat followed to the end of its conversation, above what waits under
             await waitFor(() => expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2));
         } finally {
             layout.restore();
+        }
+    });
+
+    /** Opens Spring's chat, cards taller than the view under it, sends, and waits for the send to be followed. */
+    async function sentAndFollowed(desktop: StubDesktop): Promise<HTMLElement> {
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        const box = scroller(pane);
+        await send(pane, desktop, 'Draft the next one');
+        await waitFor(() => expect(box.textContent).toContain('Draft the next one'));
+        await waitFor(() => expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2));
+        return box;
+    }
+
+    it('keeps the end in its place when the box’s own height changes and nothing is added to it', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const sizes = watchSizes();
+        const layout = layOutChats();
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const box = await sentAndFollowed(desktop);
+
+            // Something outside the box takes room from it (a card under it, the composer's lines): the view shrinks.
+            layout.setView(300);
+            flush(() => sizes.resized(box));
+            expect(box.scrollTop).toBe(followedPlace(box));
+            expect(box.scrollTop).toBe(conversationEnd(box) - 150);
+        } finally {
+            layout.restore();
+            sizes.restore();
+        }
+    });
+
+    it('keeps the end in its place when the thread grows with nothing written into it', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        let opened = 0;
+        const sizes = watchSizes();
+        const layout = layOutChats(500, 4, (part) =>
+            part.classList.contains('thread') ? (part.textContent ?? '').length * 4 + opened : undefined,
+        );
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const box = await sentAndFollowed(desktop);
+            const thread = box.querySelector(':scope > .thread')!;
+
+            // A part of the thread opens (its steps, say): it is taller, and no word was added.
+            opened = 200;
+            flush(() => sizes.resized(thread));
+            expect(box.scrollTop).toBe(followedPlace(box));
+            expect(box.scrollTop).toBe(conversationEnd(box) - box.clientHeight / 2);
+        } finally {
+            layout.restore();
+            sizes.restore();
+        }
+    });
+
+    it('goes on following when the scroll it set off is read after the box shrank', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const sizes = watchSizes();
+        const layout = layOutChats();
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const box = await sentAndFollowed(desktop);
+
+            // The view shrinks by more than twice the slack before the box says it scrolled to where it was followed:
+            // that scroll is the follower's own, not the person's, and the place is followed again.
+            layout.setView(200);
+            flush(() => box.dispatchEvent(new Event('scroll')));
+            flush(() => sizes.resized(box));
+            expect(box.scrollTop).toBe(followedPlace(box));
+            flush(() => desktop.emit(spring, { kind: 'text', text: part(1) }));
+            await waitFor(() => expect(box.textContent).toContain('Part 1:'));
+            await waitFor(() => expect(box.scrollTop).toBe(followedPlace(box)));
+        } finally {
+            layout.restore();
+            sizes.restore();
+        }
+    });
+
+    it('leaves a person who scrolled up where they are when the box changes size', async () => {
+        springSays = `So far: ${'a reply, '.repeat(200)}`;
+        const sizes = watchSizes();
+        const layout = layOutChats();
+        try {
+            const { desktop } = renderConsole(new FakeApi().answer('workitem.get', 'workitem.get/parked-send'));
+            const box = await sentAndFollowed(desktop);
+
+            scrollAs(box, followedPlace(box) - 400);
+            const kept = box.scrollTop;
+            layout.setView(300);
+            flush(() => sizes.resized(box));
+            expect(box.scrollTop).toBe(kept);
+            expect(followedPlace(box)).toBeGreaterThan(kept);
+        } finally {
+            layout.restore();
+            sizes.restore();
         }
     });
 
