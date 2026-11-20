@@ -54,8 +54,44 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The pages say what an executable another program holds open meets: the update's and the rollback's moves, and the
-    /// Windows installer's, wait for it, and the wait they name is the uninstall's own rule's.
+    /// On Windows the removal looks under this account's other temporary folders and names what builds unpacked there as
+    /// left, removing nothing there; the page and the verb's help say so in the same clause.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/release-and-update.md")]
+    [InlineData("dotnet/src/Jason.Cli/Uninstall/UninstallCommand.cs")]
+    public void The_pages_say_what_builds_unpacked_under_other_temporary_folders_is_named_and_left(string page)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains("the folder its own temporary folder is numbered inside, where it is one, and that folder's numbered folders, or its own numbered folders where it is none", text, StringComparison.Ordinal);
+        Assert.Contains("this removal takes only what stands under its own temporary folder, and what it names is safe to remove once nothing runs from it", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("another session of this account", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The page lists the Desktop's refusals a carried update calls retryable, and the list is the set the verb retries,
+    /// read out of the code: a reason added on one side alone is a row the page and the verb tell apart.
+    /// </summary>
+    [Fact]
+    public void The_page_lists_the_desktop_refusals_the_verb_retries()
+    {
+        const string lead = "Retryable where the reason is one that passes: ";
+        var row = Page("docs", "release-and-update.md").Split('\n').Single(line => line.StartsWith("| `update_refused_by_desktop` |", StringComparison.Ordinal));
+        var at = row.IndexOf(lead, StringComparison.Ordinal);
+        Assert.True(at > 0, row);
+        var listed = row[(at + lead.Length)..].TrimEnd().TrimEnd('|').Split(", ").Select(code => code.Trim().Trim('`')).ToList();
+
+        Assert.Equal(listed.Count, listed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            Jason.Cli.Update.CarriedUpdate.RetryableRefusals.Order(StringComparer.Ordinal),
+            listed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The pages say what an executable another program holds open meets: the update's and the rollback's moves wait for
+    /// it, and the wait they name is the uninstall's own rule's. The install page no longer says it of install.ps1, which
+    /// moves no executable of its own any more: the application's installer places it.
     /// </summary>
     [Fact]
     public void The_pages_say_how_long_a_held_executable_is_waited_for()
@@ -66,18 +102,7 @@ public partial class PageClaimsTests
             $"On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for {wait} first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable",
             Flat(Page("docs", "release-and-update.md")),
             StringComparison.Ordinal);
-
-        var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains($"On Windows, `install.ps1` waits up to {wait} for a file another program holds open", install, StringComparison.Ordinal);
-
-        // A file held while the archive unpacks is said by the directory it unpacks into, "or a file in it": the script
-        // cannot know which file it was, so "says which file" is no longer what it does.
-        Assert.Contains("before it gives up and names the file, or the directory it was unpacking into.", install, StringComparison.Ordinal);
-        Assert.DoesNotContain("before it gives up and says which file.", install, StringComparison.Ordinal);
-        Assert.Contains(
-            "if the new `jason.exe` cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never leaves you without the version you started with.",
-            install,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("`install.ps1` waits up to", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -199,17 +224,18 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Eleven names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c>, <c>doctor</c>, <c>export</c> and <c>import</c>,
+    /// Twelve names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>install</c>, <c>logs</c>, <c>doctor</c>, <c>export</c> and <c>import</c>,
     /// the <c>skills</c> and <c>update</c> nouns, <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
     /// other verbs are operations, and <c>session open</c> — and no page says two, the four it said before the two verbs
     /// that read the installation's files arrived, the six it said before the UI was placed by a command, the seven it said
     /// before a plugin package was, the eight it said before a person's own agent host was started by one, the nine it
-    /// said before an installation was written into one archive, or the ten it said before one was placed from it.
+    /// said before an installation was written into one archive, the ten it said before one was placed from it, or the
+    /// eleven it said before the machine was set up for the application by one.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "It is one of eleven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("docs/INSTALL.md", "It is one of eleven names in this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **eleven declared exceptions**")]
+    [InlineData("docs/handbook.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("docs/INSTALL.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -754,6 +780,17 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Where a declared program is looked for: only the entries of the search path that are full paths. An entry that is not
+    /// one names wherever the runtime stands, and every program Jason starts by name is started by its full path.
+    /// </summary>
+    [Fact]
+    public void The_plugins_page_says_an_entry_of_the_search_path_that_is_not_a_full_path_is_not_searched() =>
+        Assert.Contains(
+            "Only the entries of the search path that are full paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a program found only there is `executable_missing`.",
+            Flat(Page("docs", "plugins.md")),
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// Wherever a page walks the role skills in, or says what follows an older applier, the UI follows: the install
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>
@@ -833,6 +870,7 @@ public partial class PageClaimsTests
     [Theory]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
+    [Critical(Family.D1, "the prompt hosts were read against")]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector(string page)
     {
         var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason by following");
@@ -848,6 +886,7 @@ public partial class PageClaimsTests
     /// walk after it. Until that reading, the digest stands for a deliberate change.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the agent section hosts were read against")]
     public void The_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(AgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Agent()))));
 
@@ -888,21 +927,45 @@ public partial class PageClaimsTests
     /// <summary>
     /// An agent installs by the first route that fits: a package, where the page names one for the platform and its
     /// package manager is already there — installing a package manager to reach it would be installing something else —
-    /// then the steps by hand. It never pipes a download into a shell, and the install scripts are the person's, handed
-    /// to them where even the steps by hand are refused. The order is what is held, as well as the words.
+    /// and the page names none for a new install; then, on macOS and Windows, the release's
+    /// install script downloaded into a file and run from it, which installs Jason Desktop and sets the machine up, and
+    /// refuses an Intel Mac; and on Linux the steps by hand. It never pipes a download into a shell, and
+    /// the one-liner is the person's, handed to them where the script or the steps by hand are refused. The order is
+    /// what is held, as well as the words.
     /// </summary>
     [Fact]
-    public void The_agent_section_takes_a_package_then_the_route_by_hand()
+    public void The_agent_section_takes_a_package_then_the_script_or_the_route_by_hand()
     {
         var agent = Flat(Agent());
 
-        var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*).", StringComparison.Ordinal);
-        var byHand = agent.IndexOf("say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
-        var person = agent.IndexOf("The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
+        var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*); where it names none, take the next route.", StringComparison.Ordinal);
+        // The page no longer offers Homebrew's formula for a new install on a Mac, so the section names no formula at all.
+        Assert.DoesNotContain("Homebrew", agent, StringComparison.Ordinal);
+        var script = agent.IndexOf("On macOS and Windows that is this release's install script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file", StringComparison.Ordinal);
+        // And an Intel Mac is refused by the script, which installs Jason Desktop on Apple silicon only; every release
+        // publishes the Intel image, so the section says nothing of what is published.
+        var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since it installs Jason Desktop on Apple silicon only: report that as it stands.", StringComparison.Ordinal);
+        var byHand = agent.IndexOf("On Linux it is §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
+        var person = agent.IndexOf("Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
 
         Assert.True(package >= 0, "The section for an agent does not take a package first, where its package manager is already on this machine.");
-        Assert.True(byHand > package, "The section for an agent does not take §2 by hand after the package.");
+        Assert.True(script > package, "The section for an agent does not take the install script on macOS and Windows after the package.");
+        Assert.True(intel > script, "The section for an agent does not say the script refuses an Intel Mac.");
+        Assert.True(byHand > script, "The section for an agent does not take §2 by hand on Linux.");
         Assert.True(person > byHand, "The section for an agent does not hand the person the one-liner after the route by hand.");
+    }
+
+    /// <summary>
+    /// The script route says what an agent needs from the script: that it opens nothing, ends non-zero when jason is not in
+    /// the terminal, and ends with the full path of jason, which the agent's own session calls it by.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_says_what_the_install_script_does_and_how_its_last_line_is_used()
+    {
+        var agent = Flat(Agent());
+
+        Assert.Contains("It installs Jason Desktop and opens nothing, puts `jason` in the terminal, deploys the skills for Claude Code and Codex where each is found and the role skills, and ends non-zero, saying which act failed, when `jason` is not in the terminal.", agent, StringComparison.Ordinal);
+        Assert.Contains("Its last line is the full path of `jason`: call `jason` by that path for the rest of your session, which does not see the new PATH.", agent, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -932,32 +995,34 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The package subsection names the tap, and only a package that is there: the winget package is not published yet,
-    /// so no line installs it.
+    /// The package subsection offers no package for a new install: on macOS and Windows the install is Jason Desktop,
+    /// which the install script installs, and Homebrew's formula is the command line alone, so the pages stop offering it
+    /// for a new install on a Mac; the winget package is not published, so no line installs it either. They say nothing
+    /// of what becomes of the formula.
     /// </summary>
     [Fact]
-    public void The_package_subsection_names_the_tap_and_no_winget_install_yet()
+    public void The_package_subsection_offers_no_package_for_a_new_install()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("On macOS, with Homebrew: `brew install reply-team/tap/jason`.", package, StringComparison.Ordinal);
+        Assert.Contains("This page names no package for a new install: on macOS and Windows the route is the install script above, which installs Jason Desktop, and on Linux the script or the steps by hand below.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.DoesNotContain("winget install", package, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// No build for an Intel Mac is published, and Homebrew says so in words that never name the architecture: it
-    /// stops at the formula, before any dependency is read. So the page says it where the macOS route is given, with
-    /// what a person on such a machine can do today.
+    /// On macOS and Windows the install is Jason Desktop, so the steps by hand, which place the command line alone, are
+    /// Linux's: the page gives no archive for macOS or Windows to place by hand.
     /// </summary>
     [Fact]
-    public void The_package_subsection_says_an_Intel_Mac_has_no_build()
+    public void The_steps_by_hand_are_linux_s_alone()
     {
-        var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
+        var byHand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
 
-        Assert.Contains(
-            "Every macOS route on this page — the one-liner, Homebrew and the archive by hand — is for Apple silicon only: no build for an Intel Mac is published, so on an Intel Mac Homebrew answers \"formula requires at least a URL\", `install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an Apple silicon Mac.",
-            package,
-            StringComparison.Ordinal);
+        Assert.Contains("On Linux, to install without running a downloaded script, take the steps the script takes there, yourself. On macOS and Windows the install is Jason Desktop, which the script installs and sets up; there is no route by hand.", byHand, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason-win-x64.zip", byHand, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason-osx-arm64.tar.gz", byHand, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1008,7 +1073,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// A package manager that is there and refuses — or fails, or that the agent's harness will not run — is the same
-    /// case for the person as one that is not there: the agent says so once and takes the steps by hand, which is the
+    /// case for the person as one that is not there: the agent says so once and takes the script or the steps by hand, which is the
     /// next route rather than a way around the refusal.
     /// </summary>
     [Fact]
@@ -1016,7 +1081,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("Where it is not, where it fails, or where it or your harness refuses it, say so once and take §2 *By hand*", agent, StringComparison.Ordinal);
+        Assert.Contains("where it names none, take the next route. Where the package fails, or where it or your harness refuses it, say so once and take the next route.", agent, StringComparison.Ordinal);
         Assert.Contains("That is the next route, not a way around the refusal.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("no other way of running the same code", agent, StringComparison.Ordinal);
     }
@@ -1027,13 +1092,13 @@ public partial class PageClaimsTests
         Assert.Contains("Never pipe a download into a shell.", Flat(Agent()), StringComparison.Ordinal);
 
     /// <summary>
-    /// The route by hand is the last an agent takes. Where even that is refused, the install is the person's to type, and
-    /// the agent hands them the line rather than finding another way to run it.
+    /// The script, or on Linux the route by hand, is the last an agent takes. Where that is refused, the install is the
+    /// person's to type, and the agent hands them the line rather than finding another way to run it.
     /// </summary>
     [Fact]
     public void The_agent_section_gives_the_person_the_one_liner_where_even_the_route_by_hand_is_refused() =>
         Assert.Contains(
-            "The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.",
+            "Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.",
             Flat(Agent()),
             StringComparison.Ordinal);
 
@@ -1103,39 +1168,52 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Jason installs two ways, and the pages say each by whom it suits and recommend neither. An agent given only the
-    /// link once offered the command line as the recommended install and the desktop second, and never named the desktop
-    /// again: the install page told it to install the desktop only when asked, and the README offered it as an
-    /// afterthought. An agent that asks before the install offers both, a person with no preference is offered the
-    /// desktop, and after a command-line install the hand-over names the desktop once.
+    /// On macOS and Windows, Jason is one installation: Jason Desktop and the `jason` it carries, installed once, updated
+    /// once and removed once. The pages say so in the same words wherever they speak of installing it, and no page offers
+    /// the command line without the application there, or says an agent never needs it. On Linux the command line stays
+    /// what the install makes, and the desktop's deb and AppImage are separate downloads: an agent asked with only the link
+    /// offers both there, a person with no preference is offered the desktop, and the hand-over names the desktop once.
     /// </summary>
     [Fact]
-    public void The_pages_offer_two_ways_to_install_and_recommend_neither()
+    public void The_pages_say_one_installation_on_macOS_and_Windows_and_offer_the_desktop_on_Linux()
     {
+        const string Words = "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once.";
         var agent = Flat(Agent());
-        Assert.Contains("each said by whom it suits, and marks neither as the one to take", agent, StringComparison.Ordinal);
-        Assert.Contains("A person with no preference is offered Jason Desktop.", agent, StringComparison.Ordinal);
-        Assert.Contains("Given the three lines, the person has asked for the command line: install it, with no choice offered.", agent, StringComparison.Ordinal);
+        Assert.Contains(Words, agent, StringComparison.Ordinal);
+        Assert.Contains("A person on Linux with no preference is offered Jason Desktop.", agent, StringComparison.Ordinal);
+        Assert.Contains("Given the three lines, the person has asked for the install this page makes: do it, with no choice offered.", agent, StringComparison.Ordinal);
         Assert.Contains("The last line of that first message names Jason Desktop once", agent, StringComparison.Ordinal);
-        Assert.Contains("Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.", agent, StringComparison.Ordinal);
-        Assert.Contains("Install nothing but Jason, or Jason Desktop where the person took it, and build nothing (§3).", agent, StringComparison.Ordinal);
+        Assert.Contains("which the person opens as any other application and you do not open for them", agent, StringComparison.Ordinal);
+        Assert.Contains("On Linux, where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.", agent, StringComparison.Ordinal);
+        Assert.Contains("Install nothing but Jason, and on Linux Jason Desktop where the person took it, and build nothing (§3).", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("marks neither as the one to take", agent, StringComparison.Ordinal);
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("An agent that installs Jason never needs the desktop", install, StringComparison.Ordinal);
+        Assert.Contains(Words, install, StringComparison.Ordinal);
         Assert.DoesNotContain("Install it only when the person asks", install, StringComparison.Ordinal);
 
         // The desktop's Command Line item places `jason-desktop` where another `jason` already stands, so no page says
-        // it always puts a `jason` in the terminal.
-        Assert.Contains("puts a command in the terminal: `jason`, or `jason-desktop` where another `jason` already stands", install, StringComparison.Ordinal);
+        // it always puts a `jason` in the terminal; the install page says it of Linux, where the deb and the AppImage
+        // are installed beside the command line.
+        Assert.Contains("On Linux the Command Line item of its menu puts a command in the terminal: `jason`, or `jason-desktop` where another `jason` already stands", install, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` the terminal finds", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("Two ways in, to the same Jason.", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries, whose first start of each version puts `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("Prefer a window?", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("The full experience is still a session with your agent", readme, StringComparison.Ordinal);
-        Assert.Contains("on Windows, only where the PATH holds the folder it uses", readme, StringComparison.Ordinal);
+
+        // What two installations said, and what made the application optional on macOS or Windows, is gone from every
+        // page that speaks of installing Jason.
+        foreach (var (page, text) in new[] { ("README.md", readme), ("docs/INSTALL.md", install), ("docs/handbook.md", Flat(Page("docs", "handbook.md"))), ("docs/desktop.md", Flat(Page("docs", "desktop.md"))) })
+        {
+            foreach (var said in new[] { "Two ways in", "two ways Jason is installed", "Jason installs two ways", "never needs the desktop", "the other way to install Jason", "The other way, Jason Desktop", "the other way into this same installation", "rather than a terminal" })
+            {
+                Assert.False(text.Contains(said, StringComparison.Ordinal), $"{page} still says \"{said}\".");
+            }
+        }
 
         // The desktop's own page says the same as the README's section, with no ranking of one way above the other.
         var desktop = Flat(Page("docs", "desktop.md"));
@@ -1326,7 +1404,8 @@ public partial class PageClaimsTests
 
         var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](INSTALL.md)", StringComparison.Ordinal));
         Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
-        Assert.Contains("A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once, and a one-liner installs it.", pointer, StringComparison.Ordinal);
+        Assert.Contains("On Linux a one-liner installs the executable. Either way it ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
         Assert.Contains("teaching it its skills again where that step said it could not", pointer, StringComparison.Ordinal);
     }
 
@@ -1564,14 +1643,14 @@ public partial class PageClaimsTests
 
         string[] steps =
         [
-            "1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,",
+            "1. Download the archive and `checksums.txt` beside it: for the latest release,",
             "2. Check the archive's SHA-256 against its line in `checksums.txt`",
             "and stop if they differ.",
             "3. Unpack it into a new temporary directory",
             "named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.",
             "4. Run `jason --version` there, by its full path.",
             "5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says",
-            "Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and `rm -r <path>` elsewhere.",
+            "Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into have done their work: you may delete those three — only those — with `rm -r <path>`.",
         ];
 
         var at = -1;
@@ -1598,14 +1677,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// An archive can carry the mark of the web, and what it unpacks inherits it, so an executable placed by hand is
-    /// stopped the first time it runs. The script clears the mark from the executable it unpacks; the steps by hand say
-    /// to do the same.
+    /// The steps by hand are Linux's: on Windows the install is Jason Desktop's installer, which the script checks and runs,
+    /// so the page gives no executable for a person to unpack and unblock there.
     /// </summary>
     [Fact]
-    public void The_hand_path_unblocks_the_executable_on_Windows() =>
-        Assert.Contains(
-            "`Unblock-File` the executable, as `install.ps1` does.",
+    public void The_hand_path_places_no_executable_on_Windows() =>
+        Assert.DoesNotContain(
+            "Unblock-File",
             Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand")),
             StringComparison.Ordinal);
 
@@ -1756,6 +1834,7 @@ public partial class PageClaimsTests
     /// agent follows on a first run against a real account are in it, and a change to them is a deliberate one.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the golden path's agent section hosts were read against")]
     public void The_golden_path_s_agent_section_is_the_text_the_hosts_read() =>
         Assert.Equal(GoldenAgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(GoldenAgent()))));
 
@@ -2476,19 +2555,20 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// Where the install page says what the scripts do, it shows the two lines they print about where Jason will keep what
-    /// it learns, word for word as the scripts' runs are held to them, for a made-up account's home on Windows.
+    /// it learns, word for word as the scripts' runs are held to them, for a made-up account's home on Windows, between what the
+    /// scripts do and the table of where they put Jason.
     /// </summary>
     [Fact]
     public void The_install_page_shows_the_lines_the_scripts_print_about_the_files()
     {
         var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
-        var does = install.IndexOf("Each script works out your platform", StringComparison.Ordinal);
+        var does = install.IndexOf("**On macOS and Windows each script installs Jason Desktop**", StringComparison.Ordinal);
         var lines = install.IndexOf(
             "```text\n" + HarnessRootLines.Where(@"C:\Users\Marta\Jason") + "\n" + HarnessRootLines.DefaultProject + "\n```\n",
             StringComparison.Ordinal);
-        var held = install.IndexOf("On Windows, `install.ps1` waits", StringComparison.Ordinal);
+        var held = install.IndexOf("| Where it goes | Platform |", StringComparison.Ordinal);
 
-        Assert.True(does >= 0 && lines > does && held > lines, $"§2 does not show, after what each script does and before what install.ps1 waits for, the two lines the scripts print (at {does}, {lines}, {held}).");
+        Assert.True(does >= 0 && lines > does && held > lines, $"§2 does not show, after what each script does and before where it puts Jason, the two lines the scripts print (at {does}, {lines}, {held}).");
     }
 
     /// <summary>
@@ -2628,7 +2708,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:88e09da81b3b21870e542d046d82c4a57636c2565f694b54a1bbc7ffd5c009f6";
+    private const string AgentSectionDigest = "sha256:3f3dd577e89692e870d7bf087075d093ceaab68df1c1889380d53f1fa0240e17";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
@@ -2649,6 +2729,32 @@ public partial class PageClaimsTests
     }
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
+    /// <summary>
+    /// The pages say what an application opened from its disk image does, as the code does it: <c>jason install</c> refuses
+    /// with <c>install_vanishing_place</c> before anything is stopped, written or retired, and the desktop records a set-up
+    /// by its place as well as its version. INSTALL.md said such an install set the machine up as the script does.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/INSTALL.md", "Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first.")]
+    [InlineData("docs/desktop.md", "opened from the disk image itself, it sets nothing up and says to move it first.")]
+    [InlineData("docs/desktop.md", "`jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything")]
+    [InlineData("docs/desktop.md", "From such a place the set-up is not run: nothing is placed, retired or stopped by it, no finishing step runs, a start that is owed is not paid and nothing is recorded, so each start from there asks again")]
+    [InlineData("docs/desktop.md", "the place it ran from (the `jason` the application carries)")]
+    [InlineData("docs/release-and-update.md", "is refused with `install_vanishing_place` before anything is stopped, written or retired, and before the update's lock is read or taken")]
+    [InlineData("desktop/README.md", "`ran_from`, the carried `jason` it ran from")]
+    public void The_pages_say_an_application_opened_from_its_disk_image_sets_nothing_up(string page, string said)
+    {
+        Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
+        Assert.DoesNotContain("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        // The window's own Live start still brings a runtime up from such a place: the page claims only what the set-up does.
+        Assert.DoesNotContain("no runtime started", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
+        Assert.Equal("install_vanishing_place", CliErrors.InstallVanishingPlace);
+
+        using var paths = new TempPaths();
+        var help = Flat(Jason.Cli.Installation.InstallCommand.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)).Description ?? string.Empty);
+        Assert.Contains("it refuses with install_vanishing_place before anything is stopped, written or retired", help, StringComparison.Ordinal);
+    }
+
     private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
 
     /// <summary>A page with the marks of a quoted block taken off, so a sentence quoted across lines reads as one.</summary>

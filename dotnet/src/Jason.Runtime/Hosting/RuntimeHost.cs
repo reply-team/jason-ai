@@ -31,7 +31,8 @@ using Serilog.Events;
 namespace Jason.Runtime.Hosting;
 
 /// <summary>
-/// Composes one runtime process: data directory → configuration → instance lock → logging → an update left
+/// Composes one runtime process: a data directory this build may run (its layout, and a database no newer Jason migrated) →
+/// data directory → configuration → instance lock → logging → an update left
 /// part-way → database migration → capability token → Kestrel on 127.0.0.1 → descriptor. The descriptor is published
 /// last so a client never finds an endpoint that is not yet listening, and off the caller's thread, so a reader holding it keeps
 /// the start's task from completing, never the caller from going on.
@@ -56,6 +57,15 @@ public static class RuntimeHost
         if (LayoutStamp.Refusal(paths, Contracts.JasonVersion.Current) is { } layout)
         {
             throw new LayoutRefusalException(layout.Code, layout.Message);
+        }
+
+        // Then, before the lock, the log, the folders and the migrator: a database a newer Jason migrated holds migrations this
+        // build does not know, and EF Core would pass over them and run this build's model over that schema. Read through a
+        // read-only connection that is closed before it answers, so a refused start adds and removes no file and leaves the
+        // database and its log as they were, as its sentence says; SQLite's index of a log a runtime left may be rebuilt.
+        if (NewerDatabase.Refusal(paths, Contracts.JasonVersion.Current) is { } newer)
+        {
+            throw new DataNewerRefusalException(newer.Message);
         }
 
         // Before anything is written: a process that does not compose text would key one profile two ways.
@@ -438,16 +448,22 @@ public static class RuntimeHost
         // back from.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
             or DescriptorUnpublishableException or TextCompositionUnavailableException or MigrationFailedException
-            or UnfinishedUpdateRefusalException or LayoutRefusalException
+            or UnfinishedUpdateRefusalException or LayoutRefusalException or DataNewerRefusalException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
             // device by now, and the reason it will not start used to go there. An update's refusal is said in the
-            // envelope `jason runtime start` says it in, with its code, and so is a layout stamp's.
+            // envelope `jason runtime start` says it in, with its code, and so are a layout stamp's and a newer database's.
             try
             {
                 await refusals.WriteLineAsync(
-                    refused is UnfinishedUpdateRefusalException update ? update.Envelope : refused is LayoutRefusalException layout ? layout.Envelope : UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
+                    refused switch
+                    {
+                        UnfinishedUpdateRefusalException update => update.Envelope,
+                        LayoutRefusalException layout => layout.Envelope,
+                        DataNewerRefusalException newer => newer.Envelope,
+                        _ => UnreadableStoredValueException.In(refused)?.Message ?? refused.Message,
+                    }).ConfigureAwait(false);
                 await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

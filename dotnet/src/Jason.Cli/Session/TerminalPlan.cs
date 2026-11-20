@@ -109,6 +109,14 @@ public static class TerminalPlan
         }
     }
 
+    /// <summary>
+    /// Whether the console host starts Windows PowerShell as the host, <c>jason session open --shell</c>'s on Windows among
+    /// them: that child of the console host's is started without the <c>PSModulePath</c> the CLI inherited, as every Windows
+    /// PowerShell child of Jason's is (<see cref="ChildProcess"/>), since the console host hands its own environment on.
+    /// </summary>
+    public static bool HostsWindowsPowerShell(TerminalPlatform os, IReadOnlyList<string> host) =>
+        os == TerminalPlatform.Windows && host is { Count: > 0 } && ChildProcess.IsWindowsPowerShell(host[0]);
+
     /// <summary>The POSIX shell every macOS and Linux system keeps at this path.</summary>
     private const string PosixShell = "/bin/sh";
 
@@ -195,7 +203,7 @@ public static class TerminalPlan
             return null;
         }
 
-        var block = Block(os, inherited, own);
+        var block = Block(os, inherited, own, host);
         foreach (var word in host)
         {
             if (Scan(word, block) is { Expanded: var expanded, Name: { } name, At: var at } && !string.Equals(expanded, word, StringComparison.Ordinal))
@@ -222,10 +230,11 @@ public static class TerminalPlan
 
     /// <summary>
     /// The variables the console host is started with, as <see cref="TerminalStartInfo.For"/> gives them: the inherited
-    /// ones less <c>JASON_CONFINED</c>, then the launch's own (<see cref="TerminalLaunch.Variables"/>) over them, each name
-    /// whatever its case, as Windows compares names.
+    /// ones less <c>JASON_CONFINED</c>, and less <c>PSModulePath</c> where the host it starts is Windows PowerShell
+    /// (<see cref="HostsWindowsPowerShell"/>), then the launch's own (<see cref="TerminalLaunch.Variables"/>) over them, each
+    /// name whatever its case, as Windows compares names.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> Block(TerminalPlatform os, IReadOnlyDictionary<string, string> inherited, OwnJason? own)
+    public static IReadOnlyDictionary<string, string> Block(TerminalPlatform os, IReadOnlyDictionary<string, string> inherited, OwnJason? own, IReadOnlyList<string>? host = null)
     {
         ArgumentNullException.ThrowIfNull(inherited);
         var block = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -235,6 +244,10 @@ public static class TerminalPlan
         }
 
         block.Remove(Confinement.Variable);
+        if (host is not null && HostsWindowsPowerShell(os, host))
+        {
+            block.Remove(ChildProcess.ModulePathVariable);
+        }
         if (own is not null)
         {
             foreach (var (name, value) in Variables(os, own))
@@ -431,6 +444,12 @@ public static class TerminalPlan
 
         foreach (var directory in (searchPath ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            // An entry that is not a full path names wherever the process stands, and is not searched.
+            if (!Path.IsPathFullyQualified(directory))
+            {
+                continue;
+            }
+
             var candidate = Path.Combine(directory, program);
             if (IsProgram(candidate))
             {

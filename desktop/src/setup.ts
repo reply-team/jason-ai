@@ -14,7 +14,7 @@ import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
-import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
@@ -376,16 +376,19 @@ export function settingsUnreadable(stdout: string): string | null {
 /**
  * Pure: what the system screen says when the runtime and the desktop are two versions. A runtime that runs from the jason
  * the desktop carries is brought to one version by the desktop's own update, since `jason update` refuses to change a
- * carried file; another installation's runtime by `jason update`.
+ * carried file; another installation's runtime older than this desktop by `jason update`; and one newer than this desktop
+ * by the desktop's own update too, since it is this desktop that is behind, and updating the other installation brings
+ * nothing.
  */
 export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean, key: string | null): string | null {
     // A build after a plus names the commit, not another version.
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
+    const desktopBehind = compareVersions(bare(runtimeVersion) ?? runtimeVersion, bare(bundleVersion) ?? bundleVersion) > 0;
     // A Windows or Linux window shows no menu bar, so the tray's menu is named too, and the item's key, which a desktop
     // that shows no tray leaves as the one way in; the key only where the item can act (`updateKeyWords`).
     const menu = "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray";
-    const way = ours ? (key === null ? menu : `${menu}, or press ${key},`) : 'Run `jason update`';
+    const way = ours || desktopBehind ? (key === null ? menu : `${menu}, or press ${key},`) : 'Run `jason update`';
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
 }
 

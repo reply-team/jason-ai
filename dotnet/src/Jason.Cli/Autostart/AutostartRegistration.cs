@@ -47,7 +47,16 @@ public sealed record AutostartRegistration(
     IReadOnlyList<IReadOnlyList<string>> Remove,
     IReadOnlyList<string> Query,
     IReadOnlyList<string> Run,
-    string? SearchPath = null);
+    string? SearchPath = null)
+{
+    /// <summary>
+    /// On macOS, for an uninstall, the launchd domains in which a disabled record an earlier removal left for
+    /// <see cref="Name"/> is cleared after <see cref="Remove"/>, whether or not anything was registered: each is read first,
+    /// and cleared only where it records the label as disabled (<see cref="LaunchdJobs.ClearDisabled"/>,
+    /// <see cref="AutostartArtifacts.LeavingNoMark"/>). Empty for every other removal.
+    /// </summary>
+    public IReadOnlyList<string> ClearsDisabledIn { get; init; } = [];
+}
 
 /// <summary>What a machine says is registered: whether anything is, and the command line it names.</summary>
 /// <param name="Registered">Whether this account has a registration at all.</param>

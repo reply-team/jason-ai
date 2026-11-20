@@ -583,6 +583,20 @@ import decisionListArchivePending from '../../../docs/api/fixtures/decision.list
 import routeResolveArchivePause from '../../../docs/api/fixtures/route.resolve/archive-pause.json';
 import routeResolveArchivePauseUnusable from '../../../docs/api/fixtures/route.resolve/archive-pause-unusable.json';
 import workitemListArchiveOpen from '../../../docs/api/fixtures/workitem.list/archive-open.json';
+import approvalApproveSearchTopUp from '../../../docs/api/fixtures/approval.approve/search-top-up.json';
+import approvalGetSearchFirst from '../../../docs/api/fixtures/approval.get/search-first.json';
+import approvalGetSearchTopUp from '../../../docs/api/fixtures/approval.get/search-top-up.json';
+import approvalListSearchAfterTopUp from '../../../docs/api/fixtures/approval.list/search-after-top-up.json';
+import approvalListSearchCampaignPending from '../../../docs/api/fixtures/approval.list/search-campaign-pending.json';
+import approvalListSearchPending from '../../../docs/api/fixtures/approval.list/search-pending.json';
+import approvalListSearchFirstItem from '../../../docs/api/fixtures/approval.list/search-first-item.json';
+import decisionListSearchCampaignNone from '../../../docs/api/fixtures/decision.list/search-campaign-none.json';
+import journalListSearchFirst from '../../../docs/api/fixtures/journal.list/search-first.json';
+import workitemCountSearchDone from '../../../docs/api/fixtures/workitem.count/search-done.json';
+import workitemCountSearchNow from '../../../docs/api/fixtures/workitem.count/search-now.json';
+import workitemCountSearchPlanned from '../../../docs/api/fixtures/workitem.count/search-planned.json';
+import workitemGetSearchFirst from '../../../docs/api/fixtures/workitem.get/search-first.json';
+import workitemListSearchNow from '../../../docs/api/fixtures/workitem.list/search-now.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -1984,6 +1998,38 @@ export const fixtures = {
         Page<WorkItemSummary>
     >,
     'approval.get/by-work-item': approvalGetByWorkItem satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.approve/search-top-up': approvalApproveSearchTopUp satisfies Exchange<ApprovalDecisionRequest, Approval>,
+    'approval.get/search-first': approvalGetSearchFirst satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/search-top-up': approvalGetSearchTopUp satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.list/search-after-top-up': approvalListSearchAfterTopUp satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/search-campaign-pending': approvalListSearchCampaignPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/search-pending': approvalListSearchPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/search-first-item': approvalListSearchFirstItem satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'decision.list/search-campaign-none': decisionListSearchCampaignNone satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'journal.list/search-first': journalListSearchFirst satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'workitem.count/search-done': workitemCountSearchDone satisfies Exchange<WorkItemFilterRequest, WorkItemCount>,
+    'workitem.count/search-now': workitemCountSearchNow satisfies Exchange<WorkItemFilterRequest, WorkItemCount>,
+    'workitem.count/search-planned': workitemCountSearchPlanned satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.get/search-first': workitemGetSearchFirst satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.list/search-now': workitemListSearchNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
 } as const;
 
 export type FixtureName = keyof typeof fixtures;

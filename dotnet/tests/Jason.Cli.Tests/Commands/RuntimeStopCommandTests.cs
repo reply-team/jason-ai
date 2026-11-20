@@ -1,5 +1,6 @@
 using System.Net;
 using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Cli.Tests.Process;
 using Jason.Runtime.Tests;
 
@@ -20,6 +21,228 @@ public class RuntimeStopCommandTests
 
         Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
         Assert.Equal(CliErrors.NoDescriptor, RuntimeVerbs.Envelope(output.ToString()).Code);
+    }
+
+    /// <summary>
+    /// A person's own <c>jason runtime stop</c> says no start is wanted, so a standing note that one is owed goes with a stop
+    /// that succeeded; a stop with nothing to stop leaves it, and the routines that stop on their own account leave it too.
+    /// </summary>
+    [Fact]
+    public async Task A_persons_own_stop_takes_back_the_note_that_a_start_is_owed()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+
+        var (idle, _, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), new FakeProcessControl());
+        Assert.Equal(ExitCodes.RuntimeUnavailable, await CliApp.RunAsync(["runtime", "stop"], idle, Ct));
+        Assert.True(File.Exists(dir.Paths.StartOwedFile), "a stop with nothing to stop took the note back");
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(dir.Paths.DescriptorFile);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (routine, _, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await RuntimeStopCommand.RunAsync(routine, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(File.Exists(dir.Paths.StartOwedFile), "a routine's own stop took the note back");
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (person, _, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], person, Ct));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a person's own stop left the note that a start is owed");
+    }
+
+    /// <summary>
+    /// A stop made on behalf of an install or an update (<c>--start-owed</c>) writes the note that a start is owed, the
+    /// moment the stop began, where a person's own stop takes it back: the answer printed is the stop's own, unchanged.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R2, "a stop on an installer's behalf leaves the start it owes")]
+    public async Task With_start_owed_the_stop_writes_the_note_and_without_it_a_stop_takes_it_back()
+    {
+        using var dir = new TempPaths();
+        var moment = new DateTimeOffset(2026, 11, 17, 17, 40, 12, TimeSpan.Zero);
+        var body = RuntimeVerbs.ShutdownJson("rt_LIVE");
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(dir.Paths.DescriptorFile);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, body);
+        });
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (env, output, error) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        var exit = await CliApp.RunAsync(["runtime", "stop", "--start-owed"], env with { Clock = new FixedClock(moment) }, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(body + System.Environment.NewLine, output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+        Assert.Equal("{\"stopped_at\":\"2026-11-17T17:40:12Z\"}", File.ReadAllText(dir.Paths.StartOwedFile));
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (person, _, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], person, Ct));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a stop without --start-owed left the note that a start is owed");
+    }
+
+    /// <summary>
+    /// A stop on an installer's behalf that did not see the runtime end reads the four cases <c>jason install</c>'s stop
+    /// reads, through the one classifier beside the note (<see cref="StartOwed.After"/>). Here, the runtime ended: it refused
+    /// the shutdown as it went down, so it runs no longer, and the note this stop wrote stands for the start that is owed.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_runtime_that_ended_though_its_stop_failed_keeps_the_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (env, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ =>
+        {
+            processes.RunningPids.Remove(RuntimeVerbs.Pid);
+            return RuntimeVerbs.Response(HttpStatusCode.ServiceUnavailable, Refused);
+        }), processes);
+
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a runtime that ended was left with no note that a start is owed");
+    }
+
+    /// <summary>
+    /// The runtime took the shutdown and had not ended within the stop's wait: it is going down, so the note this stop wrote
+    /// stands for when it has ended.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_runtime_that_took_the_stop_and_had_not_ended_keeps_the_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (env, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"))), stays);
+
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a runtime going down was left with no note that a start is owed");
+    }
+
+    /// <summary>
+    /// The shutdown was sent and its answer never came: whether the runtime took it is not known, so the note this stop wrote
+    /// stands, inert beside a runtime that answers, and its own start or a deliberate stop takes it back. Held for an answer
+    /// that is lost and for a cancel inside the send, which ends the stop with the note as it was written.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_stop_whose_answer_never_came_keeps_the_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (lost, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => throw new HttpRequestException("the connection was reset")), stays);
+
+        Assert.NotEqual(ExitCodes.Success, await RuntimeStopCommand.RunOnBehalfAsync(lost, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a stop whose answer never came took back the note that a start is owed");
+
+        StartOwed.Remove(dir.Paths);
+        using var cancel = new CancellationTokenSource();
+        var (cancelled, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ =>
+        {
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        }), stays);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RuntimeStopCommand.RunOnBehalfAsync(cancelled, human: false, cancel.Token, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(StartOwed.Read(dir.Paths).Stands, "a stop cancelled inside its send took back the note that a start is owed");
+    }
+
+    /// <summary>
+    /// The runtime refused the shutdown and goes on running: no start is owed beside it, so the note this stop wrote is taken
+    /// back, and the answer printed is the refusal, unchanged. A stop that cannot find a runtime writes nothing and leaves
+    /// what stands.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_a_runtime_that_refused_the_stop_and_runs_on_leaves_no_note()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (refuses, output, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, Refused)), stays);
+
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], refuses, Ct));
+        Assert.Equal(Refused + System.Environment.NewLine, output.ToString());
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a runtime that refused the stop was said to owe a start");
+
+        File.Delete(dir.Paths.DescriptorFile);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        var (idle, _, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.RuntimeUnavailable, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], idle, Ct));
+        Assert.Equal("{\"stopped_at\":\"2026-11-17T15:05:35Z\"}", File.ReadAllText(dir.Paths.StartOwedFile));
+    }
+
+    private const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
+
+    /// <summary>
+    /// The flag takes back only what it wrote. With an older note already standing it writes none and leaves that one,
+    /// byte for byte, whatever the stop comes to: refused, outlived, or done, when the older moment is kept, not replaced.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_an_older_note_already_standing_is_left_whatever_the_stop_comes_to()
+    {
+        const string Older = "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}";
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, Older);
+        var later = new FixedClock(new DateTimeOffset(2026, 11, 17, 17, 40, 12, TimeSpan.Zero));
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
+        var (refuses, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, Refused)), new FakeProcessControl());
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], refuses with { Clock = later }, Ct));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (outlives, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"))), stays);
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(outlives with { Clock = later }, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+
+        var (stops, _, _) = RuntimeVerbs.Environment(
+            dir,
+            new FakeHandler(_ =>
+            {
+                File.Delete(dir.Paths.DescriptorFile);
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+            }),
+            new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], stops with { Clock = later }, Ct));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+    }
+
+    /// <summary>With no data directory there is no runtime to stop: the flag writes nothing and makes no folder.</summary>
+    [Fact]
+    public async Task With_start_owed_and_no_data_directory_nothing_is_written()
+    {
+        using var dir = new TempPaths();
+        Directory.Delete(dir.Paths.Root, recursive: true);
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), new FakeProcessControl());
+
+        var exit = await CliApp.RunAsync(["runtime", "stop", "--start-owed"], env, Ct);
+
+        Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
+        Assert.Equal(CliErrors.NoDescriptor, RuntimeVerbs.Envelope(output.ToString()).Code);
+        Assert.False(Directory.Exists(dir.Paths.Root), "a stop with --start-owed made the data directory");
+    }
+
+    /// <summary>The flag's help says whose stop it is for and what it writes.</summary>
+    [Fact]
+    public async Task The_help_of_stop_names_the_flag_and_whose_stop_it_is_for()
+    {
+        using var dir = new TempPaths();
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop", "--help"], env, Ct));
+        var help = string.Join(' ', output.ToString().Split((char[])['\r', '\n', ' '], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("--start-owed", help, StringComparison.Ordinal);
+        Assert.Contains("on behalf of an install or an update, never one a person or an agent asks for", help, StringComparison.Ordinal);
+        Assert.Contains("run/start-owed.json", help, StringComparison.Ordinal);
     }
 
     [Fact]

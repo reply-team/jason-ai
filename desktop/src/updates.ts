@@ -4,7 +4,9 @@
  * computes, offers what it found, downloads it only when the person says so and installs it only when the person says so
  * again, after the runtime this application carries, when it is the one running, has stopped (`own-runtime.ts`) and the
  * application's own folder has then been kept aside (`rollback.ts`): the installer replaces the executable the runtime
- * runs from, and the first start of the new version starts the runtime again from the new one. A runtime that does not
+ * runs from, and the first start of the new version starts the runtime again from the new one. The one other word it acts
+ * on is a terminal's: `jason update apply` asks for one version by a request (`update-request.ts`, `take`), which is
+ * checked, downloaded and installed as one act, silently and with no start after it, or refused with a reason. A runtime that does not
  * stop, or one that did not answer while the process its run file names still runs, keeps the update from being
  * installed with the copy an earlier update kept left as it was, and the person is told why. electron-updater is handed
  * in, so nothing here needs Electron to be tested.
@@ -58,10 +60,16 @@ export interface FeedUpdater {
     allowPrerelease: boolean;
     allowDowngrade: boolean;
     logger: unknown;
-    setFeedURL(options: typeof feed): void;
+    /**
+     * Whether the installer starts the application after it installs where it is not silent; on macOS whether Squirrel's
+     * downloaded update quits into a start of the new version or only quits (`MacUpdater.handleUpdateDownloaded`).
+     */
+    autoRunAppAfterInstall: boolean;
+    /** The releases above, or a generic feed's address, which a request's loopback feed is (`update-request.ts`). */
+    setFeedURL(options: typeof feed | string): void;
     checkForUpdates(): Promise<{ isUpdateAvailable: boolean; updateInfo: { version: string } } | null>;
     downloadUpdate(): Promise<unknown>;
-    quitAndInstall(): void;
+    quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
     /** False where electron-updater cannot replace what runs; then it looks for nothing. */
     isUpdaterActive(): boolean;
     on(event: 'error', listener: (error: Error) => void): unknown;
@@ -232,6 +240,10 @@ export function keepRefusal(stopped: boolean, version: string): string {
     return `${why} ${left} You can install the new version yourself: download it for your system from ${releasePage(version)} and install it as you installed this one.`;
 }
 
+/** What the person is told when the menu's install is chosen while a terminal's request installs the update itself. */
+export const requestUnderWayRefusal =
+    'An update asked for from a terminal is under way and installs itself: Jason closes for it once it is ready. Nothing was done from the menu.';
+
 /** What the person is told when the installer stopped before it finished, so Jason stayed open. */
 export function installRefusal(stopped: boolean, kept: string | null): string {
     return [
@@ -266,6 +278,67 @@ export interface UpdaterDeps {
     changed(state: UpdateState): void;
 }
 
+/** A terminal's request as the updater takes it: the one version it names, and a loopback feed or null for the releases. */
+export interface TakenRequest {
+    to: string;
+    feed: string | null;
+}
+
+/**
+ * How a request is taken: whether it goes on to install once the update is downloaded, which a window that takes it does
+ * only where the switch says it may close (`windowOpenUpdate` in `update-request.ts`); and `late`, which hears an install
+ * that failed after `quitAndInstall` returned, as Squirrel says it on macOS only once it has looked.
+ */
+export interface TakenHow {
+    install: boolean;
+    /**
+     * Where the request waits for the verb's go (`--await-go`): heard once the update is downloaded and before anything is
+     * stopped, kept or installed; true once the go is there, false when it did not come in time.
+     */
+    go?: () => Promise<boolean>;
+    late?: () => void;
+}
+
+/** A step of a request under way, heard before it is taken. */
+export type TakenStep = { step: 'checking' } | { step: 'downloading'; offered: string } | { step: 'downloaded' } | { step: 'installing'; runtimeStopped: boolean; kept: string | null };
+
+/** How `take` words a refusal: the reason, the version the feed offered, and what was done before it. */
+type Refuse = (reason: TakenEnd, offered?: string | null, done?: { runtimeStopped?: boolean; kept?: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered }) => TakenOutcome;
+
+/** Why the updater refused a request: codes of the request's file (`update-request.ts`). */
+export type TakenRefusal =
+    | 'updater_inactive'
+    | 'busy'
+    | 'version_rejected'
+    | 'check_failed'
+    | 'version_mismatch'
+    | 'download_failed'
+    | 'window_open'
+    | 'go_timed_out'
+    | 'runtime_not_stopped'
+    | 'keep_failed'
+    | 'install_failed';
+
+/**
+ * Why a request ended refused: a code of the file, or `step_unwritten`, the request's file not told a step the verb acts
+ * on (`installing`, `downloaded`), which is never written as itself: the file says `failed`.
+ */
+export type TakenEnd = TakenRefusal | 'step_unwritten';
+
+/** What came of a request: nothing to install, the update handed to the installer, or a refusal and what was done before it. */
+export type TakenOutcome =
+    | { state: 'current' }
+    | { state: 'installing'; offered: string; runtimeStopped: boolean; kept: string | null }
+    | { state: 'refused'; reason: TakenEnd; offered: string | null; runtimeStopped: boolean; kept: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered };
+
+/** What came of an install: handed to the installer, or stopped at one of its three steps with what was done before it. */
+type InstallResult =
+    | { ok: true; runtimeStopped: boolean; kept: string | null }
+    | { ok: false; step: 'runtime'; outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered }
+    | { ok: false; step: 'keep'; runtimeStopped: boolean }
+    | { ok: false; step: 'install'; runtimeStopped: boolean; kept: string | null }
+    | { ok: false; step: 'unwritten'; runtimeStopped: boolean; kept: string | null };
+
 export class Updater {
     private readonly deps: UpdaterDeps;
     private readonly timers: Timers;
@@ -275,6 +348,13 @@ export class Updater {
     private failures = 0;
     private downloadFailures = 0;
     private handle: unknown = null;
+    /** Whether the cadence was started (`start`): a window's updater. One built for a request alone never looks by itself. */
+    private looking = false;
+    /**
+     * Whether a terminal's request that installs is under way (`take` with `how.install`): in a window only under the
+     * `close` switch (`windowOpenUpdate`), where the menu's install would race the request's own; refused while it lasts.
+     */
+    private requestInstalls = false;
 
     constructor(deps: UpdaterDeps) {
         this.deps = deps;
@@ -300,6 +380,13 @@ export class Updater {
     }
 
     start(): void {
+        this.prepare();
+        this.looking = true;
+        if (this.active) this.schedule(firstCheckMs);
+    }
+
+    /** What every use of electron-updater is set up with: nothing downloaded or installed by itself, the releases read. */
+    prepare(): void {
         const { updater } = this.deps;
         updater.autoDownload = false;
         updater.autoInstallOnAppQuit = false;
@@ -307,7 +394,6 @@ export class Updater {
         updater.allowDowngrade = false;
         updater.logger = null;
         updater.setFeedURL(feed);
-        if (this.active) this.schedule(firstCheckMs);
     }
 
     stop(): void {
@@ -394,16 +480,141 @@ export class Updater {
      * before anything is kept, replaced or closed; a copy that cannot be kept ends it before anything is closed.
      */
     async install(): Promise<boolean> {
+        if (this.requestInstalls) {
+            this.deps.refused(requestUnderWayRefusal);
+            return false;
+        }
         if (this.state.step !== 'downloaded') return false;
         const { version } = this.state;
+        const result = await this.installing(version, null);
+        if (result.ok) return true;
+        if (result.step === 'runtime') this.deps.refused(runtimeRefusal(result.outcome));
+        else if (result.step === 'keep') this.deps.refused(keepRefusal(result.runtimeStopped, version));
+        else this.deps.refused(installRefusal(result.runtimeStopped, result.kept));
+        return false;
+    }
+
+    /**
+     * A terminal's request (`update-request.ts`): the version it names, looked for on the feed it names or the releases,
+     * downloaded, and, where `how` says so, installed as `install` installs, but silently and with no start of the
+     * application after it: `quitAndInstall(true, false)`, which the pinned electron-updater turns on Windows into the
+     * installer's `--updated /S` with no `--force-run` (`BaseUpdater.quitAndInstall`, `NsisUpdater.doInstall`), with
+     * `autoRunAppAfterInstall` off, which on macOS makes Squirrel's downloaded update quit the application rather than
+     * start it again (`MacUpdater.handleUpdateDownloaded`), ShipIt installing once it has quit. `progress` hears each step
+     * before it is taken, the install's before the installer is handed anything. A feed that offers another version, or
+     * none, refuses the request: it names the version the terminal planned for. So does a version whose first start failed
+     * here, which the cadence never offers either. Nothing is shown to a person: the reason is the answer.
+     */
+    async take(request: TakenRequest, how: TakenHow, progress: (step: TakenStep) => boolean | void): Promise<TakenOutcome> {
+        const refused: Refuse = (reason, offered = null, done = {}) => ({
+            state: 'refused',
+            reason,
+            offered,
+            runtimeStopped: done.runtimeStopped ?? false,
+            kept: done.kept ?? null,
+            ...(done.runtime === undefined ? {} : { runtime: done.runtime }),
+        });
+        if (!this.active) return refused('updater_inactive');
+        if (request.to === this.deps.version) return { state: 'current' };
+        const step = this.state.step;
+        if (step === 'checking' || step === 'downloading' || step === 'installing') return refused('busy');
+        if (isRejected(readRollback(this.deps.rollback), request.to)) return refused('version_rejected');
+        // No look of the cadence runs while the request is under way; one is scheduled again when it ends short of an install.
+        this.stop();
+        const before = this.state;
+        const back: UpdateState = before.step === 'downloaded' || before.step === 'offered' ? before : { step: 'idle' };
+        let handed = false;
+        this.requestInstalls = how.install;
+        try {
+            const outcome = await this.taking(request, how, progress, back, refused);
+            handed = outcome.state === 'installing';
+            return outcome;
+        } finally {
+            // On every path, a throw included: the releases' feed put back, and short of the installer no step left under
+            // way and the cadence looking again.
+            this.deps.updater.setFeedURL(feed);
+            this.requestInstalls = false;
+            if (!handed) {
+                const now = this.current;
+                if (now.step === 'installing') this.show({ step: 'downloaded', version: now.version });
+                else if (now.step === 'downloading') this.show({ step: 'offered', version: now.version });
+                else if (now.step === 'checking') this.show(back);
+                if (this.looking) this.schedule(nextCheckDelay(this.failures));
+            }
+        }
+    }
+
+    /** `take` once the cadence is held: its look, its download and its install, the feed and the cadence being `take`'s. */
+    private async taking(request: TakenRequest, how: TakenHow, progress: (step: TakenStep) => boolean | void, back: UpdateState, refused: Refuse): Promise<TakenOutcome> {
+        const ready = this.state.step === 'downloaded' && this.state.version === request.to && request.feed === null;
+        if (!ready) {
+            progress({ step: 'checking' });
+            this.show({ step: 'checking' });
+            this.deps.updater.setFeedURL(request.feed ?? feed);
+            let seen: string | null;
+            let offered: string | null;
+            try {
+                const result = await this.deps.updater.checkForUpdates();
+                seen = result?.updateInfo.version ?? null;
+                offered = result?.isUpdateAvailable === true ? seen : null;
+            } catch {
+                this.deps.log.warn('update_failed', { Step: 'check', Failures: 1 });
+                this.show(back);
+                return refused('check_failed');
+            }
+            if (offered !== request.to) {
+                this.deps.log.info('update_checked', { Available: offered !== null });
+                this.show(back);
+                return refused('version_mismatch', seen);
+            }
+            this.deps.log.info('update_offered', { Version: offered });
+            progress({ step: 'downloading', offered });
+            this.show({ step: 'downloading', version: offered });
+            try {
+                await this.deps.updater.downloadUpdate();
+            } catch {
+                this.downloadFailures += 1;
+                this.deps.log.warn('update_failed', { Step: 'download', Failures: this.downloadFailures });
+                this.show({ step: 'offered', version: offered });
+                return refused('download_failed', offered);
+            }
+            this.downloadFailures = 0;
+            this.deps.log.info('update_downloaded', { Version: offered });
+            this.show({ step: 'downloaded', version: offered });
+        }
+        // A window that may not close stops here: the update waits under its menu's install item.
+        if (!how.install) return refused('window_open', request.to);
+        // A request that waits for the go says it is downloaded and waits: no go in time stops nothing, keeps nothing and
+        // installs nothing, and the download waits under the install item.
+        if (how.go !== undefined) {
+            // A `downloaded` the file was not told is a go that can never come: refused at once, nothing stopped or kept.
+            if (progress({ step: 'downloaded' }) === false) return refused('step_unwritten', request.to);
+            if (!(await how.go())) {
+                this.deps.log.info('update_go_missed', { Version: request.to });
+                return refused('go_timed_out', request.to);
+            }
+        }
+        const result = await this.installing(request.to, { late: how.late, progress });
+        if (result.ok) return { state: 'installing', offered: request.to, runtimeStopped: result.runtimeStopped, kept: result.kept };
+        if (result.step === 'runtime') return refused('runtime_not_stopped', request.to, { runtime: result.outcome });
+        if (result.step === 'keep') return refused('keep_failed', request.to, { runtimeStopped: result.runtimeStopped });
+        if (result.step === 'unwritten') return refused('step_unwritten', request.to, { runtimeStopped: result.runtimeStopped, kept: result.kept });
+        return refused('install_failed', request.to, { runtimeStopped: result.runtimeStopped, kept: result.kept });
+    }
+
+    /**
+     * The install both words share: the runtime stopped, the application kept aside, the desk let go and the installer
+     * handed the update. `request` is null for the person's, whose installer runs as it always did, else the terminal's.
+     */
+    private async installing(version: string, request: { late: (() => void) | undefined; progress: (step: TakenStep) => boolean | void } | null): Promise<InstallResult> {
         this.show({ step: 'installing', version });
         const running = await this.deps.stopRuntime().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
         if (running.kind === 'failed' || running.kind === 'unanswered') {
             this.deps.log.error('update_failed', { Step: 'runtime', Failures: 1 });
             this.show({ step: 'downloaded', version });
-            this.deps.refused(runtimeRefusal(running));
-            return false;
+            return { ok: false, step: 'runtime', outcome: running };
         }
+        const runtimeStopped = running.kind === 'stopped';
         let kept: string | null;
         try {
             kept = await keepPrevious(this.deps.rollback, this.deps.application, this.deps.version, version);
@@ -412,31 +623,54 @@ export class Updater {
             this.deps.log.warn('update_keep_failed', { Code: typeof code === 'string' ? code : 'unknown' });
             this.deps.log.error('update_failed', { Step: 'keep', Failures: 1 });
             this.show({ step: 'downloaded', version });
-            this.deps.refused(keepRefusal(running.kind === 'stopped', version));
-            return false;
+            return { ok: false, step: 'keep', runtimeStopped };
         }
         this.deps.log.info('update_installing', { From: this.deps.version, To: version });
+        // `installing` is on disk before the installer is started, or nothing is installed: the verb reads it before it lets
+        // the installer have the application, and an install it was not told of is one it would fight.
+        if (request !== null && request.progress({ step: 'installing', runtimeStopped, kept }) === false) {
+            this.deps.log.error('update_failed', { Step: 'record', Failures: 1 });
+            this.show({ step: 'downloaded', version });
+            return { ok: false, step: 'unwritten', runtimeStopped, kept };
+        }
         this.stop();
         await this.deps.beforeInstall();
         let failed = false;
         const failure = (): void => {
             failed = true;
         };
-        this.deps.updater.on('error', failure);
+        const { updater } = this.deps;
+        updater.on('error', failure);
         try {
-            this.deps.updater.quitAndInstall();
+            if (request === null) updater.quitAndInstall();
+            else {
+                updater.autoRunAppAfterInstall = false;
+                updater.quitAndInstall(true, false);
+            }
         } catch {
             failed = true;
         } finally {
-            this.deps.updater.removeListener('error', failure);
+            updater.removeListener('error', failure);
         }
-        if (!failed) return true;
+        if (!failed) {
+            // An error electron-updater says after this, Squirrel's on macOS, means the update was not installed after all.
+            const late = request?.late;
+            if (late !== undefined) {
+                const heard = (): void => {
+                    updater.removeListener('error', heard);
+                    this.deps.log.error('update_failed', { Step: 'install', Failures: 1 });
+                    late();
+                };
+                updater.on('error', heard);
+            }
+            return { ok: true, runtimeStopped, kept };
+        }
+        if (request !== null) updater.autoRunAppAfterInstall = true;
         // electron-updater did not quit: the installer stopped before it finished. The copy stays recorded as pending.
         this.deps.log.error('update_failed', { Step: 'install', Failures: 1 });
         this.show({ step: 'downloaded', version });
         await this.deps.afterRefused();
-        this.deps.refused(installRefusal(running.kind === 'stopped', kept));
-        return false;
+        return { ok: false, step: 'install', runtimeStopped, kept };
     }
 
     /** The item's next step: a line said at another step is cleared; a look under way (`checking`) keeps it. */

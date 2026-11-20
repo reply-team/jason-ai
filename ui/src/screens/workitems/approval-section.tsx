@@ -4,6 +4,7 @@ import { approvalGate, readingSentence, type ApprovalGate, type Said } from '../
 import { ActionsRow } from '../../layout/actions-row';
 import { href } from '../../router';
 import { MessageCard } from '../attention/message-card';
+import { SearchLines } from '../attention/search-lines';
 import { REPLIES, STALE_SENTENCE, isStale } from '../attention/message-edit';
 import { Doubts } from '../send-modes/doubts';
 
@@ -83,6 +84,7 @@ export function ApprovalSection({ item, approvalId, read, busy, checking, onAppr
             {intent && (
                 <div className="preview">
                     <p>{intent}</p>
+                    <SearchLines search={detail?.search ?? null} />
                 </div>
             )}
             {whole && detail && <MessageCard detail={detail} reply={whole.operation === REPLIES} />}

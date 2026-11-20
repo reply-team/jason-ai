@@ -1,5 +1,8 @@
 using System.Net;
 using Jason.Cli;
+using Jason.Cli.Autostart;
+using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
@@ -37,6 +40,52 @@ public class UninstallOrderTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(["autostart.remove", "system.shutdown"], log.Steps.Take(2));
+    }
+
+    /// <summary>
+    /// On macOS the order is the other way round: taking the job out of launchd ends the process launchd started at login,
+    /// the runtime itself, with no drain, and the job (RunAtLoad, no KeepAlive) starts no runtime that stopped. So the
+    /// runtime is drained and stopped first, and the registration is taken out after it.
+    /// </summary>
+    [Fact]
+    public async Task On_macos_the_registration_is_taken_out_after_the_runtime_has_stopped()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var registrar = new LoggingRegistrar(log, Cli.Autostart.AutostartPlatform.MacOs);
+
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+
+        var (exit, _, _) = await RunAsync(dir, log, StopsWhenAsked(dir, log, processes), registrar, processes: processes);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(["system.shutdown", "autostart.remove"], log.Steps.Take(2));
+        Assert.Equal(1, registrar.Removals);
+    }
+
+    /// <summary>
+    /// And on macOS a runtime that will not stop leaves the registration where it was, and the refusal does not say it was
+    /// taken away.
+    /// </summary>
+    [Fact]
+    public async Task On_macos_a_runtime_that_will_not_stop_leaves_the_registration_in_place()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STUBBORN"));
+        var log = new StepLog();
+        var registrar = new LoggingRegistrar(log, Cli.Autostart.AutostartPlatform.MacOs);
+
+        var (exit, output, remover) = await RunAsync(dir, log, AcknowledgesAndStays(log), registrar, everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(["system.shutdown"], log.Steps);
+        Assert.Equal(0, registrar.Removals);
+        Assert.Contains("its logon registration included", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("had already been taken away", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
     }
 
     /// <summary>
@@ -449,6 +498,33 @@ public class UninstallOrderTests
     }
 
     /// <summary>
+    /// On macOS the uninstall's first step asks for the removal that leaves no mark for the label - unloaded without
+    /// <c>-w</c>, which would leave it disabled for a later install's job - where <c>jason runtime autostart disable</c> asks
+    /// for the one that keeps <c>-w</c>, a person's wish that the runtime not start at logon.
+    /// </summary>
+    [Fact]
+    public async Task On_macOS_the_uninstall_unloads_the_runtimes_job_without_w_and_disable_keeps_it()
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar(Cli.Autostart.AutostartPlatform.MacOs)
+        {
+            State = new Cli.Autostart.AutostartState(true, ["jason"], "ai.jason.runtime.plist"),
+        };
+
+        var (exit, _, _) = await RunAsync(dir, new StepLog(), RuntimeVerbs.NeverCalled(), registrar, running: false);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var uninstalled = Assert.Single(registrar.Removed);
+        Assert.Equal([[LaunchdJobs.Launchctl, "unload", uninstalled.ArtifactPath]], uninstalled.Remove);
+        Assert.Equal(AutostartArtifacts.LeavingNoMark(uninstalled, AccountDatabase.UserId()).ClearsDisabledIn, uninstalled.ClearsDisabledIn);
+
+        var env = new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths, Autostart: registrar, InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"));
+        Assert.Equal(ExitCodes.Success, RuntimeAutostartCommands.Disable(env, human: false));
+        Assert.Equal([[LaunchdJobs.Launchctl, "unload", "-w", registrar.Removed[^1].ArtifactPath]], registrar.Removed[^1].Remove);
+        Assert.Empty(registrar.Removed[^1].ClearsDisabledIn);
+    }
+
+    /// <summary>
     /// And the plan says, on Windows, that the old task goes too where there is one: a dry run that left out the one
     /// thing a real run removes would not be a dry run of it. The plan does not ask after it — only the removal does —
     /// so it says so conditionally.
@@ -637,7 +713,7 @@ public class UninstallOrderTests
         TempPaths dir,
         StepLog log,
         HttpMessageHandler handler,
-        RecordingRegistrar? registrar = null,
+        Cli.Autostart.IAutostartRegistrar? registrar = null,
         FakeProcessControl? processes = null,
         bool everything = false,
         bool running = true,
@@ -674,7 +750,7 @@ public class UninstallOrderTests
             // Beside the data directory rather than in it: a data directory holding the installation is one the
             // purge refuses, which is not what these tests are about.
             InstallPath: install,
-            Autostart: (Cli.Autostart.IAutostartRegistrar?)registrar ?? new LoggingRegistrar(log),
+            Autostart: registrar ?? new LoggingRegistrar(log),
             Harnesses: HarnessLocators.At(harness),
             Removes: remover,
             SearchPath: searchPath);
@@ -692,9 +768,9 @@ public class UninstallOrderTests
     }
 
     /// <summary>A registrar that records into the shared log, so the order asserted is the machine's order.</summary>
-    private sealed class LoggingRegistrar(StepLog log) : Cli.Autostart.IAutostartRegistrar
+    private sealed class LoggingRegistrar(StepLog log, Cli.Autostart.AutostartPlatform platform = Cli.Autostart.AutostartPlatform.Windows) : Cli.Autostart.IAutostartRegistrar
     {
-        public Cli.Autostart.AutostartPlatform Platform => Cli.Autostart.AutostartPlatform.Windows;
+        public Cli.Autostart.AutostartPlatform Platform => platform;
 
         public int Removals { get; private set; }
 

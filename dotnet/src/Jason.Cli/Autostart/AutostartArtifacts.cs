@@ -51,15 +51,33 @@ public static class AutostartArtifacts
     /// </remarks>
     public static string TaskName(string account) => $"Jason-{account}";
 
+    /// <summary>schtasks, by its path in Windows' system directory: a system tool is started by its full path.</summary>
+    public static string Schtasks => Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+
+    /// <summary>systemctl, by its full path on this machine (<see cref="SystemctlOf"/>).</summary>
+    public static string Systemctl => SystemctlOf(File.Exists);
+
+    /// <summary>
+    /// systemctl's full path: the first of <c>/usr/bin/systemctl</c> and <c>/bin/systemctl</c> that exists, and the first
+    /// where neither does, whose run is then refused as a tool that is not there.
+    /// </summary>
+    internal static string SystemctlOf(Func<string, bool> exists)
+    {
+        ArgumentNullException.ThrowIfNull(exists);
+        const string usrBin = "/usr/bin/systemctl";
+        const string bin = "/bin/systemctl";
+        return !exists(usrBin) && exists(bin) ? bin : usrBin;
+    }
+
     /// <summary>The query for one task by its name, asking for a code rather than a sentence (see <see cref="QueryFor"/>).</summary>
-    public static IReadOnlyList<string> TaskQuery(string name) => ["schtasks", "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
+    public static IReadOnlyList<string> TaskQuery(string name) => [Schtasks, "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
 
     /// <summary>
     /// The deletion of one task by its name. <c>/F</c> because without it schtasks asks "(Y/N)?" on the standard input
     /// it inherited and waits there, and a verb would hang without a word; <c>/HRESULT</c> for the same reason the
     /// query asks for it.
     /// </summary>
-    public static IReadOnlyList<string> TaskDelete(string name) => ["schtasks", "/Delete", "/TN", name, "/F", "/HRESULT"];
+    public static IReadOnlyList<string> TaskDelete(string name) => [Schtasks, "/Delete", "/TN", name, "/F", "/HRESULT"];
 
     /// <summary>
     /// Whether a registered command line is the one this product registers: the runtime itself, detached, on a data
@@ -99,13 +117,19 @@ public static class AutostartArtifacts
     /// does a user unit, since the user manager's environment reads no shell profile. Null or empty, neither carries
     /// one. A logon task ignores it: it starts with the account's own environment.
     /// </param>
+    /// <param name="namesDataDirectory">
+    /// Whether the line names the data directory with <c>--data-dir</c>. False only where a registration made before the
+    /// line named one is made again (<c>jason install</c> moving it to another executable): it kept the runtime on the
+    /// default data directory, and keeps doing so.
+    /// </param>
     public static AutostartRegistration Compose(
         AutostartPlatform platform,
         IReadOnlyList<string> run,
         string dataDirectory,
         string home,
         string account,
-        string? searchPath = null)
+        string? searchPath = null,
+        bool namesDataDirectory = true)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
@@ -115,7 +139,7 @@ public static class AutostartArtifacts
             throw new ArgumentException("There is no program to register.", nameof(run));
         }
 
-        var line = Line(run, dataDirectory);
+        var line = namesDataDirectory ? Line(run, dataDirectory) : [.. run, "runtime", "run", "--detached"];
         return platform switch
         {
             AutostartPlatform.Windows => Windows(line, dataDirectory, account),
@@ -123,6 +147,47 @@ public static class AutostartArtifacts
             AutostartPlatform.Linux => Linux(line, home, string.IsNullOrEmpty(searchPath) ? null : searchPath),
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "There is nothing to compose for a platform that cannot register anything."),
         };
+    }
+
+    /// <summary>
+    /// The removal <c>jason uninstall</c> makes, which leaves no mark for the name: on macOS the job is unloaded through its
+    /// file without <c>-w</c>, and a disabled record an earlier removal with <c>-w</c> left for the label is cleared in each of
+    /// this account's two domains that records it, and in no other. Every other platform's removal is the one <c>disable</c>
+    /// makes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>-w</c> "Overrides the Disabled key and sets it to false or true for the load and unload subcommands respectively",
+    /// and that state outlives the file: "Once a service is disabled, it cannot be loaded in the specified domain until it is
+    /// once again enabled. This state persists across boots of the device." A label left disabled after an uninstall would
+    /// refuse the job a later install registers under the same label. <c>disable</c> keeps <c>-w</c>: there a person asks that
+    /// the runtime not start at logon, and where its file could not be deleted the disabled state is what keeps it from
+    /// loading at the next login; its <c>enable</c> loads with <c>-w</c> only where that state stands, which sets it back to
+    /// false, and otherwise loads plainly and writes no state (<see cref="LaunchAgentRegistrar.Apply"/>).
+    /// </para>
+    /// <para>
+    /// The clearing is <c>launchctl enable &lt;domain&gt;/ai.jason.runtime</c>: <c>enable</c> "may only target services
+    /// within the system domain or user and user-login domains", and <c>gui/&lt;uid&gt;</c> is "another form of the
+    /// <c>login</c> specifier", the user-login domain "created when the user logs in at the GUI" (launchctl(1)); the other is
+    /// <c>user/&lt;uid&gt;</c>. <c>enable</c> writes a record of its own: on a label no record names it leaves the label
+    /// recorded as enabled, a record no command run without administrator rights removes. So each domain is read first with
+    /// <c>launchctl print-disabled</c>, and <c>enable</c> runs only where the label is recorded as disabled
+    /// (<see cref="LaunchdJobs.ClearDisabled"/>): where no record stands, none is written. Composed only where the account's
+    /// user id is known.
+    /// </para>
+    /// </remarks>
+    /// <param name="registration">The registration as a removal composes it.</param>
+    /// <param name="userId">This account's user id on macOS; null where it is not known.</param>
+    public static AutostartRegistration LeavingNoMark(AutostartRegistration registration, uint? userId)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        return registration.Platform is not AutostartPlatform.MacOs
+            ? registration
+            : registration with
+            {
+                Remove = [[LaunchdJobs.Launchctl, "unload", registration.ArtifactPath]],
+                ClearsDisabledIn = userId is { } account ? LaunchdJobs.Domains(account) : [],
+            };
     }
 
     /// <summary>
@@ -144,8 +209,8 @@ public static class AutostartArtifacts
     public static IReadOnlyList<string> QueryFor(AutostartPlatform platform, string account) => platform switch
     {
         AutostartPlatform.Windows => TaskQuery(TaskName(account)),
-        AutostartPlatform.MacOs => ["launchctl", "list", Label],
-        AutostartPlatform.Linux => ["systemctl", "--user", "is-enabled", UnitName],
+        AutostartPlatform.MacOs => [LaunchdJobs.Launchctl, "list", Label],
+        AutostartPlatform.Linux => [Systemctl, "--user", "is-enabled", UnitName],
         _ => [],
     };
 
@@ -278,7 +343,7 @@ public static class AutostartArtifacts
             name,
             document,
             xml,
-            [["schtasks", "/Create", "/XML", document, "/TN", name, "/F", "/HRESULT"]],
+            [[Schtasks, "/Create", "/XML", document, "/TN", name, "/F", "/HRESULT"]],
             [TaskDelete(name)],
             QueryFor(AutostartPlatform.Windows, account),
             line);
@@ -320,8 +385,8 @@ public static class AutostartArtifacts
             Label,
             plistPath,
             plist,
-            [["launchctl", "load", "-w", plistPath]],
-            [["launchctl", "unload", "-w", plistPath]],
+            [[LaunchdJobs.Launchctl, "load", plistPath]],
+            [[LaunchdJobs.Launchctl, "unload", "-w", plistPath]],
             QueryFor(AutostartPlatform.MacOs, string.Empty),
             line,
             searchPath);
@@ -358,12 +423,12 @@ public static class AutostartArtifacts
             unitPath,
             unit,
             [
-                ["systemctl", "--user", "daemon-reload"],
-                ["systemctl", "--user", "enable", UnitName],
+                [Systemctl, "--user", "daemon-reload"],
+                [Systemctl, "--user", "enable", UnitName],
             ],
             [
-                ["systemctl", "--user", "disable", UnitName],
-                ["systemctl", "--user", "daemon-reload"],
+                [Systemctl, "--user", "disable", UnitName],
+                [Systemctl, "--user", "daemon-reload"],
             ],
             QueryFor(AutostartPlatform.Linux, string.Empty),
             line,

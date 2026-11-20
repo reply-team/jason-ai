@@ -128,16 +128,49 @@ public class UpdateLaunchEnvironmentTests
         {
             Environment.SetEnvironmentVariable(UpdateLaunch.Variable, "inherited");
 
-            var marked = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started");
+            var marked = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started");
             Assert.Equal("started", marked.Environment[UpdateLaunch.Variable]);
             Assert.DoesNotContain(marked.ArgumentList, argument => argument.Contains("started", StringComparison.Ordinal));
 
-            var plain = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], updateLaunch: null);
+            var plain = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], updateLaunch: null);
             Assert.False(plain.Environment.ContainsKey(UpdateLaunch.Variable), "A launch that is not the update's passed a mark on.");
         }
         finally
         {
             Environment.SetEnvironmentVariable(UpdateLaunch.Variable, original);
+        }
+    }
+
+    /// <summary>
+    /// The update's lock goes to the one child a part of the update runs and waits for, in its environment and never on its
+    /// command line; never to any other run or to a runtime, even where this process has one set; and a process that was
+    /// handed one takes it out of its own environment as it reads it, so nothing it starts carries it on.
+    /// </summary>
+    [Fact]
+    public void The_updates_lock_goes_only_to_the_child_it_is_handed_to()
+    {
+        using var dir = new TempPaths();
+        var original = Environment.GetEnvironmentVariable(UpdateLock.Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(UpdateLock.Variable, "inherited");
+
+            var handed = RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason"), "update", "apply", "--finish"], "the-nonce");
+            Assert.Equal("the-nonce", handed.Environment[UpdateLock.Variable]);
+            Assert.DoesNotContain(handed.ArgumentList, argument => argument.Contains("the-nonce", StringComparison.Ordinal));
+
+            var plain = RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "Jason"), "--update-settle"]);
+            Assert.False(plain.Environment.ContainsKey(UpdateLock.Variable), "a run the lock was not handed to inherited it");
+            var launch = RuntimeProcessControl.LaunchStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason")], "started");
+            Assert.False(launch.Environment.ContainsKey(UpdateLock.Variable), "a runtime was handed the update's lock");
+
+            Assert.Equal("inherited", UpdateLock.Handed(null));
+            Assert.Null(Environment.GetEnvironmentVariable(UpdateLock.Variable));
+            Assert.Equal("given", UpdateLock.Handed(new Dictionary<string, string> { [UpdateLock.Variable] = "given" }));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UpdateLock.Variable, original);
         }
     }
 }

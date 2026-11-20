@@ -28,6 +28,18 @@ installation looks stuck for the same reason.
 jason runtime status --human
 ```
 
+**A runtime that will not start on its data.** When `jason runtime start` answers `data_newer`, the database was
+changed by a newer Jason, and this one refuses to run on it: it started nothing and changed nothing. The repair is
+to update this Jason, as the refusal's own sentence says: `jason update apply`, or Check for Updates in Jason
+Desktop. Never restore an older backup over the database, delete anything in the data directory, or start an older
+build on it to get past the refusal: the data is the newer version's, and only that version or a later one reads it.
+
+**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason status`'s optional `move` check says
+where the move of a command-line install into Jason Desktop stands. It never stops work: until the move retires it, the
+command-line install answers as `jason`, its runtime with it. Where the check names a command, that is the repair, run
+on the person's word; where it names none, the move waits on something no command typed here changes, and the check says
+what. `operating-the-installation` says the rest.
+
 **The item itself** — its status, its error code, how many attempts it has had, and which profile it ran
 under. The code is the answer; everything below is how to read it.
 
@@ -404,7 +416,8 @@ A restart is a stop you run yourself: ask first, as "Starting and stopping it" i
 jason runtime restart
 ```
 
-**Applying an update**, when the installed version is the known cause. That is `operating-the-installation`.
+**Applying an update**, when the installed version is the known cause, and always when a start answered `data_newer`.
+That is `operating-the-installation`.
 
 ## What is not a repair
 

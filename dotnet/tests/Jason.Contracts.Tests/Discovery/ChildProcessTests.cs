@@ -17,9 +17,9 @@ public class ChildProcessTests
     [Critical(Family.B1, "the door's two settings, observed on a real child")]
     public void A_child_is_started_with_no_window_and_without_the_shell()
     {
-        var start = ChildProcess.StartInfo("program");
+        var start = ChildProcess.StartInfo(FullPath);
 
-        Assert.Equal("program", start.FileName);
+        Assert.Equal(FullPath, start.FileName);
         Assert.True(start.CreateNoWindow);
         Assert.False(start.UseShellExecute);
         Assert.Equal((false, false, false), (start.RedirectStandardInput, start.RedirectStandardOutput, start.RedirectStandardError));
@@ -33,7 +33,7 @@ public class ChildProcessTests
     [Critical(Family.F4, "stdin encoding of a Jason child")]
     public void A_child_that_speaks_to_jason_is_spoken_to_in_utf_8_without_a_byte_order_mark()
     {
-        var start = ChildProcess.StartInfo("program", ChildKind.SpeaksToJason);
+        var start = ChildProcess.StartInfo(FullPath, ChildKind.SpeaksToJason);
 
         Assert.True(start.CreateNoWindow);
         Assert.False(start.UseShellExecute);
@@ -55,7 +55,7 @@ public class ChildProcessTests
     [InlineData(ChildKind.SystemToolWithInput, true)]
     public void A_system_tool_is_read_in_the_console_s_code_page(ChildKind kind, bool input)
     {
-        var start = ChildProcess.StartInfo("program", kind);
+        var start = ChildProcess.StartInfo(FullPath, kind);
 
         Assert.True(start.CreateNoWindow);
         Assert.False(start.UseShellExecute);
@@ -63,10 +63,71 @@ public class ChildProcessTests
         Assert.Equal<Encoding?>([null, null, null], [start.StandardInputEncoding, start.StandardOutputEncoding, start.StandardErrorEncoding]);
     }
 
+    /// <summary>A program named by its full path on whichever system runs the row.</summary>
+    private static readonly string FullPath = Path.Combine(Path.GetTempPath(), "program");
+
+    /// <summary>
+    /// Every child is started by its full path, so the door refuses a name that is not one through either of its ways in
+    /// and under every kind: a bare name, a relative path, nothing at all. A name the operating system looked up would be
+    /// looked up in places no caller chose, the working folder and on Windows the folder of the program that starts it.
+    /// </summary>
+    [Theory]
+    [InlineData(ChildKind.SystemTool, "schtasks")]
+    [InlineData(ChildKind.SystemTool, "launchctl")]
+    [InlineData(ChildKind.SystemToolWithInput, "powershell.exe")]
+    [InlineData(ChildKind.SystemToolWithInput, "bin/tool")]
+    [InlineData(ChildKind.SystemTool, "")]
+    [InlineData(ChildKind.SpeaksToJason, "dotnet")]
+    [InlineData(ChildKind.SpeaksToJason, "./agent")]
+    [InlineData(null, "rundll32")]
+    [InlineData(null, "xdg-open")]
+    [InlineData(null, "bin/tool")]
+    [InlineData(null, "")]
+    public void A_child_named_by_anything_but_its_full_path_is_refused(ChildKind? kind, string program)
+    {
+        var refused = Assert.ThrowsAny<ArgumentException>(() => kind is { } known ? ChildProcess.StartInfo(program, known) : ChildProcess.StartInfo(program));
+
+        Assert.Equal("fileName", refused.ParamName);
+    }
+
+    /// <summary>
+    /// On Windows a path that names no drive is no full path: one from the top of the current drive, which names whatever
+    /// drive the process stands on, and one relative to a drive's current folder are refused like a bare name; a path with
+    /// its drive is taken.
+    /// </summary>
+    [Fact]
+    public void On_windows_a_path_that_names_no_drive_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Drives are Windows' own.");
+
+        foreach (var program in new[] { @"\Windows\System32\schtasks.exe", "/usr/bin/x-terminal-emulator", "C:schtasks.exe" })
+        {
+            Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo(program)).ParamName);
+            foreach (var kind in Enum.GetValues<ChildKind>())
+            {
+                Assert.Equal("fileName", Assert.ThrowsAny<ArgumentException>(() => ChildProcess.StartInfo(program, kind)).ParamName);
+            }
+        }
+
+        var schtasks = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+        Assert.Equal(schtasks, ChildProcess.StartInfo(schtasks, ChildKind.SystemTool).FileName);
+    }
+
+    /// <summary>A full path is started as it was given, through either way in and under every kind.</summary>
+    [Fact]
+    public void A_full_path_is_started_as_it_was_given()
+    {
+        Assert.Equal(FullPath, ChildProcess.StartInfo(FullPath).FileName);
+        foreach (var kind in Enum.GetValues<ChildKind>())
+        {
+            Assert.Equal(FullPath, ChildProcess.StartInfo(FullPath, kind).FileName);
+        }
+    }
+
     [Fact]
     public void A_kind_the_door_does_not_know_is_refused()
     {
-        var refused = Assert.Throws<ArgumentOutOfRangeException>(() => ChildProcess.StartInfo("program", (ChildKind)99));
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(() => ChildProcess.StartInfo(FullPath, (ChildKind)99));
 
         Assert.Equal("kind", refused.ParamName);
     }

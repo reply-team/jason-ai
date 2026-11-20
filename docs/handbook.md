@@ -57,8 +57,10 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
 responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).
 
-A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches
-runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+line your terminal and your agents use. It is installed once, updated once and removed once, and a one-liner installs
+it. On Linux a one-liner installs the executable. Either way it ends by teaching it its role skills, without which
+every role it launches runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
 said it could not, asking whether it can work, and starting it — for a person or an agent.
 
 ### Ask an agent to do it
@@ -176,11 +178,13 @@ every platform, built from this tree at the release's version.
 
 ## The installation
 
-Each install script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
-executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
-Windows — with its licence and the third-party notices beside it, as `jason-LICENSE` and
-`jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing
-needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
+Each install script works out your platform and verifies the download's SHA-256 before it places anything. On macOS
+and Windows it installs Jason Desktop, its signature checked too, with no administrator rights — on a Mac in
+`/Applications` where your account may write there, else `~/Applications` — opens nothing, and has the `jason` the
+application carries put `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is found;
+another host gets them with `jason skills install --host <host>`. On Linux it installs the executable under your own account, in `~/.local/bin`, with its licence and the
+third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH
+unless you pass `--no-modify-path`. Nothing needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
 could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
 as it stands rather than run the line again, and build nothing instead.
 
@@ -200,6 +204,14 @@ download, drain, stop, swap, start, health check — driven by a ledger written 
 that dies half-way is finished or put back by the next run, and it ends by redeploying the skills this machine
 recorded at the new release's tag and placing the release's UI; an update applied by a build before 0.12.0 needs one
 `jason skills update` after it, and one applied by a build older than the UI step needs one `jason ui install`. `status` says where one stands, and reads the ledger without needing a runtime.
+On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: `apply` hands the update to the
+application's own updater, with no window, and the new version's `jason` finishes it — the plugin packages, the
+runtime's start, the skills, the terminal command and the UI ([release-and-update.md](release-and-update.md) §7). Where
+another update or a `jason install` is under way, it is refused with `update_in_progress` or `install_in_progress`, which
+mean later: let that one end, then run it again. On macOS and Windows a command-line install of an earlier version
+moves into Jason Desktop through that same `apply`: once it is updated, the application is installed and the command line
+moved into it. The update never fails because of the move, `jason status` says where the move stands, and Linux has no
+move ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop").
 
 ### Can this installation start work?
 
@@ -223,8 +235,8 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of eleven names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
+One question, answered check by check. It is one of twelve names in this CLI with no API operation behind
+it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
 `plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
 agent host, or a plain shell, in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
@@ -342,6 +354,10 @@ jason uninstall --human --dry-run
 jason uninstall
 jason uninstall --purge-data --yes
 ```
+
+On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed and an older
+command-line install, and it is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu
+on macOS.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else — a skill you copied into a harness by hand has no

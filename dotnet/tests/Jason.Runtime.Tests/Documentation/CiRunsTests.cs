@@ -264,7 +264,7 @@ public class CiRunsTests
         [VersionOnly] = (["The version this tree carries", "linux-x64"], ["win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         [Hotfix] = (TheHotfixSet, ["an update on win-x64"]),
         ["tested"] = (["The version this tree carries"], ["linux-x64", "win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
-        ["everything"] = (Required, []),
+        ["everything"] = ([.. Required, "install.sh on macos"], []),
         ["none"] = (["The version this tree carries"], []),
     };
 
@@ -1208,7 +1208,7 @@ public class CiRunsTests
         var (_, byRule, byCondition) = Report(decided.Outputs);
         Assert.Equal(["an update on win-x64"], byRule);
         Assert.Equal(
-            ["The suite under a release's version", "install.ps1 on windows", "jason.exe on a Windows older than 24H2"],
+            ["The suite under a release's version", "install.ps1 on windows", "install.sh on macos", "jason.exe on a Windows older than 24H2"],
             byCondition.Order(StringComparer.Ordinal));
         Assert.Contains("is a hotfix's", Assert.Single(Legs(decided.Outputs["skipped"]))["why"], StringComparison.Ordinal);
     }
@@ -1697,7 +1697,8 @@ public class CiRunsTests
             ["older-windows"] = Full,
             ["update-end-to-end"] = Linux,
             ["install-sh"] = Linux,
-            ["install-ps1"] = Full,
+            ["union-windows"] = Full,
+            ["union-macos"] = Full,
             ["ui"] = Linux,
             ["desktop"] = Linux,
             [StandIn] = Skipping,
@@ -1886,7 +1887,7 @@ public class CiRunsTests
     [Fact]
     public void The_install_jobs_require_the_archives_their_run_packaged()
     {
-        foreach (var name in new[] { "install-sh", "install-ps1" })
+        foreach (var name in new[] { "install-sh" })
         {
             var steps = Steps(Mapping(Jobs(), name));
             var assembling = Assert.Single(steps, step => Scalar(step, "name") == "Assemble the feed the way a release is assembled");

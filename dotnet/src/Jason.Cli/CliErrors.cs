@@ -44,6 +44,48 @@ public static class CliErrors
     /// </summary>
     public const string UninstallCarriedByDesktop = "uninstall_carried_by_desktop";
 
+    /// <summary>
+    /// <c>jason uninstall</c> run by the jason the desktop application carries found Jason Desktop open: nothing was read
+    /// or removed, since the application it would remove is running.
+    /// </summary>
+    public const string DesktopRunning = "desktop_running";
+
+    /// <summary>
+    /// <c>jason uninstall</c> run on Windows from a terminal by the jason the desktop application carries found another process
+    /// running that jason, which keeps the application's uninstaller from removing its folder: nothing was removed.
+    /// </summary>
+    public const string JasonRunning = "jason_running";
+
+    /// <summary>
+    /// <c>jason install</c> run by a jason the desktop application does not carry: it sets the machine up for the
+    /// application's own, and nothing was read or written.
+    /// </summary>
+    public const string InstallNotCarried = "install_not_carried";
+
+    /// <summary>
+    /// <c>jason install</c> held the update's lock, <c>&lt;data&gt;/update/update.lock</c>, while it set the machine up, and
+    /// another <c>jason install</c>, an update, its finish or a rollback found it held: nothing was begun. Retryable: the
+    /// setup takes seconds.
+    /// </summary>
+    public const string InstallInProgress = "install_in_progress";
+
+    /// <summary>
+    /// <c>jason install</c> run elevated - on Windows as an administrator above the account's ordinary rights, or as another
+    /// account than the session's; on macOS as root - which would set the terminal command, the skills and a logon
+    /// registration up as that account: nothing was read or written.
+    /// </summary>
+    public const string InstallElevated = "install_elevated";
+
+    /// <summary>
+    /// <c>jason install</c> run by a jason the application carries from a place that goes away: a mounted disk image, or a
+    /// copy macOS runs translocated. Nothing was placed, retired or stopped; the sentence says to move Jason to Applications
+    /// first. Not retryable: the same place answers the same.
+    /// </summary>
+    public const string InstallVanishingPlace = "install_vanishing_place";
+
+    /// <summary><c>jason install</c> on a system it does not set up — anything but macOS and Windows: nothing was read or written.</summary>
+    public const string InstallUnsupported = "install_unsupported";
+
     /// <summary>The log directory exists and <c>jason logs</c> could not read it: nothing was shown rather than less.</summary>
     public const string LogsUnreadable = "logs_unreadable";
 

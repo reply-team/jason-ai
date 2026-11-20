@@ -58,7 +58,7 @@ public static class SkillsCommands
         var host = new Option<string?>("--host") { Description = "Update only this host's skills root: one of " + AgentHosts.Vocabulary + "." };
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
-        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
+        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written. A skill folder of your own under a name Jason ships is never written over, with it or without." };
         var feed = new Option<string?>("--feed") { Description = "Read the release of every deployment from the default source from a different feed, for this run: the https address of its manifest.json, or http on this machine. The records keep their source. Default: the public repository's releases on GitHub." };
 
         foreach (var option in new Option[] { root, host, pack, dryRun, force, feed })
@@ -182,7 +182,10 @@ public static class SkillsCommands
                     members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
                 .ConfigureAwait(false);
 
-            carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused));
+            // A deployment its record already names at the ref it was redeployed at, from a source read at a ref, is where it
+            // was: the files are that ref's either way, and only a directory, read where it stands, can have moved under it.
+            var unmoved = string.Equals(pin, reference, StringComparison.Ordinal) && !Directory.Exists(source);
+            carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused, unmoved));
             progress.Entered = null;
             exit = exit == ExitCodes.Success ? deployed : exit;
         }
@@ -239,7 +242,7 @@ public static class SkillsCommands
         var host = new Option<string?>("--host") { Description = "Deploy only into this host's skills root: one of " + AgentHosts.Vocabulary + ". With --root, the host that directory is for." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
-        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written." };
+        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept, and everything else is written. A skill folder of your own under a name Jason ships is never written over, with it or without." };
         var rolesOnly = new Option<bool>("--roles-only") { Description = "Deploy only the role skills, into this runtime's own directory, and nothing into any agent harness. The role half is the one a runtime cannot work without; the harness half is yours to choose." };
 
         foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force, rolesOnly, feed })
@@ -392,14 +395,16 @@ public static class SkillsCommands
 
         if (options.DryRun)
         {
+            // What the one rule would make of what is already there, in the words a deployment says it in.
+            foreach (var sentence in SkillsDeployer.Judge(plan, env.Paths.RoleSkillsDirectory).Sentences)
+            {
+                env.Out.WriteLine(sentence);
+            }
+
             return (ExitCodes.Success, string.Empty, string.Empty);
         }
 
         var report = SkillsDeployer.Apply(plan, env.Paths, options.Force, TimeProvider.System);
-        foreach (var note in report.Notes)
-        {
-            env.Out.WriteLine(note);
-        }
 
         // What --force actually did, named. The report has carried this list all along and the command path
         // never read it, so the one run that overwrites somebody's work was the one that said least about it.
@@ -429,9 +434,12 @@ public static class SkillsCommands
         var keptSaid = !options.Force && report.Edited.Count > 0
             ? string.Create(CultureInfo.InvariantCulture, $" Kept {report.Edited.Count} file(s) you have edited: {string.Join(", ", report.Edited)}. --force overwrites them.")
             : string.Empty;
+        // And what the one rule made of what was there: each skill adopted, and each left alone as the person's, named in
+        // the same line every time, since this line is the answer `jason update apply` and the set-up's finish carry too.
+        var notesSaid = string.Concat(report.Notes.Select(note => " " + note));
         var said = (report.Written == 0 && report.Problems.Count == 0 && keptSaid.Length == 0
             ? string.Create(CultureInfo.InvariantCulture, $"Already current: nothing to write ({report.Unchanged} files already in place).")
-            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.")) + keptSaid;
+            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.")) + keptSaid + notesSaid;
         env.Out.WriteLine(said);
 
         return (report.Succeeded ? ExitCodes.Success : ExitCodes.ApiError, said, Refusal());
@@ -537,4 +545,8 @@ internal sealed class SkillsUpdateProgress
 /// The verb's own words for it: the pack, the roots, the source and ref and why, and what was written.
 /// </param>
 /// <param name="Refused">What it refused with, as stderr said it, or empty where it did not.</param>
-internal sealed record SkillsUpdateGroup(string Pack, IReadOnlyList<string> Roots, int Exit, string Line, string Refused);
+/// <param name="Unmoved">
+/// Whether its record named the ref it was redeployed at already, from a source read at a ref rather than a directory: a
+/// deployment that was where the run left it.
+/// </param>
+internal sealed record SkillsUpdateGroup(string Pack, IReadOnlyList<string> Roots, int Exit, string Line, string Refused, bool Unmoved = false);

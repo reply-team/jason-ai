@@ -43,8 +43,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
 - Every child process is made by `ChildProcess.StartInfo` and started by `ChildProcess.Start`, with no console
   window of its own and no shell, and on Windows with the starting thread's error mode keeping the boxes the start
   itself raises, for a file that is no program image, off the desktop (`StartErrorMode`); a started child's own
-  loader errors, a missing DLL say, follow the process error mode it inherits; a guard reads the compiled IL of
-  every production assembly and refuses a
+  loader errors, a missing DLL say, follow the process error mode it inherits; a system tool is started by its full
+  path, and the door refuses a name that is not one; a guard reads the compiled IL of every production assembly and
+  refuses a
   `ProcessStartInfo` made anywhere else, a `Process.Start` anywhere else, a write to `CreateNoWindow` or
   `UseShellExecute`, `Process.Start` from a file name, and a read of a process's `StartInfo`. Reflection,
   expression trees and `new T()` are beyond what it reads.
@@ -197,11 +198,14 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, a local act the CLI refused to perform, or a request the runtime took and did not answer within its
   operation's own `timeout_ms` and a margin, `request_timed_out`, which is not retryable), 2 usage error, 3 runtime
-  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations with **eleven declared exceptions**:
+  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**, verbs no operation stands behind:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
-  the runtime neither performs nor is asked about; the `skills` and `update` nouns and the
+  the runtime neither performs nor is asked about; `jason install`, its other half, run by the jason the desktop
+  application carries, sets this machine up for it — the terminal command, the skills of Claude Code and Codex where each is found, an older
+  command-line install retired — and of the runtime asks only to drain and stop one running from the executable it
+  retires, and starts none; the `skills` and `update` nouns and the
   `jason ui install` and `jason plugin install` verbs change this installation's files — deploying skills,
   replacing the executable and redeploying the recorded skills, placing the release's UI as the default
   build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
@@ -256,9 +260,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
   `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
   that is a release tag, `<skill-source>`.
-  `CliApp` states all eleven where the rule is written, each verb's `--help`
+  `CliApp` states all twelve where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these eleven. `export` refuses while the runtime runs unless `--stop`
+  what a bundle never carries — and guards hold the list to these twelve. `export` refuses while the runtime runs unless `--stop`
   is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
   link inside a carried place, following one at its top and judging it where it leads, or a name another system cannot
   hold before anything is written. `import` refuses, before anything is written, an
@@ -270,7 +274,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign
   context, contact custom fields, channel data — is stored as JSON text through a converter, and
   channels live in `contact_channels`. Migrations apply automatically on runtime start after a
-  pre-migration backup; a migration that fails puts that backup back and the start fails saying so,
+  pre-migration backup; before them, first of all, a database holding a migration this build does not know is refused
+  (`data_newer`) with no file added or removed and the database and its log unchanged; a migration that fails puts that backup back and the start fails saying so,
   and older backups are pruned only after a migration has succeeded. Never edit a migration after it
   has been committed; raw SQL such as the journal triggers is added to a new migration when it is
   created. `work_items.result_json` is frozen by a trigger once the item is finished; a filtered

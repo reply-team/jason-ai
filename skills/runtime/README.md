@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.48.8**.
+this pack ships with Jason **0.49.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -32,7 +32,7 @@ description that promises everything matches nothing.
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign, or for the
   searches under one of its audiences, the allowance, offered once the audience is judged to work.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI (without Jason Desktop its tab opens on the Demo, or, while something waits, on one page of text that says so; neither is the person's work) and
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI (this release's UI build draws its console only in Jason Desktop and in a tab the desktop opens itself, so a tab `jason ui open` opens shows the Demo, or, while something waits, one page of text that says so, whether Jason Desktop is installed or not, and neither is the person's work; a custom build under `ui/custom` is served first) and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
   span of one again, the journal's kinds and the plugins that subscribe to them, the hosts it can launch, whether notifications reach the person and turning them off, whether a
   newer version exists, and installing it or taking it off again.

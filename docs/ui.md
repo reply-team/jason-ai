@@ -149,8 +149,12 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
-written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+which account and on which channel, and through which provider. A paid search of the provider's people is named "Find
+people", and under its operation's intent shows its definition: each filter by its own name with the values it takes,
+what it leaves out on one line, and the search's own arguments in plain words ("People to find: up to 50", "At most 2
+per company" and the rest). An approval to send a message shows it under "The message as written", before the raw
+request, which stays
+folded: an email's sender, recipient, subject and body in that order, with the
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
 is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the
@@ -292,9 +296,10 @@ where its pause and its archive are, then takes the conversation off this comput
 transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
-the account this conversation is in, which it does not name), on which channel, and the subject and text, with
-**Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it in Needs
-you; a question's card has its options as buttons and a box for your own answer. Under the mailbox an email goes
+the account this conversation is in, which it does not name), on which channel, and the subject and text, or a search's
+definition and arguments as on [Attention](#attention), with **Approve**, **Edit** (a message written as text),
+**Reject**, which asks once, and **Details**, which opens it in Needs you; a question's card has its options as buttons
+and a box for your own answer. Under the mailbox an email goes
 from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
 not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
 wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or

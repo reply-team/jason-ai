@@ -139,24 +139,32 @@ public static class RuntimeAutostartCommands
     /// this process resolved to: under Homebrew that is a keg the next <c>brew upgrade</c> deletes, and a registration
     /// naming it fails at every logon from then on without saying anything to anybody.
     /// </remarks>
-    internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
-        Composed(env, platform, env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"));
+    internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform, bool namesDataDirectory = true) =>
+        Composed(env, platform, env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"), namesDataDirectory);
 
     /// <summary>
     /// The registration as a removal composes it: by its file and its name, with no search path. A search path differs
     /// from terminal to terminal and from one version to the next, and is not what makes a registration this one, so a
     /// PATH a new registration could not carry never stops <c>disable</c> or <c>jason uninstall</c> taking away what is there.
     /// </summary>
-    internal static AutostartRegistration Removal(CliEnvironment env, AutostartPlatform platform) => Composed(env, platform, searchPath: null);
+    /// <param name="leavesNoMark">
+    /// True for <c>jason uninstall</c>, whose removal leaves nothing standing for the name, the disabled state on macOS
+    /// included (<see cref="AutostartArtifacts.LeavingNoMark"/>); false for <c>disable</c>, which keeps it.
+    /// </param>
+    internal static AutostartRegistration Removal(CliEnvironment env, AutostartPlatform platform, bool leavesNoMark = false) =>
+        leavesNoMark
+            ? AutostartArtifacts.LeavingNoMark(Composed(env, platform, searchPath: null), AccountDatabase.UserId())
+            : Composed(env, platform, searchPath: null);
 
-    private static AutostartRegistration Composed(CliEnvironment env, AutostartPlatform platform, string? searchPath) =>
+    private static AutostartRegistration Composed(CliEnvironment env, AutostartPlatform platform, string? searchPath, bool namesDataDirectory = true) =>
         AutostartArtifacts.Compose(
             platform,
             PackageOwner.Of(env) is { } owner ? [owner.StableEntry] : env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             AutostartRegistrars.ThisAccount(),
-            searchPath);
+            searchPath,
+            namesDataDirectory);
 
     /// <summary>The search path launchd starts an agent on when the agent carries none of its own.</summary>
     internal const string LaunchdSearchPath = "/usr/bin:/bin:/usr/sbin:/sbin";

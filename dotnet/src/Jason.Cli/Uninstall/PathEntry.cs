@@ -296,6 +296,155 @@ public static class PathEntry
     public const string AppendFormat = @"\n%s\n%s\n";
 
     /// <summary>
+    /// How <c>install.sh</c> puts the line into one profile, as the function it defines and calls: nothing where the file
+    /// already holds the whole line, otherwise the marker and the line appended behind a blank line.
+    /// <see cref="AddToProfile"/> is the same rule in C#, which <c>jason install</c> writes by on macOS; the script carries
+    /// this text verbatim, and a test runs it in <c>sh</c> beside the C# on the same files.
+    /// </summary>
+    public const string AddToProfileFunction =
+        """
+        add_to_profile() {
+            if [ -f "$1" ] && grep -qxF "$LINE" "$1"; then
+                return 0
+            fi
+            printf '\n%s\n%s\n' "$MARKER" "$LINE" >> "$1"
+            ADDED="${ADDED:+$ADDED and }$1"
+        }
+        """;
+
+    /// <summary>
+    /// <see cref="AddToProfileFunction"/> in C#: puts the marker and the line for that directory into one profile, as
+    /// <c>install.sh</c> puts them, and says whether it wrote anything.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Byte for byte the script's act.</b> A file that is a regular file, through any link, and holds the line as a whole
+    /// line of its own, exactly — <c>grep -qxF</c> — takes nothing. Any other is appended to, as <c>&gt;&gt;</c> appends:
+    /// through a link, and creating a file that is not there. What is appended is <c>printf '\n%s\n%s\n'</c> of the marker
+    /// and the line, in UTF-8, the encoding the script's own bytes are in.
+    /// </para>
+    /// <para>
+    /// The line looked for is the directory's UTF-8 bytes read one byte a character, as <see cref="CarriesLine"/> reads a
+    /// profile, so a directory with non-ASCII in its name is found again on the second run and not appended twice.
+    /// </para>
+    /// </remarks>
+    /// <param name="profile">The profile file.</param>
+    /// <param name="directory">The directory to put on the PATH.</param>
+    public static bool AddToProfile(string profile, string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        if (IsRegularFile(profile))
+        {
+            var line = ExportLine(AsBytes(directory));
+            if (System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(profile)).Split('\n').Any(candidate => string.Equals(candidate, line, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+
+        var block = System.Text.Encoding.UTF8.GetBytes($"\n{Marker}\n{ExportLine(directory)}\n");
+        using (var stream = new FileStream(profile, FileMode.Append, FileAccess.Write, FileShare.Read))
+        {
+            stream.Write(block);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// How <c>install.sh</c> asks whether a terminal finds its folder already, the test it keeps before it writes any profile:
+    /// the opening of its <c>case</c> and the arm that writes nothing. <see cref="OnPath"/> is the same test in C#, which
+    /// <c>jason install</c> keeps on macOS; the script carries this text verbatim, its indentation aside, and a test runs it in
+    /// <c>sh</c> beside the C#.
+    /// </summary>
+    public const string OnPathTest =
+        """
+        case ":$PATH:" in
+            *":$INSTALL_DIR:"*) ;;
+        """;
+
+    /// <summary>
+    /// <see cref="OnPathTest"/> in C#: whether a colon-separated PATH names the directory as one of its entries, exactly as
+    /// the script's pattern matches — <c>:PATH:</c> holding <c>:directory:</c>, ordinal, a trailing slash a different entry.
+    /// A PATH nobody could read is null, and names nothing.
+    /// </summary>
+    /// <param name="path">The PATH a terminal has, or null where it is not known.</param>
+    /// <param name="directory">The directory the profile lines would put on it.</param>
+    public static bool OnPath(string? path, string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        return path is not null && $":{path}:".Contains($":{directory}:", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Whether the directory holds a character <c>install.sh</c> refuses to write into a profile's line, which reads the
+    /// directory inside double quotes: a line break, which ends the line (and the whole-line search would never find it
+    /// again), or <c>"</c>, <c>$</c>, a backtick or <c>\</c>, which the shell reads there as something else — code every
+    /// login would run. The backslash only where the machine's own separator is not one, as the desktop's rule reads it.
+    /// </summary>
+    public static bool UnsafeFolder(string directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        return directory.IndexOfAny(['"', '$', '`', '\n', '\r']) >= 0 || (Path.DirectorySeparatorChar != '\\' && directory.Contains('\\', StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Whether the directory holds a colon past its root: the colon separates PATH's entries, so a profile line naming the
+    /// directory would put two folders on PATH, neither of them this one, and never resolve. A drive's colon on Windows is part
+    /// of the root and is not one.
+    /// </summary>
+    public static bool SplitsPath(string directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        return directory.AsSpan((Path.GetPathRoot(directory) ?? string.Empty).Length).Contains(':');
+    }
+
+    /// <summary>
+    /// The line a person adds by hand: <see cref="ExportLine(string)"/>, or for a directory that line cannot spell
+    /// (<see cref="UnsafeFolder"/>), the directory in single quotes, as the desktop's own rule gives it.
+    /// </summary>
+    public static string HandLine(string directory) =>
+        UnsafeFolder(directory) ? $"export PATH='{directory.Replace("'", @"'\''", StringComparison.Ordinal)}':\"$PATH\"" : ExportLine(directory);
+
+    /// <summary>
+    /// The profiles <c>install.sh</c> puts the line into for this account, in its order: the <see cref="LoginProfile"/>, then
+    /// the <see cref="InteractiveProfile"/> where the shell has one.
+    /// </summary>
+    public static IReadOnlyList<string> ProfileTargets(string home, string? shell) =>
+        InteractiveProfile(home, shell) is { } interactive ? [LoginProfile(home, shell), interactive] : [LoginProfile(home, shell)];
+
+    /// <summary>
+    /// This account's <c>Path</c> value with the directory appended, by the rule <see cref="RegistryStatements"/> spells for
+    /// <c>install.ps1</c> — or <b>the same string</b> where the value already names it.
+    /// </summary>
+    /// <remarks>
+    /// Compared as Windows reads the value: ignoring case and a trailing separator, and expanded only where the value is
+    /// <c>REG_EXPAND_SZ</c>. The empty entries are dropped before the directory is appended, the installer's rule, because
+    /// an empty PATH entry is the current directory; every other entry keeps its spelling and its place. A test runs the
+    /// PowerShell statements and this against the same values.
+    /// </remarks>
+    /// <param name="registryValue">The value as the registry stores it, or the empty string where there is none.</param>
+    /// <param name="directory">The directory to put on the Path.</param>
+    /// <param name="expand">How an entry is read: <see cref="ReadAs"/> of the value's kind.</param>
+    public static string WithDirectory(string registryValue, string directory, Func<string, string> expand)
+    {
+        ArgumentNullException.ThrowIfNull(registryValue);
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentNullException.ThrowIfNull(expand);
+
+        var entry = directory.TrimEnd('\\');
+        var entries = registryValue.Split(';');
+        if (entries.Any(stored => string.Equals(expand(stored).TrimEnd('\\'), entry, StringComparison.OrdinalIgnoreCase)))
+        {
+            return registryValue;
+        }
+
+        return string.Join(';', entries.Where(stored => stored.Length > 0).Append(entry));
+    }
+
+    /// <summary>
     /// The command that puts the directory on this account's PATH on Unix, spelled as <c>install.sh</c>
     /// spells it.
     /// </summary>
@@ -428,15 +577,31 @@ public static class PathEntry
     /// </para>
     /// <para>
     /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
-    /// which is what both the installer and the repair append. A line nobody marked is somebody's own, written
-    /// by hand, and stays: this verb removes only what this installer wrote, on this platform as on the other,
-    /// where an entry the installer did not write is left on the Path too.
+    /// which is what both the installer and the repair append. That blank line is empty, or a lone <c>\r</c> where the
+    /// block itself was later turned to CRLF, its marker line ending in <c>\r</c> too, and nothing else: a line of
+    /// spaces, or a lone <c>\r</c> over a block that was not turned, is the person's own. Appended to a file whose
+    /// last line had no newline, the newline the block begins with ended that line instead of making a blank one: where
+    /// such a block is the last thing in the file, that newline goes with it, and the file ends as it began; where
+    /// anything follows, it stays. A line nobody marked is somebody's own, written by hand, and stays: this verb
+    /// removes only what this installer wrote, on this platform as on the other, where an entry the installer did not
+    /// write is left on the Path too. The desktop's own removal (<c>desktop/src/path-profile.ts</c>) is the same rule
+    /// and is held to the same cases.
     /// </para>
     /// <para>
     /// <b>Every other byte stays as it was.</b> The text is split on <c>\n</c> alone and each line keeps its own
     /// <c>\r</c>: a profile with a single CRLF in it used to come back all CRLF, which puts a carriage return at
     /// the end of every line a shell then reads. <see cref="WithoutEntry(byte[], string)"/> does this over the
     /// file's own bytes.
+    /// </para>
+    /// <para>
+    /// <b>What is promised, and what is not.</b> A profile the installer wrote into comes back byte for byte, the
+    /// person's own lines above and below its blocks included. Three cases are not promised, and in each only white
+    /// space may differ, never a visible character of the person's: in a file that ended without a newline and holds
+    /// blocks for two folders, one under the other, taking the upper block out first keeps the newline it began with,
+    /// since the lower block still follows it, and the lower block's removal then leaves that newline; a file turned
+    /// whole to CRLF after the installer wrote into it is no longer that file, and is not promised back byte for byte:
+    /// what can differ is a line ending at its very end; and where an editor later put spaces on the installer's own
+    /// blank line, that line stays, and the file ends without its final newline.
     /// </para>
     /// </remarks>
     public static string WithoutEntry(string profileText, string installDirectory)
@@ -464,12 +629,25 @@ public static class PathEntry
 
             // Exactly what the script appended, and in that order: a blank line, the marker, the line.
             var first = index - 1;
-            if (first > 0 && lines[first - 1].Trim().Length == 0)
+            // The installer's blank line is empty, or a lone \r where the block itself was later turned to CRLF, its
+            // marker line ending in one too. A line of spaces, or a lone \r over a block that was not turned, is the
+            // person's own.
+            var blankAbove = first > 0 && (lines[first - 1].Length == 0 || (lines[first - 1] == "\r" && lines[first].EndsWith('\r')));
+            if (blankAbove)
             {
                 first--;
             }
 
-            lines.RemoveRange(first, index - first + 1);
+            // With no blank line above, the newline the block began with ended the person's last line, which had none.
+            // Where the block is the last thing in the file, that newline goes with it and the file ends as it began;
+            // where anything follows, it stays, because it now separates the person's own lines.
+            var last = index;
+            if (!blankAbove && first > 0 && index == lines.Count - 2 && lines[^1].Length == 0)
+            {
+                last++;
+            }
+
+            lines.RemoveRange(first, last - first + 1);
             removed = true;
 
             // And carry on above what was just taken out. Without this the walk stepped down into a list
@@ -558,6 +736,37 @@ public static class PathEntry
 
         var (names, comparer) = windows ? (InstallerFiles, StringComparer.OrdinalIgnoreCase) : (UnixInstallerFiles, StringComparer.Ordinal);
         return entries.All(entry => names.Contains(Path.GetFileName(entry), comparer));
+    }
+
+    /// <summary>
+    /// What the folder the application carries its jason in holds (<c>desktop/scripts/prepare.mjs</c>): the executable, the
+    /// licence, the notices, the skills and <c>version.json</c>.
+    /// </summary>
+    public static IReadOnlyList<string> BundleFiles(bool windows) =>
+        [windows ? "jason.exe" : "jason", "LICENSE", "THIRD-PARTY-NOTICES", "skills", Installation.CarriedExecutable.RecordName];
+
+    /// <summary>
+    /// Whether a directory is the application's carried folder and holds nothing but what the application puts there: the
+    /// rule the Path entry <c>jason install</c> writes on Windows is taken back by. What the application puts there includes
+    /// <see cref="Update.CarriedUpdate.PidFileName"/>, which the carried jason writes beside itself while it hands an update
+    /// over and which an update killed part-way leaves: without it, that file made the entry another program's, and the
+    /// application's uninstaller then took the folder and left the entry naming nothing.
+    /// </summary>
+    public static bool CarriedBundle(string directory, bool windows)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        try
+        {
+            IReadOnlyList<string> names = [.. BundleFiles(windows), Update.CarriedUpdate.PidFileName];
+            var comparer = windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            return Installation.CarriedExecutable.Of(System.IO.Path.Combine(directory, names[0])) is not null
+                && System.IO.Directory.EnumerateFileSystemEntries(directory).All(entry => names.Contains(System.IO.Path.GetFileName(entry), comparer));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Whether a directory is there and holds nothing but what that platform's installer writes.</summary>

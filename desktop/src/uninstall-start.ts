@@ -1,33 +1,29 @@
 /**
- * The starts the nsis installer and uninstaller make (`uninstall.ts`): no window, no runtime started, no single-instance
- * lock, since the installer has already closed the running application.
+ * The starts the nsis installer and uninstaller make (`uninstall.ts`): no window and no runtime started. `--stop-runtime`
+ * takes no single-instance lock, since the installer has already closed the running application; `--uninstall` holds it
+ * while it runs (`main.ts`), and where another start holds it says so and goes no further (`runUninstallBusy`).
  *
- * - `--uninstall` stops the runtime this application carries when that is the one running, takes off what the desktop
- *   placed, shows what it took and left unless the uninstall is silent, and exits; the uninstaller then removes the
- *   application's folder, unless the exit says to go no further.
+ * - `--uninstall` runs the one uninstall, `jason uninstall --keep-application` of the jason this application carries,
+ *   which stops the runtime and takes off what Jason and Jason Desktop placed; it shows what was taken off and what is
+ *   left unless the uninstall is silent, and exits; the uninstaller then removes the application's folder, unless the
+ *   exit says to go no further.
  * - `--stop-runtime` stops the runtime this application carries when that is the one running, and exits; it shows
  *   nothing and removes nothing; it writes its log lines and Electron's own profile under the data directory its
  *   environment names, as `--uninstall` does.
  */
 
-import { app, dialog } from 'electron';
-import { linkRegistration } from './deep-link.ts';
+import { dialog } from 'electron';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { loggedCli } from './installation.ts';
-import { LoginItem, RuntimeAutostart } from './login-item.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { fileLogger, limitsFrom } from './log.ts';
-import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { demoDirectory } from './mode.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
-import { applicationFolder } from './rollback.ts';
-import { accountShell } from './shell-path.ts';
-import { harnessRoot, stopRuntimeCode, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
+import { carriedUninstallArgs, carriedUninstallExit, carriedUninstallOutcome, carriedUninstallText, carriedUninstallTimeoutMs, harnessRoot, stopRuntimeCode } from './uninstall.ts';
 import { windowTitle } from './window-title.ts';
 
 function readText(file: string): string | null {
@@ -49,68 +45,42 @@ function carried() {
     return { home, paths, log, executable, cli, own };
 }
 
-/** The link scheme's registration this application wrote, read and taken off as it was written (`linkRegistration`). */
-function linkStep(): { link?: { registered(): boolean; remove(): boolean } } {
-    const written = linkRegistration(process.platform, app.isPackaged, process.execPath);
-    if (written === null) return {};
-    return {
-        link: {
-            registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),
-            remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),
-        },
-    };
-}
-
 /** Returns the start's exit code (`stopRuntimeCode`). */
 export async function runStopRuntime(): Promise<number> {
     const { paths, executable, own } = carried();
-    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's.
-    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
+    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's. The person's is always
+    // stopped with --start-owed, since this start is only ever made on an installer's behalf: the next start of the
+    // application, Demo or Live, starts a runtime from the note (`docs/release-and-update.md` §9).
+    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
 }
 
-/** Returns the start's exit code (`uninstallExit`). */
+/**
+ * Returns the start's exit code (`carriedUninstallExit`): the one uninstall, run by the jason this application carries,
+ * which leaves this folder to the uninstaller (`carriedUninstallArgs`).
+ */
 export async function runUninstall(quiet: boolean): Promise<number> {
-    const { home, paths, log, executable, cli, own } = carried();
-    const folder = commandFolder(process.platform, process.env, home);
-    const autostart = new RuntimeAutostart({ cli, log });
-    const stopDemo = () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) });
-    const report = await uninstall({
-        platform: process.platform,
-        runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },
-        folder,
-        command: new PathCommand({
-            platform: process.platform,
-            folder,
-            executable,
-            dataDirectory: process.env['JASON_DATA_DIR'] || null,
-            path: () => process.env.PATH ?? '',
-            pathext: process.env['PATHEXT'],
-            isProgram: (file) => isProgramFile(file, process.platform),
-            // Its PATH lines come back out of the profiles with it; a removal never asks a terminal's PATH.
-            account: { home, shellNamed: accountShell(process.env), terminalPath: () => null },
-            log,
-        }),
-        login: new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead: Promise.resolve(), log }),
-        autostart: { status: () => autostart.registration(), disable: () => autostart.set(false) },
-        application: applicationFolder(process.platform, process.execPath),
-        // Windows carries its jason inside the installed folder: there is no copy of it to take off.
-        bundles: null,
-        jason: executable,
-        dataDirectory: paths.data,
-        harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
-        updaterCache: updaterCache(process.env, home, process.platform),
-        // The demo's two folders, beside the person's: the uninstaller's start acts on the person's installation alone.
-        demo: {
-            data: demoDirectory(paths.data),
-            harnessRoot: demoDirectory(harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile)),
-            stop: stopDemo,
-        },
-        log,
-        ...linkStep(),
-    });
-    if (!quiet) {
-        const { message, detail } = uninstallText(report);
-        await dialog.showMessageBox({ type: report.refused === null ? 'info' : 'warning', title: windowTitle, message, detail, buttons: ['OK'] });
+    const { home, paths, cli } = carried();
+    const outcome = carriedUninstallOutcome(await cli.run(carriedUninstallArgs, { timeoutMs: carriedUninstallTimeoutMs }));
+    const shown = quiet ? null : carriedUninstallText(outcome, paths.data, harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile));
+    if (shown !== null) {
+        await dialog.showMessageBox({ type: outcome.kind === 'done' && outcome.problems.length === 0 ? 'info' : 'warning', title: windowTitle, message: shown.message, detail: shown.detail, buttons: ['OK'] });
     }
-    return uninstallExit(report);
+    return carriedUninstallExit(outcome);
+}
+
+/** The exit an uninstall start gives where another start holds the lock: go no further, as for a runtime that did not stop. */
+export const uninstallBusyExit = 1;
+
+/** What a person is told where the uninstall start could not take the lock; a silent uninstall is told nothing. */
+export const uninstallBusyWords = {
+    message: 'Jason Desktop is open, or an update of it is under way, so nothing was taken off.',
+    detail: 'Close Jason Desktop, or let the update end, then uninstall Jason again.',
+};
+
+/** Returns `uninstallBusyExit`, having said why unless the uninstall is silent, and run nothing. */
+export async function runUninstallBusy(quiet: boolean): Promise<number> {
+    const { log } = carried();
+    log.warn('uninstall_busy', {});
+    if (!quiet) await dialog.showMessageBox({ type: 'warning', title: windowTitle, message: uninstallBusyWords.message, detail: uninstallBusyWords.detail, buttons: ['OK'] });
+    return uninstallBusyExit;
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
+using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Discovery;
@@ -90,7 +91,7 @@ public static class RuntimeStatusCommand
     internal static void RenderHuman(TextWriter output, SystemInfoResponse info, RuntimeDescriptor descriptor)
     {
         output.WriteLine($"Runtime:    running (pid {info.Pid})");
-        output.WriteLine($"Version:    {info.RuntimeVersion}");
+        output.WriteLine($"Version:    {JasonVersion.Stated(info.RuntimeVersion, info.TestBuild == true)}");
         output.WriteLine($"Executable: {descriptor.InstalledImage ?? "none recorded: a build run from source, or a runtime older than this CLI"}");
         output.WriteLine($"API:        {info.ApiVersion} at {descriptor.BaseUrl}");
         output.WriteLine($"Port:       {Port(info.Listening)}");

@@ -19,6 +19,7 @@ export const templates = {
     runtime_starting: 'No runtime was up; starting one with jason runtime start',
     runtime_start_failed: 'jason runtime start exited {Exit}',
     layout_refused: 'jason runtime start refused the data directory’s layout with {Code}; no runtime was started',
+    data_newer_refused: 'jason runtime start refused a database a newer Jason migrated with {Code}; no runtime was started',
     versions_differ: 'The runtime is {RuntimeVersion} and this desktop carries {BundleVersion}; the UI the runtime serves is loaded',
     ui_installed: 'jason ui install exited {Exit}',
     skills_deployed: 'jason skills install for {Target} exited {Exit}',
@@ -61,17 +62,43 @@ export const templates = {
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
     path_lines_set: 'The PATH lines were set to {On} on {Platform}: {Files} profiles written, {Refused} refused',
-    // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
+    // The machine set-up, macOS and Windows: jason install at a start of a new version, or put back from the menu.
+    machine_setup_ran: 'jason install ran at {Why} and exited {Exit}; completed {Completed}',
+    machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}, later {Later}',
+    runtime_start_update_busy: 'jason runtime start was refused with {Code}: an update holds it, and the start waits for it',
+    start_left_to_update: 'The first start waited {Seconds} seconds for an update that still holds the runtime start; it is left unsettled',
+    machine_setup_later: 'jason install ran at {Why} and found the update lock held; it is run again at the next start',
+    machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
+    machine_setup_runtime: 'A runtime answered before jason install ran at {Why}, or a start was owed, and none after it; one was started again {Started}',
+    // The note that a start is owed (docs/release-and-update.md §9), paid at a start where the set-up did not run.
+    start_owed_paid: 'A start was owed and no runtime answered; one was started from the carried jason {Started}',
+    // The carried jason.exe put back from the updater's store at a start (docs/release-and-update.md §7).
+    carried_restored: 'The carried jason.exe was missing and was put back from the updater store {Restored}',
+    // Taking off what the desktop placed: the menu's Remove What Jason Placed on Linux, and Uninstall Jason on macOS.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
+    uninstall_asked: 'Uninstall Jason was answered with {Answer}',
+    uninstall_busy: 'The uninstaller started Jason Desktop while another start held its lock; nothing was taken off',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',
     // The updater.
     update_checked: 'The releases were read; a newer one to offer: {Available}',
     update_offered: 'Jason {Version} is offered',
     update_downloaded: 'Jason {Version} was downloaded',
+    update_go_missed: 'Jason {Version} was downloaded and no go came for it, so nothing was installed',
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
+    update_window_opened: 'Jason Desktop was opened while a request held its lock; it is opened as the request ends with exit {Exit}',
     update_keep_failed: 'The application could not be kept aside for an update ({Code}); the update was not installed',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
+    // A terminal's update request (`update-request.ts`): its version, where it was taken and how it ended, never its id or feed.
+    update_request_taken: 'A terminal asked for Jason {To}; the request is taken {Where}',
+    update_request_handed: 'A terminal asked for Jason {To}; the request was handed to the Jason Desktop already running',
+    update_request_ended: 'The request for Jason {To} ended {State} with the code {Code}',
+    update_request_unwritten: 'The request’s file could not be written at the step {State}',
+    update_request_runtime_started: 'The request’s file could not be told the runtime was stopped for the update, so the desktop started it again itself: {Outcome}',
+    update_request_file_there: 'A terminal asked for Jason {To} under a request whose file was already there; nothing was taken or written',
+    update_settled_by_request: 'Jason {Version}’s update was recorded as kept from the terminal, its runtime having answered',
+    update_settle_left: 'Another Jason Desktop holds this data directory, so the update is left for it to settle',
+    update_request_shell: 'The update start runs the system’s command interpreter and folders first on {Platform}',
     bundle_copy_failed: 'The jason an AppImage carries was not copied out of it; the copy there differs: {Differs}',
     autostart_repointed: 'Start the runtime at logon named another version’s copy and was registered again from this one: jason runtime autostart exited {Exit}',
     path_command_repointed: 'The {Name} command on the PATH ran another version’s copy and was placed again over this one on {Platform}',
@@ -134,6 +161,10 @@ export const templates = {
     bridge_refused: 'The browser bridge refused a request: {Why}, member {Member}',
     bridge_stream_closed: 'An event stream of the browser bridge was closed: {Why}',
     bridge_tab_refused: 'A browser tab could not be opened: {Why}',
+    // Never said by the desktop: jason uninstall's waiter writes it into the desktop's file of the day, which the desktop's
+    // writer opens and closes per line, so another writer's line lands beside its own. The waiter's copy of this template
+    // (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff.LogTemplate) is held to this one.
+    uninstaller_exited: 'The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {Exit}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it',
 } as const;
 
 export type TemplateName = keyof typeof templates;

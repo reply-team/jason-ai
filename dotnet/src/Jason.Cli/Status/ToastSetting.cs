@@ -22,7 +22,7 @@ public enum ToastSwitch
 /// <summary>
 /// Windows' notification settings for the runtime's toast as they stand now, read when <c>jason status</c> runs. The
 /// runtime reads Windows' answer only when it sends a toast, so what it reports is the setting at its last send; a person
-/// who switched Jason off or on since is told the switch as it is now. Only ever read — the ninth seam whose default is
+/// who switched Jason off or on since is told the switch as it is now. Only ever read — the eleventh seam whose default is
 /// the refusal, for the reason <see cref="CliEnvironment.Desktop"/> gives: a test that read the real registry would answer
 /// with the settings of whoever runs the suite.
 /// </summary>

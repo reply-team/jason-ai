@@ -33,6 +33,33 @@ public sealed class UpdatePaths(JasonPaths paths)
     /// </summary>
     public string Replaced => Path.Combine(Root, "replaced");
 
+    /// <summary>
+    /// The lock a carried update, its finishing step and its rollback hold while they act, so that a second one beside them
+    /// refuses rather than reads the same ledger (<see cref="UpdateLock"/>).
+    /// </summary>
+    public string Lock => Path.Combine(Root, "update.lock");
+
+    /// <summary>
+    /// The nonce the holder of <see cref="Lock"/> hands the part of the update it runs as a child, so that part goes on under
+    /// the holder's lock instead of letting it go between the two (<see cref="UpdateLock.HandOver"/>).
+    /// </summary>
+    public string LockHolder => Path.Combine(Root, "update.lock.holder");
+
+    /// <summary>
+    /// The id of the request a carried update made of Jason Desktop, while it is in flight: the process that waits on the one
+    /// that asked reads by it whether the Desktop was given the go or has the update.
+    /// </summary>
+    public string DesktopRequest => Path.Combine(Root, "desktop-request.id");
+
+    /// <summary>
+    /// The record of the move of a command-line install into Jason Desktop, which runs once an update of that install is
+    /// complete and never fails it (<see cref="CommandLineMove"/>): the last step done, and where it stands.
+    /// </summary>
+    public string Move => Path.Combine(Root, "move.json");
+
+    /// <summary>What the move downloads: Jason Desktop's installer on Windows, its zip on macOS.</summary>
+    public string MoveDownloads => Path.Combine(Root, "move");
+
     /// <summary>Everything downloaded for updates, whichever version.</summary>
     public string Staging => Path.Combine(Root, "staged");
 

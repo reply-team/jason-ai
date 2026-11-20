@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
+import { linesOf, searchIntent, firstSearchLines } from '../../test/search-words';
 import { route } from '../../router';
 import { title } from './labels';
 import * as store from './store';
@@ -95,6 +96,24 @@ describe('Attention', () => {
         const from = Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === 'From')!;
         expect(from.nextElementSibling?.firstChild?.textContent).toBe('owner@example.test');
         expect(fact('Channel')).toBe('Email');
+    });
+
+    it('opens a paid search named in words, its definition as written and its arguments in plain words under what will happen', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/search-pending')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/search-first')
+            .answer('preference.list', 'preference.list/set');
+        renderApp(fake);
+        await waitFor(() => expect(screen.getAllByText('Find people')).toHaveLength(2));
+        fireEvent.click(screen.getAllByText('Find people')[0]!);
+        await waitFor(() => expect(document.querySelector('.panel .search-lines')).toBeTruthy());
+        const panel = document.querySelector<HTMLElement>('.panel')!;
+        expect(within(panel).getByRole('heading', { level: 2 }).textContent).toBe('Find people');
+        const happens = within(panel).getByText('What will happen').closest<HTMLElement>('.section')!;
+        expect(within(happens).getByText(searchIntent)).toBeTruthy();
+        expect(linesOf(happens, '.search-lines')).toEqual(firstSearchLines);
+        expect(fake.calls.filter((c) => c.operation === 'workitem.get')).toEqual([]);
     });
 
     it('says a reply in a thread goes from the account the conversation is in, with no sending name under it', async () => {

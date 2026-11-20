@@ -42,7 +42,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A feed in a directory is never handed to the verb: the verb is not run, and the line says what to run.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     [Critical(Family.I1, "the installer runs the skills verb only on a feed it read itself")]
     public void A_feed_in_a_directory_runs_no_skills_verb_and_says_what_to_run(string script)
     {
@@ -65,7 +64,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_feed_at_an_address_is_handed_to_the_skills_verb_as_its_manifest(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -90,7 +88,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A deployment that fails leaves Jason installed and the run successful, and the one line says what to do.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_skills_deployment_that_fails_leaves_jason_installed_and_says_so(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -109,54 +106,6 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
-    /// The same under the Windows PowerShell a fresh Windows has, which stops on a native command's stderr read through
-    /// its error stream: the verb's refusal goes straight through, and the run still ends with the licence.
-    /// </summary>
-    [Fact]
-    public void A_skills_deployment_that_fails_under_windows_powershell_is_said_the_same_way()
-    {
-        var installer = Installer.For(Ps1, _tree);
-        using var address = new LoopbackReleases(installer.Feed("0.33.0"));
-        installer.Variables[StandInLog] = Path.Combine(_tree.NewDirectory("standin"), "calls.txt");
-        installer.Variables[StandInExit] = "1";
-
-        var run = installer.RunUnderWindowsPowerShell($"{address.Releases}/latest/download");
-
-        Assert.True(run.Exit == 0, run.Stderr);
-        Assert.Contains("The stand-in refused.", run.Stderr, StringComparison.Ordinal);
-        var lines = Lines(run.Stdout);
-        Assert.Equal(FailedLine, lines[^3]);
-        AssertEndsWith(MitLine("0.33.0"), lines);
-    }
-
-    /// <summary>
-    /// An executable that cannot be started when the verb is run — moved aside since the script asked its version, as a
-    /// scanner moves one — has no line of its own to show: what PowerShell answered is said in its place, then the line,
-    /// and the run still ends with the licence and exits 0.
-    /// </summary>
-    [Fact]
-    public void A_skills_verb_that_cannot_start_is_said_and_the_run_still_ends_with_the_licence()
-    {
-        var installer = Installer.For(Ps1, _tree);
-        using var address = new LoopbackReleases(installer.Feed("0.33.0"));
-        var feed = $"{address.Releases}/latest/download";
-        var first = installer.Run(feed);
-        Assert.True(first.Exit == 0, first.Stderr);
-        installer.Variables[StandInVanish] = "1";
-
-        var run = installer.Run(feed);
-
-        Assert.True(run.Exit == 0, run.Stderr);
-        Assert.False(File.Exists(installer.Target));
-        var lines = Lines(run.Stdout);
-        var installed = lines.FindIndex(line => line.StartsWith("Jason 0.33.0 is already installed at ", StringComparison.Ordinal));
-        Assert.True(installed >= 0, run.Stdout);
-        Assert.Contains(lines.Skip(installed + 1).SkipLast(3), line => line.Contains(installer.Target, StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(FailedLine, lines[^3]);
-        AssertEndsWith(MitLine("0.33.0"), lines);
-    }
-
-    /// <summary>
     /// With no feed of its own, the verb is run with no <c>--feed</c>, so it reads its default. A run with no feed reaches
     /// the published releases, which no test does, so this row reads the text: the no-feed case hands the verb nothing.
     /// </summary>
@@ -166,10 +115,6 @@ public sealed partial class InstallNoticesTests
         var sh = Code(Sh);
         Assert.Contains("    '') deploy_role_skills ;;", sh, StringComparison.Ordinal);
         Assert.Contains("deploy_role_skills --feed \"${FEED%/}/manifest.json\"", sh, StringComparison.Ordinal);
-
-        var ps1 = Code(Ps1);
-        Assert.Contains("$arguments = @('skills', 'install', '--roles-only')", ps1, StringComparison.Ordinal);
-        Assert.Contains("if ($Feed) { $arguments += @('--feed', ($Feed.TrimEnd('/') + '/manifest.json')) }", ps1, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -180,7 +125,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData("install-sh", "--feed http://127.0.0.1:8099 ")]
-    [InlineData("install-ps1", "-Feed http://127.0.0.1:8099 ")]
     public void Ci_proves_the_directory_line_and_a_feed_served_on_the_machine(string job, string served)
     {
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
@@ -200,7 +144,7 @@ public sealed partial class InstallNoticesTests
             DirectoryLine,
             "http.server 8099 --bind 127.0.0.1 --directory feed",
             served,
-            "skills/roles/.jason-skills.json".Replace("/", job == "install-ps1" ? "\\" : "/", StringComparison.Ordinal),
+            "skills/roles/.jason-skills.json",
             "http://127.0.0.1:8099/manifest.json",
             "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
         })
@@ -212,12 +156,64 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
+    /// On Windows the line every real install takes reads its feed over the web in Windows PowerShell 5.1, which a feed in a
+    /// directory never reaches. The proof's Windows job holds it in a leg of its own: the job's feed served on this machine
+    /// by the proof's one feed server, install.ps1 run by <c>powershell.exe</c> with that address and that shell said and
+    /// held to Windows PowerShell 5.1, the server's own record
+    /// of the manifest, the checksums and the setup each answered, and a runtime over the installed role skills saying
+    /// <c>role_skills</c> is ok. The role skills come from the skills beside the application's jason, so their record is
+    /// held to a folder of the application and never to the feed.
+    /// </summary>
+    [Fact]
+    public void The_windows_proof_installs_from_a_feed_served_on_the_machine_in_Windows_PowerShell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
+        var job = ci.IndexOf("\n  union-windows:\n", StringComparison.Ordinal);
+        Assert.True(job >= 0, "ci.yml no longer has the union-windows job.");
+        var leg = ci.IndexOf("- name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal\n", job, StringComparison.Ordinal);
+        Assert.True(leg > job, "union-windows no longer installs from a feed served on this machine in Windows PowerShell 5.1.");
+        var next = ci.IndexOf("\n      - ", leg + 1, StringComparison.Ordinal);
+        var step = next < 0 ? ci[leg..] : ci[leg..next];
+        var begin = step.IndexOf("-Step Begin -Out $env:OUT -Leg $env:LEG -Clean ", StringComparison.Ordinal);
+        var served = step.IndexOf("-Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script ", StringComparison.Ordinal);
+        var end = step.IndexOf("-Step End -Out $env:OUT -Leg $env:LEG", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && served > begin && end > served, $"the served feed's leg is not framed by a clean begin and its end:\n{step}");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).ReplaceLineEndings("\n");
+        var at = script.IndexOf("\n    'ServedFeed' {\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Test-InstallationWindows.ps1 has no ServedFeed step.");
+        var body = script[at..script.IndexOf("\n    }\n", at, StringComparison.Ordinal)];
+        foreach (var said in new[]
+        {
+            "$server = Start-FeedServer $Feed 8099 ",
+            "Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }",
+            "$served = 'http://127.0.0.1:8099'",
+            "Say \"install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition\"",
+            "$shellEdition -cne 'Desktop' -or -not \"$shellVersion\".StartsWith('5.1.')",
+            "@('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')",
+            "' HTTP/1\\.[01]\" 200'",
+            "skills\\roles\\.jason-skills.json",
+            "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
+        })
+        {
+            Assert.True(body.Contains(said, StringComparison.Ordinal), $"Test-InstallationWindows.ps1's ServedFeed step does not say: {said}");
+        }
+
+        // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
+        Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        // Its answer waited for up to 90 s: the server is the proof's own, and a runner's image can start it slowly.
+        Assert.Contains("    $until = [DateTime]::UtcNow.AddSeconds(90)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\"the feed on 127.0.0.1:$port answering did not happen within 90 s\"", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
+    }
+
+    /// <summary>
     /// The step comes after the PATH step and before the licence in both scripts. Windows' PATH step is never run here, so
     /// that half is the order in the text, as the licence line's is.
     /// </summary>
     [Theory]
     [InlineData(Sh, "Added $INSTALL_DIR to the PATH in ", "skills install --roles-only")]
-    [InlineData(Ps1, "is on your PATH; open a new terminal", "'skills', 'install', '--roles-only'")]
     public void The_skills_step_comes_after_the_path_step_and_before_the_licence(string script, string pathStep, string verb)
     {
         var code = Code(script);

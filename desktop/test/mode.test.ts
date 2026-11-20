@@ -168,9 +168,12 @@ test('a Demo start shows the page and nothing else: no jason, no runtime, no fol
     // The Demo's run makes no jason, starts no runtime and asks no program anything.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
     assert.ok(demo.length > 0);
-    for (const never of ['cliAt(', 'startInstallation(', 'loginPath(', 'programsOn(', 'new Chat(', 'new Setup(', 'Repairer', 'WindowPairing', 'carriedOf(', 'handle(seam', 'preload:', 'Updater', 'RuntimeAutostart', 'PathCommand', 'placedRemoval', 'stopOwnRuntime', 'stopDemoRuntime', 'writeSettings(', 'settingsAtStart(']) {
+    for (const never of ['cliAt(', 'startInstallation(', 'loginPath(', 'programsOn(', 'new Chat(', 'new Setup(', 'Repairer', 'WindowPairing', 'carriedOf(', 'handle(seam', 'preload:', 'new Updater(', 'requestUpdater(', 'updates.start(', 'RuntimeAutostart', 'PathCommand', 'placedRemoval', 'stopOwnRuntime', 'stopDemoRuntime', 'writeSettings(', 'settingsAtStart(']) {
         assert.equal(demo.includes(never), false, never);
     }
+    // A terminal's update request (`update-request.ts`) is served, and refused as the Demo (`demo_open`): the Demo holds no
+    // updater, so it checks, stops and keeps nothing.
+    assert.ok(demo.includes("serveRequests(log, runOn.person, 'demo');"));
     assert.ok(demo.includes('await openDemo(window, {'));
 });
 

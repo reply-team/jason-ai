@@ -136,6 +136,15 @@ public static class RuntimeStartCommand
                 // error it was started with, and that sentence is the one thing an operator can act on. A runtime that
                 // published a descriptor first is said to have, and what was seen of it.
                 var said = child.Said;
+
+                // A database a newer Jason migrated is answered by its own code: the runtime alone can read the database
+                // to find it out, and an agent and the desktop branch on the code, never on the words around it.
+                if (NewerData(said) is { } newer)
+                {
+                    env.Out.WriteLine(CliErrors.Serialize(DataNewer.Code, newer, retryable: false));
+                    return ExitCodes.ApiError;
+                }
+
                 var exited = unanswered is { } seen
                     ? $"The runtime process exited with code {child.ExitCode} after publishing an endpoint descriptor at {seen.Descriptor.BaseUrl}, and {Observed(seen.Answer, seconds: null)}. "
                     : $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. ";
@@ -421,6 +430,28 @@ public static class RuntimeStartCommand
 
     /// <summary>What is compared of one log file to tell whether a start wrote to it.</summary>
     private readonly record struct LogFile(long Length, DateTime WrittenAt);
+
+    /// <summary>
+    /// The sentence of a runtime that refused a database a newer Jason migrated, where what it said is that refusal's envelope
+    /// and nothing else (<see cref="DataNewer"/>); null for anything else it said, which is heard after "It said:".
+    /// </summary>
+    internal static string? NewerData(string said)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(said);
+            return document.RootElement is { ValueKind: JsonValueKind.Object } root
+                && root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String && code.GetString() == DataNewer.Code
+                && error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String && message.GetString() is { Length: > 0 } sentence
+                    ? sentence
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static int Fail(CliEnvironment env, string message, bool retryable)
     {

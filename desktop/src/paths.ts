@@ -4,7 +4,7 @@
  */
 
 import { closeSync, fstatSync, lstatSync, openSync, readSync, statSync, type Stats } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve, win32 } from 'node:path';
 
 export interface DesktopPaths {
     /** The data directory: the one the CLI and the runtime use, never one of the desktop's own. */
@@ -68,11 +68,22 @@ export interface DesktopPaths {
      * of the UI token the window's page holds now, never the token (`window-pairing.ts`).
      */
     windowPairing: string;
+    /**
+     * `<data>/desktop/machine-setup.json`: the version `jason install` last completed for at a start or from the menu, and
+     * its report, on macOS and Windows (`machine-setup.ts`); one of the desktop's own records (`isNewInstallation`).
+     */
+    machineSetup: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
     // The installation's settings file is not here: it is one of the parts a layout places, answered by `dataLayout`.
     /** `<data>/run/runtime.json`, which the running runtime writes and the desktop only reads. */
     runFile: string;
+    /**
+     * `<data>/run/start-owed.json`: the note that a start is owed, which `jason install` and an installer's
+     * `jason runtime stop --start-owed` write and a runtime's own start removes (`docs/release-and-update.md` §9). The
+     * desktop only reads it, and starts a runtime where it stands and none answers; it never writes one.
+     */
+    startOwed: string;
 }
 
 /** `JASON_DATA_DIR` when it is set, otherwise `~/.jason`: the rule the CLI and the runtime follow. */
@@ -106,8 +117,10 @@ export function desktopPaths(data: string): DesktopPaths {
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         windowPairing: join(desktop, 'window-pairing.json'),
+        machineSetup: join(desktop, 'machine-setup.json'),
         logs: join(data, 'logs'),
         runFile: join(data, 'run', 'runtime.json'),
+        startOwed: join(data, 'run', 'start-owed.json'),
     };
 }
 
@@ -173,6 +186,12 @@ export const layoutNewerCode = 'layout_newer';
 
 /** The refusal of a stamp that is there and cannot be read. */
 export const layoutUnreadableCode = 'layout_unreadable';
+
+/**
+ * The runtime's refusal of a database a newer Jason migrated (`DataNewer`), which `jason runtime start` answers as its
+ * own: only the runtime reads the database, so nothing here can find it out before the start.
+ */
+export const dataNewerCode = 'data_newer';
 
 /**
  * What a data directory's `layout.json` was found to say, read by the rules `LayoutStamp` reads it by: nothing (layout 1,
@@ -481,4 +500,20 @@ export function layoutRefusal(layout: DataLayout, current: string): { code: stri
     if (stamp.state === 'unreadable') return { code: layoutUnreadableCode, message: layoutUnreadableSentence(stamp.path, stamp.problem) };
     if (stamp.state === 'read') return { code: layoutNewerCode, message: layoutNewerSentence(stamp.writtenBy, current) };
     return null;
+}
+
+/**
+ * The data directory a wrapper of the command line names, as the desktop compares one: none where `JASON_DATA_DIR` is
+ * unset or names the default `~/.jason`, which the command line's wrapper does not pin; else the variable as set. The
+ * default is compared as the command line compares it (`FolderPaths` in the contracts): the full path, a trailing separator
+ * dropped, whatever the case on Windows and macOS and letter for letter on Linux.
+ */
+export function namedDataDirectory(env: Readonly<Record<string, string | undefined>>, home: string, platform: NodeJS.Platform): string | null {
+    const named = env.JASON_DATA_DIR;
+    if (!named) return null;
+    const paths = platform === 'win32' ? win32 : posix;
+    const full = paths.resolve(named);
+    const theDefault = paths.join(home, '.jason');
+    const same = platform === 'win32' || platform === 'darwin' ? full.toUpperCase() === theDefault.toUpperCase() : full === theDefault;
+    return same ? null : named;
 }

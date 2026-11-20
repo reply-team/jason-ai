@@ -155,11 +155,27 @@ function linuxOrder(limitMs) {
 }
 
 /**
+ * The variable that asks for a test build, `JASON_DESKTOP_TEST_BUILD=1`: the package CI's own install, update and
+ * uninstall jobs build on macOS and Windows, which hold no identity. It is the package a release builds with every
+ * signature step and every signature check off - on Windows nothing signed, and no publisher an update must carry, so
+ * app-update.yml names none; on macOS an ad hoc signature, no hardened runtime, no notarization and no dmg - and nothing
+ * else changed. Only the default export reads it, and it refuses it beside `JASON_WINDOWS_SIGN`. No release step sets
+ * it (ReleaseWorkflowTests), and a test build that reached a release's own checks would stop there: check-package
+ * refuses a Windows package whose app-update.yml names no publisher, and the release's Mac verification refuses a
+ * signature that names no team.
+ */
+export const testBuildVariable = 'JASON_DESKTOP_TEST_BUILD';
+
+/**
  * The configuration for one version. `sign`, when given, is the module that signs each Windows file; without it a
- * Windows package is unsigned, which only a local build is. `linuxWaitMs` is how long a deb waits for the AppImage packed
+ * Windows package is unsigned, which only a local build is. `testBuild` turns every signature step and check off
+ * (`testBuildVariable`), and is refused beside `sign`. `linuxWaitMs` is how long a deb waits for the AppImage packed
  * beside it, for a test to make short.
  */
-export function configuration({ version, sign = null, linuxWaitMs: waitMs = linuxWaitMs }) {
+export function configuration({ version, sign = null, testBuild = false, linuxWaitMs: waitMs = linuxWaitMs }) {
+    if (testBuild && sign !== null) {
+        throw new Error(`${testBuildVariable} asks for a test build, which signs nothing, and a signing module was given: a package is one or the other.`);
+    }
     const order = linuxOrder(waitMs);
     return {
         appId: 'ai.jasonharness.desktop',
@@ -212,7 +228,8 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
             target: [{ target: 'nsis', arch: ['x64'] }],
             icon: 'resources/icon.png',
             requestedExecutionLevel: 'asInvoker',
-            verifyUpdateCodeSignature: true,
+            // A test build's updater checks no publisher: nothing it is offered is signed.
+            verifyUpdateCodeSignature: !testBuild,
             // The libraries beside Jason.exe are signed as the programs are; the hook leaves one that came signed.
             signExts: ['.dll'],
             signtoolOptions: { publisherName: [signer], signingHashAlgorithms: ['sha256'], ...(sign === null ? {} : { sign }) },
@@ -226,28 +243,36 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
             deleteAppDataOnUninstall: false,
         },
         mac: {
-            target: [
-                { target: 'dmg', arch: ['arm64', 'x64'] },
-                { target: 'zip', arch: ['arm64', 'x64'] },
-            ],
+            // A test build makes the zip alone, which the install script and the updater take (a dmg is a person's), for
+            // the architecture the pack names: CI's runner builds the one it runs.
+            target: testBuild
+                ? [{ target: 'zip' }]
+                : [
+                      { target: 'dmg', arch: ['arm64', 'x64'] },
+                      { target: 'zip', arch: ['arm64', 'x64'] },
+                  ],
             category: 'public.app-category.business',
             // The desktop's link scheme, jason-desktop, written into Info.plist as CFBundleURLTypes (app-builder-lib 26.18.0,
             // out/electron/electronMac.js), so the system hands a link to the application by open-url (`deep-link.ts`).
             // The runtime's jason scheme is never declared here.
             protocols: [{ name: 'Jason', schemes: ['jason-desktop'] }],
             icon: 'installer/icon.icns',
-            hardenedRuntime: true,
+            // A test build is signed ad hoc, which names no team, and so without the hardened runtime, under which an ad
+            // hoc signature cannot load Electron's own libraries (app-builder-lib 26.18.0, scheme.json, mac identity).
+            ...(testBuild ? { identity: '-' } : {}),
+            hardenedRuntime: !testBuild,
             entitlements: 'installer/entitlements.mac.plist',
             entitlementsInherit: 'installer/entitlements.mac.plist',
             // The bundled jason is signed by its own job with its own entitlements, and keeps that signature.
             signIgnore: ['/Contents/Resources/bundle/jason$'],
-            notarize: true,
-            // A Mac package is built only by the release, which signs it: one that cannot be signed fails the build.
-            forceCodeSigning: true,
+            notarize: !testBuild,
+            // A Mac package is built only by the release, which signs it: one that cannot be signed fails the build. A
+            // test build is CI's alone, and its ad hoc signature is no release's.
+            forceCodeSigning: !testBuild,
             artifactName: 'jason-desktop-macos-${arch}.${ext}',
         },
         // A dmg is installed by hand and is never an update: no feed entry and no blockmap.
-        dmg: { sign: true, writeUpdateInfo: false, artifactName: 'jason-desktop-macos-${arch}.${ext}' },
+        dmg: { sign: !testBuild, writeUpdateInfo: false, artifactName: 'jason-desktop-macos-${arch}.${ext}' },
         // Linux, x64 alone: an AppImage and a deb, both updates, named in one feed, latest-linux.yml, where each updater
         // finds its own file by its extension. Neither is signed: a person checks either against checksums.txt.
         linux: {
@@ -294,7 +319,12 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
     };
 }
 
+/** The configuration a pack is given, from the variables it runs with. */
+export function fromEnvironment(environment) {
+    const sign = environment['JASON_WINDOWS_SIGN'] === '1' ? join(desktop, 'scripts', 'sign-windows.mjs') : null;
+    return configuration({ version: releaseVersion(environment['JASON_VERSION']), sign, testBuild: environment[testBuildVariable] === '1' });
+}
+
 export default function () {
-    const sign = process.env['JASON_WINDOWS_SIGN'] === '1' ? join(desktop, 'scripts', 'sign-windows.mjs') : null;
-    return configuration({ version: releaseVersion(process.env['JASON_VERSION']), sign });
+    return fromEnvironment(process.env);
 }

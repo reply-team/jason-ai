@@ -48,24 +48,26 @@ public sealed class ProcessToastLauncher : IToastLauncher
         // OEM code page its fresh console reads stdin and writes stdout through never meets a byte above 127. Its stderr
         // is its own words, and a localized Windows message in them is written in that page: the kept tail may read it
         // wrong.
-        var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0], Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
-        foreach (var argument in launch.Command.Skip(1))
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        start.Environment.Clear();
-        foreach (var (name, value) in launch.Environment)
-        {
-            start.Environment[name] = value;
-        }
-
+        //
+        // A program the door refuses, one named by anything but its full path, never started either, as one that is not there.
         Process process;
         try
         {
+            var start = Jason.Contracts.Discovery.ChildProcess.StartInfo(launch.Command[0], Jason.Contracts.Discovery.ChildKind.SpeaksToJason);
+            foreach (var argument in launch.Command.Skip(1))
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            start.Environment.Clear();
+            foreach (var (name, value) in launch.Environment)
+            {
+                start.Environment[name] = value;
+            }
+
             process = Jason.Contracts.Discovery.ChildProcess.Start(start) ?? throw new InvalidOperationException("The process did not start.");
         }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or ArgumentException)
         {
             return new LaunchResult(false, false, null, string.Empty, string.Empty, ex.Message);
         }

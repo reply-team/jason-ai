@@ -16,7 +16,11 @@ internal static class TaggedSource
     public static string Body(string tag) => $"the body at {tag}";
 
     /// <summary>A repository with these tags, oldest first, and its <c>file://</c> address.</summary>
-    public static async Task<string> CreateAsync(TempPaths dir, CancellationToken cancellationToken, params string[] tags)
+    public static Task<string> CreateAsync(TempPaths dir, CancellationToken cancellationToken, params string[] tags) =>
+        CreateAsync(dir, cancellationToken, _ => false, tags);
+
+    /// <summary>The same, where the tags <paramref name="shipsQuickStart"/> names also ship an interactive skill <c>quick-start</c>.</summary>
+    public static async Task<string> CreateAsync(TempPaths dir, CancellationToken cancellationToken, Func<string, bool> shipsQuickStart, params string[] tags)
     {
         var root = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "origin")).FullName;
         var git = ProgramRunners.ForThisMachine();
@@ -27,6 +31,10 @@ internal static class TaggedSource
             Skill(Path.Combine(root, "skills", "runtime", "operating"), "operating", Body(tag));
             Skill(Path.Combine(root, "skills", "runtime", "roles", "researcher"), "researcher", Body(tag));
             Skill(Path.Combine(root, "skills", "business", "campaign-planning"), "campaign-planning", Body(tag));
+            if (shipsQuickStart(tag))
+            {
+                Skill(Path.Combine(root, "skills", "runtime", "quick-start"), "quick-start", Body(tag));
+            }
 
             await RunAsync(git, root, ["add", "-A"], cancellationToken);
             await RunAsync(git, root, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", tag], cancellationToken);

@@ -52,6 +52,47 @@ public class StatusCommandTests
         Assert.Equal("jason runtime start", runtime.Fix);
     }
 
+    /// <summary>
+    /// <c>jason install</c> stopped this data directory's runtime and none has started since: the note it left is named by
+    /// the runtime check with the one command that pays it, and the verb still answers 1, never 3. With no note it says
+    /// nothing of one, and a runtime that answers has paid it, so a note left beside one is not named.
+    /// </summary>
+    [Fact]
+    public async Task A_start_owed_by_jason_install_is_named_with_the_command_that_pays_it()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var runtime = Assert.Single(Read(output).Checks, check => check.Name == "runtime");
+        Assert.Equal(CheckState.Failed, runtime.State);
+        Assert.Contains("`jason install` stopped the runtime on this data directory at 2026-11-17T15:05:35Z and none has started since, so a start is owed: `jason runtime start` starts one.", runtime.Fact, StringComparison.Ordinal);
+        Assert.Equal("jason runtime start", runtime.Fix);
+
+        // A note whose moment cannot be read still stands.
+        File.WriteAllText(dir.Paths.StartOwedFile, "not json");
+        output.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["status"], Machine(dir, output), Ct));
+        Assert.Contains("`jason install` stopped the runtime on this data directory and none has started since", Assert.Single(Read(output).Checks, check => check.Name == "runtime").Fact, StringComparison.Ordinal);
+
+        File.Delete(dir.Paths.StartOwedFile);
+        output.GetStringBuilder().Clear();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+        Assert.DoesNotContain("owed", Assert.Single(Read(output).Checks, check => check.Name == "runtime").Fact, StringComparison.Ordinal);
+
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        Running(dir);
+        output.GetStringBuilder().Clear();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+        var answering = Assert.Single(Read(output).Checks, check => check.Name == "runtime");
+        Assert.Equal(CheckState.Ok, answering.State);
+        Assert.DoesNotContain("owed", answering.Fact, StringComparison.Ordinal);
+    }
+
     // The autostart check says what a logon registration does at the next sign-in, and nothing of whether the runtime runs now.
 
     private static async Task<StatusCheck> AutostartCheckAsync(bool registered)
@@ -400,6 +441,72 @@ public class StatusCommandTests
         var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
         Assert.Equal(CheckState.Absent, check.State);
         Assert.DoesNotContain("skills", check.Fact.Replace(harness, string.Empty, StringComparison.Ordinal).Replace("skill packs", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A role Jason ships whose skill in the role skills directory is a folder the record there does not name is the
+    /// person's: every deployment leaves it alone and a launch teaches it, so the check says so, by name, in the class of a
+    /// role of their own, and never counts it silently as Jason's. A role the record names is not said.
+    /// </summary>
+    [Fact]
+    public async Task A_shipped_role_whose_skill_is_a_folder_of_your_own_is_said_and_never_counted_silently()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var roles = dir.Paths.RoleSkillsDirectory;
+        Running(dir, roles: ["researcher", "planner"], skills: new SkillsInfo(roles, 1048576, [Taught("researcher"), Taught("planner")]));
+        Deploy(roles);
+        Skills.SkillsLeftAloneTests.Plant(roles, "planner");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains($" 'planner' is a role Jason ships, and its skill in {roles} is a folder Jason did not deploy: the runtime teaches 'planner' from that folder, and no deployment writes over it. To have the one Jason ships, move or remove that folder, then run `jason skills install --roles-only`.", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("'researcher' is a role Jason ships", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The harness check names each skill a deployment left alone as the person's: one still there as theirs, which a host
+    /// reading the root runs under the shipped name, and one since taken away as a root without that skill, which an
+    /// update writes.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_harness_check_names_a_skill_left_alone_as_yours_and_one_taken_away_as_missing(bool stillThere)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        DeployPacks(harness, ("jason-runtime-skills", "operating", "v0.1.0", false));
+        var record = SkillsRecord.Read(harness)!;
+        SkillsRecord.Write(harness, record with { Packs = [record.Packs[0] with { LeftAlone = ["quick-start"] }] });
+        if (stillThere)
+        {
+            Skills.SkillsLeftAloneTests.Plant(harness, "quick-start");
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        var folder = Path.Combine(harness, "quick-start");
+        if (stillThere)
+        {
+            // Said, and never a failure: the check stays ok, so `ready` does not move.
+            Assert.Equal(CheckState.Ok, check.State);
+            Assert.Contains($"{folder} is a folder Jason did not deploy, under a name Jason ships, left as it is: Jason's 'quick-start' is not installed for ", check.Fact, StringComparison.Ordinal);
+            Assert.Contains(", and an agent there asked to use 'quick-start' reads that folder. To have the one Jason ships, move or remove that folder, then run `jason skills update`.", check.Fact, StringComparison.Ordinal);
+        }
+        else
+        {
+            // The state and repair a recorded skill missing from the disk is given, since it is the same fact.
+            Assert.Equal(CheckState.Failed, check.State);
+            Assert.Equal("jason skills update", check.Fix);
+            Assert.False(check.Required, "harness_skills moves `ready`");
+            Assert.Contains($"{folder}, a folder Jason left as it was, no longer holds a skill, so {harness} has no 'quick-start': `jason skills update` writes the one Jason ships.", check.Fact, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>And what the record in the role root says is reported by the check whose subject it is.</summary>
@@ -1189,8 +1296,10 @@ public class StatusCommandTests
         var output = new StringWriter();
         Running(dir);
         var installed = Path.Combine(dir.Paths.Root, "programs", name, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        File.WriteAllText(installed, string.Empty);
 
-        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = Path.GetDirectoryName(installed) }, Ct);
 
         var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
         Assert.Equal(CheckState.Ok, check.State);
@@ -1253,6 +1362,82 @@ public class StatusCommandTests
         var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
         Assert.Equal(CheckState.Ok, check.State);
         Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Another file first by name is what a person and every agent typing jason run, so this jason's readiness says nothing
+    /// of theirs: the path check fails, naming both files, and the installation is not ready. That is so on a machine where
+    /// a build of a checkout answers here and a release answers by name, and the sentence says why in one reading. On macOS
+    /// and Windows, where a machine holds one installation; Linux keeps the check it had (the next row).
+    /// </summary>
+    [Fact]
+    public async Task Another_jason_first_by_name_fails_the_path_check_naming_both()
+    {
+        Assert.SkipWhen(OperatingSystem.IsLinux(), "On Linux the path check is as it was before one installation per machine: the next row holds it.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs")).FullName, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        File.WriteAllText(installed, string.Empty);
+        var found = Path.Combine(dir.Paths.Root, "bin", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.True(check.Required);
+        Assert.Equal(
+            $"'jason' resolves to {found}, not to this jason ({installed}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
+            + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {installed}.",
+            check.Fact,
+            ignoreCase: true);
+        Assert.False(report.Ready);
+    }
+
+    /// <summary>
+    /// On Linux the path check is exactly what it was before one installation per machine: another jason by name than the
+    /// one answering is said, the check passes, and readiness is not touched by it.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_another_jason_first_by_name_is_said_and_the_path_check_passes_as_before()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "On macOS and Windows a machine holds one installation, and the row above holds the failure.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs")).FullName, "jason");
+        File.WriteAllText(installed, string.Empty);
+        var found = Path.Combine(dir.Paths.Root, "bin", "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"'jason' resolves to {found}, which is not the file answering here ({installed}): two installations are on this machine.", check.Fact);
+    }
+
+    /// <summary>
+    /// The application's wrapper running this jason is this jason by name: on macOS a new terminal finds
+    /// <c>~/.local/bin/jason</c>, which runs the image inside the application.
+    /// </summary>
+    [Fact]
+    public async Task The_application_s_wrapper_running_this_jason_is_this_jason_by_name()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "The wrapper is the application's on macOS; a Windows shell never runs a script with no extension by name, and Linux keeps the check it had.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "Jason.app", "bundle")).FullName, "jason");
+        File.WriteAllText(installed, string.Empty);
+        var bin = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "local-bin")).FullName;
+        File.WriteAllText(Path.Combine(bin, "jason"), Jason.Cli.Installation.CommandFiles.Wrapper(installed, null));
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = bin }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"'jason' resolves to {Path.Combine(bin, "jason")}.", check.Fact);
     }
 
     /// <summary>
@@ -1497,6 +1682,11 @@ public class StatusCommandTests
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendModesInForce> SendModeAnswers = [];
 
+    /// <summary>The dispatcher the runtime's <c>system.info</c> answers with; without it, running with nothing in flight.</summary>
+    internal static void Dispatcher(TempPaths dir, DispatcherInfo dispatcher) => DispatcherAnswers[dir.Paths.Root] = dispatcher;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DispatcherInfo> DispatcherAnswers = [];
+
     /// <summary>
     /// A role of the person's own on the roster beside the seeded ones: not shipped, and with the entry command it was added
     /// with, where it was added with one.
@@ -1616,7 +1806,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root), Dispatcher = DispatcherAnswers.GetValueOrDefault(dir.Paths.Root) ?? Info(answers.Skills).Dispatcher }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

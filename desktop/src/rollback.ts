@@ -239,8 +239,8 @@ export function keptNotice(said: string, previous: Previous, installed: string, 
 
 /**
  * What the starting page says when a start failed: what failed, and after an update's first start, where the version it
- * replaced is. A data directory whose layout `jason runtime start` refused is said in those words alone: the version an
- * update replaced knows that directory no better, so going back is not offered.
+ * replaced is. A data directory whose layout `jason runtime start` refused, or whose database a newer Jason migrated, is
+ * said in those words alone: the version an update replaced knows that directory no better, so going back is not offered.
  */
 export function failedStartNotice(said: string, layoutRefused: boolean, previous: Previous | null, installed: string, platform: NodeJS.Platform): string {
     return previous === null || layoutRefused ? said : keptNotice(said, previous, installed, platform);
@@ -248,12 +248,29 @@ export function failedStartNotice(said: string, layoutRefused: boolean, previous
 
 /**
  * Settles an update's first launch that did not load the window, as `settleStart` does, but for a start `jason runtime
- * start` refused for the data directory's layout: then the record stays as it is, since the cause is the directory and
+ * start` refused for the data directory's layout, or for a database a newer Jason migrated: then the record stays as it
+ * is, since the cause is the directory and
  * not the version, so that version is not refused, and the next start settles the same record. Returns the pending
  * record where the person is to be told where the previous version is, null otherwise.
  */
 export function settleFailedStart(rollback: string, currentVersion: string, layoutRefused: boolean, log: Logger): PendingUpdate | null {
     return layoutRefused ? null : settleStart(rollback, currentVersion, false, log);
+}
+
+/**
+ * Settles an update a terminal asked for and the installer made with no window (`update-request.ts`): the `--update-settle`
+ * start of the new version, made once that version's runtime answered, records it as a start that worked records it,
+ * the copy kept and the version not refused. Only the update that installed this version is settled, and once: a record
+ * that names no such update is left as it is, so a second settle or one after a window's changes nothing. An update whose
+ * runtime did not come up is not settled here: it stays pending, and the next start of a Live window settles it and
+ * says where the copy is. Answers whether it settled.
+ */
+export function settleByRequest(rollback: string, currentVersion: string, log: Logger): boolean {
+    const state = readRollback(rollback);
+    if (!isFirstLaunchOfUpdate(state, currentVersion)) return false;
+    writeRollback(rollback, afterSuccessfulStart(state));
+    log.info('update_settled_by_request', { Version: currentVersion });
+    return true;
 }
 
 /**

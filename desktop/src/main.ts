@@ -9,7 +9,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeThem
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
@@ -17,7 +17,8 @@ import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
-import { cliAt, type Cli } from './cli.ts';
+import { restoreAtStart } from './carried-restore.ts';
+import { cliAt, startJasonAlone, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
@@ -35,13 +36,16 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
+import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
+import { carriedRuntimeStart, refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
-import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed, UpdateBusy } from './installation.ts';
+import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, startPastUpdate, StillUpdating, updateHolds, updateWaitMs, updateWaitSentence, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
-import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths, namedDataDirectory, type DesktopPaths } from './paths.ts';
 import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
@@ -59,8 +63,9 @@ import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { accountShell, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
-import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
-import { runStopRuntime, runUninstall } from './uninstall-start.ts';
+import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart, updaterCache } from './uninstall.ts';
+import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
+import { runStopRuntime, runUninstall, runUninstallBusy } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
 import { followTheme, frameOf, keepMovable } from './window-frame.ts';
@@ -208,6 +213,26 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
+/**
+ * A terminal's update requests, taken by the run whose window is open: in Live by the updater `updater` gives, up to the
+ * download, and on, to the install, only where the switch says a window may close (`windowOpenUpdate`); `menu` says
+ * whether the window has an install item to wait under. A window that shows the Demo holds no updater and refuses every
+ * request as `demo_open` (`takeRequest`).
+ */
+function serveRequests(log: Logger, data: string, window: { menu: boolean; updater: () => Pick<Updater, 'take'> } | 'demo'): void {
+    windowRequests?.serve((request) =>
+        takeRequest(request, {
+            data,
+            from: app.getVersion(),
+            ...(window === 'demo' ? { where: 'demo' as const } : { where: { window: { menu: window.menu } }, updater: window.updater }),
+            unsupported: requestSupport(app.isPackaged, process.platform),
+            windowOpen: windowOpenUpdate,
+            log,
+            startRuntime: carriedRuntimeStart(data, log),
+        }),
+    );
+}
+
 /** The desktop's log before run() makes its own, under the data directory this start was given. */
 function startLog(): Logger {
     return fileLogger(desktopPaths(dataDirectory(process.env, homedir())).logs);
@@ -249,7 +274,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
     const inherited = pathOf(process.env);
-    const shellRead = shellPath();
+    const shellRead = askedShell();
     const pathRead = loginPath(inherited, home, shellRead);
     process.env.PATH = await pathRead;
     // What a new terminal has: the login shell's own PATH, before the usual places, never the PATH above. Placing the
@@ -397,14 +422,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
         executable,
-        dataDirectory: process.env['JASON_DATA_DIR'] || null,
+        dataDirectory: namedDataDirectory(process.env, home, process.platform),
         path: () => process.env.PATH ?? '',
         pathext: process.env['PATHEXT'],
         isProgram: (file) => isProgramFile(file, process.platform),
         account: { home, shellNamed: accountShell(process.env), terminalPath: () => terminalPath },
         log,
     };
-    const command = offers.command && carried.outlives ? new PathCommand(commandDeps) : null;
+    // On Linux the Command Line item places the PATH command; on macOS and Windows it is the machine set-up's status
+    // (`machine-setup.ts`), which `jason install` places and the desktop's start runs.
+    const command = offers.command && carried.outlives && !commandIsSetup(process.platform) ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
     const otherCopy = carried.repoints ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
@@ -416,8 +443,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Offered
-    // in Live alone (`offersOf`).
+    // Remove What Jason Placed, on Linux: the uninstall's own steps, over the same items the menu sets. Offered in Live
+    // alone (`offersOf`). On macOS, Uninstall Jason…: the one uninstall, the carried jason's, started on its own once the
+    // person says so, waiting for this process to quit.
     const removal = offers.removal && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
@@ -441,11 +469,45 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         : null;
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
     // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
-    const modeDeps = modeSwitch(log, form);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps), menuChanged: () => toPage('updates.changed') });
+    const modeDeps = modeSwitch(log, form, () => current);
+    const uninstall = offers.removal && uninstallOffered(process.platform) && version !== null && carried.outlives
+        ? {
+              scope: () => ({
+                  application: applicationFolder(process.platform, process.execPath),
+                  dataDirectory: paths.data,
+                  harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
+                  output: uninstallOutput(tmpdir(), new Date()),
+              }),
+              start: (args: string[], output: string) => startJasonAlone(executable, args, env, output),
+              pid: process.pid,
+          }
+        : null;
+    const desk = new Desk({
+        window: () => current,
+        origin,
+        cli: jason,
+        log,
+        reload: () => void repairer.reload(),
+        login,
+        autostart,
+        updates,
+        kept: keptCopy,
+        // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
+        place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
+        command,
+        setup: offers.command && carried.outlives ? machineSetup : null,
+        removal,
+        uninstall,
+        demo: demoMenu(runOn.mode),
+        back: () => backToLive(modeDeps),
+        menuChanged: () => toPage('updates.changed'),
+    });
     desk.open();
     showWindow = () => desk.show();
+    // The logon start is moved from another copy only once the machine set-up has ended, never beside it: the routine may
+    // move the same registration when it retires an older command-line install.
     const repointed = (async () => {
+        await machineSetup?.settled();
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
         await desk.readAutostart();
     })();
@@ -458,6 +520,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     });
     updates?.start();
+    // A terminal's update request, taken by this window's own updater (a build that has none takes none: `requestSupport`).
+    serveRequests(log, paths.data, { menu: updates !== null, updater: () => updates ?? requestUpdater({ data: paths.data, log }) });
     let runtimeVersion: string | null = null;
     let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
@@ -629,9 +693,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
-        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look; none told where
-        // this run offers no command (the demo, a start that carries no copy).
-        ...(command === null ? {} : { jason: () => command.onPath() }),
+        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look on Linux and by
+        // the same lookup on macOS and Windows, where the item's one act is put back; none told where this run offers no
+        // command (the demo, a start that carries no copy).
+        ...(command !== null
+            ? { jason: () => command.onPath() }
+            : machineSetup !== null && offers.command && carried.outlives
+              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: namedDataDirectory(process.env, home, process.platform), isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
+              : {}),
         icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
@@ -672,21 +741,51 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         return;
     }
 
+    // The machine set-up this start runs, where it runs one, is waited for at most `liveWaitMs` before the installation is
+    // brought up, the window saying meanwhile what is being done. Past it Live goes on and the routine is left to end; a
+    // runtime it stops then, of a command-line install it retires, is started again from the carried jason by the set-up
+    // itself (`machine-setup.ts`), as one it stops in time is.
+    if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
+    await machineSetup?.settledWithin(liveWaitMs);
+
     try {
-        const started = await startInstallation({
-            cli,
-            paths,
-            log,
-            programs,
-            bundle,
-            bundleVersion: version,
-            gate: skillsGate,
-            settings,
-            saveSettings(next) {
-                settings = next;
-                writeSettings(paths.settings, next);
+        // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
+        // refuses a runtime's start until that step has started one (`startAfterSetup`). Where an update still holds the
+        // start, the set-up's or a terminal's, it is asked again, bounded, and never settled as a failed start
+        // (`startPastUpdate`).
+        const started = await startPastUpdate(
+            () =>
+                startAfterSetup(
+                    () =>
+                        startInstallation({
+                            cli,
+                            paths,
+                            log,
+                            programs,
+                            bundle,
+                            bundleVersion: version,
+                            gate: skillsGate,
+                            settings,
+                            saveSettings(next) {
+                                settings = next;
+                                writeSettings(paths.settings, next);
+                            },
+                        }),
+                    machineSetup,
+                    () => showStarting(window, finishWaitSentence, false),
+                ),
+            {
+                holds: (error) =>
+                    updateHolds(error, machineSetup?.state ?? null, {
+                        busy: (failed) => failed instanceof UpdateBusy,
+                        refusedData: (failed) => failed instanceof LayoutRefused || failed instanceof DataNewerRefused,
+                    }),
+                busy: (failed) => failed instanceof UpdateBusy,
+                waiting: () => showStarting(window, updateWaitSentence, false),
+                sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+                now: () => Date.now(),
             },
-        });
+        );
         runtimeVersion = started.runtimeVersion;
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
@@ -724,17 +823,26 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        const layoutRefused = error instanceof LayoutRefused;
-        const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
-        const said = error instanceof Error ? error.message : String(error);
-        const notice = failedStartNotice(
-            said,
-            layoutRefused,
-            kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
-            aside ?? applicationFolder(process.platform, process.execPath),
-            process.platform,
-        );
-        if (current !== null) await showStarting(current, notice, true);
+        // An update that still held the start past the bound settles nothing: the version is neither kept nor refused, and
+        // the next start decides.
+        if (error instanceof StillUpdating) {
+            log.warn('start_left_to_update', { Seconds: updateWaitMs / 1000 });
+            if (current !== null) await showStarting(current, error.message, true);
+        } else {
+            // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
+            // offered, since an older version knows that directory no better.
+            const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
+            const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
+            const said = error instanceof Error ? error.message : String(error);
+            const notice = failedStartNotice(
+                said,
+                layoutRefused,
+                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+                aside ?? applicationFolder(process.platform, process.execPath),
+                process.platform,
+            );
+            if (current !== null) await showStarting(current, notice, true);
+        }
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {
@@ -819,14 +927,17 @@ async function runDemo(_links: LinkPost): Promise<void> {
     window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     window.webContents.session.setPermissionCheckHandler(() => false);
 
-    const modeDeps = modeSwitch(log, form);
+    const modeDeps = modeSwitch(log, form, () => current);
     // The Demo runs no jason: the tray's count is never read here, and anything that asked would be refused.
     const noJason: Cli = { run: () => Promise.reject(new Error('The demo runs no jason.')) };
     let views: DemoViews | null = null;
     const login = new LoginItem({ platform: process.platform, home: homedir(), executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead: Promise.resolve(), log, env: process.env });
-    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
+    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
+    // A terminal's update request: the Demo resolves no host name and holds no updater, so it refuses the request as the
+    // Demo (`demo_open`), and nothing is checked, stopped or kept.
+    serveRequests(log, runOn.person, 'demo');
 
     const unshown = demoUnshownSentence(process.platform);
     try {
@@ -871,6 +982,62 @@ let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
+// Where a terminal's update request waits for the window's run that takes it (`update-request.ts`), made by the start that
+// holds the lock: one at a time, and one that comes while another is taken is refused as busy, in its own file.
+let windowRequests: UpdateRequests | null = null;
+// The machine set-up of a windowed start on macOS and Windows (`machine-setup.ts`): made once the single-instance lock is
+// held, run once Electron is ready, before the Demo's or Live's run goes on; null on Linux and for every other start.
+let machineSetup: MachineSetup | null = null;
+// The login shell's own PATH, asked once a start: the window's run and the machine set-up read the same answer.
+let shellAsked: Promise<string | null> | null = null;
+function askedShell(): Promise<string | null> {
+    shellAsked ??= shellPath();
+    return shellAsked;
+}
+
+/**
+ * A Linux Demo start's payment of the note that a start is owed (`payOwedStart`), from the jason that outlasts the run, with
+ * the person's environment and nothing of an AppImage's mount.
+ */
+async function linuxOwedStart(log: Logger): Promise<void> {
+    const form = linuxForm();
+    if (form === null) return;
+    const bundle = bundleDirectory();
+    const jason = linuxOwedJason(form, bundle, desktopPaths(runOn.person).bundle, bundleVersion(bundle), existsSync);
+    if (jason === null) return;
+    const cli = cliAt(jason, withoutMount(withPath(process.env, pathOf(process.env)), mountOf(form, process.env)));
+    await payOwedStart({ note: desktopPaths(runOn.person).startOwed, exists: existsSync, runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile), log });
+}
+
+/**
+ * The machine set-up a windowed start runs on macOS and Windows: the carried `jason install`, with the person's own
+ * environment, its record in the person's directory; null on Linux, whose Command Line item is the PATH command.
+ */
+function makeMachineSetup(log: Logger): MachineSetup | null {
+    if (!commandIsSetup(process.platform)) return null;
+    const bundle = bundleDirectory();
+    const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    const cli = cliAt(executable, withPath(process.env, pathOf(process.env)));
+    return new MachineSetup({
+        cli,
+        executable,
+        version: bundleVersion(bundle),
+        platform: process.platform,
+        offered: setupOffered(process.platform, app.isPackaged),
+        record: desktopPaths(runOn.person).machineSetup,
+        terminalPath: () => askedShell(),
+        // The runtime on the person's data directory, read before and after each run and started again from the carried
+        // jason where the run left none that had answered, or the note says a start is owed: in Demo as in Live, the
+        // person's installation's, not the Demo's.
+        runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile),
+        log,
+        // The command line's finishing step after the routine, with no time limit: with a carried update in flight and the
+        // application at its version it finishes that update, the runtime's start included (`docs/release-and-update.md` §7).
+        finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),
+        // The note that a start is owed, read at every start of a window, Demo or Live; the desktop writes none.
+        startOwed: desktopPaths(runOn.person).startOwed,
+    });
+}
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -887,7 +1054,7 @@ if (unsandboxed !== null) {
  * The switch between Live and Demo, the page's and the menu's: the record written in the person's directory, then the
  * desktop started again with the person's environment, which a run no longer changes (`relaunchAsPerson`).
  */
-function modeSwitch(log: Logger, form: LinuxPackage | null): { write(mode: Mode): void; relaunch(): void } {
+function modeSwitch(log: Logger, form: LinuxPackage | null, window: () => BrowserWindow | null): { write(mode: Mode): void; relaunch(): void } {
     return {
         write: (mode: Mode) => {
             try {
@@ -898,14 +1065,24 @@ function modeSwitch(log: Logger, form: LinuxPackage | null): { write(mode: Mode)
             }
             log.info('mode_set', { Mode: mode });
         },
+        // Held for the machine set-up's run up to its bound, the page saying so (`beforeRelaunch`); a person's Quit is not.
         relaunch: () =>
-            relaunchAsPerson({
-                env: process.env,
-                person: personEnvironment,
-                relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
-                quit: () => app.quit(),
-            }),
+            void beforeRelaunch(machineSetup, () => sayBeforeRelaunch(window())).then(() =>
+                relaunchAsPerson({
+                    env: process.env,
+                    person: personEnvironment,
+                    relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
+                    quit: () => app.quit(),
+                }),
+            ),
     };
+}
+
+/** The page the mode switch shows while its relaunch waits: the window's own, the Demo's views taken off it first. */
+async function sayBeforeRelaunch(window: BrowserWindow | null): Promise<void> {
+    if (window === null || window.isDestroyed()) return;
+    for (const child of [...window.contentView.children]) window.contentView.removeChildView(child);
+    await showStarting(window, relaunchWaitSentence, false);
 }
 
 /** Back to Your Own Installation, in a demo run's tray and menu: what Live on the switch does. */
@@ -948,21 +1125,41 @@ function startDesktop(): void {
 
     const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
     const stoppingRuntime = uninstalling === null && stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
-    chooseInstallation(uninstalling !== null || stoppingRuntime);
+    const updating = uninstalling === null && !stoppingRuntime ? updateStart(process.argv) : null;
+    chooseInstallation(uninstalling !== null || stoppingRuntime || updating !== null);
     keepElectronUnderData();
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
-        // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
-        void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
+        // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`). It holds the
+        // single-instance lock while it runs, so an update asked for meanwhile is handed to a start that never answers it
+        // rather than racing the removal; where another start holds the lock, a window or an update, it takes nothing off
+        // and exits 1, which the uninstaller reads as go no further (`uninstallBusyExit`).
+        const held = app.requestSingleInstanceLock();
+        void app
+            .whenReady()
+            .then(() => (held ? runUninstall(uninstalling.quiet) : runUninstallBusy(uninstalling.quiet)))
+            .then((code) => app.exit(code), () => app.exit(2));
     } else if (stoppingRuntime) {
         // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that
         // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read
         // the code.
         void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
+    } else if (updating !== null) {
+        // A terminal's update request, or its settling start: no window, no runtime started (`update-start.ts`).
+        startUpdate(updating);
     } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
     } else {
         const early = startLog();
+        windowRequests = new UpdateRequests((request) => refuseBusy(request, true));
+        // The machine set-up, where the routine has not run for this version yet: in a Demo start as in Live, before the
+        // person chooses, and writing nothing under the data directory but its own record (`machine-setup.ts`).
+        // On Windows, a carried jason.exe an update moved out of the folder and the installer never replaced is put back from
+        // the updater's store where the folder is still the version the stored image came from (`carried-restore.ts`).
+        if (process.platform === 'win32' && app.isPackaged) {
+            restoreAtStart({ executable: join(bundleDirectory(), 'jason.exe'), version: bundleVersion(bundleDirectory()), updaterCache: updaterCache(process.env, homedir(), process.platform), log: early });
+        }
+        machineSetup = makeMachineSetup(early);
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
         // carry what Chromium added (electron.d.ts, `second-instance`).
@@ -971,6 +1168,11 @@ function startDesktop(): void {
         app.on('second-instance', (_event, argv, _directory, data) => {
             const link = linkOf(data);
             if (link !== null) return linkArrived(link, links, early);
+            // A terminal's update request, handed over by its start: taken by the window's run, and it brings nothing forward.
+            const request = requestOf(data);
+            if (request !== null) return windowRequests?.arrived(request);
+            // A terminal's settling start, or a request that could not be read: it brings nothing forward.
+            if (updateStart(argv) !== null) return;
             if (showsOnSecondStart(argv)) showWindow();
         });
         // macOS hands a link by open-url, at a cold start before ready as at a running one, so it is listened for now.
@@ -984,6 +1186,65 @@ function startDesktop(): void {
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
+        // On Linux no set-up runs: a Demo start pays the note that a start is owed itself, and a Live start brings a runtime up.
+        void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }
+}
+
+/**
+ * The starts a terminal's `jason update apply` makes (`update-request.ts`): no window, and on macOS no Dock icon, the
+ * activation policy being set to `accessory` before Electron is ready and once more when it is. `--update-apply` takes the
+ * single-instance lock of its data directory, or hands its request to the Jason Desktop that holds it and exits 3; while
+ * it holds the lock, a second start's request is refused as busy and anything else a second start asks is let go.
+ * `--update-settle` takes the same lock, so it never writes the rollback record while a window settles its own start;
+ * where another Jason Desktop holds it, this one exits 0 having written nothing, and the next Live window's start settles
+ * it (a Demo window does not).
+ */
+function startUpdate(updating: UpdateStart): void {
+    const headless = (): void => {
+        if (process.platform === 'darwin') app.setActivationPolicy('accessory');
+    };
+    headless();
+    if (updating.kind === 'usage') {
+        app.exit(runUpdateUsage(updating.id, updating.why));
+        return;
+    }
+    const ready = app.whenReady().then(headless);
+    if (updating.kind === 'settle') {
+        if (!app.requestSingleInstanceLock()) {
+            startLog().info('update_settle_left', {});
+            app.exit(0);
+            return;
+        }
+        void ready.then(runUpdateSettle).then((code) => app.exit(code), () => app.exit(1));
+        return;
+    }
+    const { request } = updating;
+    if (!app.requestSingleInstanceLock(handedData(request))) {
+        startLog().info('update_request_handed', { To: request.to });
+        app.exit(applyExits.handedOver);
+        return;
+    }
+    const requests = new UpdateRequests((other) => refuseBusy(other, false));
+    // A person who opens Jason Desktop while this start holds the lock gets nothing meanwhile: the start is remembered,
+    // and the application opened as this one exits, where it installed nothing (`asksForWindow`, `openAfterRequest`).
+    let windowAsked = false;
+    app.on('second-instance', (_event, argv, _directory, data) => {
+        const other = requestOf(data);
+        if (other !== null) return requests.arrived(other);
+        if (!asksForWindow(argv, data, openedAtLogin)) return;
+        // Said once, with no window of its own to stand on and nothing waited for: the update goes on meanwhile.
+        if (!windowAsked) void dialog.showMessageBox({ type: 'info', title: windowTitle, ...updatingWords, buttons: ['OK'] }).catch(() => undefined);
+        windowAsked = true;
+    });
+    const exit = (code: number): void => {
+        if (openAfterRequest(windowAsked, code)) {
+            startLog().info('update_window_opened', { Exit: code });
+            const form = linuxForm();
+            app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));
+        }
+        app.exit(code);
+    };
+    void ready.then(() => runUpdateApply(request, requests)).then(exit, () => exit(applyExits.failed));
 }

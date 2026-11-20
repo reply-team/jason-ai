@@ -80,6 +80,23 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// (it may be another installation's or a spelling of this one), untouched where another program's.
 /// </param>
 /// <param name="LinkUnreadable">Why the link registration could not be read, never taken for an account without one.</param>
+/// <param name="Desktop">
+/// Where this jason is the one Jason Desktop carries, on macOS and Windows: the application's own placements and the
+/// application itself, which this uninstall takes off too; null for any other installation.
+/// </param>
+/// <param name="ExtractedLibraryBases">
+/// The temporary folders looked under for what builds of this program unpacked, on Windows where the host unpacks into
+/// its own default base: this build's own temporary folder first, always, then the folder it is numbered inside where it
+/// is a numbered folder, and the numbered folders of that folder, or of its own where it is none, each where builds
+/// unpacked under it. Holding this build's own alone where no other was found. Null where the look was not widened at
+/// all: elsewhere than Windows, where the host was told to unpack somewhere else, or where this build's directory is not
+/// known or not shaped as the host unpacks.
+/// </param>
+/// <param name="ExtractedLibrariesElsewhere">
+/// What builds of this program unpacked under the bases in <paramref name="ExtractedLibraryBases"/> other than this
+/// build's own, one directory each: named and left, never removed, since this removal takes only what stands under its
+/// own temporary folder and a copy may be in use from there. Null where <paramref name="ExtractedLibraryBases"/> is.
+/// </param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
@@ -101,7 +118,10 @@ public sealed record UninstallPlan(
     IReadOnlyList<string>? OtherExtractedLibraries = null,
     string? OtherExtractedLibrariesLeft = null,
     LinkRegistrationPlan? Link = null,
-    string? LinkUnreadable = null)
+    string? LinkUnreadable = null,
+    DesktopPlan? Desktop = null,
+    IReadOnlyList<string>? ExtractedLibraryBases = null,
+    IReadOnlyList<string>? ExtractedLibrariesElsewhere = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

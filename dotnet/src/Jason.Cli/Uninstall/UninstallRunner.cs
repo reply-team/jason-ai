@@ -58,12 +58,17 @@ public static class UninstallRunner
     /// assembly it has not loaded yet — see <see cref="IInstallationRemover.RemoveExecutable"/> — and the
     /// report is the one thing still to be written.
     /// </param>
+    /// <param name="startWait">
+    /// What the wait for a runtime still starting, made before the plan was read, ended with: said in <c>done</c> where it
+    /// waited.
+    /// </param>
     public static async Task<UninstallReport> RunAsync(
         CliEnvironment env,
         UninstallPlan plan,
         UninstallOptions options,
         CancellationToken cancellationToken,
-        Action<UninstallReport>? beforeTheImageGoes = null)
+        Action<UninstallReport>? beforeTheImageGoes = null,
+        StartWait startWait = StartWait.None)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
@@ -97,37 +102,123 @@ public static class UninstallRunner
 
         try
         {
-            // 1. The registration, first.
-            if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
+            if (startWait is StartWait.Ended)
+            {
+                done.Add("A jason of this installation was running when this began, with no runtime answering; it ended by itself before anything was removed.");
+            }
+
+            // 1. The registration, first — except on macOS, where it comes after the stop. There the registration is a
+            // job loaded in launchd, and taking it out (`launchctl unload`, `launchctl remove`) ends the process launchd
+            // started at login: the runtime itself, with no drain. The job has RunAtLoad and no KeepAlive, so launchd
+            // does not start a runtime that stopped, and a login of an account already logged in loads nothing again:
+            // between the stop and the take-out nothing starts it.
+            var registrationAfterTheStop = RuntimeAutostartCommands.Registrar(env).Platform is AutostartPlatform.MacOs;
+            if (!registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
             }
 
+            var desktop = plan.Desktop;
+            var places = env.Setup;
+
             // 2. The runtime, and only then.
-            if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, startWait, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
+            }
+
+            // And nothing else of this installation's jason still running, now that the runtime has stopped: what this removes
+            // next is what such a process runs from.
+            if (await Step2OthersEndedAsync(env, plan, options, registrationAfterTheStop, cancellationToken).ConfigureAwait(false) is { } refusedAfter2)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAfter2.Code, refusedAfter2.Message);
+            }
+
+            // On macOS the registration now, with the runtime stopped: its file is unloaded before it goes.
+            if (registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAfterTheStop.Code, refusedAfterTheStop.Message);
+            }
+
+            // And the application's own start at sign-in, only now, so a runtime that will not stop leaves it where it was
+            // and the refusal's "as it was" holds of it. It went before the stop, "for the same reason" as the runtime's
+            // registration, and nothing needs that: what it starts is the window, which refuses this verb up front while it
+            // is open, and a sign-in of the account this runs in, already signed in, starts nothing again.
+            if (desktop is not null && places is not null)
+            {
+                DesktopRemoval.RemoveOpenAtLogin(env, places, desktop, done, problems);
+            }
+
+            // The note that a start is owed, where the data is kept: with this installation taken off no start is owed, and a
+            // later install would otherwise start a runtime for an old jason install's stop. A purge takes it with the rest.
+            if (!purge && File.Exists(env.Paths.StartOwedFile))
+            {
+                if (Installation.StartOwed.Remove(env.Paths))
+                {
+                    done.Add($"Removed {env.Paths.StartOwedFile}, the note that a start was owed: with this installation taken off, none is.");
+                }
+                else
+                {
+                    problems.Add($"{env.Paths.StartOwedFile}, the note that a start is owed, could not be removed: delete it, or a later install of Jason Desktop starts a runtime at its first start.");
+                }
+            }
+
+            if (desktop is not null && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);
             }
 
             // 3. The notification registration, after the runtime that could write it back has stopped.
             StepRemoveNotificationRegistration(env, plan, done, problems);
             StepRemoveLinkRegistration(env, done, kept, problems);
+            if (desktop is not null)
+            {
+                DesktopRemoval.RemoveDesktopLink(desktop, done, problems);
+            }
 
             // 4. Everything a receipt names, and nothing else.
             Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
-            // 5. The PATH entry, only where this installer wrote it.
-            Step4RemovePathEntry(env, plan, done, kept, problems);
+            // 5. The PATH entry, only where this installer wrote it; for the application's jason, the terminal command
+            //    `jason install` placed and what an older command-line install left, then the application's other files.
+            if (desktop is not null && places is not null)
+            {
+                DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
+                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
+            }
+            else
+            {
+                Step4RemovePathEntry(env, plan, done, kept, problems);
+            }
 
             // Rendered once and thrown away, while this process can still load whatever rendering it needs.
             beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
 
             // 6. The executable, its install directory and what it unpacked, last, because everything above is
             //    run from it.
-            Step5RemoveExecutable(env, plan, done, kept, problems);
+            if (desktop is null)
+            {
+                Step5RemoveExecutable(env, plan, done, kept, problems);
+            }
+            else
+            {
+                // The application's jason goes with the application, and what its build unpacked here, by the same
+                // routine: it maps nothing of that directory, which only a runtime loads, and the runtime has stopped.
+                RemoveExtractedLibraries(env, plan, done, kept, problems);
+            }
+
+            // And the folders an install or a move renamed a running executable into, which no later run of this
+            // installation would sweep once it is off the machine.
+            SweepRetired(env, plan, done, problems);
 
             // 7. And the data directory, only on the explicit word, after everything else.
             Step6Data(env, plan, purge, done, kept, problems);
+
+            // 8. The application itself, last of all: everything above ran from the jason inside it.
+            if (desktop is not null)
+            {
+                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems);
+            }
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
         {
@@ -167,7 +258,8 @@ public static class UninstallRunner
         {
             // Composed the one way this product composes a removal, the way `disable` does. A second place that knew
             // how this machine registers things would be a second place to be wrong about how it unregisters them.
-            removed = registrar.Remove(RuntimeAutostartCommands.Removal(env, registrar.Platform));
+            // One difference: an uninstall leaves no mark for the name, where `disable` leaves the label disabled on macOS.
+            removed = registrar.Remove(RuntimeAutostartCommands.Removal(env, registrar.Platform, leavesNoMark: true));
         }
         catch (AutostartException refusal)
         {
@@ -442,7 +534,8 @@ public static class UninstallRunner
     /// Last because every step above it is run from this file. And the one step that can honestly half
     /// succeed: where the file is the image of this very process it is moved aside rather than deleted, and
     /// the report names where it went and the line that removes it. It does not claim a clean uninstall it
-    /// did not perform.
+    /// did not perform. Off Windows the executable is looked at once more first: a jason started from it since the
+    /// runtime stopped (a person's or an agent's <c>jason runtime start</c>) keeps it, and what goes with it, as a problem.
     /// </remarks>
     private static void Step5RemoveExecutable(
         CliEnvironment env,
@@ -469,6 +562,18 @@ public static class UninstallRunner
                 + "own output - so there is no one executable to remove and none was: the build it runs from is "
                 + "where it lives, and neither the muxer nor a build's launcher is an installation of Jason. A "
                 + "published release is one file, and this verb removes that one.");
+            return;
+        }
+
+        if (StartInFlight.LastLook(env, executable, []) is { Any: true } late)
+        {
+            problems.Add(StartInFlight.LateProblem(
+                env,
+                late,
+                [],
+                $"The executable at '{executable}' was kept, and its notice files, its install directory and what it unpacked with it",
+                executable,
+                $"run '{executable} uninstall' again"));
             return;
         }
 
@@ -554,6 +659,42 @@ public static class UninstallRunner
     }
 
     /// <summary>
+    /// The <c>jason-retired-&lt;id&gt;</c> folders, by the sweep an install, an update's finish and a move run: each goes once
+    /// the process running its executable has ended, and is said; one still held is a problem, named with what to do, since
+    /// nothing of Jason sweeps it after this. Windows only, where the sweep is; and only where the system's places are known.
+    /// </summary>
+    private static void SweepRetired(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> problems)
+    {
+        if (env.Setup is not { } places)
+        {
+            return;
+        }
+
+        // Where the routine renames into: the temporary directory, beside the default install's folder, and beside the folder of
+        // the executable this removal takes, or of the older command-line install the application's removal found, where a
+        // rename aside on another volume puts its folder.
+        var outcome = RetiredSweep.Sweep(places, plan.Executable ?? plan.Desktop?.CommandLineInstall);
+        foreach (var folder in outcome.Swept)
+        {
+            done.Add($"Removed '{folder}', where an earlier install or move set aside a jason.exe a process was still running.");
+        }
+
+        foreach (var folder in outcome.Left)
+        {
+            problems.Add(
+                $"'{folder}' was not removed: an earlier install or move set aside there a jason.exe a process is still running, and "
+                + "nothing of Jason sweeps it after this. Remove the folder once that process has ended.");
+        }
+    }
+
+    /// <summary>
+    /// The line that names a directory a build unpacked under another temporary folder of this account, which this
+    /// uninstall leaves: where it is, and why it stays.
+    /// </summary>
+    internal static string LeftElsewhere(string directory) =>
+        $"Left '{directory}': a build of Jason unpacked it under another temporary folder, '{Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(directory)))}'. This removal takes only what stands under its own temporary folder; it is safe to remove once nothing runs from it.";
+
+    /// <summary>
     /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
     /// planned, and the directory holding them if that is now empty.
     /// </summary>
@@ -575,6 +716,13 @@ public static class UninstallRunner
         if (plan.ExtractedLibraries is not { } extracted)
         {
             return;
+        }
+
+        // What builds unpacked under this account's other temporary folders is named and left, whatever becomes of this
+        // build's own below: nothing there is removed.
+        foreach (var elsewhere in plan.ExtractedLibrariesElsewhere ?? [])
+        {
+            kept.Add(LeftElsewhere(elsewhere));
         }
 
         try
@@ -894,6 +1042,8 @@ public static class UninstallRunner
         CliEnvironment env,
         UninstallPlan plan,
         UninstallOptions options,
+        bool registrationAfterTheStop,
+        StartWait startWait,
         List<string> done,
         List<string> kept,
         CancellationToken cancellationToken)
@@ -911,7 +1061,7 @@ public static class UninstallRunner
 
         if (exit == ExitCodes.Success)
         {
-            done.Add("Stopped the runtime.");
+            done.Add(startWait is StartWait.Answered ? "A runtime was starting when this began; it answered, and it was stopped." : "Stopped the runtime.");
             return null;
         }
 
@@ -937,14 +1087,61 @@ public static class UninstallRunner
                 ({ } pid, false) => string.Create(CultureInfo.InvariantCulture, $"The runtime may still be running — process {pid}, which its descriptor names, is — "),
                 _ => "The runtime did not stop, ",
             }
-            + "so nothing further was removed and this installation is as it was — "
-            + "except the logon registration, which had already been taken away and which "
-            + "'jason runtime autostart enable' puts back. "
+            + (registrationAfterTheStop
+                ? "so nothing further was removed and this installation is as it was, its logon registration included. "
+                : "so nothing further was removed and this installation is as it was — "
+                  + "except the logon registration, which had already been taken away and which "
+                  + "'jason runtime autostart enable' puts back. ")
             + (left.Identified
                 ? "Stop the runtime with 'jason runtime stop' — or, where it does not answer that either, end that process — and run this again. "
                 : "Stop the runtime with 'jason runtime stop' and run this again. ")
             + (left.Note is { } note ? note + " " : string.Empty)
             + $"It said: {said.ToString().Trim()}");
+    }
+
+    /// <summary>
+    /// After the runtime: the other processes of this installation's <c>jason</c>, given <see cref="StartInFlight.Settle"/>
+    /// to end. One still running then — a provider's call the stopped runtime left running, a runtime that never came up, a
+    /// runtime of another data directory, a journal watch — runs from what the next steps remove, so it refuses with
+    /// <c>jason_running</c>, nothing further removed. The Windows uninstaller's own call (<c>--keep-application</c>) leaves
+    /// the folder and looks at it itself; and Windows never looks again here, having refused such a process up front.
+    /// </summary>
+    private static async Task<RemovalRefused?> Step2OthersEndedAsync(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        bool registrationAfterTheStop,
+        CancellationToken cancellationToken)
+    {
+        if (options.KeepApplication || StartInFlight.Windows(env) || StartInFlight.Image(env) is not { } image)
+        {
+            return null;
+        }
+
+        var left = await StartInFlight.SettleAsync(env, image, plan.Desktop?.Demo ?? [], cancellationToken).ConfigureAwait(false);
+        if (left.Count == 0)
+        {
+            return null;
+        }
+
+        // A runtime that answers on this data directory now is one started again since the stop, which ends only when stopped.
+        var again = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is { } runtime && left.Contains(runtime.Pid)
+            ? $" Process {runtime.Pid.ToString(CultureInfo.InvariantCulture)} is a runtime of {env.Paths.Root} started again since the stop, which "
+              + $"`\"{image}\" runtime stop` stops."
+            : string.Empty;
+        return new RemovalRefused(
+            CliErrors.JasonRunning,
+            StartInFlight.JasonRunning(
+                env,
+                image,
+                $"Another jason still runs from this installation ({StartInFlight.Processes(left)}) with its runtime stopped, so nothing "
+                + "further was removed and this installation is as it was"
+                + (registrationAfterTheStop
+                    ? ", its logon registration included."
+                    : " — except the logon registration, which had already been taken away and which "
+                      + "'jason runtime autostart enable' puts back.")
+                + again,
+                afterTheStop: true));
     }
 
     /// <summary>

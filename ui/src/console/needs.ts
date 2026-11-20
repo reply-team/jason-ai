@@ -27,7 +27,7 @@ import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
 import { svg } from './icons';
 import { offUnless } from './off';
-import { ageOf, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
+import { ageOf, searchLines, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { chatWaits } from './needs-chats';
 import {
     agentsOf,
@@ -660,6 +660,13 @@ function words(whole: Approval | undefined): Html | null {
                 detail.subject === null && detail.body === null && detail.intent
                     ? html`<div class="needs-intent">${detail.intent}</div>`
                     : null
+            }
+            ${
+                detail.search === null
+                    ? null
+                    : html`<div class="needs-search">
+                          ${searchLines(detail.search).map((line) => html`<div>${line}</div>`)}
+                      </div>`
             }
         </div>
         ${detail.facts.length > 0 ? html`<div class="needs-facts">${detail.facts.map((fact) => html`<div class="meta">${withCode(fact)}</div>`)}</div>` : null}`;

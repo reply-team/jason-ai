@@ -4,8 +4,10 @@ namespace Jason.Cli.Tests.Update;
 
 /// <summary>
 /// Every request <c>jason update</c> makes about a release goes through one construction: the check's read of the
-/// feed, and apply's read of the release's own feed and its download of the archive. The check's redirect row proves
-/// that construction follows the product's address. This row holds the other two to it, so a client built anywhere
+/// feed, apply's read of the release's own feed and its download of the archive, the plan of a carried jason's apply,
+/// which reads the feed and hands the download to Jason Desktop, and the move's read of the release and its download of
+/// Jason Desktop. The check's redirect row proves
+/// that construction follows the product's address. This row holds the others to it, so a client built anywhere
 /// else in the update code is refused here rather than left to follow redirects by chance.
 /// </summary>
 public partial class UpdateHttpTests
@@ -30,7 +32,7 @@ public partial class UpdateHttpTests
         }
 
         Assert.Empty(built);
-        Assert.Equal(3, sent);
+        Assert.Equal(5, sent);
     }
 
     /// <summary>A client or a handler made in place: <c>new HttpClient(…)</c>, a handler, or a target-typed <c>new(…)</c>.</summary>

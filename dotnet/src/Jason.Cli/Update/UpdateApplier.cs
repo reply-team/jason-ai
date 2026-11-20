@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Files;
+using Jason.Cli.Installation;
 using Jason.Cli.Plugins;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
@@ -13,6 +14,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
 using Jason.Contracts.Json;
+using Jason.Contracts.Ui;
 using Jason.Contracts.Update;
 
 namespace Jason.Cli.Update;
@@ -61,6 +63,9 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>The name the UI's line goes under, which is no step of the ledger either.</summary>
     private const string Ui = "ui";
+
+    /// <summary>The name the machine setup's lines go under, after the skills: no step of the ledger either.</summary>
+    private const string Install = "install";
 
     /// <summary>Everything the applier did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
@@ -142,9 +147,67 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
         }
 
-        await RedeploySkillsAsync(ledger, request, cancellationToken).ConfigureAwait(false);
+        await RedeploySkillsAsync(ledger.ToVersion, request, cancellationToken).ConfigureAwait(false);
+        if (SetsUpTheMachine)
+        {
+            await SetUpTheMachineAsync(ledger, cancellationToken).ConfigureAwait(false);
+        }
+
         await PlaceUiAsync(ledger, request, cancellationToken).ConfigureAwait(false);
         return ledger;
+    }
+
+    /// <summary>
+    /// Whether the update, once complete and its recorded skills redeployed, runs the machine setup <c>jason install</c>
+    /// runs, without <c>--roles</c>: what an update of a jason Jason Desktop carries does before the UI, so the terminal
+    /// command and the harness skills move with the application although no window opens.
+    /// </summary>
+    internal bool SetsUpTheMachine { get; init; }
+
+    /// <summary>
+    /// The machine setup of the jason this update installed, run in this process, which is that jason: one line under
+    /// <c>install</c> for each thing it did and left, and for each problem one that names <c>jason install</c>.
+    /// </summary>
+    /// <remarks>
+    /// After <c>complete</c> and never a step of the ledger, as the skills are: the update has happened, so nothing here
+    /// fails it. The role skills are not its: the skills step before it redeployed every deployment this installation
+    /// recorded, the role skills among them.
+    /// </remarks>
+    private async Task SetUpTheMachineAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    {
+        if (env.Setup is not { } places || CarriedExecutable.Of(ledger.InstallPath) is not { } carried)
+        {
+            Say(Install, "not run: this system has no machine setup for Jason Desktop");
+            return;
+        }
+
+        try
+        {
+            var report = await MachineSetup
+                .RunAsync(env, carried, places, new InstallOptions(Human: false, Roles: false, Retire: null), cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var line in report.Done.Concat(report.Left))
+            {
+                Say(Install, OneLine(line).TrimEnd('.'));
+            }
+
+            foreach (var problem in report.Problems)
+            {
+                env.Error.WriteLine(problem);
+                Say(Install, $"{ReasonSaid(problem)}; run: jason install");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Say(Install, "not run — cancelled; run: jason install");
+        }
+        catch (Exception error)
+        {
+            // Everything, as the skills catch everything: a completed update reported as refused is the one outcome this
+            // step must never have.
+            env.Error.WriteLine(error.Message);
+            Say(Install, $"not run — {ReasonSaid(error.Message)}; run: jason install");
+        }
     }
 
     /// <summary>
@@ -224,7 +287,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// the step's lines; when it failed, everything it said goes to stderr beside the line, as the stop's does.
     /// </para>
     /// </remarks>
-    private async Task RedeploySkillsAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    /// <returns>The part's state, as the finishing step reports it (<see cref="UpdateFinishStates"/>).</returns>
+    private async Task<string> RedeploySkillsAsync(SemanticVersion to, UpdateRequest request, CancellationToken cancellationToken)
     {
         using var said = new StringWriter(CultureInfo.InvariantCulture);
         using var complained = new StringWriter(CultureInfo.InvariantCulture);
@@ -239,7 +303,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             outcome = await SkillsCommands
                 .UpdateRecordedAsync(
-                    env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained },
+                    env with { BuildVersion = to.ToString(), Out = said, Error = complained },
                     progress,
                     cancellationToken,
                     request.Feed == UpdateFeed.Default ? null : request.Feed)
@@ -265,7 +329,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         if (outcome.NothingRecorded)
         {
             Say(Skills, "nothing on this machine was deployed by jason skills, so nothing was redeployed");
-            return;
+            return UpdateFinishStates.AlreadyThere;
         }
 
         if (outcome.Exit != ExitCodes.Success)
@@ -291,7 +355,209 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             var stoppedIn = cause is not null && progress.Entered is { } entered ? $"{entered.Pack} in {string.Join(", ", entered.Roots)} " : string.Empty;
             Say(Skills, $"{stoppedIn}not updated — {ReasonSaid(cause ?? complained.ToString())}; run: jason skills update");
         }
+
+        // Every deployment already recorded at the ref it was redeployed at is a part that was there already: the finishing
+        // step run a second time says so, as it does of a package that is current and a UI in place.
+        return outcome.Exit != ExitCodes.Success || !outcome.Carried.All(group => group.Exit == ExitCodes.Success)
+            ? UpdateFinishStates.NotDone
+            : outcome.Carried.All(group => group.Unmoved)
+                ? UpdateFinishStates.AlreadyThere
+                : UpdateFinishStates.Done;
     }
+
+    /// <summary>
+    /// The finishing step with no update in flight (<c>jason update apply --finish</c> on a jason Jason Desktop carries):
+    /// what belongs to <paramref name="version"/>, the installed one, brought up to it — the plugin packages its release
+    /// publishes, by the plan an update's <c>plugins</c> step makes; every skills deployment this installation records; and
+    /// the UI. It starts and stops no runtime: where a package changed, it asks the reload <c>jason plugin install</c> asks,
+    /// of a runtime that answers. Run again it changes nothing, and says each part is there already.
+    /// </summary>
+    internal async Task<UpdateFinishResponse> FinishInstalledAsync(SemanticVersion version, UpdateRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var pinned = request with { Version = version };
+        var parts = new List<UpdateFinishPart>
+        {
+            await PluginsPartAsync(version, pinned, cancellationToken).ConfigureAwait(false),
+        };
+
+        Steps.Clear();
+        var skills = await RedeploySkillsAsync(version, request, cancellationToken).ConfigureAwait(false);
+        parts.Add(Part(Skills, skills, Lines(Skills)));
+        parts.Add(await UiPartAsync(version, request, cancellationToken).ConfigureAwait(false));
+
+        return new UpdateFinishResponse(
+            version.ToString(),
+            env.Paths.Root,
+            DataDirFound: true,
+            InstallationFound: true,
+            Complete: parts.All(part => part.State != UpdateFinishStates.NotDone),
+            parts);
+    }
+
+    /// <summary>The report of a finishing step that found no data directory: nothing done, nothing made, and each part says so.</summary>
+    internal static UpdateFinishResponse NoDataDirectory(SemanticVersion version, string root)
+    {
+        var reason = $"There is no data directory at {root}, so nothing belongs to {version} there yet, and nothing was made.";
+        return new UpdateFinishResponse(
+            version.ToString(),
+            root,
+            DataDirFound: false,
+            InstallationFound: false,
+            Complete: false,
+            [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
+    }
+
+    /// <summary>
+    /// The report of a finishing step whose data directory holds nothing of an installation but Jason Desktop's own, as on its
+    /// first start: nothing done, no release read, nothing made, and each part says so.
+    /// </summary>
+    internal static UpdateFinishResponse NothingInstalled(SemanticVersion version, string root)
+    {
+        var reason = $"The data directory at {root} holds nothing of an installation but Jason Desktop's own, so nothing belongs to {version} there yet: no release was read and nothing was made.";
+        return new UpdateFinishResponse(
+            version.ToString(),
+            root,
+            DataDirFound: true,
+            InstallationFound: false,
+            Complete: false,
+            [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
+    }
+
+    /// <summary>
+    /// The plugin packages of the installed version's release, by <see cref="PluginUpdates.Plan"/> against its manifest: one
+    /// behind is replaced, and every other is left as an update's <c>plugins</c> step leaves it — an edited one among them.
+    /// A manifest that cannot be read changes nothing.
+    /// </summary>
+    private async Task<UpdateFinishPart> PluginsPartAsync(SemanticVersion version, UpdateRequest pinned, CancellationToken cancellationToken)
+    {
+        UpdateManifest manifest;
+        try
+        {
+            manifest = await ReadFeedAsync(pinned, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            env.Error.WriteLine(error.Message);
+            return new UpdateFinishPart("plugins", UpdateFinishStates.NotDone, $"The release's manifest at {Address(pinned)} could not be read, so no package was looked at or changed: {OneLine(error.Message)}", []);
+        }
+
+        if (manifest.Version != version)
+        {
+            return new UpdateFinishPart("plugins", UpdateFinishStates.NotDone, $"The release at {Address(pinned)} is {manifest.Version}, and this jason is {version}, so no package was changed.", []);
+        }
+
+        if (manifest.Plugins.Count == 0)
+        {
+            return new UpdateFinishPart("plugins", UpdateFinishStates.AlreadyThere, null, [$"{version} publishes no plugin package"]);
+        }
+
+        var lines = new List<string>();
+        var replaced = 0;
+        string? failed = null;
+        foreach (var plugin in PluginUpdates.Plan(manifest, env.Paths))
+        {
+            if (plugin.State != PluginPlanState.Behind)
+            {
+                lines.Add(Left(plugin));
+                continue;
+            }
+
+            try
+            {
+                await PluginInstaller.PlaceAsync(env, Address(pinned), plugin.Id, plugin.Package, PluginInPlace.Digest(plugin.InstalledDigest!), null, PackageMoves, clock, Pause, cancellationToken).ConfigureAwait(false);
+                lines.Add($"{plugin.Id} {plugin.Installed} -> {plugin.Package.Version}");
+                replaced++;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                env.Error.WriteLine(error.Message);
+                failed ??= $"{plugin.Id} {plugin.Installed} was not replaced: {OneLine(error.Message)}";
+                lines.Add($"{plugin.Id} {plugin.Installed} not replaced — {ReasonSaid(error.Message)}; run: jason plugin install {plugin.Id} --replace");
+            }
+        }
+
+        if (replaced > 0)
+        {
+            lines.Add(await ReloadAsync(cancellationToken).ConfigureAwait(false));
+        }
+
+        return new UpdateFinishPart(
+            "plugins",
+            failed is not null ? UpdateFinishStates.NotDone : replaced > 0 ? UpdateFinishStates.Done : UpdateFinishStates.AlreadyThere,
+            failed,
+            lines);
+    }
+
+    /// <summary>The reload <c>jason plugin install</c> asks, of a runtime that answers; none is started.</summary>
+    private async Task<string> ReloadAsync(CancellationToken cancellationToken)
+    {
+        using var unasked = new StringWriter(CultureInfo.InvariantCulture);
+        var (_, response) = await OperationRunner.SendAsync(env with { Out = unasked }, Operations.PluginReload, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        return response switch
+        {
+            null => "reload: no runtime answered, so the packages load at the runtime's next start",
+            { IsSuccess: true } => "reload: the runtime loaded the packages",
+            _ => $"reload: the runtime refused to reload ({ReasonSaid(OperationRunner.ErrorText(response))}); run: jason plugin reload",
+        };
+    }
+
+    /// <summary>The release's UI for the installed version, where the one in place is not that build already.</summary>
+    private async Task<UpdateFinishPart> UiPartAsync(SemanticVersion version, UpdateRequest request, CancellationToken cancellationToken)
+    {
+        UiManifest? installed;
+        try
+        {
+            installed = UiManifest.Read(env.Paths.UiDefaultDirectory);
+        }
+        catch (Exception error) when (error is UiManifestException or IOException or UnauthorizedAccessException)
+        {
+            installed = null;
+        }
+
+        if (installed is not null
+            && SemanticVersion.TryParse(installed.Version, out var placed)
+            && placed == version
+            && string.Equals(installed.ApiVersion, ApiVersion.Current, StringComparison.Ordinal))
+        {
+            return new UpdateFinishPart(Ui, UpdateFinishStates.AlreadyThere, null, [$"{version} is in place"]);
+        }
+
+        try
+        {
+            var built = await UiInstaller.PlaceAsync(env, request.Feed, version, ApiVersion.Current, cancellationToken).ConfigureAwait(false);
+            return new UpdateFinishPart(Ui, UpdateFinishStates.Done, null, [$"placed {built.Manifest.Version}"]);
+        }
+        catch (UiNotPublishedException)
+        {
+            return new UpdateFinishPart(Ui, UpdateFinishStates.AlreadyThere, null, [$"{version} publishes no UI, so none was placed"]);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            env.Error.WriteLine(error.Message);
+            return new UpdateFinishPart(Ui, UpdateFinishStates.NotDone, $"The UI of {version} was not placed: {OneLine(error.Message)}", [$"not updated — {ReasonSaid(error.Message)}; run: jason ui install"]);
+        }
+    }
+
+    /// <summary>A part from the lines an update's step said, its own prefix taken off.</summary>
+    private static UpdateFinishPart Part(string part, string state, IReadOnlyList<string> lines) =>
+        new(part, state, state == UpdateFinishStates.NotDone ? lines.FirstOrDefault(line => line.Contains(" not updated — ", StringComparison.Ordinal) || line.StartsWith("not updated — ", StringComparison.Ordinal)) ?? "It did not finish." : null, lines);
+
+    /// <summary>The lines said so far under <paramref name="step"/>, without its prefix.</summary>
+    private List<string> Lines(string step) =>
+        [.. Steps.Where(line => line.StartsWith(step + ": ", StringComparison.Ordinal)).Select(line => line[(step.Length + 2)..])];
 
     /// <summary>
     /// Why something was not updated, as one line before <c>; run:</c>, without the full stop that ends its own sentence.
@@ -519,7 +785,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// is not running is already drained: <c>jason update</c> is the same command whether one is up or not — and one
     /// whose descriptor was left behind by a process that has gone is not running.
     /// </summary>
-    private async Task<UpdateLedger> DrainAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    internal async Task<UpdateLedger> DrainAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
     {
         if (Live() is null)
         {
@@ -560,7 +826,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         }
     }
 
-    private async Task<UpdateLedger> StopAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    internal async Task<UpdateLedger> StopAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {
         if (Live() is null)
         {

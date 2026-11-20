@@ -16,7 +16,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Eleven names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Twelve names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -97,9 +97,15 @@ namespace Jason.Cli;
 /// once for each project folder it placed, as <c>project link</c> asks it.
 /// </para>
 /// <para>
-/// Guards hold the list to these: the verb-map tests to the six verbs, the three nouns, the <c>ui</c> group's three
+/// <c>install</c> is the twelfth, the other half of <c>uninstall</c>. Run by the jason the desktop application carries, it
+/// sets this machine up for it — the terminal command, the skills of Claude Code and Codex where each is found, an older
+/// command-line install retired — none of which the runtime performs or is asked about; of the runtime it asks only to drain and to stop, and
+/// only one running from the executable it retires.
+/// </para>
+/// <para>
+/// Guards hold the list to these: the verb-map tests to the seven verbs, the three nouns, the <c>ui</c> group's three
 /// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
-/// noun's one verb, <c>open</c>. A twelfth has to be added in the open rather than arriving as one more verb somebody
+/// noun's one verb, <c>open</c>. A thirteenth has to be added in the open rather than arriving as one more verb somebody
 /// thought was obviously fine.
 /// </para>
 /// </remarks>
@@ -158,6 +164,12 @@ public static class CliApp
             Output = env.Out,
             Error = env.Error,
             EnableDefaultExceptionHandler = false,
+
+            // Ctrl+C and SIGTERM cancel the verb's token, and the process is ended this long after unless the verb has
+            // answered: a carried update puts back what it began, a jason file of some 120 MB among it, launches the runtime
+            // and says so, which the default two seconds do not always leave room for. A verb that ends on the cancel ends
+            // at once all the same.
+            ProcessTerminationTimeout = TimeSpan.FromSeconds(10),
         };
 
         try
@@ -192,7 +204,7 @@ public static class CliApp
     /// option's own value is never read here, and after <c>--</c> every word is a value, which is how one that starts with
     /// a dash is given.
     /// </summary>
-    private static List<string> UnknownOptions(ParseResult parseResult)
+    internal static List<string> UnknownOptions(ParseResult parseResult)
     {
         var tokens = parseResult.Tokens;
         var end = tokens.Count;
@@ -275,6 +287,7 @@ public static class CliApp
         root.Subcommands.Add(LogsCommand.Build(env));
         root.Subcommands.Add(DoctorCommand.Build(env));
         root.Subcommands.Add(UninstallCommand.Build(env));
+        root.Subcommands.Add(Installation.InstallCommand.Build(env));
         root.Subcommands.Add(ExportCommand.Build(env));
         root.Subcommands.Add(ImportCommand.Build(env));
 

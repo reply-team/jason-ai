@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Jason.Contracts.Api;
 
 /// <summary>Response of <c>system.info</c>: what the runtime says about itself. Non-business by design.</summary>
@@ -16,6 +18,10 @@ namespace Jason.Contracts.Api;
 /// campaign's own modes are the campaign's to answer. Null on a runtime older than the section.
 /// </param>
 /// <param name="Setup">Where this runtime's parts are (<see cref="SetupInfo"/>); null on a runtime older than the section.</param>
+/// <param name="TestBuild">
+/// True where this runtime is a test build, made with the test-build switch, which no release passes; absent from the
+/// document otherwise, never false (<see cref="JasonVersion.ReportMember"/>).
+/// </param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -35,7 +41,8 @@ public sealed record SystemInfoResponse(
     HarnessInfo? Harness = null,
     IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null,
     SendModesInForce? SendModes = null,
-    SetupInfo? Setup = null);
+    SetupInfo? Setup = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? TestBuild = null);
 
 /// <summary>
 /// A plugin package this runtime's release publishes beside its archives, and the package of the same id the active

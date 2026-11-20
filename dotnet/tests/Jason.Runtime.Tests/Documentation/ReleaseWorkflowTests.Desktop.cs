@@ -258,8 +258,9 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// What the notes and the release guide tell a person about the desktop beyond its files: the three platforms, that the
     /// test suite does not run on an Intel Mac, that it updates to stable releases only, that an update restarts the runtime
-    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, and that an
-    /// uninstall stops that runtime first or removes nothing.
+    /// the application carries and leaves another alone, how the copy an update keeps is used to go back, that on macOS and
+    /// Windows the one uninstall takes the application off from any of its doors, and that an uninstall stops the runtime
+    /// first or removes nothing.
     /// </summary>
     [Fact]
     public void The_notes_and_the_guide_say_how_the_desktop_updates_goes_back_and_where_it_is_tested()
@@ -274,11 +275,12 @@ public partial class ReleaseWorkflowTests
             "A runtime that does not stop leaves the update uninstalled, saying why, and a runtime started from another `jason` is never stopped.",
             "the application as it was is copied under `~/.jason/desktop/rollback/<version>/`, and the Jason menu names that copy until the next update replaces it.",
             "to go back, quit Jason and put that folder back in the place of the installed application by hand.",
-            "Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that runtime does not stop.",
+            "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use.",
+            "It is removed once, by `jason uninstall` in a terminal, by Installed apps on Windows, or by Uninstall Jason… in the Jason menu on macOS.",
+            "The uninstall stops the runtime first, and removes nothing when that runtime does not stop.",
+            "and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so.",
             "On Linux, choose Remove What Jason Placed… in the Jason menu first:",
             "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/.cache/jason-desktop-updater`.",
-            "On macOS, choose Remove What Jason Placed… in the Jason menu first, then move Jason.app to the Trash.",
-            "What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.",
         ])
         {
             Assert.Contains(said, notes, StringComparison.Ordinal);
@@ -287,7 +289,7 @@ public partial class ReleaseWorkflowTests
         var guide = Regex.Replace(Read(["docs", "release-and-update.md"]), @"\s+", " ");
         foreach (var said in (string[])
         [
-            "on an Intel Mac `jason update apply` refuses with `update_carried_by_desktop` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
+            "on an Intel Mac `jason update apply` hands the update to the application as it does on Apple silicon (§7, \"Handing the update to Jason Desktop\"), which reads no archive; the test suite does not run on an Intel Mac.",
             "the desktop updates to stable releases only.",
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
@@ -373,7 +375,7 @@ public partial class ReleaseWorkflowTests
         var configuration = Read(["desktop", "electron-builder.config.mjs"]);
         Assert.Contains("            checkBundle(bundleFolder(context.arch), version, context.electronPlatformName);\n", configuration, StringComparison.Ordinal);
         Assert.Contains("beforePack: async (context) => {", configuration, StringComparison.Ordinal);
-        Assert.Contains("return configuration({ version: releaseVersion(process.env['JASON_VERSION']), sign });", configuration, StringComparison.Ordinal);
+        Assert.Contains("return configuration({ version: releaseVersion(environment['JASON_VERSION']), sign, testBuild: environment[testBuildVariable] === '1' });", configuration, StringComparison.Ordinal);
 
         // The executable says the version itself: each call's smoke test refuses another, and so does the Rosetta start.
         var release = Read(Release);

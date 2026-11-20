@@ -310,7 +310,7 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
     assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
-    assert.ok(main.includes("menuChanged: () => toPage('updates.changed') });"));
+    assert.ok(main.includes("        menuChanged: () => toPage('updates.changed'),\n    });"));
     assert.equal(main.split('menuChanged:').length - 1, 1, 'Live alone');
 });
 

@@ -504,7 +504,7 @@ public class ProtocolFailureTests
 
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>
     private static CommandLocator Child(params string[] behaviour) =>
-        new(["dotnet", FakeProviderCli.Dll, .. behaviour]);
+        new([Muxer.Path, FakeProviderCli.Dll, .. behaviour]);
 
     /// <param name="logs">Where the invoker writes its lines, when a test reads them: a running host writes through its file sink and nothing else would see them.</param>
     private static Task<RuntimeApiFixture> StartAsync(IPluginHostLocator locator, string? settings = null, RecordingLogs? logs = null) =>

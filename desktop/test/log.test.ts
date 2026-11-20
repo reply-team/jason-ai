@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { defaultLimits, fileLines, fileLogger, fileName, holesOf, limitsFrom, lineOf, templates, type Logger } from '../src/log.ts';
 import { changeJasonLoggedCodes } from '../src/open-in.ts';
 
@@ -26,6 +27,21 @@ test('the templates are a closed table whose fields are named holes and nothing 
         // No hole for free text: what a person or a program said has no place to go.
         for (const hole of holesOf(template)) assert.doesNotMatch(hole, /(?:Message|Text|Error|Output|Stderr|Stdout|Key|Token|Prompt|Reason|Url|Value|Args)$/, `${name}: ${hole}`);
     }
+});
+
+test('the one line another program writes into the desktop\'s file, jason uninstall\'s waiter, is this table\'s and opens the exit code alone', () => {
+    // The waiter writes its own copy of the template from a script, with the desktop's line shape, into the desktop's file
+    // of the day: it is held here, to this table and its rules above, and the copy to this entry, word for word.
+    assert.equal(templates.uninstaller_exited, 'The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {Exit}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it');
+    assert.deepEqual(holesOf(templates.uninstaller_exited), ['Exit']);
+    const remover = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dotnet', 'src', 'Jason.Cli', 'Uninstall', 'IInstallationRemover.cs'), 'utf8');
+    assert.equal(/public const string LogTemplate = "([^"]*)";/.exec(remover)?.[1], templates.uninstaller_exited);
+    assert.equal(/public const string LogEventName = "([^"]*)";/.exec(remover)?.[1], 'uninstaller_exited');
+    // No call of the desktop's says it: the desktop never writes this line itself.
+    const said = readdirSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src'), { recursive: true, encoding: 'utf8' })
+        .filter((file) => file.endsWith('.ts') && !file.endsWith('log.ts'))
+        .filter((file) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', file), 'utf8').includes('uninstaller_exited'));
+    assert.deepEqual(said, []);
 });
 
 test('Change Jason itself is logged by where its host came from, and a refusal by the command line\'s code from a closed table', () => {

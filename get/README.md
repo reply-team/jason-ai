@@ -9,7 +9,7 @@ GitHub, and never reaches this code.
 
 | Path | Answer |
 | --- | --- |
-| `https://get.jasonharness.ai/install` | 200, `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`: the text of [`docs/INSTALL.md`](../docs/INSTALL.md) of `main`, read from one fixed address on `raw.githubusercontent.com` and kept at Cloudflare's edge for five minutes. Its relative links are made whole against that same address, so they lead to the files they name. When that address cannot be read, or answers anything but the guide (a body over 256 KB, or one that does not begin with the guide's first heading), a 302 to it. |
+| `https://get.jasonharness.ai/install` | 200, `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`: the text of [`docs/INSTALL.md`](../docs/INSTALL.md) as the latest published release has it. Its tag is read from the redirect of the fixed address `https://github.com/reply-team/jason-ai/releases/latest`, never followed, and used only when that redirect names this repository's page of a tag that is `v` and three numbers; the page is then read at that tag on `raw.githubusercontent.com`. Where the tag cannot be learnt or has any other shape, or the page at it is not the guide, the text of `docs/INSTALL.md` of `main` is read instead. The redirect is asked to be kept at Cloudflare's edge for five minutes by its status (`cacheTtlByStatus`), over GitHub's `Cache-Control: no-cache`; where the edge does not keep it, every `/install` asks GitHub once, and a throttled or failed answer falls back to the page of `main`, which `X-Jason-Install-Source` then shows. Each page read is asked to be kept for five minutes too, and the page's relative links are made whole against the address it was read from, so they lead to the files of that same tree. The answer names the page it served in `X-Jason-Install-Source`: the release tag it was read at, or `main`. When neither read gives the guide (a body over 256 KB, or one that does not begin with the guide's first heading), a 302 to the page of `main`, which carries no such header. |
 | `https://get.jasonharness.ai/desktop/windows` | 302 to the latest release's `jason-desktop-windows-x64-setup.exe` |
 | `https://get.jasonharness.ai/desktop/mac` | 302 to the latest release's `jason-desktop-macos-arm64.dmg` (Apple silicon) |
 | `https://get.jasonharness.ai/desktop/mac-intel` | 302 to the latest release's `jason-desktop-macos-x64.dmg` |
@@ -132,14 +132,16 @@ the address in the Worker's place. The install scripts' own addresses, `/release
    database refuses fails silently, because the count is left to run after the answer, so the row is the only sign the
    counting works; if it is not there, `npx wrangler@4.152.0 rollback`.
 7. Check, before a release that names the address is published: `curl -sI https://get.jasonharness.ai/install`
-   answers 200 with `content-type: text/plain; charset=utf-8`, and
+   answers 200 with `content-type: text/plain; charset=utf-8` and an `X-Jason-Install-Source` header:
+   `X-Jason-Install-Source` names the latest release's tag; `main` means the release's page was not read, and `main`'s
+   was served in its place. And
    `curl -sI https://get.jasonharness.ai/releases/latest/download/manifest.json` still answers the redirect to this
    repository's releases on GitHub. The install prompt names the first address, so it must answer before the prompt is
    published.
 
 A change under `src/` is live only once it is deployed. The install page is served only while it begins with the heading
 in `src/paths.mjs`, so a release that retitles `docs/INSTALL.md` needs a deployment of that change, or `/install`
-answers the redirect to the raw file from then on.
+answers `main`'s page, and then the redirect to it, from then on.
 
 Redirect rules answer before a Worker does. No redirect rule may stand on the Worker's paths: a rule put on one of them
 for a while is removed in the same step that routes the Worker. The rule for `/releases/` and the root stays as it is.

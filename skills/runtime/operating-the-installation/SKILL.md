@@ -49,9 +49,12 @@ a minute. After that pairing, a bookmark of the page keeps working. `--approval 
 address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
 this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
-`jason decision` commands.
+`jason decision` commands. Where Jason was installed on macOS or Windows by its install script or Jason Desktop's own
+package, Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download
+link, which is for Linux, where the desktop is a separate download.
 
-Without Jason Desktop, then, that tab is not where a person watches their work. When they ask what happened, what is
+That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
+draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
 queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
 and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
 
@@ -96,6 +99,13 @@ brought you to it, ask the person in words, say what a stop does, and run it onl
 restart was their own request, and when the runtime looks idle: work can be claimed between the status you read and
 the stop. What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing
 is cancelled, and a provider operation already under way may still act, ending at its own lease.
+
+`jason runtime drain` has the runtime claim no new work while it keeps running, and `jason runtime resume` has it claim
+again, the way back for a runtime whose dispatcher `jason runtime status` shows `draining` after an update or an install
+ended part-way; ask before a drain as before a stop. `jason status` names a drain in its `dispatcher` check, a
+required one, so `ready` is false while the runtime drains. Its repair is `jason runtime resume`; while an update stands
+unfinished the drain is the update's, and the repair is `jason update apply`, never a resume in the middle of it. Where
+an update may be under way and the check names no repair, ask the person rather than resume.
 
 `jason runtime run` keeps the runtime in the **foreground** instead, and it is **not** the normal way to run
 it — the normal way is `jason runtime start`. You would type `run` when something else owns the process: your
@@ -412,6 +422,33 @@ needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earl
 `install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
 `update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
+Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran,
+`jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window,
+waits for it, and the new version's `jason` finishes it: the plugin packages, the runtime's start, the skills, the terminal command and the UI. It still ends with one JSON
+document and its exit code. Jason Desktop's first start of each version runs `jason install` and
+`jason update apply --finish` itself, so a version installed from the desktop's own menu catches up the same way. A
+refusal with `update_in_progress` or `install_in_progress` means later, not a failure: another update, or
+`jason install`, holds this installation's update lock; let it end, then run the command again, and
+`jason update status` says where an update stands. `update_desktop_not_installed` means Jason Desktop's installer had not
+installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason
+Desktop that is running, one of another data directory included: say that to the person, who quits it, and run the
+command again only on their word. On Linux the `jason` the deb or the AppImage carries is refused with
+`update_carried_by_desktop`: the desktop's own update item updates it.
+
+**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason update apply` typed into a
+command-line install of an earlier version updates it and then moves it into Jason Desktop: it installs the application,
+or takes one of 0.49.0 or later that is already there, and has that application's `jason install` retire the
+command-line install, so the terminal's `jason` becomes the one the application carries. Its answer is the update's
+success whatever the move meets, with the move's own state beside it in `move.state`: `done`, `pending`, `failed`, or
+`not_applicable` on Linux, where there is no move. Every step leaves a working installation: until the move retires it,
+the command-line install answers as `jason`, its runtime with it. `jason status` says where the move stands in its
+optional `move` check. Where the check names a command, that command carries the move on, and it is the person's to ask
+for, like any update; where it names none, the move waits on something no command typed here changes, so say what it
+waits for. On Windows the move first verifies this `jason`'s own signature: where that does not verify, nothing is
+fetched or changed, and the way on is installing Jason Desktop from the release page, whose first start takes the
+command-line install in. Once the install is moved, `jason update rollback` refuses with `update_carried_by_desktop` and
+points to "Going back from 0.49" in `docs/release-and-update.md`: tell the person so, and do not look for another way back.
+
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
 line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
@@ -424,6 +461,12 @@ A skill file the person edited, or a file they put in a skill, is theirs: the sk
 and the install it repeats, keep it, write everything else around it, name each file they kept and succeed. The
 skill holding it is then a blend of two hands, the person's and the release's, which the person reconciles. Only
 `--force` overwrites it, and it is the person's to type, never yours to add.
+A whole skill folder under a name Jason ships, one no record of Jason's names, is taken for the person's: every
+deployment leaves it as it is, writes and records nothing of it, and names it in its answer, and `jason status` names
+it — no flag reaches it. Pass that sentence on in its sense: Jason's skill of that name is not installed there, and an
+agent asked to use it reads their folder. The release's skill takes its place only when the person moves or removes
+their folder, then runs the command the sentence names — `jason skills update` for an agent host's folder,
+`jason skills install --roles-only` for the roles home. Never move it yourself.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
@@ -478,12 +521,14 @@ for every other is 1.0.0; whether that one is behind is `jason status`'s to say,
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
 followed in order, its §4 included: that section teaches the installation its role skills, which the install script
 has already done as its last step unless it said it could not, and without them every role it launches runs
-untaught. Jason installs two ways: the command line, which a person installs with the two lines below, and Jason
-Desktop, one download from `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
-`/desktop/linux-deb` or `/desktop/linux-appimage`. If they ask you to install it, follow that page yourself, by its
-section for an agent: a package where the page names one for this platform and its package manager is already there,
-otherwise the steps it gives by hand. That section also says when to offer them the two ways, and what to do when they
-take Jason Desktop. Never pipe a download into a shell, and
+untaught. On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the
+command line your terminal and your agents use. It is installed once, updated once and removed once, and a person
+installs it with the two lines below. On Linux the two lines install the command line, and Jason Desktop's deb and
+AppImage are separate downloads, `https://get.jasonharness.ai/desktop/linux-deb` and `/desktop/linux-appimage`. If
+they ask you to install it, follow that page yourself, by its section for an agent: a package where the page names one
+for this platform and its package manager is already there, otherwise the install script on macOS and Windows, and on
+Linux the steps it gives by hand. That section also says what to offer them on Linux, and what to do when they take
+Jason Desktop there. Never pipe a download into a shell, and
 ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
 you, hand them the lines to type.
 
@@ -495,12 +540,20 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable
-under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on Windows —
-and puts that directory on the `PATH` unless `--no-modify-path` is passed. Then the executable it installed deploys
-the role skills from the release's package of them; where that fails, Jason is still installed, one line says so,
-and `jason status` names the line to run. Nothing needs
-administrator rights.
+Each script works out the platform and verifies the download's SHA-256 before it places anything. On macOS and
+Windows it installs Jason Desktop, its signature checked too, opens nothing, and has the `jason` the application
+carries put `jason` in the terminal, give Claude Code and Codex Jason's skills where each is found, retire an older command-line
+install and deploy the role skills; it ends non-zero, saying which act failed, when `jason` is not in the terminal,
+and its last line is the full path of `jason`, which a shell already open, yours included, calls it by. On Linux it
+installs the executable under the person's own account, in `~/.local/bin`, and puts that directory on the `PATH`
+unless `--no-modify-path` is passed; then the executable it installed deploys the role skills from the release's
+package of them; where that fails, Jason is still installed, one line says so, and `jason status` names the line to
+run. Nothing needs administrator rights. A person who installs Jason Desktop on macOS or Windows by hand, from its
+disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it
+carries, which puts `jason` in the terminal and gives Claude Code and Codex Jason's skills, and its Command Line item
+says what that placed. Any other agent host, and on Linux every one, gets Jason's skills with
+`jason skills install --host <host>`, an act the install page marks "Ask first" unless it is the host of the agent the install prompt's
+three lines were given to.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
@@ -578,6 +631,12 @@ jason uninstall
 ```
 
 Show the dry run first: it prints exactly what would go and changes nothing.
+
+On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed — the terminal
+command, the skills it recorded in agent hosts' folders, Open Jason at Login — and an older command-line install, and deletes the
+application last. It is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu on
+macOS. Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed:
+say so, and ask the person to quit Jason, rather than closing it yourself. The harness root is never touched.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and the verb removes those skills and nothing else. **A skill somebody copied into a harness by hand has

@@ -51,6 +51,25 @@ public class ModeRouterTests
     }
 
     /// <summary>
+    /// A test build's <c>--version</c> says so on standard error, its version alone staying on standard output as every
+    /// reader of it takes it; a released build writes nothing there. This build is not a test build.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Version_says_a_test_build_on_standard_error_and_a_released_build_says_nothing(bool testBuild)
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        Assert.Equal(0, ModeRouter.WriteVersion(output, error, testBuild));
+
+        Assert.Equal(Jason.Contracts.JasonVersion.Current + Environment.NewLine, output.ToString());
+        Assert.Equal(testBuild ? "This jason is a test build, not a release." + Environment.NewLine : string.Empty, error.ToString());
+        Assert.False(Jason.Contracts.JasonVersion.TestBuild);
+    }
+
+    /// <summary>
     /// Which data directory a run owns. The flag wins over the variable because the thing that starts a runtime
     /// at logon has no environment to put a variable in: a Windows logon task carries none, so naming the
     /// directory on the command line is the only way to say it, and a registration that says it must not be

@@ -7,10 +7,11 @@ using Jason.Runtime.Tests.Plugins;
 namespace Jason.Cli.Tests.Status;
 
 /// <summary>
-/// Under <c>JASON_CONFINED</c>, <c>status --provider-cli</c> runs a program named by a bare name only, and looks that name
-/// up in the fully qualified entries of the search path alone: a path, a value naming a drive among them, is not
-/// looked up and nothing is started, and a relative or drive-relative entry is skipped, so a working folder is never searched by name.
-/// The check says so in the body and <c>status</c> keeps its contract. Unset or empty, nothing changes.
+/// <c>status --provider-cli</c> looks a bare name up in the fully qualified entries of the search path alone, with
+/// <c>JASON_CONFINED</c> and without it: a relative or drive-relative entry is skipped, so a working folder is never searched
+/// by name. Under the variable it also runs a program named by a bare name only: a path, a value naming a drive among
+/// them, is not looked up and nothing is started. The check says so in the body and <c>status</c> keeps its contract.
+/// Unset and empty are the same.
 /// </summary>
 public class ConfinedProviderCliTests
 {
@@ -45,33 +46,45 @@ public class ConfinedProviderCliTests
     }
 
     /// <summary>
-    /// A search path entry that is not fully qualified names a folder relative to wherever the CLI runs, so under the
-    /// variable it is skipped and the name is not found there; the same entry, unconfined, finds and runs it as before.
+    /// A search path entry that is not fully qualified names a folder relative to wherever the CLI runs, so it is skipped
+    /// with the variable and without it: the name is not found there, nothing is run, and the check says the same both
+    /// ways. The plain entry is a folder made in the current folder and named by its name alone, so the program stands
+    /// where the entry would find it were the entry read, on every system.
     /// </summary>
     [Theory]
     [MemberData(nameof(Separators))]
-    public async Task Confined_a_relative_search_path_entry_is_skipped(bool driveRelative)
+    public async Task A_relative_search_path_entry_is_skipped_with_the_variable_and_without_it(bool driveRelative)
     {
         Assert.SkipWhen(driveRelative && !OperatingSystem.IsWindows(), "Only Windows has a path rooted on no drive.");
         using var dir = new TempPaths();
         using var programs = new TestPrograms();
-        programs.AddProgram("acme-sdr");
-        var entry = driveRelative ? programs.Root[2..] : Path.GetRelativePath(Environment.CurrentDirectory, programs.Root);
-        Assert.SkipWhen(
-            Path.IsPathFullyQualified(entry)
-                || (driveRelative && !string.Equals(
-                    Path.GetPathRoot(Environment.CurrentDirectory),
-                    Path.GetPathRoot(programs.Root),
-                    StringComparison.OrdinalIgnoreCase)),
-            "The temporary folder is on another drive than the working folder.");
+        using var current = new CurrentFolderFiles();
+        string entry;
+        if (driveRelative)
+        {
+            programs.AddProgram("acme-sdr");
+            entry = programs.Root[2..];
+            Assert.SkipWhen(
+                !string.Equals(Path.GetPathRoot(Environment.CurrentDirectory), Path.GetPathRoot(programs.Root), StringComparison.OrdinalIgnoreCase),
+                "The temporary folder is on another drive than the working folder.");
+        }
+        else
+        {
+            current.AddProgramInAFolder("acme-sdr");
+            entry = current.Name;
+        }
+
+        Assert.False(Path.IsPathFullyQualified(entry), $"'{entry}' is a full path.");
 
         var confined = await StatusAsync(dir, "acme-sdr", entry, Set("1"));
         var plain = await StatusAsync(dir, "acme-sdr", entry, Unset);
 
         Assert.Empty(confined.Runner.Requested);
+        Assert.Empty(plain.Runner.Requested);
         Assert.Equal(CheckState.Absent, confined.Check.State);
-        Assert.Single(plain.Runner.Requested);
-        Assert.Equal(CheckState.Ok, plain.Check.State);
+        Assert.Equal(CheckState.Absent, plain.Check.State);
+        Assert.StartsWith("'acme-sdr' was not found on the search path, so 'acme-sdr --version' was not run.", plain.Check.Fact, StringComparison.Ordinal);
+        Assert.Equal(plain.Check.Fact, confined.Check.Fact);
     }
 
     /// <summary>A bare name on a fully qualified entry is found and run under the variable as it is without it.</summary>
@@ -88,18 +101,17 @@ public class ConfinedProviderCliTests
         Assert.Equal(CheckState.Ok, confined.Check.State);
     }
 
-    /// <summary>Unset and empty are today's behaviour, byte for byte, for a path and for a relative entry alike.</summary>
+    /// <summary>Unset and empty are the same, byte for byte, for a path and for a bare name on a fully qualified entry alike.</summary>
     [Theory]
     [MemberData(nameof(Separators))]
-    public async Task Unset_or_empty_the_check_is_as_before(bool byPath)
+    public async Task Unset_and_empty_are_the_same(bool byPath)
     {
         using var dir = new TempPaths();
         using var programs = new TestPrograms();
         var program = programs.AddProgram("acme-sdr");
-        var relative = Path.GetRelativePath(Environment.CurrentDirectory, programs.Root);
 
-        var unset = await StatusAsync(dir, byPath ? program : "acme-sdr", byPath ? programs.Root : relative, Unset);
-        var empty = await StatusAsync(dir, byPath ? program : "acme-sdr", byPath ? programs.Root : relative, Set(string.Empty));
+        var unset = await StatusAsync(dir, byPath ? program : "acme-sdr", programs.Root, Unset);
+        var empty = await StatusAsync(dir, byPath ? program : "acme-sdr", programs.Root, Set(string.Empty));
 
         Assert.Equal(unset.Output, empty.Output);
         Assert.Equal(unset.Exit, empty.Exit);
@@ -181,6 +193,25 @@ public class ConfinedProviderCliTests
         public string DriveRelative => $"{_folder[0]}:{Name}";
 
         public string AddProgram() => Write(Name + ".exe", "not a real program");
+
+        /// <summary>
+        /// A program called <paramref name="program"/> in a folder of this row's name in the current folder, so the entry
+        /// <see cref="Name"/>, relative, names that folder: an <c>.exe</c> on Windows, a file with the execute bit elsewhere.
+        /// </summary>
+        public string AddProgramInAFolder(string program)
+        {
+            var folder = Path.Combine(_folder, Name);
+            Directory.CreateDirectory(folder);
+            _made.Add(folder);
+            var file = Path.Combine(folder, program + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+            File.WriteAllText(file, "not a real program");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            return file;
+        }
 
         public string AddShim()
         {

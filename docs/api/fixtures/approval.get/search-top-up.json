@@ -1,0 +1,224 @@
+{
+  "operation": "approval.get",
+  "case": "search-top-up",
+  "request": {
+    "approval_id": "apr_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_2",
+    "work_item_id": "wi_2",
+    "campaign_id": "cmp_1",
+    "operation": "audience.search",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-2",
+    "subject": {
+      "binding_identity": "sha256:recorded-3",
+      "input": {
+        "args": {
+          "audience": 1,
+          "count": 20
+        },
+        "definition": {
+          "jobTitles": [
+            {
+              "value": "Head of Operations",
+              "type": "include"
+            },
+            {
+              "value": "Operations Director",
+              "type": "include"
+            },
+            {
+              "value": "Operations Intern",
+              "type": "exclude"
+            }
+          ],
+          "contactLocations": [
+            {
+              "value": "Portugal",
+              "type": "include"
+            }
+          ],
+          "industries": [
+            {
+              "value": "Logistics",
+              "type": "include"
+            },
+            {
+              "value": "Staffing and Recruiting",
+              "type": "exclude"
+            }
+          ],
+          "companySizes": [
+            "fifty",
+            "twoHundred"
+          ]
+        },
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {}
+        },
+        "idempotency_key": "wi_2"
+      },
+      "operation": "audience.search",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_2"
+    },
+    "preview": {
+      "summary": "Search the provider for up to 20 people matching the definition below, for Jason's campaign Spring launch: a metered search, charged per person found.",
+      "highlights": {
+        "/args/count": 20,
+        "/definition": {
+          "jobTitles": [
+            {
+              "value": "Head of Operations",
+              "type": "include"
+            },
+            {
+              "value": "Operations Director",
+              "type": "include"
+            },
+            {
+              "value": "Operations Intern",
+              "type": "exclude"
+            }
+          ],
+          "contactLocations": [
+            {
+              "value": "Portugal",
+              "type": "include"
+            }
+          ],
+          "industries": [
+            {
+              "value": "Logistics",
+              "type": "include"
+            },
+            {
+              "value": "Staffing and Recruiting",
+              "type": "exclude"
+            }
+          ],
+          "companySizes": [
+            "fifty",
+            "twoHundred"
+          ]
+        },
+        "/args/audience": 1,
+        "/args/people_per_company": null,
+        "/args/include_without_email": null,
+        "/args/find_phones": null
+      },
+      "intent": "\"Find up to this many people matching this definition, and make them ours\" — one search the provider runs and charges for, its people revealed",
+      "reach": {
+        "value": "control",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": false,
+        "detail": null
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": null,
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-3",
+      "subject": {
+        "binding_identity": "sha256:recorded-3",
+        "input": {
+          "args": {
+            "audience": 1,
+            "count": 20
+          },
+          "definition": {
+            "jobTitles": [
+              {
+                "value": "Head of Operations",
+                "type": "include"
+              },
+              {
+                "value": "Operations Director",
+                "type": "include"
+              },
+              {
+                "value": "Operations Intern",
+                "type": "exclude"
+              }
+            ],
+            "contactLocations": [
+              {
+                "value": "Portugal",
+                "type": "include"
+              }
+            ],
+            "industries": [
+              {
+                "value": "Logistics",
+                "type": "include"
+              },
+              {
+                "value": "Staffing and Recruiting",
+                "type": "exclude"
+              }
+            ],
+            "companySizes": [
+              "fifty",
+              "twoHundred"
+            ]
+          },
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {}
+          },
+          "idempotency_key": "wi_2"
+        },
+        "operation": "audience.search",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_2"
+      },
+      "standing_approval": {
+        "standing": null,
+        "audience": null,
+        "expires_at": null,
+        "max_people": null,
+        "max_per_search": null,
+        "people": null,
+        "count": 20,
+        "why": "no_standing_approval"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-3",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-16T09:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": null,
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

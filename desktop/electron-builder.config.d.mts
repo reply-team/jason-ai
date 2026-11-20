@@ -9,10 +9,12 @@ export function releaseVersion(value: string | undefined): string;
 export function bundleFolder(arch: number): string;
 export function checkBundle(folder: string, version: string, platform: string): void;
 export function copyChromiumNotices(from: string, resources: string): void;
+/** The variable that asks for a test build: every signature step and check off, for CI alone. */
+export const testBuildVariable: string;
 
 interface Target {
     target: string;
-    arch: string[];
+    arch?: string[];
 }
 
 export interface Configuration {
@@ -48,6 +50,8 @@ export interface Configuration {
         target: Target[];
         category: string;
         icon: string;
+        /** "-" in a test build alone: an ad hoc signature. */
+        identity?: string;
         hardenedRuntime: boolean;
         entitlements: string;
         entitlementsInherit: string;
@@ -74,5 +78,6 @@ export interface Configuration {
     toolsets: { appimage: string };
 }
 
-export function configuration(options: { version: string; sign?: string | null; linuxWaitMs?: number }): Configuration;
+export function configuration(options: { version: string; sign?: string | null; testBuild?: boolean; linuxWaitMs?: number }): Configuration;
+export function fromEnvironment(environment: Record<string, string | undefined>): Configuration;
 export default function (): Configuration;

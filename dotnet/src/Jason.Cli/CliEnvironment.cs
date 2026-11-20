@@ -111,13 +111,25 @@ namespace Jason.Cli;
 /// the registry of whoever ran the suite. Null is "no desktop", which opens the browser UI; <see cref="Default()"/> names
 /// this account's on Windows, and nothing elsewhere.
 /// </param>
+/// <param name="Setup">
+/// The places <c>jason install</c> sets this machine up in — the home, the Path, the folders a terminal finds programs in —
+/// and the ninth seam whose default is the refusal, for the reason <paramref name="Removes"/> gives: a verb that found them
+/// for itself would write into the profiles and the Path of whoever runs the suite. Null sets nothing up;
+/// <see cref="Default()"/> names this machine's on macOS and Windows, and nothing elsewhere.
+/// </param>
+/// <param name="Moves">
+/// What the move of a command-line install into Jason Desktop asks of the operating system — a signature, an unzip, a setup
+/// run to its end — and the tenth seam whose default is the refusal, for the reason <paramref name="Setup"/> gives: a move
+/// that asked for itself would install an application on whoever runs the suite. Null installs nothing, and the move waits
+/// and says so; <see cref="Default()"/> names this machine's.
+/// </param>
 /// <param name="ToastSetting">
 /// Windows' notification settings for the runtime's toast as they stand now, which <c>jason status</c> reads beside what
-/// the runtime last saw — the ninth seam whose default is the refusal, for the reason <paramref name="Desktop"/> gives.
+/// the runtime last saw — the eleventh seam whose default is the refusal, for the reason <paramref name="Desktop"/> gives.
 /// Null reads nothing, and the check says what the runtime reported; <see cref="Default()"/> names this account's on
 /// Windows, and nothing elsewhere.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null, TimeProvider? Clock = null, Link.IDesktopRegistration? Desktop = null, Status.IToastSetting? ToastSetting = null)
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null, TimeProvider? Clock = null, Link.IDesktopRegistration? Desktop = null, SetupPlaces? Setup = null, Update.IMoveSystem? Moves = null, Status.IToastSetting? ToastSetting = null)
 {
     public static CliEnvironment Default() => Default(Console.Out, Console.Error, Console.OutputEncoding);
 
@@ -145,6 +157,8 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
             Terminals: new Session.PlatformTerminalStarter(),
             Desktop: OperatingSystem.IsWindows() ? new Link.WindowsDesktopRegistration() : null,
+            Setup: SetupPlaces.ForThisMachine(),
+            Moves: Update.MoveSystem.Instance,
             ToastSetting: OperatingSystem.IsWindows() ? new Status.WindowsToastSetting() : null);
 
     /// <summary>

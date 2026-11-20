@@ -72,12 +72,29 @@ internal static partial class StatusChecks
 
         public const string Restart = "jason runtime restart";
 
+        /// <summary>The repair for a runtime left draining: it claims again, with nothing restarted.</summary>
+        public const string Resume = "jason runtime resume";
+
         /// <summary>
         /// The repair for an update that stopped part-way: the apply carries it on from the step its ledger names, starts the
         /// runtime itself and finishes what the update still owes. Never <see cref="Start"/>, which would run the new build
         /// outside the update.
         /// </summary>
         public const string FinishUpdate = "jason update apply";
+
+        /// <summary>
+        /// The repair for a runtime newer than this CLI: this jason brought up to the runtime, never the runtime restarted from
+        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason. On a jason Jason Desktop carries it
+        /// is the same command again, with no hop through the desktop's menu: there it hands the update to the application.
+        /// </summary>
+        public const string UpdateThisJason = "jason update apply";
+
+        /// <summary>
+        /// The repair for a move into Jason Desktop that has not ended, where the jason that reads it is the application's: its own
+        /// setup, which retires the command-line install it finds. From the command-line install the move is carried on by
+        /// <see cref="FinishUpdate"/> instead.
+        /// </summary>
+        public const string SetUpMachine = "jason install";
 
         public const string ReloadPlugins = "jason plugin reload";
 
@@ -262,13 +279,15 @@ internal static partial class StatusChecks
             }
 
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
-            checks.Add(Runtime(descriptor, info, unfinished));
+            checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
+            checks.Add(Dispatcher(info, unfinished, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
             checks.Add(UpdateInFlight(unfinished));
+            checks.Add(Move(env));
             checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
@@ -303,12 +322,22 @@ internal static partial class StatusChecks
         return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks, SetupInfo.From(env.Paths));
     }
 
-    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
+    private static StatusCheck Runtime(
+        Contracts.Discovery.RuntimeDescriptor? descriptor,
+        SystemInfoResponse? info,
+        Contracts.Update.UnfinishedUpdate? unfinished,
+        (bool Stands, DateTimeOffset? StoppedAt) owed)
     {
         // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
         // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
         // fails the same way, with no repair this verb can name. Before that step nothing has been replaced, and the
-        // runtime check is the runtime's own; the optional update check names what is waiting.
+        // runtime check is the runtime's own; the optional update check names what is waiting. A carried update whose
+        // application is the new version already landed under a jason that never finished it: the finish is the one way on.
+        if (Landed(unfinished) is { } landed)
+        {
+            return new StatusCheck("runtime", true, CheckState.Failed, landed, Repair.FinishUpdate);
+        }
+
         if (unfinished is { Replacing: true })
         {
             return unfinished.Ledger is { } ledger
@@ -321,14 +350,21 @@ internal static partial class StatusChecks
                 : new StatusCheck("runtime", true, CheckState.Failed, $"{unfinished.Said()}.", null);
         }
 
+        // jason install stopped this data directory's runtime and started none, and none has started since: the note it left
+        // is said with the one command that pays it. A runtime that answers has removed it at its start, or pays it already.
+        var owes = owed.Stands
+            ? " `jason install` stopped the runtime on this data directory"
+              + (owed.StoppedAt is { } moment ? string.Create(CultureInfo.InvariantCulture, $" at {moment.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss'Z'}") : string.Empty)
+              + $" and none has started since, so a start is owed: `{Repair.Start}` starts one."
+            : string.Empty;
         if (descriptor is null)
         {
-            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask.", Repair.Start);
+            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask." + owes, Repair.Start);
         }
 
         return info is null
-            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
-            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there." + owes, Repair.Start)
+            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {JasonVersion.Stated(info.RuntimeVersion, info.TestBuild == true)}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
     /// <summary>
@@ -367,9 +403,89 @@ internal static partial class StatusChecks
     /// required check would stop every agent that branches on <c>ready</c> until the network came back. From that step
     /// on the required runtime check fails as well, and a ledger that cannot be read is said there.
     /// </summary>
+    /// <summary>
+    /// Where the move of a command-line install into Jason Desktop stands, from its record alone: optional, since every prefix
+    /// of a move leaves a working installation. A move that is not done names the one command that carries it on from the jason
+    /// this is: <c>jason update apply</c> typed into the command-line install, which carries it on at the version it is; and,
+    /// where the application's jason answers already, <c>jason install</c>, the routine the move had still to finish.
+    /// </summary>
+    internal static StatusCheck Move(CliEnvironment env)
+    {
+        const string Name = "move";
+        var file = new Jason.Cli.Update.UpdatePaths(env.Paths).Move;
+        Jason.Cli.Update.MoveRecord? record;
+        try
+        {
+            record = Jason.Cli.Update.MoveRecord.Read(file);
+        }
+        catch (Jason.Cli.Update.MoveRecordUnreadable unread)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, unread.Message, null);
+        }
+
+        if (record is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No command-line install is being moved into Jason Desktop.", null);
+        }
+
+        if (record.DoneAndStanding(Jason.Cli.Update.MoveRecord.OnWindows(env)))
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, $"The command-line install at {record.From} was moved into Jason Desktop at {record.Application}.", null);
+        }
+
+        if (record.State == Jason.Cli.Update.MoveStates.Done)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Absent,
+                $"The command-line install at {record.From} was recorded as moved into Jason Desktop at {record.Application}, which no longer stands: the next jason update apply moves it again.",
+                null);
+        }
+
+        // The routine retired the command-line install, renamed aside on Windows or a wrapper over the application's jason on
+        // macOS, and the move that asked for it ended before it said so: the install is in the application, and a start it
+        // owes is the runtime check's to name.
+        if (Jason.Cli.Update.MoveRecord.Retired(record.From))
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Ok,
+                $"The command-line install at {record.From} is retired into Jason Desktop{(record.Application is { } application ? " at " + application : string.Empty)}; the move's record stopped before it said so.",
+                null);
+        }
+
+        // Waiting on what no command typed here changes - an Intel Mac, an older or unreadable application: what stands and what
+        // would move it, with no repair that cannot help.
+        if (record.Waits is { } waits)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Unknown,
+                $"The move of the command-line install at {record.From} into Jason Desktop waits: {record.Reason ?? "it says no more."} It goes on once {waits}.",
+                null);
+        }
+
+        var carried = CarriedExecutable.Of(env) is not null;
+        var repair = carried ? Repair.SetUpMachine : Repair.FinishUpdate;
+        var fact = record.State == Jason.Cli.Update.MoveStates.Moving
+            ? $"The move of the command-line install at {record.From} into Jason Desktop was begun and has not ended: it runs now, or it was stopped at '{record.Doing ?? "the beginning"}'"
+              + (record.Step is { } done ? $", after '{done}'" : string.Empty)
+              + $". The command-line install answers as jason until the move retires it. `{repair}` carries it on once none runs."
+            : $"The move of the command-line install at {record.From} into Jason Desktop is {record.State}"
+              + (record.Step is { } last ? $" after '{last}'" : string.Empty)
+              + $": {record.Reason ?? "it says no more."}";
+        return carried
+            ? new StatusCheck(Name, false, CheckState.Failed, fact, Repair.SetUpMachine)
+            : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
+    }
+
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
             "update",
@@ -384,6 +500,19 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more
+    /// than its stop — that jason ended with the go given, by a kill or a closed console: the application names the new
+    /// version already, and <c>jason update apply</c> finishes the update and starts the runtime. Null for every other.
+    /// </summary>
+    private static string? Landed(Contracts.Update.UnfinishedUpdate? unfinished) =>
+        unfinished?.Ledger is { Step: < UpdateStep.Swapped } ledger
+        && CarriedExecutable.Of(ledger.InstallPath)?.Version is { } named
+        && SemanticVersion.TryParse(named, out var version)
+        && version == ledger.ToVersion
+            ? $"{unfinished.Said()}, and Jason Desktop's installer has put {ledger.ToVersion} in place already: `{Repair.FinishUpdate}` finishes it and starts the runtime."
+            : null;
 
     /// <summary>
     /// Whether the runtime answering is the build this CLI is. Required, because a binary can change under a running
@@ -406,10 +535,83 @@ internal static partial class StatusChecks
             return new StatusCheck("runtime_version", true, CheckState.Unknown, "The runtime did not answer, so which build it is was not asked.", Repair.Start);
         }
 
-        return string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
-            ? new StatusCheck("runtime_version", true, CheckState.Ok, $"The runtime running is {build}, the build this CLI is.", null)
+        if (string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal))
+        {
+            return new StatusCheck("runtime_version", true, CheckState.Ok, $"The runtime running is {build}, the build this CLI is.", null);
+        }
+
+        // A runtime newer than this CLI is not restarted from it: that would start this older build on data the newer one
+        // may have migrated, which a build from 0.49.0 on refuses and an earlier one runs unguarded.
+        return SemanticVersion.TryParse(info.RuntimeVersion, out var running) && SemanticVersion.TryParse(build, out var self) && running > self
+            ? new StatusCheck(
+                "runtime_version",
+                true,
+                CheckState.Failed,
+                $"The runtime running is {info.RuntimeVersion}, newer than this CLI, {build}: a restart from this CLI would start the older build on data the newer one may have changed, so update this jason instead.",
+                Repair.UpdateThisJason)
             : new StatusCheck("runtime_version", true, CheckState.Failed, $"The runtime running is {info.RuntimeVersion}; this CLI is {build}.", Repair.Restart);
     }
+
+    /// <summary>
+    /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
+    /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
+    /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
+    /// restarts nothing; for a runtime of an older build than this CLI it is the restart alone, since where another build
+    /// has replaced its executable a resume would start its plugin hosts from that file, which the check cannot tell from
+    /// where it stands. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
+    /// of it is never offered: the check says the runtime is draining for the update and names the update's own repair. A
+    /// dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never failed; a runtime that
+    /// did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
+    /// </summary>
+    private static StatusCheck Dispatcher(SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished, string build)
+    {
+        const string Name = "dispatcher";
+        if (info is null)
+        {
+            return new StatusCheck(Name, true, CheckState.Unknown, "The runtime did not answer, so whether it claims work was not asked.", Repair.Start);
+        }
+
+        var running = info.Dispatcher.RunningAttempts == 1
+            ? "1 attempt is still running"
+            : string.Create(CultureInfo.InvariantCulture, $"{info.Dispatcher.RunningAttempts} attempts are still running");
+        return info.Dispatcher.State switch
+        {
+            DispatcherState.Draining when unfinished is { Ledger: not null } => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining for the update: {char.ToLowerInvariant(unfinished.Said()[0])}{unfinished.Said()[1..]}, and `{Repair.FinishUpdate}` carries it on; {running}.",
+                Repair.FinishUpdate),
+            DispatcherState.Draining when unfinished is not null => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining, and an update may be under way: {unfinished.Said()}; {running}.",
+                null),
+            DispatcherState.Draining when OlderBuild(info, build) => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining, and it is {info.RuntimeVersion}, not this CLI's {build}: where another build has replaced its executable, a resume would start its plugin hosts from that file, so the repair is a restart of the runtime; {running}.",
+                Repair.Restart),
+            DispatcherState.Draining => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining: it claims no new work until `{Repair.Resume}` or a restart of the runtime; {running}.",
+                Repair.Resume),
+            DispatcherState.Disabled => new StatusCheck(Name, true, CheckState.Ok, "The dispatcher is turned off by the settings (Dispatcher:Enabled), so this runtime claims no work.", null),
+            _ => new StatusCheck(Name, true, CheckState.Ok, "The runtime claims work.", null),
+        };
+    }
+
+    /// <summary>
+    /// Whether the runtime is another build than this CLI and not a newer one: the case <c>runtime_version</c> repairs with a
+    /// restart, a runtime whose executable another build may have replaced.
+    /// </summary>
+    private static bool OlderBuild(SystemInfoResponse info, string build) =>
+        !string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
+        && !(SemanticVersion.TryParse(info.RuntimeVersion, out var running) && SemanticVersion.TryParse(build, out var self) && running > self);
 
     private static StatusCheck Migrations(SystemInfoResponse? info)
     {
@@ -596,6 +798,81 @@ internal static partial class StatusChecks
             : $" '{role.Name}' is a role of your own, and no skill Jason ships teaches it: it launches untaught unless a skill named after it is in {directory}."));
 
     /// <summary>
+    /// The roles Jason ships whose skill in the role skills directory is a folder the record there does not name: the
+    /// person's own, which every deployment leaves as it is (<see cref="Skills.SkillsDeployer.Judge"/>), and which a launch
+    /// teaches the role. Said as a role of the person's, each by name, never counted silently as Jason's. A record that
+    /// cannot be read says nothing here: what is Jason's there cannot be told.
+    /// </summary>
+    private static string OwnUnderShippedName(IEnumerable<string> present, string directory)
+    {
+        // A directory this machine does not hold is a runtime's that is not here to read: nothing is said of it.
+        if (!Directory.Exists(directory))
+        {
+            return string.Empty;
+        }
+
+        SkillsRecord? record;
+        try
+        {
+            record = SkillsRecord.Read(directory);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return string.Empty;
+        }
+
+        var named = record?.Packs.SelectMany(pack => pack.Files).Select(file => file.Path.Split('/')[0]).ToHashSet(StringComparer.Ordinal) ?? [];
+        var roles = present.Where(role => !named.Contains(role)).Order(StringComparer.Ordinal).ToList();
+        if (roles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // One sentence for the directory, naming every such role, a link said as a link.
+        var quoted = Skills.SkillsDeployer.Listed(roles.Select(role => $"'{role}'"));
+        var what = Skills.SkillsDeployer.Things([.. roles.Select(role => new FileInfo(System.IO.Path.Combine(directory, role)).LinkTarget is not null)]);
+        return roles.Count == 1
+            ? $" {quoted} is a role Jason ships, and its skill in {directory} is a {what} Jason did not deploy: the runtime teaches {quoted} from that {what}, and no deployment writes over it. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`."
+            : $" {quoted} are roles Jason ships, and their skills in {directory} are {what} Jason did not deploy: the runtime teaches each of them from what stands there, and no deployment writes over it. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployRoles}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that still stand there: one sentence for
+    /// the root, in its singular or plural form, each by its path, a link said as a link. Null for none.
+    /// </summary>
+    internal static string? LeftAloneStanding(string root, IReadOnlyList<string> names, string hosts)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        var quoted = Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"));
+        var what = Skills.SkillsDeployer.Things([.. names.Select(name => new FileInfo(System.IO.Path.Combine(root, name)).LinkTarget is not null)]);
+        return names.Count == 1
+            ? $"{paths} is a {what} Jason did not deploy, under a name Jason ships, left as it is: Jason's {quoted} is not installed for {hosts}, and an agent there asked to use {quoted} reads that {what}. To have the one Jason ships, move or remove that {what}, then run `{Skills.SkillsDeployer.RedeployHost}`."
+            : $"{paths} are {what} Jason did not deploy, under names Jason ships, left as they are: Jason's {quoted} are not installed for {hosts}, and an agent there asked to use one of them reads what stands there. To have the ones Jason ships, move or remove those {what}, then run `{Skills.SkillsDeployer.RedeployHost}`.";
+    }
+
+    /// <summary>
+    /// What harness_skills says of the folders a root's last deployment left alone that no longer hold a skill: one sentence
+    /// for the root. Null for none.
+    /// </summary>
+    internal static string? LeftAloneGone(string root, IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var paths = Skills.SkillsDeployer.Listed(names.Select(name => System.IO.Path.Combine(root, name)));
+        return names.Count == 1
+            ? $"{paths}, a folder Jason left as it was, no longer holds a skill, so {root} has no '{names[0]}': `{Skills.SkillsDeployer.RedeployHost}` writes the one Jason ships."
+            : $"{paths}, folders Jason left as they were, no longer hold a skill, so {root} has none of {Skills.SkillsDeployer.Listed(names.Select(name => $"'{name}'"))}: `{Skills.SkillsDeployer.RedeployHost}` writes the ones Jason ships.";
+    }
+
+    /// <summary>
     /// The skills the roles are taught from, reported, with the deployment their record names as fields a program reads.
     /// </summary>
     /// <remarks>
@@ -743,6 +1020,7 @@ internal static partial class StatusChecks
             ? string.Empty
             : $" {string.Join(", ", stranger.Select(name => $"'{name}'"))} is deployed and is no role on this runtime's roster, so nothing reads it.";
         note += Own(roster.Where(role => !role.Builtin && !deployed.Contains(role.Name)), skills.RoleSkillsDirectory);
+        note += OwnUnderShippedName(seeded.Intersect(deployed), skills.RoleSkillsDirectory);
         var taught = string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}");
 
         // Present and launchable is not current. After `jason update apply` the roles went on being taught from the
@@ -937,14 +1215,31 @@ internal static partial class StatusChecks
                 Repair.OnPath(env));
         }
 
-        var running = env.InstallPath;
-        if (running is not null && !string.Equals(System.IO.Path.GetFullPath(running), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
+        // Linux keeps the check it had: more than one installation may stand there, and another jason by name is said, not
+        // failed.
+        if (OperatingSystem.IsLinux())
+        {
+            var installed = env.InstallPath;
+            if (installed is not null && !string.Equals(System.IO.Path.GetFullPath(installed), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
+            {
+                return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}, which is not the file answering here ({installed}): two installations are on this machine.", null);
+            }
+
+            return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+        }
+
+        // macOS and Windows, where a machine holds one installation. The file answering here, as installed: a release's
+        // image, which every release has. Another file first by name is what a person and every agent typing jason runs, so
+        // this one's readiness says nothing of theirs; the application's wrapper running this image is this jason by name.
+        var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
             return new StatusCheck(
                 "path",
                 true,
-                CheckState.Ok,
-                $"'jason' resolves to {resolved}, which is not the file answering here ({running}): two installations are on this machine.",
+                CheckState.Failed,
+                $"'jason' resolves to {resolved}, not to this jason ({running}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
+                + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}.",
                 null);
         }
 
@@ -1687,6 +1982,7 @@ internal static partial class StatusChecks
         var behind = new List<string>();
         var empty = new List<string>();
         var pinned = new List<string>();
+        var yours = new List<string>();
         foreach (var root in roots.Select(root => root.Directory).Distinct(HarnessLocators.SamePath))
         {
             try
@@ -1703,6 +1999,23 @@ internal static partial class StatusChecks
                         {
                             gone.Add(string.Create(CultureInfo.InvariantCulture, $"{pack.Pack} in {root}: {missing} of the {pack.Files.Count} file(s) its record names are not there."));
                         }
+
+                    }
+
+                    // The names the last deployment left alone, each looked at on disk and never repeated blind, said once
+                    // for the root. One still standing is the person's: said, host by host, and never a failure, so `ready`
+                    // does not move. One that no longer holds a skill leaves the root without Jason's skill of that name,
+                    // which is the fact a recorded skill missing from the disk is, and takes its state and repair (`gone`).
+                    var left = record.Packs.SelectMany(pack => pack.LeftAlone).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+                    var standing = left.Where(name => Skills.SkillsDeployer.Occupied(System.IO.Path.Combine(root, name))).ToList();
+                    if (LeftAloneStanding(root, standing, HostsReading(root)) is { } said)
+                    {
+                        yours.Add(said);
+                    }
+
+                    if (LeftAloneGone(root, [.. left.Except(standing)]) is { } missingSaid)
+                    {
+                        gone.Add(missingSaid);
                     }
 
                     deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}{ReadBy(root)}"));
@@ -1745,14 +2058,20 @@ internal static partial class StatusChecks
         // the source and at the ref its record names and into the roots it names; and it moves a pack that is behind. An
         // install would move a pack from another source, or pinned, to this build's default, and deploy into every harness.
         return gone.Count > 0 || behind.Count > 0
-            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned).Concat(unfilled)), Repair.UpdateSkills)
-            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Concat(unfilled).Select(note => " " + note)), null);
+            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", gone.Concat(behind).Concat(pinned).Concat(yours).Concat(unfilled)), Repair.UpdateSkills)
+            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Concat(yours).Concat(unfilled).Select(note => " " + note)), null);
 
         // The hosts that read a folder, by their words.
         List<string> HostWords(string root) =>
             [.. roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().Select(AgentHosts.Word)];
 
         // The hosts that read a folder, by their words, after it; a folder named with --root and no host says none.
+        // The hosts that read a root, by name, for a sentence about what each of them is given there.
+        string HostsReading(string root) =>
+            roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
+                ? string.Join(" and ", hosts.Select(AgentHosts.Word))
+                : $"a host reading {root}";
+
         string ReadBy(string root) =>
             roots.Where(found => HarnessLocators.SamePath.Equals(found.Directory, root)).SelectMany(found => found.Hosts).Distinct().ToList() is { Count: > 0 } hosts
                 ? " (" + string.Join(", ", hosts.Select(AgentHosts.Word)) + ")"

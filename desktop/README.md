@@ -13,6 +13,10 @@ that a person needs.
 
 | Step | How |
 | --- | --- |
+| Set the machine up, on macOS and Windows, at a windowed start of a version it has not yet completed for, in Demo as in Live, before Live brings the installation up; again on Put Back jason and the Skills (`src/machine-setup.ts`) | `jason install`, with `--terminal-path` naming the login shell's own PATH (the empty value where it printed none) on macOS and nothing on Windows; never `--roles`, so nothing is written under the data directory but the desktop's record `<data>/desktop/machine-setup.json`; then `jason update apply --finish`, after every run of `jason install` but one refused as `install_in_progress` or `update_in_progress`, which are later, no failure and no record; the record is written only when both completed (the finish's document `complete`, or an update's `step` at `complete`); once a start, both with no time limit, Live waiting for them at most thirty seconds and a runtime start refused meanwhile made again once they ended; a runtime that answered before them (`jason runtime status`, asked only where `<data>/run/runtime.json` is there), or the note `<data>/run/start-owed.json`, and none after them, whatever they reported, is started again with `jason runtime start`, in Demo as in Live and after Put Back, a refused start read again before it is said to have failed; the Command Line item shows the report as facts, saying that a new terminal finds `jason` only where the report's `command.placed` is true |
+| Pay the note that a start is owed, at every windowed start where no set-up runs (`payOwedStart` in `src/machine-setup.ts`) | where `<data>/run/start-owed.json` stands and `jason runtime status` finds none answering, `jason runtime start` from the carried `jason`; on Linux in a Demo start only, from the deb's `jason` or the AppImage's copy; the desktop never writes or removes the note |
+| Stop the runtime for the installer (`--stop-runtime`, `src/uninstall-start.ts`) | `jason runtime stop --start-owed`, always, so the next start owes a runtime; a person's own stop never passes it |
+| Put back a missing carried `jason.exe` on Windows (`src/carried-restore.ts`) | at a windowed start, before the set-up: a stored image under `%LOCALAPPDATA%\jason-desktop-updater\jason-carried\<request>\` whose `jason.version` names the version the bundle's `version.json` names, copied through a file beside the target |
 | Know whether a runtime is up and whether it is this build | `jason status` |
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
@@ -114,6 +118,11 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
   `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
   between its mark and the runtime's naming of the default).
+- `<data>/desktop/machine-setup.json`: on macOS and Windows, `ran_for`, the version `jason install` last completed for,
+  `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
+  where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
+  `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
@@ -736,39 +745,25 @@ silent run are not. A process still running, a runtime that did not stop or one 
 ends the install or the uninstall before a file is replaced, and a person is told to stop it with
 `resources\bundle\jason.exe runtime stop` in the application's folder, with `JASON_DATA_DIR` set when it was started
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
-runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
-stops the runtime it carries, takes off the PATH command's files that are its own (and on macOS and Linux the PATH lines
-with them, where their folder then holds nothing but what Jason writes there), Open Jason at Login, the runtime's
-start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
-application, and an earlier version's demo's two folders, its data directory and its harness root (the person's with `-demo` after
-each), once the demo's own runtime is stopped, and names what it leaves: the data directory, the harness root
-and the updater's cache.
+runtime, and an update goes on without a look. Once the files are in place, at every install and every update, silent
+or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
+waited for (`customInstall`): `jason` on this account's Path, the skills for Claude Code and Codex where each is found, and an older
+command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
+done never fails the install. On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
+carried `jason uninstall` (`docs/release-and-update.md` §9), which takes off what Jason and Jason Desktop placed and
+leaves the data directory unless told otherwise and the harness root always. A person's uninstall from Installed apps
+starts the application with `--uninstall` (`src/uninstall-start.ts`), which runs that uninstall as
+`jason uninstall --keep-application`, shows what was taken off and what is left unless the uninstall is silent, and
+exits; the uninstaller then removes the application's folder, unless the exit says to go no further.
 
-On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
-an update is the whole guard. Before removing Jason.app, choose Remove What Jason Placed… in the Jason menu (or the
-tray's), which, once confirmed, takes the Windows uninstall's own steps (`src/uninstall.ts`; its dialogs are
-`src/remove-placed.ts`), stopping the runtime first and going no further when it does not stop, says what came of each
-and what to do by hand for one that failed, and offers to quit Jason, after which Jason.app goes to the Trash.
-
-When Jason will not start, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
-Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it was put in Applications):
-
-1. Read `installed_image` in the run file, `run/runtime.json` in the data directory. Only when it names that `jason` is
-   the runtime this application's: stop it with that `jason`, `<that jason> runtime stop`. A runtime of any other
-   `jason` is another installation's, and stays.
-2. Run `<that jason> runtime autostart status`. When the `executable` it names is that `jason`, run
-   `<that jason> runtime autostart disable`.
-3. Delete `~/Library/LaunchAgents/ai.jasonharness.desktop.plist`, which is Open Jason at Login.
-4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`. Once that
-   folder holds no `jason` or `jason-desktop` and nothing else but Jason's `jason-LICENSE` and
-   `jason-THIRD-PARTY-NOTICES`, take the line `# added by jason install` and the
-   `export PATH="…/.local/bin:$PATH"` line under it out of `~/.zprofile`, `~/.zshrc`, `~/.bash_profile`,
-   `~/.bash_login`, `~/.profile` and `~/.bashrc`, wherever they are.
-
-What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. An earlier version's demo's two folders (removed only when they carry the mark the desktop wrote into each when it made them, `.jason-demo-folder`) are not
-among them: the menu act takes them off, and by hand they are `~/.jason-demo` and `~/Jason-demo` (the data directory's and
-the harness root's own names with `-demo` after them), deleted once the demo's runtime is stopped.
+On macOS there is no installer, so the desktop's own look before an update is the whole guard. The Jason menu's
+Uninstall Jason… (and the tray's; `src/uninstall-door.ts`) asks first,
+with a box for the data directory, Cancel the default, and on the person's word starts the carried `jason uninstall`
+on its own with `--wait-for` this process's id, and quits; the verb deletes Jason.app last and writes what it did to a
+file in the temporary folder, which the dialog names. `jason uninstall` from a terminal is the same uninstall, with
+Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason uninstall` inside Jason.app
+(`/Applications/Jason.app/Contents/Resources/bundle/jason uninstall` where it was put in Applications).
 
 ## On Linux
 
@@ -792,9 +787,10 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS, and where a new terminal's PATH
-  lacks that folder it writes the installer's PATH lines into the shell profiles by the installer's own rule, as on macOS
-  (`src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)).
+- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, and where a new terminal's PATH lacks that folder
+  it writes the installer's PATH lines into the shell profiles by the installer's own rule (`src/path-command.ts`,
+  `src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)). On macOS and Windows the
+  item is the machine set-up's report instead (`src/machine-setup.ts`), and `jason install` places the command.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
@@ -817,11 +813,14 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
   updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
   open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
   machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
-- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
-  as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
+- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which, once confirmed, takes
+  the steps `src/uninstall.ts` lists (its dialogs are `src/remove-placed.ts`), stopping the runtime first and going no
+  further when it does not stop, says what came of each and what to do by hand for one that failed, and offers to quit
+  Jason. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
   the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders
-  (see macOS above). It then says what removes the
+  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders,
+  `~/.jason-demo` and `~/Jason-demo` (the data directory's and the harness root's own names with `-demo` after them),
+  only where each carries the mark the desktop wrote into it, `.jason-demo-folder`, once the demo's runtime is stopped. It then says what removes the
   application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
   that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
   `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
@@ -834,8 +833,11 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
      `<that jason> runtime autostart disable`, which takes off the runtime's systemd user unit.
   3. Delete `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that is set), which is
      Open Jason at Login, when its `Exec` line starts the AppImage file or the deb's executable.
-  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`, and the PATH
-     lines on the same condition as on macOS (step 4 above).
+  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`. Once that
+     folder holds no `jason` or `jason-desktop` and nothing else but Jason's `jason-LICENSE` and
+     `jason-THIRD-PARTY-NOTICES`, take the line `# added by jason install` and the
+     `export PATH="…/.local/bin:$PATH"` line under it out of `~/.profile`, `~/.bash_profile`, `~/.bash_login`,
+     `~/.bashrc`, `~/.zprofile` and `~/.zshrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
 
 ## Building and testing

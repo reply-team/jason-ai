@@ -51,7 +51,7 @@ internal static partial class CriticalTier
         [Family.B4] =  [  0,   0,   0,   0,   7],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
-        [Family.B7] =  [  4,   4,   4,   4,  16],
+        [Family.B7] =  [  4,   4,   4,   4,  20],
         [Family.B8] =  [  0,   0,   0,   0,   1],
         [Family.B9] =  [  3,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
@@ -66,7 +66,7 @@ internal static partial class CriticalTier
         [Family.W10] = [  0,   0,   0,   0,  15],
         [Family.W11] = [  0,   0,   0,   0,  17],
         [Family.P1] =  [  0,   0,   0,   0,  12],
-        [Family.P2] =  [  0,   2,   0,   0, 101],
+        [Family.P2] =  [  0,   5,   0,   0, 104],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  25],
         [Family.S2] =  [  2,   1,  10,   0,  92],
@@ -75,20 +75,20 @@ internal static partial class CriticalTier
         [Family.S5] =  [  0,   0,   0,   0,  23],
         [Family.S6] =  [  0,   0,   0,   0, 133],
         [Family.R1] =  [  0,   0,  12,   9,  31],
-        [Family.R2] =  [  0,  26,  10,   0,  22],
+        [Family.R2] =  [  0,  29,  10,   0,  22],
         [Family.R3] =  [  0,   1,  30,   0,  15],
         [Family.R4] =  [  0,   0,   0,   8,   0],
         [Family.R5] =  [  0,   0,   0,   9,   7],
-        [Family.I1] =  [  0,  18,   5,   0,   4],
-        [Family.I2] =  [  0,  21,  10,   0,   2],
-        [Family.I3] =  [  1,  25,   0,   0,   0],
+        [Family.I1] =  [  0,  17,   5,   0,  10],
+        [Family.I2] =  [  0,  54,  10,   0,   2],
+        [Family.I3] =  [  1,  48,   0,   0,   0],
         [Family.I4] =  [  0,  12,   0,   0,   0],
         [Family.E1] =  [  0,   0,   0,   0,   1],
         [Family.E2] =  [  1,   0,   0,   0,   0],
         [Family.F1] =  [  0,   0,   9,   1,  14],
         [Family.F2] =  [  0,   0,   0,   0,   4],
         [Family.F3] =  [  1,   4,   2,   1,   6],
-        [Family.F4] =  [  0,   1,   4,   4,  11],
+        [Family.F4] =  [  1,   1,   4,   4,  11],
         [Family.F5] =  [  0,   4,   2,   0,   1],
         [Family.F6] =  [  0,   0,   0,   0,   3],
         [Family.C1] =  [  0,   0,   0,   0,  15],
@@ -96,7 +96,7 @@ internal static partial class CriticalTier
         [Family.N1] =  [  0,   0,   0,   0,   7],
         [Family.N2] =  [  0,   0,   0,   0,  24],
         [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1,   7,   0,   0,   2],
+        [Family.D1] =  [  1,  11,   0,   0,   2],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   3],
         [Family.X1] =  [  0,  10,   3,   1,  14],
@@ -115,11 +115,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
-        (29, 415, 676, 32),      // Jason.App.Tests
-        (165, 2780, 5270, 382),  // Jason.Cli.Tests
+        (30, 415, 676, 32),      // Jason.App.Tests
+        (200, 3300, 6231, 456),  // Jason.Cli.Tests
         (105, 864, 4589, 136),   // Jason.Contracts.Tests
         (48, 302, 479, 54),      // Jason.PluginHost.Tests
-        (733, 6291, 12954, 937), // Jason.Runtime.Tests
+        (746, 6327, 13009, 950), // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>

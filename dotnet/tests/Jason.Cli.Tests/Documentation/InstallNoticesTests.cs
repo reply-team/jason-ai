@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -11,10 +12,10 @@ using Jason.Contracts.Update;
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
-/// What the install scripts say about the licence once an install has succeeded, and the two notice files they keep
-/// beside the executable. Each script is run for real, on the platform it is written for, against a feed of the test's
-/// own: <c>install.ps1</c> on Windows, <c>install.sh</c> on Linux and macOS. Every row is a theory over the two, so each
-/// CI leg runs one script's rows and names the other's as skipped.
+/// What <c>install.sh</c> says about the licence once an install of the archive has succeeded on Linux, and the two notice
+/// files it keeps beside the executable, run for real against a feed of the test's own. On macOS and Windows the scripts
+/// install Jason Desktop, which <see cref="InstallDesktopScriptTests"/> runs; the Windows half of these rows went with the
+/// archive route there.
 /// </summary>
 /// <remarks>
 /// The executable in the feed is a stand-in that prints the version a row gives it: on Windows a one-line program built
@@ -37,7 +38,6 @@ public sealed partial class InstallNoticesTests : IDisposable
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_fresh_install_says_the_licence_and_then_the_next_command(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -56,7 +56,6 @@ public sealed partial class InstallNoticesTests : IDisposable
     /// <summary>A run over the version already installed describes what is installed, so it says the licence too.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_install_already_there_says_the_licence_too(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -72,10 +71,35 @@ public sealed partial class InstallNoticesTests : IDisposable
         AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 
+    /// <summary>
+    /// A run as root installs on Linux as any run does: the refusal of root is macOS's alone, where the application and
+    /// what it sets up are the account's own. Here the executable goes where the install directory says, and a root that
+    /// asks for a directory of its own gets it. <c>id</c> is stood in for, answering 0 to <c>-u</c>, so the row runs as
+    /// root by every test the script could make without being root.
+    /// </summary>
+    [Theory]
+    [InlineData(Sh)]
+    [UnsupportedOSPlatform("windows")]
+    public void A_run_as_root_on_linux_installs_as_any_run_does(string script)
+    {
+        var installer = Installer.For(script, _tree);
+        var stubs = _tree.NewDirectory("stubs");
+        var id = Path.Combine(stubs, "id");
+        File.WriteAllText(id, "#!/bin/sh\n[ \"${1:-}\" = -u ] && { echo 0; exit 0; }\nexec /usr/bin/id \"$@\"\n");
+        File.SetUnixFileMode(id, (UnixFileMode)0b111_101_101);
+        installer.Variables["PATH"] = stubs + ":" + Environment.GetEnvironmentVariable("PATH");
+
+        var run = installer.Run(installer.Feed("0.49.0"));
+
+        Assert.True(run.Exit == 0, run.Stderr);
+        Assert.DoesNotContain("root", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains(Lines(run.Stdout), line => line.StartsWith("Installed Jason 0.49.0 to ", StringComparison.Ordinal));
+        Assert.True(File.Exists(installer.Target));
+    }
+
     /// <summary>A run that installs nothing says nothing about the licence of what it did not install.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_failed_install_says_no_licence(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -99,21 +123,13 @@ public sealed partial class InstallNoticesTests : IDisposable
     /// </summary>
     [Theory]
     [InlineData(Sh, "0.5.0", Band.None)]
-    [InlineData(Ps1, "0.5.0", Band.None)]
     [InlineData(Sh, "0.6.0-rc.1", Band.Runtime)]
-    [InlineData(Ps1, "0.6.0-rc.1", Band.Runtime)]
     [InlineData(Sh, "0.10.0", Band.Runtime)]
-    [InlineData(Ps1, "0.10.0", Band.Runtime)]
     [InlineData(Sh, "0.23.9", Band.Runtime)]
-    [InlineData(Ps1, "0.23.9", Band.Runtime)]
     [InlineData(Sh, "0.24.0-rc.1", Band.Mit)]
-    [InlineData(Ps1, "0.24.0-rc.1", Band.Mit)]
     [InlineData(Sh, "0.24.0", Band.Mit)]
-    [InlineData(Ps1, "0.24.0", Band.Mit)]
     [InlineData(Sh, "0.100.0", Band.Mit)]
-    [InlineData(Ps1, "0.100.0", Band.Mit)]
     [InlineData(Sh, "1.0.0", Band.Mit)]
-    [InlineData(Ps1, "1.0.0", Band.Mit)]
     public void Each_release_says_the_licence_it_was_published_under(string script, string version, Band band)
     {
         var installer = Installer.For(script, _tree);
@@ -165,27 +181,12 @@ public sealed partial class InstallNoticesTests : IDisposable
         AssertEndsWith(LicenceLine("0.6.0"), lines);
     }
 
-    [Fact]
-    public void Install_ps1_says_the_licence_after_the_path_step()
-    {
-        var code = Code(Ps1);
-        var path = code.IndexOf("is on your PATH; open a new terminal", StringComparison.Ordinal);
-
-        foreach (var said in Licences)
-        {
-            var licence = code.IndexOf(said, StringComparison.Ordinal);
-            Assert.True(path >= 0 && licence > path, $"install.ps1 does not say '{said}' after the PATH step.");
-        }
-        Assert.DoesNotContain("if ($NoModifyPath) { return }", code, StringComparison.Ordinal);
-    }
-
     /// <summary>
     /// And both scripts name the command to run next after everything else, outside every branch: on Windows the PATH
     /// step is never run here, so this half is read from the text, and the runs above end with it on both.
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void Each_script_names_the_next_command_after_the_licence(string script)
     {
         var code = Code(script);
@@ -218,9 +219,8 @@ public sealed partial class InstallNoticesTests : IDisposable
         Assert.Equal(shBase.Groups[1].Value, ps1Base.Groups[1].Value);
 
         Assert.Contains("$LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md", sh, StringComparison.Ordinal);
-        Assert.Contains("$licenceBase/v$latest/LICENSE-RUNTIME.md", ps1, StringComparison.Ordinal);
         Assert.Contains("$LICENCE_BASE/v$LATEST/LICENSE\"", sh, StringComparison.Ordinal);
-        Assert.Contains("$licenceBase/v$latest/LICENSE\"", ps1, StringComparison.Ordinal);
+        Assert.Contains("$licenceBase/v$installed/LICENSE\"", ps1, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASES_URL", shBase.Value, StringComparison.Ordinal);
         Assert.DoesNotContain("releasesUrl", ps1Base.Value, StringComparison.Ordinal);
     }
@@ -233,7 +233,6 @@ public sealed partial class InstallNoticesTests : IDisposable
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_install_from_the_address_follows_it_for_every_file(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -377,11 +376,11 @@ public sealed partial class InstallNoticesTests : IDisposable
             }
             else
             {
-                Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux and macOS legs run this row.");
+                // Linux alone: on macOS install.sh installs Jason Desktop, which InstallDesktopScriptTests runs.
+                Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux leg runs this row.");
                 Assert.SkipUnless(
-                    (OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64)
-                    || (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64),
-                    "No release is built for this machine, and install.sh refuses it by name.");
+                    OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64,
+                    "install.sh installs the archive on Linux on x64 alone: macOS installs Jason Desktop, and no other release is built.");
             }
 
             return new Installer(script, tree);
@@ -602,10 +601,25 @@ public sealed partial class InstallNoticesTests : IDisposable
         return (process.ExitCode, stdout.Result, stderr.Result);
     }
 
-    /// <summary>A script without its comments: the lines that run.</summary>
-    private static string Code(string name) =>
-        string.Join('\n', File.ReadAllText(Path.Combine(RepositoryRoot(), "install", name)).ReplaceLineEndings("\n").Split('\n')
-            .Where(line => !line.TrimStart().StartsWith('#')));
+    /// <summary>
+    /// A script without its comments: the lines that run. Of <c>install.sh</c>, the Linux route alone, which these rows
+    /// are about: its macOS route, from its section's heading to the call that ends the run there, installs Jason Desktop
+    /// and says its own lines, which <see cref="InstallDesktopScriptTests"/> holds.
+    /// </summary>
+    private static string Code(string name)
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", name)).ReplaceLineEndings("\n");
+        if (name == Sh)
+        {
+            const string Dispatch = "if [ \"$RID\" = macos ]; then\n    install_desktop\n    exit 0\nfi\n";
+            var start = text.IndexOf("# --- macOS: Jason Desktop", StringComparison.Ordinal);
+            var end = text.IndexOf(Dispatch, StringComparison.Ordinal);
+            Assert.True(start > 0 && end > start, "install.sh no longer keeps its macOS route in one section that ends in its dispatch.");
+            text = text[..start] + text[(end + Dispatch.Length)..];
+        }
+
+        return string.Join('\n', text.Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
+    }
 
     private static string RepositoryRoot()
     {

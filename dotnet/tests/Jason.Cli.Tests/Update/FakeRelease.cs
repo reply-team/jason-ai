@@ -21,6 +21,9 @@ public sealed class FakeRelease : HttpMessageHandler
     /// <summary>The plugin packages the manifest names, by id, as the lines of its <c>plugins</c> object.</summary>
     private readonly SortedDictionary<string, string> _plugins = new(StringComparer.Ordinal);
 
+    /// <summary>Further files the release publishes beside its archives, by name: Jason Desktop's installer or zip.</summary>
+    private readonly HashSet<string> _beside = new(StringComparer.Ordinal);
+
     public FakeRelease(SemanticVersion version, byte[]? archive = null, string? asset = null, string? digest = null, long? size = null)
     {
         Version = version;
@@ -84,6 +87,18 @@ public sealed class FakeRelease : HttpMessageHandler
         return ChecksumsSay($"{listed}{checksum ?? Convert.ToHexStringLower(SHA256.HashData(zip))}  {asset}\n");
     }
 
+    /// <summary>
+    /// A further file the release publishes beside its archives, Jason Desktop's installer or zip, listed in checksums.txt
+    /// after what is listed there already: by its own hash, or by <paramref name="checksum"/> where given.
+    /// </summary>
+    public FakeRelease WithFile(string name, byte[] content, string? checksum = null)
+    {
+        _files[name] = content;
+        _beside.Add(name);
+        var listed = Encoding.UTF8.GetString(_files[ReleaseAssets.Checksums]);
+        return ChecksumsSay($"{listed}{checksum ?? Convert.ToHexStringLower(SHA256.HashData(content))}  {name}\n");
+    }
+
     /// <summary>Replaces what checksums.txt says, for a test about a file that says something wrong.</summary>
     public FakeRelease ChecksumsSay(string text)
     {
@@ -134,6 +149,9 @@ public sealed class FakeRelease : HttpMessageHandler
     /// the wrong file at the address. Unset, the length is the body's.
     /// </summary>
     public long? UiLengthSays { get; set; }
+
+    /// <summary>Called with each address as it is asked for, before it is answered: a test's look at the machine in that moment.</summary>
+    public Action<string>? OnRequest { get; set; }
 
     /// <summary>Set to fail the next download in the way a network does.</summary>
     public HttpStatusCode? FailWith { get; set; }
@@ -191,6 +209,7 @@ public sealed class FakeRelease : HttpMessageHandler
         Requested.Add(path);
         Hosts.Add(request.RequestUri.Host);
         UserAgents[path] = request.Headers.UserAgent.ToString();
+        OnRequest?.Invoke(path);
 
         if (FailWith is { } failure)
         {
@@ -213,11 +232,12 @@ public sealed class FakeRelease : HttpMessageHandler
             $"/releases/download/v{Version}/{UiAssetLayout.AssetName}",
             $"/releases/download/v{Version}/{ReleaseAssets.Skills}",
             .. _plugins.Keys.Select(id => $"/releases/download/v{Version}/jason-plugin-{id}.zip"),
+            .. _beside.Select(name => $"/releases/download/v{Version}/{name}"),
         ];
         var repository = new Uri(PublicRepository.Url).AbsolutePath;
         string[] served = Feed.AbsolutePath.StartsWith("/releases/", StringComparison.Ordinal)
             ? [.. released, .. released.Select(release => repository + release)]
-            : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", $"/{ReleaseAssets.Skills}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip")];
+            : [$"/{ReleaseAssets.Manifest}", $"/{Asset}", $"/{ReleaseAssets.Checksums}", $"/{UiAssetLayout.AssetName}", $"/{ReleaseAssets.Skills}", .. _plugins.Keys.Select(id => $"/jason-plugin-{id}.zip"), .. _beside.Select(name => $"/{name}")];
 
         var name = path[(path.LastIndexOf('/') + 1)..];
         if (!served.Contains(path, StringComparer.Ordinal) || !_files.TryGetValue(name, out var bytes))

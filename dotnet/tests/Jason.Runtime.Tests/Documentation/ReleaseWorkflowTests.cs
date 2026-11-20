@@ -511,14 +511,22 @@ public partial class ReleaseWorkflowTests
             "The stamp is checked after the tests have already run under it.");
 
         // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
-        // The one exception is the desktop job's Linux packages, which are never built at a -dev version: they carry the
-        // release with a ci word and the run's number, a candidate's shape no release ever has, on that one line.
+        // The exceptions are the desktop job's Linux packages and the two proof jobs' test builds, which are never built at a
+        // -dev version: they carry the release with a ci word and the run's number, a candidate's shape no release ever has,
+        // on that one line.
         foreach (var name in jobs.Children.Keys.Select(key => key.ToString()).Where(name => name is not "version" and not "release-stamp"))
         {
             var text = Job(ci, name);
             if (name == "desktop")
             {
                 const string candidate = "version: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}";
+                Assert.Equal(1, Regex.Count(text, Regex.Escape(candidate)));
+                text = text.Replace(candidate, string.Empty, StringComparison.Ordinal);
+            }
+
+            if (name is "union-windows" or "union-macos")
+            {
+                const string candidate = "VERSION: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}";
                 Assert.Equal(1, Regex.Count(text, Regex.Escape(candidate)));
                 text = text.Replace(candidate, string.Empty, StringComparison.Ordinal);
             }
@@ -630,6 +638,9 @@ public partial class ReleaseWorkflowTests
             "osx-arm64 tests: Runtime 4 of 6",
             "osx-arm64 tests: Runtime 5 of 6",
             "osx-arm64 tests: Runtime 6 of 6",
+            // The macOS half of the proof of one installation, beside install.ps1 on windows, which the ruleset requires
+            // since it was the Windows install job's name.
+            "install.sh on macos",
         ];
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
@@ -718,9 +729,30 @@ public partial class ReleaseWorkflowTests
             Scalar(Mapping(inputs, "dry_run"), "description"));
 
         // One step publishes, the tag's release or the button's draft, and only outside a dry run in the public
-        // repository; the tap is asked only after a tag's release, there.
+        // repository; the tap's job would ask only after a tag's release, there, and is switched off.
         Assert.Equal(PublishesHere, Scalar(PublishingStep(PublishStep), "if"));
-        Assert.Equal(TagHere, Scalar(TapJob(), "if"));
+        Assert.Equal(TapSwitchedOff, Scalar(TapJob(), "if"));
+    }
+
+    /// <summary>
+    /// The order a release goes in, as the workflow's head says it: the release pull request and its run on every
+    /// platform first, then the tag on that pull request's head, the release published from it, and the merge into main
+    /// only once the publication is checked, with the reason; a hotfix's tag is its merge. No comment of the workflow
+    /// still says the tag is the release pull request's merge.
+    /// </summary>
+    [Fact]
+    public void The_workflow_s_head_says_the_tag_is_the_release_pull_request_s_head_and_main_takes_it_after()
+    {
+        var text = Read(Release).ReplaceLineEndings("\n");
+        var head = string.Join(' ', text.Split('\n').TakeWhile(line => line.StartsWith('#')).Select(line => line[1..].Trim()));
+
+        Assert.Contains(
+            "The release pull request into main, and its run on every platform, come before the tag: the tag is that pull request's head, the release is published from it, and the pull request is merged into main only once the publication is checked, so main, whose README and pages GitHub shows, never describes a release that is not out, and a release run that fails leaves main as it was. A hotfix's tag is its merge into main instead, as DEVELOPMENT.md says.",
+            head,
+            StringComparison.Ordinal);
+        var flat = Regex.Replace(text, @"\s*\n\s*#\s*", " ");
+        Assert.DoesNotContain("the tag is that merge", flat, StringComparison.Ordinal);
+        Assert.DoesNotContain("the merge of the release pull request", flat, StringComparison.Ordinal);
     }
 
     /// <summary>The step that publishes the release, or the button's draft.</summary>
@@ -729,8 +761,11 @@ public partial class ReleaseWorkflowTests
     /// <summary>The condition of the step that publishes: not a dry run, and in the public repository.</summary>
     private const string PublishesHere = "${{ !inputs.dry_run && github.repository == 'reply-team/jason-ai' }}";
 
-    /// <summary>The condition of the job that asks the tap: a tag, in the public repository.</summary>
-    private const string TagHere = "${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' }}";
+    /// <summary>
+    /// The condition of the job that asks the tap: a tag, in the public repository, and a last clause that is false, which
+    /// switches the job off while every clause it comes back with stays held.
+    /// </summary>
+    private const string TapSwitchedOff = "${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' && false }}";
 
     /// <summary>The tap's token, as the one step that sends it names it.</summary>
     private const string TapToken = "${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}";
@@ -903,7 +938,7 @@ public partial class ReleaseWorkflowTests
     {
         var text = Read(Release).ReplaceLineEndings("\n");
         const string Publish = "        if: " + PublishesHere + "\n";
-        const string Tap = "    if: " + TagHere + "\n";
+        const string Tap = "    if: " + TapSwitchedOff + "\n";
         const string Upload = "      - name: Keep what a dry run assembled\n";
 
         string Moved(string from, string to)
@@ -1833,6 +1868,40 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("--version", run, StringComparison.Ordinal);
         Assert.Contains("$env:VERSION", run, StringComparison.Ordinal);
         Assert.Contains("throw", run, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each platform's smoke step holds the executable it just built to not being a test build, in both places a test build
+    /// says it is one: <c>--version</c>'s standard error, where a test build writes <see cref="Jason.Contracts.JasonVersion.TestBuildSentence"/>
+    /// and a released one nothing, and the runtime's own report, where a test build carries <c>test_build</c> and a released
+    /// one does not. The words are the code's, read here from it, so the step and the build cannot say it differently.
+    /// </summary>
+    [Theory]
+    [InlineData("linux-x64")]
+    [InlineData("macos")]
+    [InlineData("windows")]
+    public void Every_smoke_step_holds_the_built_executable_to_not_a_test_build(string platform)
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
+        var job = platform switch
+        {
+            "macos" => MacosJob(),
+            "windows" => WindowsJob(),
+            _ => building,
+        };
+        var smoke = JobSteps(job).Single(step => Scalar(step, "name")?.StartsWith("Smoke-test", StringComparison.Ordinal) == true);
+        var lines = Scalar(smoke, "run")!.Split('\n');
+
+        // --version's standard error is kept, and a line that finds the test-build words there fails the step.
+        Assert.Contains(lines, line => line.Contains("& $exe --version 2>", StringComparison.Ordinal));
+        var mark = Assert.Single(lines, line => line.Contains($"'{Jason.Contracts.JasonVersion.TestBuildMark}'", StringComparison.Ordinal));
+        Assert.Contains("throw", mark, StringComparison.Ordinal);
+
+        // And the running runtime's report, read whole, carries no test_build.
+        var report = Assert.Single(lines, line => line.Contains("'\"test_build\"'", StringComparison.Ordinal));
+        Assert.Contains("throw", report, StringComparison.Ordinal);
+        Assert.Contains("\"$running\"", report, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4460,10 +4529,13 @@ public partial class ReleaseWorkflowTests
     [Fact]
     public void The_install_job_runs_the_script_the_way_the_one_liner_does()
     {
-        var job = Job(Read(Ci), "install-ps1");
+        var job = Job(Read(Ci), "union-windows");
+        Assert.Contains("Test-InstallationWindows.ps1 -Step Install ", job, StringComparison.Ordinal);
 
-        Assert.True(Runs(job, "Invoke-Expression"), $"the install job never runs the script as text, so it cannot see what the one-liner leaves behind:\n{job}");
-        Assert.Contains("Get-Command Install-Jason", job, StringComparison.Ordinal);
+        // The step's script runs install.ps1 as a file under Windows PowerShell, then its text through Invoke-Expression.
+        var script = Read([".github", "scripts", "Test-InstallationWindows.ps1"]);
+        Assert.Contains("Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw)", script, StringComparison.Ordinal);
+        Assert.Contains("if (Get-Command Install-Jason -ErrorAction SilentlyContinue)", script, StringComparison.Ordinal);
     }
 
     /// <summary>

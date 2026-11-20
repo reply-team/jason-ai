@@ -134,15 +134,87 @@ public class UpdateRollbackTests
         // A line in the chronicle that was not there when the update was declared healthy.
         installation.Chronicle = "jrn_01LATERLATERLATERLATERLATER";
 
-        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+        // This build is on the side of the guard that refuses a database a newer Jason migrated, so once put back it does
+        // not start on the database left as it is.
+        Assert.True(UpdateRollback.RefusesNewerData(installation.From), "the test's premise: the version put back has the guard.");
+        installation.PutBackRefusesTheDatabase = true;
+        var rollback = installation.Rollback();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => rollback.RollBackAsync(Ct));
 
         Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
         Assert.Contains("state/jason.db", refused.Message, StringComparison.Ordinal);
 
-        // The binary went back anyway, the runtime is up, and the database is untouched.
+        // The version put back refuses the migrated database itself, and the refusal says so rather than "may".
+        Assert.Contains($"{installation.From} does not start on a database {installation.To} migrated, and says so with data_newer", refused.Message, StringComparison.Ordinal);
+
+        // The binary went back anyway and the database is untouched. Its runtime is not running: it refused the database,
+        // and the step says so in its own words and names no start, which would only be refused again.
         Assert.Equal(installation.From.ToString(), installation.Installed());
-        Assert.True(installation.Running, "the refusal was about the database, not about leaving the machine dead");
+        Assert.False(installation.Running, "the version put back started on the database it refuses");
         Assert.Equal("work done under the new version", File.ReadAllText(installation.Paths.DatabaseFile));
+        var step = Assert.Single(rollback.Steps, step => step.Contains("did not start", StringComparison.Ordinal));
+        Assert.Contains($"it refused the database {installation.To} migrated with data_newer", step, StringComparison.Ordinal);
+        Assert.Contains("was changed by a newer Jason", step, StringComparison.Ordinal);
+        Assert.DoesNotContain(rollback.Steps, said => said.Contains("jason runtime start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same refusal where the start that did not answer said no envelope of its own: the version put back still does
+    /// not start on that database, so the step names putting the database back, never another start.
+    /// </summary>
+    [Fact]
+    public async Task A_put_back_start_that_did_not_answer_on_a_database_it_refuses_names_no_start()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("work done under the new version");
+        installation.Chronicle = "jrn_01LATERLATERLATERLATERLATER";
+        installation.PutBackRefusesTheDatabase = true;
+        installation.PutBackSays = "something else";
+        var rollback = installation.Rollback();
+
+        await Assert.ThrowsAsync<UpdateException>(() => rollback.RollBackAsync(Ct));
+
+        var step = Assert.Single(rollback.Steps, step => step.Contains("before it answered", StringComparison.Ordinal));
+        Assert.EndsWith($"; it does not start on the database {installation.To} migrated (data_newer) until that database is put back", step, StringComparison.Ordinal);
+        Assert.DoesNotContain(rollback.Steps, said => said.Contains("jason runtime start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same where the backup the update's migration took is gone, so the database is left as it is with no refusal of its
+    /// own: the version put back still does not start on a database the newer one migrated, so the step names putting a
+    /// database back, never another start.
+    /// </summary>
+    [Fact]
+    public async Task A_put_back_start_on_a_migrated_database_whose_backup_is_gone_names_no_start()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        File.Delete(installation.Ledger()!.BackupFile!);
+        installation.PutBackRefusesTheDatabase = true;
+        installation.PutBackSays = "something else";
+        var rollback = installation.Rollback();
+
+        await rollback.RollBackAsync(Ct);
+
+        Assert.Contains(rollback.Steps, step => step.Contains("its backup is not at", StringComparison.Ordinal));
+        var step = Assert.Single(rollback.Steps, step => step.Contains("before it answered", StringComparison.Ordinal));
+        Assert.EndsWith($"; it does not start on the database {installation.To} migrated (data_newer) until that database is put back", step, StringComparison.Ordinal);
+        Assert.DoesNotContain(rollback.Steps, said => said.Contains("jason runtime start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Which side of the guard the version put back is on decides the sentence: from the first version that refuses a
+    /// database a newer one migrated, its development builds included, it does not start; before it, it may run on it.
+    /// </summary>
+    [Theory]
+    [InlineData("0.48.2", "0.49.0", "0.48.2 may refuse to open a database migrated by 0.49.0; to go all the way back, ")]
+    [InlineData("0.48.2-dev", "0.49.0", "0.48.2-dev may refuse to open a database migrated by 0.49.0; to go all the way back, ")]
+    [InlineData("0.49.0-dev", "0.50.0", "0.49.0-dev does not start on a database 0.50.0 migrated, and says so with data_newer; to go all the way back, ")]
+    [InlineData("0.49.0", "0.50.0", "0.49.0 does not start on a database 0.50.0 migrated, and says so with data_newer; to go all the way back, ")]
+    [InlineData("1.2.0", "1.3.0-rc.1", "1.2.0 does not start on a database 1.3.0-rc.1 migrated, and says so with data_newer; to go all the way back, ")]
+    public void The_version_put_back_is_said_to_refuse_the_database_only_from_the_first_version_that_does(string from, string to, string said)
+    {
+        Assert.Equal(said, UpdateRollback.OlderOnNewer(SemanticVersion.Parse(from), SemanticVersion.Parse(to)));
     }
 
     /// <summary>

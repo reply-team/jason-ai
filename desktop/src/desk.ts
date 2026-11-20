@@ -12,8 +12,10 @@ import { eventChannels } from './ipc.ts';
 import { bindingsFor, itemKeys, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
+import { putBackQuestion, putBackTold, setupMenuOf, type MachineSetup } from './machine-setup.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
 import { menuItemOf, pressItem, updateNotice, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
@@ -34,16 +36,26 @@ export interface DeskDeps {
     updates: Updater | null;
     /** Which previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
+    /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
+    place?(): string | null;
     /**
      * The jason command on the PATH: placed and removed by an installed build only, each on the person's word; null where
      * this start carries no jason that outlasts it (an AppImage whose copy was not made), when none is offered.
      */
     command: PathCommand | null;
     /**
+     * On macOS and Windows, the machine set-up (`machine-setup.ts`), whose report the Command Line item shows and whose
+     * routine its one act runs again; null on Linux, where the item is the PATH command, and where this start carries no
+     * jason that outlasts it.
+     */
+    setup: MachineSetup | null;
+    /**
      * Remove What Jason Placed, on macOS and Linux, offered by an installed build only; null where it is not offered:
      * Windows keeps its uninstaller.
      */
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
+    /** Uninstall Jason…, on macOS, offered by an installed build only; null where it is not offered. */
+    uninstall?: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'> | null;
     /**
      * In a demo run, the way back (`demoMenu`), and nothing where the update, the start at logon, the jason command and
      * Remove What Jason Placed would be; null in Live.
@@ -89,6 +101,7 @@ export class Desk {
         this.demo = deps.demo;
         // The Demo reads no count: the tray says it is the demo from the first.
         this.attention = deps.demo === null ? { state: 'reading' } : { state: 'demo' };
+        deps.setup?.onChanged(() => this.renderMenu());
         const removal = deps.removal;
         this.removal =
             removal === null
@@ -197,6 +210,12 @@ export class Desk {
         } catch {
             // A record that cannot be read names no copy.
         }
+        let place: string | null = null;
+        try {
+            place = this.deps.place?.() ?? null;
+        } catch {
+            // A place that cannot be looked at is not said.
+        }
         return [
             {
                 label: item.label,
@@ -205,6 +224,7 @@ export class Desk {
                 click: (_menuItem, _window, event) => this.pressUpdate(item.act, !inTray && event.triggeredByAccelerator === true, 'menu'),
             },
             ...(kept === null ? [] : [{ label: kept, enabled: false }]),
+            ...(place === null ? [] : [{ label: place, enabled: false }]),
         ];
     }
 
@@ -241,6 +261,7 @@ export class Desk {
      */
     private commandItems(): MenuItemConstructorOptions[] {
         if (this.demo !== null) return [];
+        if (this.deps.setup !== null) return this.setupItems(this.deps.setup);
         const command = this.deps.command;
         if (command === null) return [{ label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] }];
         let status: CommandStatus;
@@ -257,6 +278,29 @@ export class Desk {
             items.push({ label: act.label, enabled: app.isPackaged && !this.removing(), click: () => void this.commandAct(act.act, status) });
         }
         return [{ label: 'Command Line', submenu: items }];
+    }
+
+    /**
+     * The Command Line submenu on macOS and Windows: the executable's full path, what the machine set-up's report says, as
+     * facts, and put back, which runs the routine again on the person's word.
+     */
+    private setupItems(setup: MachineSetup): MenuItemConstructorOptions[] {
+        const menu = setupMenuOf(setup.state, setup.executable);
+        const items: MenuItemConstructorOptions[] = menu.lines.map((line) => ({ label: line, enabled: false }));
+        items.push({ label: 'Copy the Executable’s Path', click: () => clipboard.writeText(setup.executable) });
+        if (menu.acts.length > 0) items.push({ type: 'separator' });
+        for (const act of menu.acts) items.push({ label: act.label, enabled: app.isPackaged && !this.removing(), click: () => void this.putBackAct(setup) });
+        return [{ label: 'Command Line', submenu: items }];
+    }
+
+    /** Asks, then runs the routine again and tells what came of it in its own sentences. */
+    private async putBackAct(setup: MachineSetup): Promise<void> {
+        const question = putBackQuestion(setup.platform, setup.executable);
+        const answer = await this.box({ type: 'question', title: windowTitle, buttons: [question.button, 'Cancel'], defaultId: 0, cancelId: 1, message: question.message, detail: question.detail });
+        if (answer !== 0) return;
+        const told = putBackTold(await setup.putBack());
+        await this.box({ type: told.type, title: windowTitle, buttons: ['OK'], message: told.message, detail: told.detail });
+        this.renderMenu();
     }
 
     /** Asks, then places or removes the command; what went wrong is said in a box of its own. */
@@ -306,8 +350,29 @@ export class Desk {
 
     private removalItems(): MenuItemConstructorOptions[] {
         if (this.demo !== null) return [];
+        const door = this.deps.uninstall ?? null;
+        if (door !== null) return [{ label: uninstallLabel, enabled: app.isPackaged, click: () => void this.uninstallAct(door) }];
         if (this.removal === null) return [];
         return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
+    }
+
+    /** Uninstall Jason…: asks, and on the person's word starts the one uninstall and quits. */
+    private async uninstallAct(door: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'>): Promise<void> {
+        try {
+            await uninstallJason({
+                ...door,
+                ask: async (question) => {
+                    const window = this.deps.window();
+                    const options = { type: 'question' as const, title: windowTitle, ...question };
+                    const { response, checkboxChecked } = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
+                    return { response, checkboxChecked };
+                },
+                quit: () => app.quit(),
+                log: this.deps.log,
+            });
+        } catch (error) {
+            dialog.showErrorBox(windowTitle, error instanceof Error ? error.message : String(error));
+        }
     }
 
     /** Runs the act, then reads again what the menu shows of the installation, which the act changed. */

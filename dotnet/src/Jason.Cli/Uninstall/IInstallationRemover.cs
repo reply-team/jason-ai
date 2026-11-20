@@ -6,6 +6,7 @@ using Jason.Cli.Files;
 using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
+using Jason.Contracts.Harness;
 
 namespace Jason.Cli.Uninstall;
 
@@ -160,6 +161,59 @@ public interface IInstallationRemover
     /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Require"/>).
     /// </summary>
     void RemoveLinkRegistration(string? command);
+
+    /// <summary>
+    /// The processes running <paramref name="executable"/>: Jason Desktop's own, which an uninstall of the application does
+    /// not remove from under. On Windows only this session's; elsewhere every one, since a session there is a terminal's
+    /// and never the one the application runs in. One whose image cannot be read, under that file's name, is counted. A
+    /// process's image and <paramref name="executable"/> are compared by where each finally leads, every link in either
+    /// followed (<see cref="FolderPaths.Real"/>), since the system reports an image at its real path - on macOS the
+    /// temporary folder is reached through <c>/var</c>, a link to <c>/private/var</c> - and an application can be reached
+    /// through a linked folder; a part that cannot be read is compared as it is written. Names are compared as the system's
+    /// own: ignoring case on Windows, exactly elsewhere.
+    /// </summary>
+    IReadOnlyList<int> RunningFrom(string executable) => [];
+
+    /// <summary>
+    /// Windows: the processes running <paramref name="executable"/> in every session, compared by the image's path alone, as
+    /// the application's uninstaller looks (<c>installer/uninstall.nsh</c>: every process whose image it can read). One in
+    /// this session whose image cannot be read, under that file's name, is counted, as <see cref="RunningFrom"/> counts it;
+    /// one in another session only where its image is read. Elsewhere what <see cref="RunningFrom"/> answers.
+    /// </summary>
+    IReadOnlyList<int> RunningFromInAnySession(string executable) => RunningFrom(executable);
+
+    /// <summary>
+    /// Windows: the process that started process <paramref name="pid"/>, where it is still that one, having started no later
+    /// than <paramref name="pid"/> did; a number another process took since is not its parent. Null where that cannot be
+    /// told, where either is gone, and on every other system.
+    /// </summary>
+    int? ParentOf(int pid) => null;
+
+    /// <summary>
+    /// macOS: unloads the LaunchAgent at <paramref name="file"/> from this login session before the file goes, so it is not
+    /// left loaded until the person logs out. One not loaded is not an error.
+    /// </summary>
+    void UnloadLaunchAgent(string file, string label)
+    {
+    }
+
+    /// <summary>
+    /// macOS: deletes the preferences domain <paramref name="domain"/> through the preferences system
+    /// (<c>defaults delete</c>, "Removes all default information for domain"), so a copy it holds is not written back over
+    /// the file's removal. A domain that is not there is not an error. Nothing elsewhere.
+    /// </summary>
+    void DeletePreferences(string domain)
+    {
+    }
+
+    /// <summary>
+    /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
+    /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
+    /// application's steps are done; where that run ends 3 it runs it once more for a person to see, and where the last run
+    /// ends with any other code but 0 it writes one line into the log folder <paramref name="logs"/>, where that folder is
+    /// still there (<see cref="UninstallerHandOff"/>). Its id, or null where it could not be started.
+    /// </summary>
+    int? HandToUninstaller(string application, int waitFor, string logs) => null;
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -175,6 +229,122 @@ public interface IInstallationRemover
 /// this uninstall set out to remove and did not, so it is a problem and the verb exits 1, rather than a note
 /// beside a success.
 /// </param>
+/// <summary>
+/// The waiter an uninstall of the application leaves on Windows, as the script it runs: it waits for the uninstall's own
+/// process to end, since the uninstaller refuses while a process runs from the folder it removes, then copies the
+/// uninstaller out of that folder and runs the copy silently on it, in place (<c>_?=</c>), waiting for it; then the copy goes.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A silent uninstaller never closes a running Jason Desktop: where it finds one, or cannot look for one, it removes
+/// nothing and ends with 3 (<c>desktop/installer/uninstall.nsh</c>). The person who asked for this uninstall is then
+/// asked on the screen: the copy is run once more without <c>/S</c>, and its own questions say what runs and offer to
+/// close it. Where the last run ends with any other code but 0, nothing is said on any screen, since the verb has already
+/// answered; one line, <see cref="LogTemplate"/> with the code alone, goes into the desktop's log file of the day, which
+/// <c>jason logs --source desktop</c> shows, and only where the log folder is still there - a purged data directory is
+/// never made again.
+/// </para>
+/// <para>
+/// Not the runtime's file: the runtime's logger holds its file of the day open and shares no write, and the likeliest
+/// refusal, 3, comes while a Jason Desktop runs, which runs a runtime. The desktop's writer opens and closes its file for
+/// each line (<c>desktop/src/log.ts</c>, <c>fileLines</c>: <c>appendFileSync(file, line, ...)</c>), so a line of the
+/// waiter's lands beside its own; it goes into the day's newest file, the last the desktop rolled to, and is tried five
+/// times a second apart, in case a reader holds the file at that moment. The line has the desktop's own shape and its
+/// template is the desktop's <c>uninstaller_exited</c>, held to that table (<c>desktop/test/log.test.ts</c>).
+/// </para>
+/// </remarks>
+public static class UninstallerHandOff
+{
+    /// <summary>The variable that hands the waiter the application's folder.</summary>
+    public const string ApplicationVariable = "JASON_UNINSTALL_APPLICATION";
+
+    /// <summary>The variable that hands the waiter the folder it copies the uninstaller into.</summary>
+    public const string AsideVariable = "JASON_UNINSTALL_ASIDE";
+
+    /// <summary>The variable that hands the waiter the data directory's log folder.</summary>
+    public const string LogsVariable = "JASON_UNINSTALL_LOGS";
+
+    /// <summary>
+    /// The one line the waiter writes, the desktop's template <c>uninstaller_exited</c>, whose only hole is the
+    /// uninstaller's exit code. It holds no apostrophe, so it sits in the script's literal as it is.
+    /// </summary>
+    public const string LogTemplate = "The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {Exit}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it";
+
+    /// <summary>The name the desktop's table gives <see cref="LogTemplate"/>, written beside it as the desktop's lines are.</summary>
+    public const string LogEventName = "uninstaller_exited";
+
+    /// <summary>The script, for Windows PowerShell's <c>-Command</c>. It names no path: each comes in the environment.</summary>
+    /// <remarks>
+    /// <para>
+    /// The paths are handed in the environment, as the installer's include hands the application's path, so no character
+    /// of them is read as PowerShell's. A literal in the script was quoted by doubling the apostrophe, and PowerShell takes
+    /// the typographic quotes for quotes as well (about_Quoting_Rules: "PowerShell treats smart quotation marks, also called
+    /// typographic or curly quotes, as normal quotation marks for strings"), so a profile folder named with one ended the
+    /// literal early, the script did not parse, and nothing ran after a report that said the folder goes.
+    /// </para>
+    /// <para>
+    /// <c>_?=</c> is the last of the arguments and never quoted, a space in the folder included: NSIS reads the rest of the
+    /// line as the folder. With it the uninstaller runs where it is started from and the caller can wait for it; without it,
+    /// it copies itself to the temporary folder and returns at once. A copy outside the folder is what lets the folder go
+    /// whole, the copy of the uninstaller with it.
+    /// </para>
+    /// </remarks>
+    public static string Script(int waitFor)
+    {
+        var wait = waitFor.ToString(CultureInfo.InvariantCulture);
+        return $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {wait} -Timeout 600; "
+            + $"$folder = $env:{ApplicationVariable}; $aside = $env:{AsideVariable}; $logs = $env:{LogsVariable}; "
+            + "[void][System.IO.Directory]::CreateDirectory($aside); "
+            + $"$copy = Join-Path $aside '{DesktopRemoval.UninstallerName}'; "
+            + $"Copy-Item -LiteralPath (Join-Path $folder '{DesktopRemoval.UninstallerName}') -Destination $copy; "
+            + "if (Test-Path -LiteralPath $copy) { "
+            + $"$run = Start-Process -Wait -PassThru -FilePath $copy -ArgumentList ('/S {DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder); "
+            + "$exit = if ($run) { $run.ExitCode } else { -1 }; "
+            + $"if ($exit -eq 3) {{ $run = Start-Process -Wait -PassThru -FilePath $copy -ArgumentList ('{DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder); $exit = if ($run) {{ $run.ExitCode }} else {{ -1 }} }}; "
+            + "if ($exit -ne 0 -and $logs -and (Test-Path -LiteralPath $logs -PathType Container)) { "
+            + "$line = [ordered]@{ '@t' = [DateTime]::UtcNow.ToString('o'); '@mt' = '" + LogTemplate + "'; '@l' = 'Warning'; 'Exit' = $exit; 'SourceContext' = 'Jason.Cli'; 'EventName' = '" + LogEventName + "' } | ConvertTo-Json -Compress; "
+            + "$day = 'desktop-' + [DateTime]::Now.ToString('yyyyMMdd'); $file = Join-Path $logs ($day + '.jsonl'); "
+            + "$rolled = @(Get-ChildItem -LiteralPath $logs -File | Where-Object { $_.Name -match ('^' + $day + '_([0-9]{3,9})\\.jsonl$') } | Sort-Object { [long]($_.BaseName.Split('_')[1]) }); "
+            + "if ($rolled.Count -gt 0) { $file = $rolled[-1].FullName }; "
+            + "for ($try = 1; $try -le 5; $try++) { try { [System.IO.File]::AppendAllText($file, $line + [char]10, (New-Object System.Text.UTF8Encoding $false)); break } catch { Start-Sleep -Seconds 1 } } } }; "
+            + "Remove-Item -LiteralPath $aside -Recurse -Force";
+    }
+
+    /// <summary>
+    /// What the script is handed in its environment: the application's folder, a new folder for the copy, and the data
+    /// directory's log folder.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Variables(string application, string temporary, string logs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(application);
+        ArgumentException.ThrowIfNullOrWhiteSpace(temporary);
+        ArgumentException.ThrowIfNullOrWhiteSpace(logs);
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [ApplicationVariable] = Path.TrimEndingDirectorySeparator(application),
+            [AsideVariable] = Path.Combine(temporary, $"jason-uninstall-{Guid.NewGuid():N}"),
+            [LogsVariable] = Path.TrimEndingDirectorySeparator(logs),
+        };
+    }
+}
+
+/// <summary>
+/// The cleanup a moved running image leaves on Windows, as the script it runs: it waits for the uninstall's process to end,
+/// then removes the folder the copy was moved into, which it is handed in the environment, as the waiter is.
+/// </summary>
+public static class AsideCleanup
+{
+    /// <summary>The variable that hands the cleanup the folder it removes.</summary>
+    public const string FolderVariable = "JASON_UNINSTALL_ASIDE";
+
+    /// <summary>The script, for Windows PowerShell's <c>-Command</c>. It names no path.</summary>
+    public static string Script(int waitFor) =>
+        $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {waitFor.ToString(CultureInfo.InvariantCulture)} -Timeout 600; $target = $env:{FolderVariable}; "
+            + "for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath $target); $attempt++) "
+            + "{ Remove-Item -LiteralPath $target -Recurse -Force; if (Test-Path -LiteralPath $target) { Start-Sleep -Milliseconds 250 } }";
+}
+
 public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? Note, bool LeftBehind = false);
 
 /// <summary>The removers this build knows how to make.</summary>
@@ -446,18 +616,14 @@ public static class InstallationRemovers
                 return null;
             }
 
-            var target = "'" + directory.Replace("'", "''", StringComparison.Ordinal) + "'";
-            var script = string.Create(
-                CultureInfo.InvariantCulture,
-                $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {Environment.ProcessId} -Timeout 600; "
-                + $"for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath {target}); $attempt++) "
-                + $"{{ Remove-Item -LiteralPath {target} -Recurse -Force; if (Test-Path -LiteralPath {target}) {{ Start-Sleep -Milliseconds 250 }} }}");
-
+            // The folder in the environment, never in the script: a typographic quote in it would end a literal there.
             var start = ChildProcess.StartInfo(powershell, ChildKind.SystemToolWithInput);
-            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", script })
+            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", AsideCleanup.Script(Environment.ProcessId) })
             {
                 start.ArgumentList.Add(argument);
             }
+
+            start.Environment[AsideCleanup.FolderVariable] = directory;
 
             StandardStreams.KeepOutOfChildren();
 
@@ -567,6 +733,155 @@ public static class InstallationRemovers
             {
                 Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(Jason.Contracts.Notifications.LinkRegistration.Key, throwOnMissingSubKey: false);
             }
+        }
+
+        public IReadOnlyList<int> RunningFrom(string executable) => Running(executable, everySession: false);
+
+        public IReadOnlyList<int> RunningFromInAnySession(string executable) => Running(executable, everySession: true);
+
+        public int? ParentOf(int pid) => OperatingSystem.IsWindows() ? WindowsProcessTree.ParentOf(pid) : null;
+
+        private static IReadOnlyList<int> Running(string executable, bool everySession)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+
+            var name = Path.GetFileNameWithoutExtension(executable);
+
+            // A session is this login's only on Windows, where it is the Terminal Services session. On macOS and Linux .NET
+            // answers the POSIX session (getsid): a jason typed in a terminal is in the terminal's, and the application,
+            // started by the system, never is, so filtering by it there never found the window.
+            var windows = OperatingSystem.IsWindows();
+            var session = windows ? System.Diagnostics.Process.GetCurrentProcess().SessionId : 0;
+            var wanted = FolderPaths.Real(executable);
+            var found = new List<int>();
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
+            {
+                using (process)
+                {
+                    bool? here = windows ? null : true;
+                    try
+                    {
+                        here ??= process.SessionId == session;
+                        if (!everySession && here == false)
+                        {
+                            continue;
+                        }
+
+                        if (ImageOf(process) is { } image
+                            && string.Equals(FolderPaths.Real(image), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        {
+                            found.Add(process.Id);
+                        }
+                    }
+                    catch (Exception unread) when (unread is Win32Exception or InvalidOperationException or NotSupportedException)
+                    {
+                        // Its image cannot be read: under the application's own name, spelled as it is, it may be the
+                        // application, and an uninstall does not remove a running application from under it. In another
+                        // session, or one not known, it may be another account's, which the uninstaller cannot read either.
+                        if ((everySession ? here == true : here != false) && string.Equals(SafeName(process), name, StringComparison.Ordinal))
+                        {
+                            found.Add(process.Id);
+                        }
+                    }
+                }
+            }
+
+            return found;
+        }
+
+        /// <summary>
+        /// The file a process runs: on Windows by the least right there is to ask (<c>QueryFullProcessImageName</c>), which
+        /// a process of this account's in another session or at another integrity level grants, else its main module.
+        /// </summary>
+        private static string? ImageOf(System.Diagnostics.Process process) =>
+            (OperatingSystem.IsWindows() ? WindowsProcessTree.ImageOf(process.Id) : null) ?? process.MainModule?.FileName;
+
+        private static string? SafeName(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.ProcessName;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        public int? HandToUninstaller(string application, int waitFor, string logs)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(application);
+
+            var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (!OperatingSystem.IsWindows() || !File.Exists(powershell))
+            {
+                return null;
+            }
+
+            var start = ChildProcess.StartInfo(powershell, ChildKind.SystemToolWithInput);
+            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", UninstallerHandOff.Script(waitFor) })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            foreach (var (variable, value) in UninstallerHandOff.Variables(application, Path.GetTempPath(), logs))
+            {
+                start.Environment[variable] = value;
+            }
+
+            // Not one of this process's standard streams: a caller reading this verb's output to its end would otherwise wait
+            // for the waiter, and the waiter for the uninstaller.
+            StandardStreams.KeepOutOfChildren();
+
+            try
+            {
+                using var process = ChildProcess.Start(start);
+                if (process is null)
+                {
+                    return null;
+                }
+
+                process.StandardInput.Close();
+                return process.Id;
+            }
+            catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        public void DeletePreferences(string domain)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return;
+            }
+
+            // Its answer is not read: a domain with nothing in it is the ordinary case, and the file goes either way.
+            try
+            {
+                Jason.Cli.Autostart.AutostartRegistrars.Run(["/usr/bin/defaults", "delete", domain], Jason.Cli.Autostart.LaunchdJobs.Limit);
+            }
+            catch (Jason.Cli.Autostart.AutostartException)
+            {
+                // defaults could not be started, or did not answer in time; the file is removed all the same.
+            }
+        }
+
+        public void UnloadLaunchAgent(string file, string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(file);
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return;
+            }
+
+            // Without -w, which marks the label disabled for good ("Overrides the Disabled key and sets it to ... true for
+            // the ... unload subcommand"), and would keep a later Open at Login from starting it; then by its label. Each
+            // waited for ten seconds at most, and neither's answer read: a job that is not loaded is the ordinary case.
+            Jason.Cli.Autostart.LaunchdJobs.TakeOut([[Jason.Cli.Autostart.LaunchdJobs.Launchctl, "unload", file]], label);
         }
 
         public void RemoveExtractedLibraries(string directory)

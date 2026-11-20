@@ -335,6 +335,8 @@ public class DefaultActorTests
     internal static readonly string[][] Runs =
     [
         ["runtime", "status"],
+        ["runtime", "drain"],
+        ["runtime", "resume"],
         ["campaign", "create", "--name", "Spring outreach"],
         ["campaign", "get", "cmp_A"],
         ["campaign", "list"],
@@ -447,6 +449,7 @@ public class DefaultActorTests
         ["logs"] = "reads the log files and never asks the runtime",
         ["doctor"] = "asks the runtime only reads",
         ["uninstall"] = "takes this installation off the machine",
+        ["install"] = "sets this machine up for the application: a terminal command, a Path, skills in an agent host's folder",
     };
 
     /// <summary>The one operation the runtime maps by hand, with no body to bind: it reads, and takes no actor.</summary>
@@ -487,7 +490,8 @@ public class DefaultActorTests
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args, IReadOnlyDictionary<string, string>? variables = null)
+    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(
+        string[] args, IReadOnlyDictionary<string, string>? variables = null, Process.FakeProcessControl? processes = null)
     {
         using var paths = new TempPaths();
         paths.WriteDescriptor(Live);
@@ -503,6 +507,7 @@ public class DefaultActorTests
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
             }),
             new StringReader("[{\"first_name\":\"Ada\"}]"),
+            Processes: processes,
             Variables: variables ?? new Dictionary<string, string>(),
             AccountName: Account);
 

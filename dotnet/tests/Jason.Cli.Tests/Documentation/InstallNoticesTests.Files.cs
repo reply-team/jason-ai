@@ -16,7 +16,6 @@ public sealed partial class InstallNoticesTests
 
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_fresh_install_keeps_both_notices_beside_the_executable_under_their_names(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -31,7 +30,6 @@ public sealed partial class InstallNoticesTests
 
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_upgrade_writes_the_new_release_s_notices_over_the_old_ones(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -47,7 +45,6 @@ public sealed partial class InstallNoticesTests
 
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_upgrade_over_an_install_without_notices_writes_both(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -66,7 +63,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_archive_with_LICENSE_alone_writes_it_and_removes_the_notices_of_the_release_before(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -100,12 +96,6 @@ public sealed partial class InstallNoticesTests
     [InlineData(Sh, "THIRD-PARTY-NOTICES", "case")]
     [InlineData(Sh, "LICENSE", "dot-slash")]
     [InlineData(Sh, "THIRD-PARTY-NOTICES", "dot-slash")]
-    [InlineData(Ps1, "LICENSE", "nested")]
-    [InlineData(Ps1, "THIRD-PARTY-NOTICES", "nested")]
-    [InlineData(Ps1, "LICENSE", "directory")]
-    [InlineData(Ps1, "THIRD-PARTY-NOTICES", "directory")]
-    [InlineData(Ps1, "LICENSE", "case")]
-    [InlineData(Ps1, "THIRD-PARTY-NOTICES", "case")]
     public void A_notice_that_is_not_a_top_level_file_of_its_name_is_never_taken(string script, string name, string kind)
     {
         var installer = Installer.For(script, _tree);
@@ -119,32 +109,9 @@ public sealed partial class InstallNoticesTests
         Assert.Equal(other == Licence ? LicenceText("0.7.0") : NoticesText("0.7.0"), Text(installer, other));
     }
 
-    /// <summary>
-    /// <c>Expand-Archive</c> refuses an archive that names a file twice, or a file outside the directory it unpacks into,
-    /// and <c>install.ps1</c> unpacks before it installs anything: what was installed stays as it was.
-    /// </summary>
-    [Theory]
-    [InlineData("LICENSE", "duplicate")]
-    [InlineData("THIRD-PARTY-NOTICES", "duplicate")]
-    [InlineData("LICENSE", "parent")]
-    [InlineData("THIRD-PARTY-NOTICES", "parent")]
-    public void Install_ps1_refuses_an_archive_naming_a_notice_twice_or_outside_itself_before_installing_anything(string name, string kind)
-    {
-        var installer = Installer.For(Ps1, _tree);
-        Assert.Equal(0, installer.Run(installer.Feed("0.6.0")).Exit);
-        var before = Snapshot(installer.InstallDir);
-
-        var run = installer.Run(installer.Feed("0.7.0", Hostile(name, kind, "0.7.0")));
-
-        Assert.True(run.Exit != 0, run.Stdout + run.Stderr);
-        Assert.Equal(before, Snapshot(installer.InstallDir));
-        AssertSaysNoLicence(run.Stdout + run.Stderr);
-    }
-
     /// <summary>A run over the installed version with both notices beside it fetches nothing but the manifest.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_install_already_there_with_both_notices_downloads_nothing(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -167,8 +134,6 @@ public sealed partial class InstallNoticesTests
     [Theory]
     [InlineData(Sh, Licence)]
     [InlineData(Sh, Notices)]
-    [InlineData(Ps1, Licence)]
-    [InlineData(Ps1, Notices)]
     public void An_install_already_there_missing_a_notice_writes_it_and_leaves_the_executable_alone(string script, string missing)
     {
         var installer = Installer.For(script, _tree);
@@ -196,7 +161,6 @@ public sealed partial class InstallNoticesTests
     [Theory]
     [Critical(Family.I1, "a checksum mismatch writes nothing")]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_repair_whose_archive_does_not_match_its_checksum_writes_nothing(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -218,7 +182,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_release_before_0_6_0_installed_again_downloads_nothing_although_it_has_no_notices_file(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -239,7 +202,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void Notices_that_cannot_be_written_fail_the_run_saying_what_is_installed_and_a_run_again_writes_them(string script)
     {
         var installer = Installer.For(script, _tree);
