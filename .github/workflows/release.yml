@@ -1046,9 +1046,9 @@ jobs:
 
       # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
       # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
-      # Never the latest published release: that moves under a proof that ran, and once this release is published it is
-      # this release, with nothing to update from. Its files come from its public downloads. No token: the repository's
-      # releases are public.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
       - name: Fetch the one-installation release this one updates from
         id: one-installation
         if: ${{ !cancelled() }}
@@ -1096,6 +1096,7 @@ jobs:
       # leg holds that it said so, and ended complete. Then the uninstall from a new terminal, compared with the machine
       # before.
       - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
         if: ${{ !cancelled() }}
         timeout-minutes: 30
         shell: pwsh
@@ -1135,10 +1136,17 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: pwsh
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end.
+          $ended = Join-Path $env:OUT 'legs-ended.txt'
+          $handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } else { 'is not proven here: its leg was not run' }
           @(
             '### What this job does not prove',
-            '- This release''s own updater, end to end: no next build is made, so this release''s command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release''s command line handing this release to its Jason Desktop, with no window, is.',
+            "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.",
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this release: it reads only the published releases; this job runs this release''s installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -1329,9 +1337,9 @@ jobs:
 
       # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
       # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
-      # Never the latest published release: that moves under a proof that ran, and once this release is published it is
-      # this release, with nothing to update from. Its files come from its public downloads. No token: the repository's
-      # releases are public.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
       - name: Fetch the one-installation release this one updates from
         id: one-installation
         if: ${{ !cancelled() }}
@@ -1378,6 +1386,7 @@ jobs:
       # word on the application where the update left it, and the uninstall from a new terminal, compared with the machine
       # before.
       - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
         if: ${{ !cancelled() }}
         timeout-minutes: 30
         shell: bash
@@ -1403,10 +1412,18 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: bash
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end.
+          if [ "$ONE_INSTALLATION_LEG" = success ] && grep -qxF -- "$ONE_INSTALLATION_LEG_NAME" "$OUT/legs-ended.txt" 2>/dev/null; then handed="is proven here, by its leg"
+          elif [ "$ONE_INSTALLATION_LEG" = failure ]; then handed="is not proven here: its leg failed"
+          else handed="is not proven here: its leg was not run"; fi
           {
             echo '### What this job does not prove'
-            echo "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, is."
+            echo "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed."
             echo "- The 0.48 Jason Desktop's own updater on a Mac reaching this release: it reads only the published releases, and this release ships without that proof."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- Each account of a shared Mac: the runner has one account."
