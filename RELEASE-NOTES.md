@@ -113,6 +113,10 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
 - **A runtime started from Jason Desktop on Linux no longer holds the application's files open.** The runtime Jason
   Desktop starts no longer inherits the application's open files, so after an AppImage's window closes, its runtime no
   longer keeps the AppImage mounted.
+- **On Windows, a browser or a terminal the CLI opens no longer holds what `jason` was handed.** A link the CLI opens and
+  the terminal `jason session open` starts no longer inherit the handles the CLI holds as inheritable, its standard
+  streams among them, as the runtime it starts already did not: a script or an agent that runs `jason` with its output
+  captured no longer waits for that browser or terminal to close before its read ends.
 
 ## Upgrading from 0.49.0
 
