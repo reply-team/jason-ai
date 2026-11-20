@@ -653,6 +653,13 @@ public static partial class DesktopRemoval
         return found;
     }
 
+    /// <summary>
+    /// <c>&lt;data&gt;/desktop/machine-setup.json</c> under <paramref name="dataRoot"/>: the version and the place Jason Desktop's
+    /// start last set the machine up for, which a start of that version from that place reads as done
+    /// (<c>desktop/src/machine-setup.ts</c>). A file of the desktop's own folder, as <see cref="AppImageCopy.BundlesUnder"/> is.
+    /// </summary>
+    public static string SetupRecordUnder(string dataRoot) => Path.Combine(dataRoot, "desktop", "machine-setup.json");
+
     /// <summary>Linux: Open Jason at Login's XDG autostart entry, under <c>XDG_CONFIG_HOME</c>, <c>~/.config</c> by default (<c>desktop/src/login-item.ts</c>).</summary>
     public static string AutostartEntryFile(SetupPlaces places)
     {
@@ -1358,6 +1365,7 @@ public static partial class DesktopRemoval
             AptRefusal.NoPassword => PackageStays("Jason Desktop is a system package here, and taking it off needs an administrator's password, which was not given.", "Run `jason uninstall` again to be asked again; where this account is not an administrator, an administrator of this computer can type theirs, " + ByHand),
             AptRefusal.NoSession => PackageStays("Jason Desktop is a system package here, which needs an administrator's password to take off, and this session cannot ask for one.", "Run `jason uninstall` in a terminal of your desktop, " + ByHand),
             AptRefusal.DialogFailed => PackageStays("The system's password dialog failed, so Jason Desktop's package was not taken off.", "Sign out and back in, or restart, then run `jason uninstall` again, " + ByHand),
+            AptRefusal.NoNewPrivileges => PackageStays("Jason Desktop is a system package here, and this uninstall cannot ask for the password that takes it off: it runs under a Jason Desktop its own update or a switch of mode started again, which the system marks, with everything it starts, as unable to gain an administrator's rights.", "Quit Jason Desktop, open it again from your applications menu and uninstall from it, or run `jason uninstall` in a terminal you open from the menu, " + ByHand),
             AptRefusal.LockHeld => PackageStays("Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop's package was not taken off.", "Run `jason uninstall` again in a few minutes, " + ByHand),
             _ => PackageStays(string.Create(CultureInfo.InvariantCulture, $"apt did not take Jason Desktop's package off: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}."), "`sudo dpkg --configure -a` finishes a package left half configured, and `sudo apt purge jason-desktop` takes it off; then run `jason uninstall` again where it is still there."),
         }, false);

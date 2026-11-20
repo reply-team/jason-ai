@@ -105,17 +105,24 @@ export function packageFormOf(platform: NodeJS.Platform, resourcesPath: string, 
 /** The lists the pinned app-builder-lib's AppRun puts the mount's folders on (`appImageUtil.js`, `generateAppRunScript`). */
 const mountLists = ['PATH', 'LD_LIBRARY_PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR'] as const;
 
+/** Pure: whether a folder is one the AppImage runtime mounts an AppImage in, `<temporary folder>/.mount_<name>`, or inside one. */
+export function inAppImageMount(entry: string): boolean {
+    return /(^|\/)\.mount_[^/]*(\/|$)/.test(entry);
+}
+
 /**
  * Pure: the environment every child is given, with no folder of the AppImage's mount on any list the AppRun put it on.
  * The mount lasts only while the application runs, and a runtime it starts outlasts it: the PATH a unit records, the
- * PATH the chat and the Connect cards' programs search, and the libraries a child loads are the person's own. A list
- * left empty is dropped. With no mount the environment is returned as it is.
+ * PATH the chat and the Connect cards' programs search, and the libraries a child loads are the person's own. Nor any
+ * folder of an earlier start's mount (`inAppImageMount`), which a start an earlier one's update restarted inherits on
+ * these lists: it vanished with that start, and a folder of its name in the shared temporary folder could be anyone's. A
+ * list left empty is dropped. With no mount the environment is returned as it is.
  */
 export function withoutMount<T extends Readonly<Record<string, string | undefined>>>(env: T, mount: string | undefined): T {
     if (mount === undefined) return env;
     const trimmed = (entry: string): string => (entry.endsWith('/') && entry.length > 1 ? trimmed(entry.slice(0, -1)) : entry);
     const root = trimmed(mount);
-    const under = (entry: string) => trimmed(entry) === root || entry.startsWith(`${root}/`);
+    const under = (entry: string) => trimmed(entry) === root || entry.startsWith(`${root}/`) || inAppImageMount(entry);
     const next: Record<string, string | undefined> = { ...env };
     for (const name of mountLists) {
         const value = next[name];

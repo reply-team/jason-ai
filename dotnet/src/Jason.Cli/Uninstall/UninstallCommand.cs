@@ -123,11 +123,14 @@ public static class UninstallCommand
             process it started (its plugin hosts, its agents' calls), are not counted.
           - on Linux from the deb, just after the runtime and before anything of this account's is removed: the package
             jason-desktop, purged with apt-get, which asks for an administrator's password once, through sudo where
-            there is a terminal, else through the desktop's own dialog (pkexec); its scripts take back what it placed
-            for every account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask
-            in, the package system held, apt failing - nothing of this account's is removed, the runtime's start at
-            logon included, the runtime this stopped is started again, and the verb exits 1 naming sudo apt purge
-            jason-desktop as the way by hand.
+            there is a terminal, else through the desktop's own dialog (pkexec), and through that dialog started by
+            the user manager (systemd-run --user) where this process cannot gain privileges, as under a Jason
+            Desktop its update or a switch of mode started again; its scripts take back what it placed for every
+            account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask in, no
+            way to ask from a process that cannot gain privileges (the refusal says to open Jason Desktop again from
+            the applications menu), the package system held, apt failing - nothing of this account's is removed, the
+            runtime's start at logon included, the runtime this stopped is started again, and the verb exits 1 naming
+            sudo apt purge jason-desktop as the way by hand.
           - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
             where it starts this application; on Linux the XDG autostart entry ai.jasonharness.desktop.desktop under
             XDG_CONFIG_HOME (~/.config by default). On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
@@ -166,7 +169,9 @@ public static class UninstallCommand
             appimage.json, and ai.jasonharness.desktop there (jason install's record of the profiles it created).
             --keep-application keeps all of it.
           - with the data kept: run/start-owed.json, the note that a start is owed, since with this
-            installation taken off none is.
+            installation taken off none is; and desktop/machine-setup.json, the record of the set-up Jason
+            Desktop's start ran, since what it set up is taken off and the next start sets the machine up
+            again.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
             Windows: a waiter is started, which once this command has ended runs the application's own
             uninstaller silently on its folder, so the folder goes after this ends; the report names the

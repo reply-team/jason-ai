@@ -226,6 +226,23 @@ public static class UninstallRunner
                 Step4RemovePathEntry(env, plan, done, kept, problems);
             }
 
+            // The record of the machine set-up Jason Desktop's start ran, where the data is kept, once what that set-up placed
+            // is taken off: a later start of the same version from the same place would read it as done and place nothing
+            // again. A purge takes it with the rest.
+            var setupRecord = DesktopRemoval.SetupRecordUnder(env.Paths.Root);
+            if (!purge && desktop is not null && File.Exists(setupRecord))
+            {
+                try
+                {
+                    File.Delete(setupRecord);
+                    done.Add($"Removed {setupRecord}, the record of the set-up Jason Desktop's start ran: with what it set up taken off, the next start sets this machine up again.");
+                }
+                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                {
+                    problems.Add($"{setupRecord}, the record of the set-up Jason Desktop's start ran, could not be removed ({refused.Message}): delete it, or a later start of this version places no jason and no skills.");
+                }
+            }
+
             // Rendered once and thrown away, while this process can still load whatever rendering it needs.
             beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
 

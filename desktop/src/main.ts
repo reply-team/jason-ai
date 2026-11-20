@@ -63,7 +63,7 @@ import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
-import { accountShell, loginPath, shellPath } from './shell-path.ts';
+import { accountShell, handedPath, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart, updaterCache } from './uninstall.ts';
 import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
@@ -274,10 +274,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const seam = withMembers(ipcMain);
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
-    // finds it.
-    const inherited = pathOf(process.env);
+    // finds it; where it answers nothing, the PATH this start was handed less what an earlier start added to it.
+    const handed = handedPath(pathOf(process.env), process.env['APPDIR'], home, process.platform);
     const shellRead = askedShell();
-    const pathRead = loginPath(inherited, home, shellRead);
+    const pathRead = loginPath(handed, home, shellRead);
     process.env.PATH = await pathRead;
     // What a new terminal has: the login shell's own PATH, before the usual places, never the PATH above. Placing the
     // PATH command writes the PATH lines only where its folder is not on it, and where the shell said none, always.
