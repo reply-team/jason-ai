@@ -336,6 +336,25 @@ test('a new conversation\'s folder holds the instruction files and the recorded 
     assert.equal(existsSync(join(own, '.claude', 'settings.json')), false, 'a settings file');
 });
 
+test('no folder above a new conversation\'s own, up to the data directory, carries an instruction file, while its own folder does', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'again', claude);
+    const own = ownFolder(r, id);
+    const above: string[] = [];
+    for (let folder = dirname(own); ; folder = dirname(folder)) {
+        above.push(folder);
+        if (folder === r.b.paths.data || dirname(folder) === folder) break;
+    }
+    assert.equal(above.at(-1), r.b.paths.data, 'the conversation\'s folder is inside the data directory');
+    const carried = above.flatMap((folder) => ['CLAUDE.md', 'AGENTS.md'].map((file) => join(folder, file)).filter((path) => existsSync(path)));
+    assert.deepEqual(carried, [], 'no folder above the conversation\'s own carries an instruction file');
+    assert.notEqual(fence.instructions, null, 'the application carries its instruction text');
+    for (const file of ['CLAUDE.md', 'AGENTS.md']) assert.ok(textOf(join(own, file)) === fence.instructions, `${file} in the conversation's own folder holds the instruction text`);
+});
+
 test('removing a conversation removes its folder, and leaves the chat folder and every other conversation\'s', async (t) => {
     const r = rig(t);
     const one = await r.chat.create();
