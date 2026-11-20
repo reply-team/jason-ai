@@ -389,8 +389,9 @@ The decision is a person's — a session must not make it, and the runtime refus
 one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
 When the person asks where to see what is waiting or what became of the work, name what works: **Needs you** in Jason
 Desktop, or `jason approval list` and `jason decision list` in a terminal, and `jason workitem list --campaign
-<campaign-id>` for the queue. `jason ui open` opens Needs you in Jason Desktop for them, and `--approval <id>` or
-`--question <id>` opens it on one item; it never opens a browser.
+<campaign-id>` for the queue. From a terminal, `jason ui open` opens Needs you in Jason Desktop for them, and
+`--approval <id>` or `--question <id>` opens it on one item; it never opens a browser. In Jason Desktop's chat they are
+already in the desktop, and the chat refuses every `jason ui` verb.
 
 **A question a role raised is answered by recording the answer, and the campaign's manager acts on it.** When the
 person answers a question a launched role raised, you record it with `jason decision answer` and the person as

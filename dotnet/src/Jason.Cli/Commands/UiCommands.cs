@@ -99,7 +99,7 @@ public static class UiCommands
 
     private static Command Open(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("open", "Open Jason Desktop at what waits, or at one approval or question, by the desktop's own jason-desktop: link; never a browser. It asks the runtime nothing. Where no Jason Desktop that takes its links is installed for this account it opens nothing and refuses with desktop_not_installed. Prints the address on stdout; exits 0 opened (or handed to the system and not yet answered, said on stderr), 1 refused, 2 usage, and never 3.");
+        var command = new Command("open", "Open Jason Desktop at what waits, or at one approval or question, by the desktop's own jason-desktop: link; never a browser. It asks the runtime nothing. Where no Jason Desktop that takes its links is installed for this account it opens nothing and refuses with desktop_not_installed. Prints the address on stdout; exits 0 opened (or handed to the system and not yet answered, said on stderr), 1 refused, 2 usage, and 3 only under --web, which asks the runtime what ui pair asks.");
         var approval = new Option<string?>("--approval") { Description = "Open at one approval, by its id as approval list shows it." };
         var question = new Option<string?>("--question") { Description = "Open at one question, by its id as decision list shows it." };
         var noOpen = new Option<bool>("--no-open") { Description = "Print the address and open nothing; for an agent handing it to a person." };
@@ -166,15 +166,16 @@ public static class UiCommands
     }
 
     /// <summary>
-    /// A web UI of one's own: only where a build is in the custom directory, as the runtime serves one (an index and a
-    /// manifest), the link <c>ui pair</c> prints handed to the browser. The release's own build is never opened in a browser,
-    /// so with none of one's own nothing is asked or opened. Stdout stays the exact response; whether a browser opened is
-    /// said on stderr.
+    /// A web UI of one's own: only where the custom directory holds a build the runtime serves first (an index, and a
+    /// manifest <see cref="UiManifest.Read"/> takes), the link <c>ui pair</c> prints handed to the browser. The release's
+    /// own build is never opened in a browser, so with no such build nothing is asked or opened: a custom directory the
+    /// runtime refuses is served the release's build in its place. Stdout stays the exact response; whether a browser opened
+    /// is said on stderr.
     /// </summary>
     private static async Task<int> OpenWebAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
     {
         var custom = env.Paths.UiCustomDirectory;
-        if (!File.Exists(Path.Combine(custom, UiAssetLayout.IndexFile)) || !File.Exists(Path.Combine(custom, UiAssetLayout.ManifestFile)))
+        if (!ServedFirst(custom))
         {
             var message = $"No web UI of your own is installed ({custom}); Jason runs in Jason Desktop.";
             env.Out.WriteLine(CliErrors.Serialize(CliErrors.CustomUiNotInstalled, message, retryable: false));
@@ -206,6 +207,19 @@ public static class UiCommands
             ? "Opened in your default browser. The link works once, within a minute."
             : $"Open this link in your browser within a minute (it works once): {opened.Url}");
         return ExitCodes.Success;
+    }
+
+    /// <summary>Whether the runtime serves <paramref name="custom"/> before the release's build, by the rule it chooses by.</summary>
+    private static bool ServedFirst(string custom)
+    {
+        try
+        {
+            return File.Exists(Path.Combine(custom, UiAssetLayout.IndexFile)) && UiManifest.Read(custom) is not null;
+        }
+        catch (Exception exception) when (exception is UiManifestException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

@@ -1,6 +1,9 @@
 #!/bin/bash
 # `jason ui open` against Jason Desktop on Linux, proven on a deb of this run's: run by CI's install.sh job on
-# ubuntu-latest after the apt route, and on any Ubuntu by an account that may use sudo without a password.
+# ubuntu-latest after the apt route, and by hand only on a throwaway Ubuntu machine whose account may use sudo without a
+# password: it installs and purges the package, and Jason Desktop's first start sets that account up as it sets up a
+# person's (the terminal command, the skills of the agent hosts it finds). Where jason-desktop is installed already it
+# refuses before anything.
 #
 #   test-desktop-link.sh <folder>
 #
@@ -10,7 +13,7 @@
 #   1. with nothing of Jason's running, `jason ui open --approval <id>` prints the desktop's address for that approval and
 #      hands it on; Jason Desktop starts and records that a link opened the approval's page;
 #   2. with Jason Desktop running, `jason ui open --question <id>` does the same for the question's page, through the
-#      window that runs;
+#      window that runs, the same process as before;
 #   3. `jason ui open --no-open` prints the address of what waits and hands nothing on;
 #   4. with the deb's menu entry out of sight (XDG_DATA_HOME and XDG_DATA_DIRS naming an empty folder), `jason ui open`
 #      refuses with desktop_not_installed and hands nothing on;
@@ -26,6 +29,8 @@ deb=$(readlink -f "$1/jason-desktop-linux-x64.deb")
 fail() { echo "::error title=desktop link::$1"; exit 1; }
 SUDO=sudo
 [ "$(id -u)" -eq 0 ] && SUDO=
+dpkg-query -W -f='${Status}' jason-desktop 2> /dev/null | grep -q 'install ok installed' \
+  && fail "jason-desktop is installed on this machine; the leg installs and purges its own, so it runs only where none is."
 
 work=$(mktemp -d)
 mkdir -p "$work/empty"
@@ -44,7 +49,7 @@ trap cleanup EXIT
 
 # Every browser a runner or a desktop carries, and every one xdg-open's generic mode falls back to, by process name.
 # Jason Desktop's own processes are named jason-desktop-a and chrome_crashpad, which none of these is.
-browsers='firefox|firefox-bin|firefox-esr|chrome|google-chrome|chromium|chromium-browse|msedge|microsoft-edge|epiphany|konqueror|x-www-browser|www-browser|links|links2|elinks|lynx|w3m'
+browsers='firefox|firefox-bin|firefox-esr|iceweasel|seamonkey|mozilla|chrome|google-chrome|chromium|chromium-browse|msedge|microsoft-edge|epiphany|konqueror|x-www-browser|www-browser|links|links2|elinks|lynx|w3m'
 no_browser() { local seen; seen=$(pgrep -a -x "$browsers") && fail "a browser runs after $1: $seen"; return 0; }
 
 # The links Jason Desktop recorded as opened, for one page or for every page.
@@ -77,7 +82,7 @@ code=$?
 [ "$code" -eq 0 ] || { cat "$work/open1.err"; fail "jason ui open --approval ended $code: $out"; }
 [ "$out" = "{\"address\":\"jason-desktop://attention/approvals/$approval\"}" ] || fail "jason ui open --approval printed: $out"
 wait_opened approval 0 "Jason Desktop recorded no link to the approval's page within 90 seconds of jason ui open --approval."
-pgrep -f '^/opt/Jason/jason-desktop-app' > /dev/null || fail "no Jason Desktop runs after jason ui open --approval."
+window=$(pgrep -o -f '^/opt/Jason/jason-desktop-app') || fail "no Jason Desktop runs after jason ui open --approval."
 no_browser "jason ui open --approval"
 echo "1. jason ui open --approval: Jason Desktop started and opened the approval's page. It said: $(cat "$work/open1.err")"
 
@@ -87,6 +92,7 @@ code=$?
 [ "$code" -eq 0 ] || { cat "$work/open2.err"; fail "jason ui open --question ended $code: $out"; }
 [ "$out" = "{\"address\":\"jason-desktop://attention/questions/$question\"}" ] || fail "jason ui open --question printed: $out"
 wait_opened question 0 "The running Jason Desktop recorded no link to the question's page within 90 seconds of jason ui open --question."
+[ "$(pgrep -o -f '^/opt/Jason/jason-desktop-app')" = "$window" ] || fail "the question's page was not opened by the Jason Desktop that ran (process $window)."
 no_browser "jason ui open --question"
 echo "2. jason ui open --question: the running Jason Desktop opened the question's page. It said: $(cat "$work/open2.err")"
 

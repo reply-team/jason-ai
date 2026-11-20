@@ -46,7 +46,8 @@ jason ui revoke <token-id>
 
 `jason ui open` opens Jason Desktop on **Needs you**, what waits, and `--approval <id>` or `--question <id>` on one
 item, by the desktop's own `jason-desktop:` link: it asks the runtime nothing, decides nothing and never opens a
-browser. Run it when the person asks to see what waits; `--no-open` prints the address instead. Where Jason was
+browser. From a terminal, run it when the person asks to see what waits; `--no-open` prints the address instead. In
+Jason Desktop's chat the person is already in the desktop, and the chat refuses every `jason ui` verb. Where Jason was
 installed by its install script or Jason Desktop's own package, on macOS, Windows or Linux, Jason Desktop is already
 there, since it is the installation itself. Where it refuses with `desktop_not_installed`, no Jason Desktop that takes
 its links is installed for this account (a command-line install still waiting to move into the desktop, or an AppImage on

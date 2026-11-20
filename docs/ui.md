@@ -14,13 +14,15 @@ opens Jason Desktop on what waits, by the desktop's own `jason-desktop:` link; `
 open it at one item, and `--no-open` prints the address instead, for an agent to hand to you. It asks the runtime
 nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
 command-line install still waiting to move into the desktop, or an AppImage, whose menu entry declares no link), it
-opens nothing and refuses with `desktop_not_installed`.
+opens nothing and refuses with `desktop_not_installed`. Outside GNOME and KDE, xdg-open runs the desktop it starts until
+that window closes, so a `jason ui open` that starts it says after ten seconds that it handed the address on
+(`opener_timed_out`) and ends 0: the desktop opens all the same.
 
 A page of the UI is paired with `jason ui pair`, which prints a link that pairs one page, once, within 60 seconds, and
 opens nothing; Jason Desktop pairs its own window with it. `jason ui pair --approval <id>` and `--question <id>` pair at
 the address of one item, `#/attention/approvals/<id>` or `#/attention/questions/<id>`. For a build of your own in
 `ui/custom`, `jason ui open --web` opens such a link in your default browser (`--web --no-open` prints it); with no
-build of your own it asks and opens nothing and refuses with `custom_ui_not_installed`. Once paired, a bookmark of
+build of your own it asks nothing, opens nothing and refuses with `custom_ui_not_installed`. Once paired, a bookmark of
 `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts. The build of this release draws its console in
 Jason Desktop and in a tab the desktop opens; any other tab is neither, so it opens on the demo, or, while something
 waits, on the one page that says Live Mode is only available in Jason Desktop, where to download it, what waits and

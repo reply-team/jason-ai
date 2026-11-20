@@ -203,7 +203,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "with `DisplayName` `Jason` — written the first time, only read after that — from an ordinary prompt.")]
     [InlineData("docs/notifications.md", "opens Jason on Windows: on the one approval or question when exactly one waits, on the list of what waits otherwise.")]
     [InlineData("docs/notifications.md", "With no desktop registered, or its program gone, the click opens nothing; a hand-on that fails is said on stderr by its code")]
-    [InlineData("docs/notifications.md", "and nothing else opens, never a browser (§7). On macOS and Linux a click opens nothing of Jason's; `jason ui open` opens Jason Desktop on the same list or item.")]
+    [InlineData("docs/notifications.md", "and nothing else opens, never a browser. On macOS and Linux a click opens nothing of Jason's; `jason ui open` opens Jason Desktop on the same list or item.")]
     [InlineData("docs/notifications.md", "said on stderr by its code (`opener_not_started`, `opener_failed`, `opener_timed_out`), and nothing else opens")]
     [InlineData("docs/notifications.md", "after your browser's own confirmation, and it can do nothing a click cannot")]
     [InlineData("docs/notifications.md", "or Jason's own prompt for such an item replaces what was on your clipboard")]

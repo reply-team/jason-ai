@@ -65,7 +65,8 @@ public class PlatformUrlOpenerTests
     /// The opener is handed streams of the CLI's own, never its caller's: what it starts inherits them, and outside GNOME
     /// and KDE xdg-open runs Jason Desktop to its end, so a caller that reads <c>jason ui open</c>'s output to its end, an
     /// agent's tool call among them, would wait until the window closed. Seen on Ubuntu with no desktop session. Breaks if
-    /// the opener inherits its caller's streams again.
+    /// the opener's start inherits its caller's streams again; that the start closes the input and drains the output is
+    /// the start's own code, which no test runs without starting a real opener.
     /// </summary>
     [Fact]
     public void The_opener_gets_streams_of_its_own_and_none_of_its_callers()
@@ -84,7 +85,7 @@ public class PlatformUrlOpenerTests
     /// <summary>
     /// On Linux nothing is handed to xdg-open outside a graphical session: with neither <c>DISPLAY</c> nor
     /// <c>WAYLAND_DISPLAY</c> it never asks which program takes the address and goes straight to a list of text browsers.
-    /// Breaks if a session with no display can reach that list.
+    /// Breaks if the predicate the opener's start asks takes a session with no display for one.
     /// </summary>
     [Theory]
     [InlineData(null, null, false)]

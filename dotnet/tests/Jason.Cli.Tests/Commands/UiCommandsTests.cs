@@ -157,19 +157,27 @@ public class UiCommandsTests
     }
 
     /// <summary>
-    /// With no build of one's own, --web asks the runtime nothing and opens no browser, and says so in words: the
-    /// release's own build is never opened in a browser. Breaks if --web becomes the old ui open again.
+    /// With no build of one's own the runtime would serve — none, the release's alone, or one whose manifest the runtime
+    /// refuses and so serves the release's in its place — --web asks the runtime nothing and opens no browser, and says so
+    /// in words: the release's own build is never opened in a browser. Breaks if --web becomes the old ui open again, or
+    /// takes a directory the runtime does not serve for a build of one's own.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Open_web_without_a_build_of_ones_own_opens_nothing_and_refuses_in_words(bool defaultBuild)
+    [InlineData("none")]
+    [InlineData("release's only")]
+    [InlineData("refused manifest")]
+    public async Task Open_web_without_a_build_of_ones_own_opens_nothing_and_refuses_in_words(string installed)
     {
         var opener = new HandingOpener();
         using var cli = new CliRun(Opened, opener: opener);
-        if (defaultBuild)
+        if (installed != "none")
         {
             Build(cli.Environment.Paths.UiDefaultDirectory);
+        }
+
+        if (installed == "refused manifest")
+        {
+            Build(cli.Environment.Paths.UiCustomDirectory, manifest: "{}");
         }
 
         Assert.Equal(ExitCodes.ApiError, await cli.RunAsync("ui", "open", "--web"));
@@ -210,11 +218,11 @@ public class UiCommandsTests
     /// <summary>A build of one's own, as the runtime serves one: an index and a manifest in the custom directory.</summary>
     private static void OwnBuild(CliEnvironment env) => Build(env.Paths.UiCustomDirectory);
 
-    private static void Build(string directory)
+    private static void Build(string directory, string manifest = "{\"version\":\"0.1.0\",\"api_version\":\"v1\"}")
     {
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, Jason.Contracts.Ui.UiAssetLayout.IndexFile), "<!doctype html>");
-        File.WriteAllText(Path.Combine(directory, Jason.Contracts.Ui.UiAssetLayout.ManifestFile), "{}");
+        File.WriteAllText(Path.Combine(directory, Jason.Contracts.Ui.UiAssetLayout.ManifestFile), manifest);
     }
 
     /// <summary>pair is the runtime's ui.open: it prints the link that pairs one page once and opens nothing, whatever opener is there.</summary>

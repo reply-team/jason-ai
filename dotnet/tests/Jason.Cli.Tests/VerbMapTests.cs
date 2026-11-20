@@ -153,8 +153,19 @@ public class VerbMapTests
         Assert.Equal(["ui.open"], await SentAsync("ui", "pair"));
         Assert.Equal(["ui.tokens"], await SentAsync("ui", "tokens"));
         Assert.Equal(["ui.revoke"], await SentAsync("ui", "revoke", "uit_A"));
-        Assert.Empty(await SentAsync("ui", "open"));
-        Assert.Empty(await SentAsync("ui", "open", "--no-open", "--approval", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6"));
+
+        // open with Jason Desktop registered, so each run goes past the presence check to the hand-on or the printed
+        // address, where a request would be sent if one were.
+        foreach (var options in new[] { Array.Empty<string>(), ["--approval", "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6"], ["--no-open"] })
+        {
+            var opener = new Link.HandingOpener();
+            using var cli = new Commands.CliRun(opener: opener);
+            var env = cli.Environment with { Desktop = Link.FakeRegistration.Present(cli.Environment) };
+
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["ui", "open", .. options], env, TestContext.Current.CancellationToken));
+            Assert.Equal(0, cli.Requests);
+            Assert.Equal(options is ["--no-open"] ? 0 : 1, opener.Urls.Count);
+        }
 
         static async Task<string[]> SentAsync(params string[] args) =>
             [.. (await DefaultActorTests.RunEachAsync(args)).Requests.Select(request => request.Operation)];

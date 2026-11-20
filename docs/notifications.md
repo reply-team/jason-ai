@@ -190,7 +190,7 @@ such a unit exists only while the person is signed in.
   hands Windows the desktop's `jason-desktop://attention` address, made from the link's parsed parts, through the
   system's opener ([desktop.md](desktop.md), Links). With no desktop registered, or its program gone, the click opens
   nothing; a hand-on that fails is said on stderr by its code (`opener_not_started`, `opener_failed`,
-  `opener_timed_out`), and nothing else opens, never a browser (§7). On macOS and Linux a click opens nothing of
+  `opener_timed_out`), and nothing else opens, never a browser. On macOS and Linux a click opens nothing of
   Jason's; `jason ui open` opens Jason Desktop on the same list or item. On Windows the opener is `rundll32`, which
   answers 0 once the address is handed to the shell and does not carry the handler's own result: a desktop that is
   registered and there but does not start leaves the click with no page; `opener_failed` there means the opener itself
