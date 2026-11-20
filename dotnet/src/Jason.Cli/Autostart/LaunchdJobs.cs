@@ -6,16 +6,22 @@ internal delegate (int Exit, string Output, string Error) BoundedRun(IReadOnlyLi
 /// <summary>What launchd says of one job in one domain (<see cref="LaunchdJobs.Read"/>).</summary>
 public enum LaunchdJobState
 {
-    /// <summary><c>launchctl print</c> answered other than 0: launchd holds no such job there.</summary>
+    /// <summary><c>launchctl print</c> answered 113, "Could not find service": launchd holds no such job there.</summary>
     Absent,
 
-    /// <summary>Loaded, and not running.</summary>
+    /// <summary>Loaded and idle: its own state is <c>not running</c>, and it names no process of its own.</summary>
     Loaded,
 
-    /// <summary>Loaded and running: launchd says its state is <c>running</c>, or names its process.</summary>
+    /// <summary>
+    /// Loaded and in progress: it names its process, or its own state is any but <c>not running</c> — <c>running</c>, or
+    /// <c>spawn scheduled</c> as launchd starts it again.
+    /// </summary>
     Running,
 
-    /// <summary>launchctl could not be started, or did not answer in time.</summary>
+    /// <summary>
+    /// launchctl answered another exit, could not be started, did not answer in time, or named no state of the job's own:
+    /// whether it is there, and what it does, cannot be told.
+    /// </summary>
     Unread,
 }
 
@@ -116,15 +122,23 @@ internal static class LaunchdJobs
         return [LoginDomain(userId), $"user/{id}"];
     }
 
+    /// <summary>
+    /// What <c>launchctl print</c> answers for a job its domain does not hold: 113, with "Could not find service" on standard
+    /// error. Any other exit is no answer about the job.
+    /// </summary>
+    internal const int NotFound = 113;
+
     /// <summary>The account's login domain, <c>gui/&lt;uid&gt;</c>, where a job its applications submit is loaded.</summary>
     public static string LoginDomain(uint userId) => $"gui/{userId.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
     /// <summary>
     /// The job <paramref name="label"/> in <paramref name="domain"/>, as <c>launchctl print &lt;domain&gt;/&lt;label&gt;</c>
-    /// answers, waited for <see cref="Limit"/> at most: absent where it answers other than 0, as the release proof reads a
-    /// job; running where the job's own <c>state</c> is <c>running</c> or it names the job's process; loaded where its state
-    /// is any other; and unread where launchctl could not be started, did not answer in time, or named no state of the job's
-    /// own.
+    /// answers, waited for <see cref="Limit"/> at most: absent only where it answers <see cref="NotFound"/>; loaded where the
+    /// job's own <c>state</c> is <c>not running</c> and it names no process of its own; running, in progress, where it names
+    /// one or its state is any other, <c>spawn scheduled</c> included; and unread where launchctl answered any other exit,
+    /// said by its code and its first line, could not be started, did not answer in time, or named no state of the job's
+    /// own. Each doubt fails toward leaving the job alone: an unread job is never taken out, and one in progress is an update
+    /// being installed.
     /// </summary>
     /// <remarks>
     /// The job's own properties are the lines one step in from its first line, whether a tab or spaces make the step; a
@@ -139,10 +153,17 @@ internal static class LaunchdJobs
         string printed;
         try
         {
-            var (exit, output, _) = run([Launchctl, "print", $"{domain}/{label}"], Limit);
-            if (exit != 0)
+            var (exit, output, error) = run([Launchctl, "print", $"{domain}/{label}"], Limit);
+            if (exit == NotFound)
             {
                 return LaunchdJob.Absent;
+            }
+
+            if (exit != 0)
+            {
+                var ended = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"`launchctl print` ended with {exit}");
+                var said = error.ReplaceLineEndings("\n").Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0);
+                return new LaunchdJob(LaunchdJobState.Unread, Why: said is null ? ended : $"{ended}: {said}");
             }
 
             printed = output;
@@ -182,9 +203,9 @@ internal static class LaunchdJobs
 
         return state is null
             ? new LaunchdJob(LaunchdJobState.Unread, Why: "launchctl print named no state of the job's own")
-            : state == "running" || pid is not null
-                ? new LaunchdJob(LaunchdJobState.Running, pid)
-                : new LaunchdJob(LaunchdJobState.Loaded);
+            : state == "not running" && pid is null
+                ? new LaunchdJob(LaunchdJobState.Loaded)
+                : new LaunchdJob(LaunchdJobState.Running, pid);
     }
 
     /// <summary>

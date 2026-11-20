@@ -1164,8 +1164,9 @@ removal takes them off too.
   in launchd after an update, `ai.jasonharness.desktop.ShipIt`, too, and while that job is still installing an update
   it refuses with `update_in_progress` and takes nothing off: wait for the update to end, then run it again. The menu
   item asks first, with a box for deleting the data directory too, quits Jason and runs the same uninstall, which
-  deletes Jason.app last and writes what it did to the file the dialog names. When Jason will not start, run
-  `Jason.app/Contents/Resources/bundle/jason uninstall`.
+  deletes Jason.app last and writes what it did to the file the dialog names. A refusal from the menu is in that file
+  too, and running it again from the menu is reopening Jason and choosing **Uninstall Jason…** again. When Jason will
+  not start, run `Jason.app/Contents/Resources/bundle/jason uninstall`.
 - **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   steps the Windows uninstaller took before the one uninstall: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's

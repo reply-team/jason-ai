@@ -548,14 +548,22 @@ close_leg() {
 # line that starts the job's clock says which. The worker is Runner.Worker on every system, as the runner's listener
 # starts it, and an ancestor of this script; macOS's pgrep leaves its own ancestors out of what it matches unless -a is
 # given (pgrep(1): "By default, the current pgrep or pkill process and all of its ancestors are excluded"), so without
-# -a no worker was ever found on a Mac.
+# -a no worker was ever found on a Mac. A runner may run a worker for each of several jobs, so of the workers pgrep
+# lists, this job's own is the one this script descends from, found by walking up its parents (ps -o ppid=) to the
+# first process, 64 steps at most; never the first one listed.
 start_leg_clock() {
-    local now worker elapsed began from
+    local now workers worker pid steps elapsed began from
     now="$(date +%s)"
     if [ ! -s "$OUT/job-began.txt" ]; then
         began="$now"
         from="this leg's begin: no runner's worker was found"
-        worker="$(pgrep -a -x Runner.Worker | head -n 1)" || worker=""
+        workers=" $(pgrep -a -x Runner.Worker | tr '\n' ' ')" || workers=" "
+        worker="" pid="$$" steps=0
+        while [ "$steps" -lt 64 ] && [ -n "$pid" ] && [ "$pid" -gt 1 ] 2> /dev/null; do
+            case "$workers" in *" $pid "*) worker="$pid"; break ;; esac
+            pid="$(ps -o ppid= -p "$pid" | tr -d ' ')" || pid=""
+            steps=$(( steps + 1 ))
+        done
         if [ -n "$worker" ]; then
             elapsed="$(ps -o etime= -p "$worker" | awk '$1 ~ /^([0-9]+-)?([0-9]+:)?[0-9]+:[0-9]+$/ { n = split($1, part, /[-:]/); s = part[n] + 60 * part[n - 1]; if (n > 2) s += 3600 * part[n - 2]; if (n > 3) s += 86400 * part[n - 3]; print s }')" || elapsed=""
             case "$elapsed" in
