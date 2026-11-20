@@ -695,13 +695,8 @@ export class Chat {
             if (conversation.folder === undefined && ownFolderStands(join(paths.chats, conversation.id))) conversation.folder = 'own';
         }
         const unshaped = new Set(unstamped);
-        // The file says the records were stamped, and so does any record that carries its shape, which only a start of this
-        // desktop or a later one writes: a file lost while such a record stands makes no first start, so it never takes a
-        // record an earlier desktop wrote again for one found at the first start, and it is written again.
-        const shaped = kept.some((conversation) => !unshaped.has(conversation.id));
         this.#stamped = standing(paths.conversationsStamped);
-        if (!this.#stamped && shaped) this.#stamp();
-        if (this.#stamped || shaped) {
+        if (this.#stamped) {
             for (const conversation of kept) {
                 if (!unshaped.has(conversation.id)) continue;
                 this.#unshaped.add(conversation.id);

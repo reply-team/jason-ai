@@ -223,18 +223,14 @@ entry of a kind this desktop does not know, written by another version, is skipp
 the folder that is not a record is counted in the log and left as it was. On a Claude Code turn the desktop's file
 rules deny the agent a read or an edit of the folder; a Codex turn outside Full access is held only by its own
 read-only sandbox, which the desktop does not narrow, so it may read the records, and one in Full access by nothing,
-so it may write them, or remove `conversations-stamped`.
+so it may write them.
 
 Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
 a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
 start that finds records with no `shape` takes each as it is, one with no `mode` in Full access, writes it again with
 its shape and then writes `conversations-stamped`, only once every one of them was written again: a start that could
-not write one writes no file, at no later write either. With no record at all, the first record written writes that
-file first. The records say they were stamped as the file does: a start that finds a record carrying its `shape`
-takes the records as stamped, writing the file again where it is lost, so a file removed between two starts, by a Full
-access turn on Codex say, makes no first start and widens nothing a downgrade wrote; only a start that finds the file
-gone and no record with a `shape` is a first start again. The hold rests on nothing a host obeys: the file and the
-records only ever narrow what a record opens in. From then on a record with no `shape` is one an
+not write one writes no file, at no later write either, so the next start is a first start again. With no record at all,
+the first record written writes that file first, and a start that finds the file lost is a first start again. From then on a record with no `shape` is one an
 earlier desktop wrote last: it opens in Ask first, unless it is in Plan only, says why once when it is opened, and is
 then written again with its mode and its shape. A record with no `folder` whose `chats/<id>/` stands as a folder is
 that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
