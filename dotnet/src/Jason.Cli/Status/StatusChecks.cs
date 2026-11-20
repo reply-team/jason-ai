@@ -510,9 +510,9 @@ internal static partial class StatusChecks
     /// </summary>
     /// <remarks>
     /// Neither has a command for a repair. The second is finished by Jason Desktop's start, which runs <c>jason install</c> and
-    /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; the finishing
-    /// step alone neither sets the machine up nor writes the record, so this check would still fail after it, and no
-    /// <c>jason</c> verb opens the application.
+    /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; its Put Back
+    /// runs the same set-up again. The finishing step alone neither sets the machine up nor writes the record, so this check
+    /// would still fail after it, and no <c>jason</c> verb opens the application.
     /// </remarks>
     private static StatusCheck? PackageUpdates(CliEnvironment env)
     {
@@ -537,7 +537,7 @@ internal static partial class StatusChecks
                 "update",
                 false,
                 CheckState.Failed,
-                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it; where it is open already, choose Restart Jason and Its Runtime to Finish the Update in its Jason menu.",
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop, whose start finishes it. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Command Line, Put Back jason and the Skills…, which runs that set-up again.",
                 null);
         }
 

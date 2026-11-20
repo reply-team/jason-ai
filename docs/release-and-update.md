@@ -630,8 +630,9 @@ Package**. `jason status`'s optional `update` check says when updates cannot arr
 off, as a release upgrade of Ubuntu turns third-party sources off, to be turned on again in Software & Updates → Other
 Software — and when the package is a version this installation was not set up for yet, which Jason Desktop's start
 finishes: it runs `jason install` and the finishing step, and only once both completed records the version it set up
-for, so the check names that start, or the restart item where a window is open, and no command, since the finishing step
-alone records nothing. `sudo apt-mark hold jason-desktop` stops every update of it.
+for. So the check names that start and no command, since the finishing step alone records nothing; in a window already
+open, the restart item where the package changed under it, and otherwise **Put Back jason and the Skills…** under
+Command Line, which runs the same set-up again. `sudo apt-mark hold jason-desktop` stops every update of it.
 
 **A `jason` the desktop application carries hands the update to the application** (§6): the Desktop's own updater
 installs it with no window, and the new carried `jason` finishes it, as "Handing the update to Jason Desktop" below says;
