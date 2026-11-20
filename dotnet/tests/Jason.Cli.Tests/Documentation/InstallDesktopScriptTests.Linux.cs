@@ -30,7 +30,10 @@ public sealed partial class InstallDesktopScriptTests
     /// With apt and no terminal - an agent runs the line in the person's session - the deb is downloaded, checked, and
     /// installed by apt through pkexec, whose dialog asks the password once, with the package lock waited for ten minutes
     /// and the whole run for longer, so apt's own answer comes first; then the jason the package carries sets the machine up,
-    /// and the last line is the full path of jason. Catches a bound that ends the wait while apt still waits on the lock.
+    /// and the last line is the full path of jason. apt's options are handed as one argument each, a proxy's value with a
+    /// space in it included, and the deb by its full path under a relative TMPDIR: apt reads an argument as a file only when
+    /// it begins with / or ./, and pkexec runs apt from the root folder. Catches a bound that ends the wait while apt still
+    /// waits on the lock, an option split where the person's proxy holds a space, and a package name made of the path.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "install.sh installs the deb on Linux with apt only once its checksum holds, and sets it up")]
@@ -38,6 +41,9 @@ public sealed partial class InstallDesktopScriptTests
     public void Linux_with_apt_the_deb_is_installed_by_apt_through_the_desktop_s_dialog_then_set_up()
     {
         var linux = Linux.Start(_tree, apt: true);
+        Directory.CreateDirectory(Path.Combine(linux.WorkingDirectory, "relative-tmp"));
+        linux.Variables["TMPDIR"] = "relative-tmp";
+        linux.Variables["http_proxy"] = "http://proxy.example.test:3128/a b";
 
         var run = linux.Run(linux.Feed());
 
@@ -45,6 +51,9 @@ public sealed partial class InstallDesktopScriptTests
         var calls = linux.Calls();
         var install = Assert.Single(calls, call => call.StartsWith("pkexec ", StringComparison.Ordinal));
         Assert.Contains("apt-get install -y -o DPkg::Lock::Timeout=600 ", install, StringComparison.Ordinal);
+        Assert.Contains("-o Acquire::http::Proxy=http://proxy.example.test:3128/a b ", install, StringComparison.Ordinal);
+        Assert.Contains($" {Path.Combine(linux.WorkingDirectory, "relative-tmp")}/", install, StringComparison.Ordinal);
+        Assert.Equal("apt-get-arguments 11|", Assert.Single(calls, call => call.StartsWith("apt-get-arguments ", StringComparison.Ordinal)));
         Assert.EndsWith("/jason-desktop-linux-x64.deb|", install, StringComparison.Ordinal);
         var bound = Assert.Single(calls, call => call.StartsWith("timeout ", StringComparison.Ordinal));
         Assert.True(int.Parse(bound["timeout ".Length..^1], System.Globalization.CultureInfo.InvariantCulture) > 600, bound);
@@ -113,6 +122,37 @@ public sealed partial class InstallDesktopScriptTests
     }
 
     /// <summary>
+    /// Where apt installs the package as root, the feed is taken from --feed alone: one JASON_INSTALL_FEED names, which
+    /// whatever started the line may have set, is refused before anything is read from it, and nothing is installed. The
+    /// AppImage, the account's own file with no password, still takes it. Catches a deb from a feed nobody typed installed
+    /// with the person's password.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [UnsupportedOSPlatform("windows")]
+    public void Linux_on_the_apt_route_a_feed_is_taken_from_the_option_alone(bool apt)
+    {
+        var linux = Linux.Start(_tree, apt);
+        var feed = linux.Feed();
+
+        var run = linux.Run(feed, [], feedFromEnvironment: true);
+
+        if (apt)
+        {
+            Assert.NotEqual(0, run.Exit);
+            Assert.Contains("JASON_INSTALL_FEED names a feed, and where apt installs Jason Desktop's package with your password the feed is taken from --feed alone, so nothing was read from it or installed: give it as --feed, or unset JASON_INSTALL_FEED and run the line again.", run.Stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
+            Assert.Empty(linux.Calls());
+        }
+        else
+        {
+            Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+            Assert.Equal([Path.Combine(linux.Applications, "jason-desktop-linux-x64.AppImage")], linux.InApplications());
+        }
+    }
+
+    /// <summary>
     /// The package already installed at the release's version downloads nothing and asks nothing: the line sets the
     /// machine up again, which changes nothing in place. With Jason Desktop running, nothing is changed either.
     /// </summary>
@@ -130,6 +170,30 @@ public sealed partial class InstallDesktopScriptTests
         Assert.Contains($"Jason Desktop {LinuxVersion} is already installed; nothing to download.", run.Stdout, StringComparison.Ordinal);
         Assert.DoesNotContain(linux.Calls(), call => call.StartsWith("pkexec", StringComparison.Ordinal));
         Assert.Equal($"install --roles|{linux.Data}", linux.Calls()[^1]);
+    }
+
+    /// <summary>
+    /// A runtime of an earlier build still running once the package is this release's, installed now over an older one or
+    /// earlier by the system: the line leaves it running, since a restart ends a turn it may be running and the person
+    /// chooses when, and says what brings it up, as Jason Desktop's next start offers it; its last line is still the full
+    /// path. Catches the line ending as if the update were whole while the runtime still runs the older build.
+    /// </summary>
+    [Theory]
+    [InlineData("0.49.0")]
+    [InlineData(LinuxVersion)]
+    [UnsupportedOSPlatform("windows")]
+    public void Linux_a_runtime_of_an_earlier_build_is_left_running_and_the_line_says_what_brings_it_up(string placed)
+    {
+        var linux = Linux.Start(_tree, apt: true);
+        linux.PlaceDeb(placed);
+        File.WriteAllText(linux.Running, "{\"state\":\"running\",\"runtime_version\":\"0.49.0\"}\n");
+
+        var run = linux.Run(linux.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains($"The runtime still runs Jason 0.49.0 and was left running, since a restart ends a turn it may be running: Restart Jason and Its Runtime to Finish the Update to {LinuxVersion}, which Jason Desktop offers when it opens, or `jason runtime restart`, brings it to {LinuxVersion}.", run.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(linux.Calls(), call => call.StartsWith("runtime restart", StringComparison.Ordinal) || call.StartsWith("runtime stop", StringComparison.Ordinal) || call.StartsWith("runtime start", StringComparison.Ordinal));
+        Assert.StartsWith("A terminal opened from now on finds jason by name", Lines(run.Stdout)[^1], StringComparison.Ordinal);
     }
 
     /// <summary>A change to the application while it runs is refused, and the window is never closed from here.</summary>
@@ -194,12 +258,15 @@ public sealed partial class InstallDesktopScriptTests
 
     /// <summary>
     /// Where the AppImage could not run its sandbox or open, or the place holds a file of that name that is not Jason
-    /// Desktop, the line refuses before anything is downloaded or written, saying why.
+    /// Desktop, or one older than 0.49.1, whose jason cannot set this machine up, the line refuses before anything is
+    /// downloaded or written, saying why and, for the older one, the way on: its own update, as the move says for the same
+    /// file. Catches the older one refused by the set-up after it, which names the line again.
     /// </summary>
     [Theory]
     [InlineData("user namespaces refused", "This system does not let an application make the user namespaces Chromium's sandbox needs, and Jason never runs without its sandbox, so nothing was installed.")]
     [InlineData("no setuid fusermount", "Jason Desktop is an AppImage here, which needs FUSE 3 to open: install the fuse3 package (sudo pacman -S fuse3 on Arch), then run the line again. Nothing was installed.")]
     [InlineData("another file in the place", "A file of that name that is not Jason Desktop is in ")]
+    [InlineData("an older one in the place", "is older than 0.49.1, so its jason cannot set this machine up, and nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again.")]
     [UnsupportedOSPlatform("windows")]
     public void Linux_without_apt_what_the_appimage_cannot_do_is_refused_before_anything_is_written(string why, string refusal)
     {
@@ -211,12 +278,19 @@ public sealed partial class InstallDesktopScriptTests
             File.SetUnixFileMode(Path.Combine(linux.Applications, "jason-desktop-linux-x64.AppImage"), (UnixFileMode)0b111_101_101);
         }
 
+        var said = refusal;
+        if (why == "an older one in the place")
+        {
+            linux.PlaceAppImage("0.49.0");
+            said = $"Jason Desktop 0.49.0 at {Path.Combine(linux.Applications, "jason-desktop-linux-x64.AppImage")} {refusal}";
+        }
+
         var before = Directory.EnumerateFileSystemEntries(linux.Home, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList();
 
         var run = linux.Run(linux.Feed());
 
         Assert.NotEqual(0, run.Exit);
-        Assert.Contains(refusal, run.Stderr, StringComparison.Ordinal);
+        Assert.Contains(said, run.Stderr, StringComparison.Ordinal);
         Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
         Assert.Equal(before, Directory.EnumerateFileSystemEntries(linux.Home, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal));
         Assert.Empty(linux.Calls());
@@ -277,6 +351,7 @@ public sealed partial class InstallDesktopScriptTests
             Log = Path.Combine(tree.NewDirectory("log"), "calls.log");
             Running = Path.Combine(tree.NewDirectory("flag"), "running");
             DebPlace = Path.Combine(tree.NewDirectory("opt"), "Jason");
+            WorkingDirectory = tree.NewDirectory("cwd");
             Stubs = tree.NewDirectory("stubs");
             foreach (var tool in Tools)
             {
@@ -300,7 +375,7 @@ public sealed partial class InstallDesktopScriptTests
             {
                 // apt-get installs the file by putting the package's carried jason in its place, and dpkg-query says what is
                 // installed by the file the stand-in keeps beside that place.
-                Stub("apt-get", $"echo \"apt-get $*|\" >> '{Log}'\nmkdir -p '{DebPlace}/resources/bundle'\ncp '{Path.Combine(DebPlace, "..", "jason")}' '{DebCarried}'\nchmod 755 '{DebCarried}'\necho '{LinuxVersion}' > '{DebPlace}.version'\n");
+                Stub("apt-get", $"echo \"apt-get $*|\" >> '{Log}'\necho \"apt-get-arguments $#|\" >> '{Log}'\nmkdir -p '{DebPlace}/resources/bundle'\ncp '{Path.Combine(DebPlace, "..", "jason")}' '{DebCarried}'\nchmod 755 '{DebCarried}'\necho '{LinuxVersion}' > '{DebPlace}.version'\n");
                 Stub("dpkg", "[ \"$1\" = --compare-versions ] || exit 0\n[ \"$(printf '%s\\n%s\\n' \"$2\" \"$4\" | sort -V | tail -n 1)\" = \"$2\" ] && [ \"$2\" != \"$4\" ]\n");
                 Stub("dpkg-query", $"[ -f '{DebPlace}.version' ] || exit 1\nprintf 'ii |%s' \"$(cat '{DebPlace}.version')\"\n");
             }
@@ -324,6 +399,9 @@ public sealed partial class InstallDesktopScriptTests
 
         public string Running { get; }
 
+        /// <summary>The folder the line runs in, where a relative TMPDIR is read from.</summary>
+        public string WorkingDirectory { get; }
+
         /// <summary>Where this row's copy of the script puts the deb's application.</summary>
         public string DebPlace { get; }
 
@@ -339,7 +417,7 @@ public sealed partial class InstallDesktopScriptTests
             "#!/bin/sh\n"
             + $"printf '%s|%s\\n' \"$*\" \"${{JASON_DATA_DIR:-}}\" >> '{Log}'\n"
             + "case \"$1 ${2:-}\" in\n"
-            + $"  'runtime status') [ -f '{Running}' ] ;;\n"
+            + $"  'runtime status') [ -f '{Running}' ] && cat '{Running}' ;;\n"
             + "  'install --roles') printf '%s\\n' \"${STANDIN_REPORT:-$STANDIN_DEFAULT}\" | sed \"s|{self}|$HOME/.local/bin/jason|g; s|{dir}|$HOME/.local/bin|g\" ;;\n"
             + "esac\n";
 
@@ -373,9 +451,27 @@ public sealed partial class InstallDesktopScriptTests
         {
             var feed = _tree.NewDirectory("feed");
             File.WriteAllText(Path.Combine(feed, "jason-desktop-linux-x64.deb"), "a deb\n");
-            var jason = Convert.ToBase64String(Encoding.UTF8.GetBytes(StandInJason));
+            File.WriteAllText(Path.Combine(feed, "jason-desktop-linux-x64.AppImage"), AppImage(version));
+            File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"" + version + "\"\n}\n");
             File.WriteAllText(
-                Path.Combine(feed, "jason-desktop-linux-x64.AppImage"),
+                Path.Combine(feed, ReleaseAssets.Checksums),
+                string.Concat(new[] { "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage" }.Select(name => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(feed, name)))) + "  " + name + "\n")));
+            return feed;
+        }
+
+        /// <summary>An AppImage of a version already at the install line's place, ~/Applications/jason-desktop-linux-x64.AppImage.</summary>
+        public void PlaceAppImage(string version)
+        {
+            var file = Path.Combine(Applications, "jason-desktop-linux-x64.AppImage");
+            Directory.CreateDirectory(Applications);
+            File.WriteAllText(file, AppImage(version));
+            File.SetUnixFileMode(file, (UnixFileMode)0b111_101_101);
+        }
+
+        private string AppImage(string version)
+        {
+            var jason = Convert.ToBase64String(Encoding.UTF8.GetBytes(StandInJason));
+            return
                 "#!/bin/sh\n"
                 + "[ \"${1:-}\" = --appimage-extract ] || exit 1\n"
                 + "r=squashfs-root\n"
@@ -384,15 +480,11 @@ public sealed partial class InstallDesktopScriptTests
                 + "chmod 755 \"$r/resources/bundle/jason\"\n"
                 + $"printf '{{\\n  \"version\": \"{version}\"\\n}}\\n' > \"$r/resources/bundle/version.json\"\n"
                 + "printf '[Desktop Entry]\\nName=Jason\\nExec=AppRun %%U\\nTerminal=false\\nType=Application\\nIcon=jason-desktop-app\\n' > \"$r/jason-desktop-app.desktop\"\n"
-                + "printf 'png' > \"$r/usr/share/icons/hicolor/256x256/apps/jason-desktop-app.png\"\n");
-            File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"" + version + "\"\n}\n");
-            File.WriteAllText(
-                Path.Combine(feed, ReleaseAssets.Checksums),
-                string.Concat(new[] { "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage" }.Select(name => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(feed, name)))) + "  " + name + "\n")));
-            return feed;
+                + "printf 'png' > \"$r/usr/share/icons/hicolor/256x256/apps/jason-desktop-app.png\"\n";
         }
 
-        public (int Exit, string Stdout, string Stderr) Run(string feed, string[] arguments, string? wrapper = null)
+        /// <param name="feedFromEnvironment">The feed named by JASON_INSTALL_FEED rather than by --feed.</param>
+        public (int Exit, string Stdout, string Stderr) Run(string feed, string[] arguments, string? wrapper = null, bool feedFromEnvironment = false)
         {
             var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
             Assert.Equal(1, Count(text, "\nDEB_PLACE=\"/opt/Jason\"\n"));
@@ -409,9 +501,16 @@ public sealed partial class InstallDesktopScriptTests
                 ["PATH"] = Stubs,
                 ["STANDIN_DEFAULT"] = Report(placed: true, runtime: "not_running", completed: true),
             };
+            string[] feedOption = ["--feed", feed];
+            if (feedFromEnvironment)
+            {
+                environment["JASON_INSTALL_FEED"] = feed;
+                feedOption = [];
+            }
+
             return wrapper is null
-                ? RunToEnd(Path.Combine(Stubs, "sh"), environment, [script, "--feed", feed, .. arguments])
-                : RunToEnd(wrapper, environment, [.. arguments, Path.Combine(Stubs, "sh"), script, "--feed", feed]);
+                ? RunToEnd(Path.Combine(Stubs, "sh"), environment, [script, .. feedOption, .. arguments], WorkingDirectory)
+                : RunToEnd(wrapper, environment, [.. arguments, Path.Combine(Stubs, "sh"), script, .. feedOption], WorkingDirectory);
         }
 
         public (int Exit, string Stdout, string Stderr) Run(string feed) => Run(feed, []);
