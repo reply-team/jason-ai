@@ -2070,27 +2070,22 @@ public partial class InstallScriptTests
     /// </summary>
     private static (int Exit, string Stdout, string Stderr) Pwsh(IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it.");
-
-        return Run(pwsh!, environment, ["-NoProfile", "-NonInteractive", .. arguments]);
+        // A start cache of the child's own, gone with the child.
+        using var tree = new TempTree();
+        return Run(Jason.Runtime.Tests.ChildPwsh.StartInfo(tree.Root), environment, ["-NoProfile", "-NonInteractive", .. arguments]);
     }
 
     /// <summary>One program, run to completion, with the environment a test wants it to have.</summary>
-    private static (int Exit, string Stdout, string Stderr) Run(string executable, IReadOnlyDictionary<string, string> environment, params string[] arguments)
+    private static (int Exit, string Stdout, string Stderr) Run(string executable, IReadOnlyDictionary<string, string> environment, params string[] arguments) =>
+        Run(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true }, environment, arguments);
+
+    /// <summary>One program, run to completion from a start made for it, with the environment a test wants it to have.</summary>
+    private static (int Exit, string Stdout, string Stderr) Run(ProcessStartInfo start, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var start = new ProcessStartInfo(executable)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         // PowerShell reports telemetry over the network unless told not to, and no test in this repository
         // reaches the network.
         start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
@@ -2114,7 +2109,7 @@ public partial class InstallScriptTests
             process.Kill(entireProcessTree: true);
             Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(10))).GetAwaiter().GetResult();
             Assert.Fail(
-                $"{Path.GetFileName(executable)} did not finish in two minutes.\n"
+                $"{Path.GetFileName(start.FileName)} did not finish in two minutes.\n"
                 + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}\n"
                 + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
         }

@@ -255,44 +255,7 @@ public sealed partial class ScriptSwitchTests
         return files;
     }
 
-    private static (int Exit, string Stdout, string Stderr) Pwsh(params string[] args)
-    {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it, and the fill script only ever runs there.");
-
-        var start = new ProcessStartInfo(pwsh)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
-        // reaches the network.
-        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
-        start.ArgumentList.Add("-NoProfile");
-        start.ArgumentList.Add("-NonInteractive");
-        foreach (var argument in args)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
-        {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail("pwsh did not finish in two minutes.");
-        }
-
-        return (process.ExitCode, stdout.Result, stderr.Result);
-    }
+    private static (int Exit, string Stdout, string Stderr) Pwsh(params string[] args) => Workflows.Pwsh(new Dictionary<string, string>(), args);
 
     /// <summary>One of this repository's files, with the line endings git checks it out with made LF.</summary>
     private static string Source(string relativePath) =>
