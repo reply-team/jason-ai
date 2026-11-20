@@ -68,8 +68,7 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
 - **`jason status` says when the deb's updates cannot arrive, or are not finished.** A release upgrade of Ubuntu turns
   Jason's apt source off, as it turns off every third-party source; `jason status`'s `update` check says when the source
   is off or gone, and Software & Updates → Other Software turns it on again. The same check says when the system
-  installed a version this installation is not set up for yet, which `jason update apply --finish`, or opening Jason
-  Desktop, finishes.
+  installed a version this installation is not set up for yet, which opening Jason Desktop finishes.
 - **An AppImage updates itself.** Its update item, or `jason update apply` in a terminal, updates Jason Desktop and the
   `jason` it carries together, as on macOS and Windows. The update replaces the file where it is, so you need to be able
   to write to its folder, and keeps the previous file under `~/.jason/desktop/rollback/<version>/`. Jason Desktop needs
