@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
+import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { withoutMount } from './linux-package.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 const marker = '__JASON_PATH__';
@@ -20,10 +22,40 @@ export function loginShellOptions(env: Readonly<Record<string, string | undefine
  */
 export function withUsualPlaces(path: string, home: string, platform: NodeJS.Platform = 'darwin'): string {
     const entries = path.split(delimiter).filter(Boolean);
-    const brew = platform === 'linux' ? ['/usr/local/bin', '/home/linuxbrew/.linuxbrew/bin'] : ['/opt/homebrew/bin', '/usr/local/bin'];
-    for (const place of [join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), ...brew]) {
+    for (const place of usualPlaces(home, platform)) {
         if (!entries.includes(place)) entries.push(place);
     }
+    return entries.join(delimiter);
+}
+
+function usualPlaces(home: string, platform: NodeJS.Platform): string[] {
+    const brew = platform === 'linux' ? ['/usr/local/bin', '/home/linuxbrew/.linuxbrew/bin'] : ['/opt/homebrew/bin', '/usr/local/bin'];
+    return [join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), ...brew];
+}
+
+/** A folder the AppImage runtime mounts an AppImage in, `<temporary folder>/.mount_<name>`, or one inside it. */
+const appImageMount = /(^|\/)\.mount_[^/]*(\/|$)/;
+
+/**
+ * Pure: the PATH a start of the desktop was handed, less what an earlier start put on its own PATH for the programs it
+ * starts. A desktop started by another inherits that one's environment: an AppImage's update starts the new file with
+ * it, and the mode switch starts the desktop again with it. That PATH ends with the usual places the earlier start added
+ * (`withUsualPlaces`), and on Linux it holds the folders of the AppImage mounts each AppRun put in front, the earlier
+ * start's and this one's (`appdir`), which end with their start and which no terminal has. The usual places at its end
+ * and every mount's folders are taken off; what is left is what the session handed, which the login shell is asked with
+ * (`shellPath`), so that its answer is the PATH a new terminal has, and which stands in where it answers nothing.
+ *
+ * A usual place a person's own profile puts last is taken off too, and the login shell's reading of that profile puts it
+ * back. One that something other than a shell put last on the session's PATH, `environment.d` say, is not put back: the
+ * machine set-up then writes the PATH lines for a folder a terminal has already. Off macOS and Linux the PATH is the
+ * person's own and is returned as it is.
+ */
+export function handedPath(path: string, appdir: string | undefined, home: string, platform: NodeJS.Platform): string {
+    if (platform !== 'darwin' && platform !== 'linux') return path;
+    const mount = appdir !== undefined && appdir.startsWith('/') ? appdir : undefined;
+    const entries = (withoutMount({ PATH: path }, mount).PATH ?? '').split(delimiter).filter((entry) => entry !== '' && !appImageMount.test(entry));
+    const usual = usualPlaces(home, platform);
+    while (entries.length > 0 && usual.includes(entries[entries.length - 1]!)) entries.pop();
     return entries.join(delimiter);
 }
 
@@ -57,24 +89,28 @@ export function pathFromOutput(stdout: string): string | null {
  * started from a Linux session's menu gets the session's, which reads no `~/.bashrc`, where a version manager or npm's
  * own folder most often adds itself; on neither is an agent's command line found as a terminal finds it. The person's
  * login shell knows the real one, so on macOS and Linux it is asked once (`shellPath`), before anything is started, the
- * inherited PATH standing in where it answers nothing, and the usual places are added. On Windows the inherited PATH is
- * the person's own and is used as it is.
+ * PATH this start was handed (`handedPath`) standing in where it answers nothing, and the usual places are added. On
+ * Windows the inherited PATH is the person's own and is used as it is.
  */
-export async function loginPath(inherited: string, home: string, asked: Promise<string | null> = shellPath()): Promise<string> {
-    if (process.platform !== 'darwin' && process.platform !== 'linux') return inherited;
-    return withUsualPlaces((await asked) ?? inherited, home, process.platform);
+export async function loginPath(handed: string, home: string, asked: Promise<string | null> = shellPath()): Promise<string> {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return handed;
+    return withUsualPlaces((await asked) ?? handed, home, process.platform);
 }
 
 /**
  * The PATH the person's login shell itself has, or null where it printed none, or anywhere but macOS and Linux: what a
  * new terminal finds programs by, before the desktop adds the usual places to its own (`withUsualPlaces`). Whether the
- * PATH command's folder is on it decides whether placing the command also writes the PATH lines (`path-profile.ts`).
+ * PATH command's folder is on it decides whether placing the command also writes the PATH lines (`path-profile.ts`, and
+ * the machine set-up's `--terminal-path`). The shell starts from the PATH this start was handed (`handedPath`), never one
+ * an earlier start extended for its own children: a profile that keeps the PATH it is given, as Arch's does, would print
+ * that start's additions back as a terminal's.
  */
 export async function shellPath(): Promise<string | null> {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return null;
     const shell = loginShell(process.platform, process.env) ?? '/bin/sh';
+    const env = { ...process.env, PATH: handedPath(process.env['PATH'] ?? '', process.env['APPDIR'], homedir(), process.platform) };
     return new Promise((resolve) => {
-        execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions(process.env), (error, stdout) => {
+        execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions(env), (error, stdout) => {
             resolve(error ? null : pathFromOutput(String(stdout)));
         });
     });
