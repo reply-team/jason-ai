@@ -15,7 +15,7 @@ public sealed class RequestFileOption(string name) : Option<string?>(name);
 /// </summary>
 /// <remarks>
 /// <para>
-/// Under <c>JASON_CONFINED</c> (<see cref="Confinement"/>), set to any value but empty, such an option takes only
+/// Under <c>JASON_CONFINED</c> or <c>JASON_CHAT_TURN</c> (<see cref="Confinement"/>), set to any value but empty, such an option takes only
 /// <c>-</c>. Anything else is refused before the file is opened and before any request, exit 1, naming the cure:
 /// <c>--file - &lt; &lt;path&gt;</c>, or a here-document. With the content on standard input, what reads the file is
 /// the caller's shell, which the caller's host already checks, and never this CLI. Unset or empty, nothing changes.
@@ -51,10 +51,10 @@ public static class RequestFile
             return (await (env.In ?? TextReader.Null).ReadToEndAsync(cancellationToken).ConfigureAwait(false), "Standard input");
         }
 
-        if (env.Confined())
+        if (env.FileHalfVariable() is { } variable)
         {
             throw new ConfinedRefusal(
-                $"{option} '{path}' was not read: with {Confinement.Variable} set, this CLI reads a request's content from "
+                $"{option} '{path}' was not read: with {variable} set, this CLI reads a request's content from "
                 + $"standard input only. Give it as {option} - < <path>, or in a here-document.");
         }
 

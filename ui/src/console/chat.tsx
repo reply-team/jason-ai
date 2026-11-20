@@ -1099,6 +1099,18 @@ function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
     </div>`;
 }
 
+/**
+ * What the empty chat says about approval, one short sentence true of its mode: in Plan only nothing written reaches a
+ * person unapproved; in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves when the
+ * person tells it to. Full access, where a program the AI writes can act as the person, and a mode word this desktop
+ * does not know say nothing.
+ */
+function approvalSentence(mode: Chat['mode']): string | null {
+    if (mode === 'plan_only') return t('chat.empty.planOnly');
+    if (mode === 'ask_first' || mode === 'auto_edit') return t('chat.empty.onYourWord');
+    return null;
+}
+
 export function threadView(chat: Chat, host: DesktopHost | null): Html {
     if (chat.entries.length === 0 && chat.main)
         return html`<div class="hero">
@@ -1116,7 +1128,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
-                ${drawn === 'ask_first' || drawn === 'auto_edit' || drawn === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
+                ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);

@@ -640,20 +640,23 @@ public sealed class TerminalStartConfinementTests
     public void The_terminal_does_not_carry_the_variable(TerminalPlatform os)
     {
         var original = Environment.GetEnvironmentVariable(Confinement.Variable);
+        var turn = Environment.GetEnvironmentVariable(Confinement.ChatTurnVariable);
         bool carried;
         try
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, "1");
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, "1");
 
             // Every child is started by its full path, so the terminal is named by one this machine reads as full.
             var start = TerminalStartInfo.For(os, [Path.Combine(Path.GetTempPath(), "x-terminal-emulator"), "-e", "/usr/local/bin/codex"], "/home/marta/Jason");
 
             // The start's environment is read from this process when it is first asked for, so it is asked while the variable is set.
-            carried = start.Environment.ContainsKey(Confinement.Variable);
+            carried = start.Environment.ContainsKey(Confinement.Variable) || start.Environment.ContainsKey(Confinement.ChatTurnVariable);
         }
         finally
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, original);
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, turn);
         }
 
         Assert.False(carried, "The terminal was handed the variable.");

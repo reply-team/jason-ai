@@ -11,8 +11,9 @@ namespace Jason.Cli.Tests;
 
 /// <summary>
 /// The desktop's chat drives an agent host that may run <c>jason</c>, fenced by two files. In
-/// <c>desktop/chat-deny-list.txt</c>, the listed commands are refused by the host's tool fence and by the desktop, and a
-/// command naming a listed operation is refused by the desktop. <c>desktop/chat-allow-list.txt</c> names the verbs the
+/// <c>desktop/chat-deny-list.txt</c>, the listed commands are refused in Plan only by the host's tool fence and by the
+/// desktop, and a command naming a listed operation is refused by the desktop; in the other modes the turn's mode decides
+/// each (<c>modeFence</c>). <c>desktop/chat-allow-list.txt</c> names the verbs the
 /// host runs without asking, and any other jason command goes to the person's card. The deny list is held here to the
 /// CLI's own tables and to the Runtime API's names, and the allow list is written here from the CLI's command tree, so a
 /// verb that becomes a person's own word, a new verb, or a line taken out of either file is red in this class before an
@@ -184,10 +185,12 @@ public class DesktopDenyListTests
     }
 
     private const string DenyListHeader =
-        "# The jason commands the desktop's chat never runs, one per line.\n" +
+        "# The jason commands the desktop's chat never runs in Plan only, one per line.\n" +
         "#\n" +
-        "# The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by\n" +
-        "# the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.\n" +
+        "# In Plan only the listed commands are refused by the host's tool fence, and a command that names a listed operation is\n" +
+        "# refused by the desktop; there a person runs them, in the page or in a terminal. An operation is told from a command\n" +
+        "# by its dot. In Ask first, Auto-edit and Full access the turn's mode decides each instead (modeFence in\n" +
+        "# desktop/src/chat-deny.ts).\n" +
         "#\n" +
         "# The command lines below are written from ConfinedVerbs.Table by DesktopDenyListTests, the table the CLI refuses under\n" +
         "# JASON_CONFINED; a line taken out or added here by hand is red there until JASON_UPDATE_FIXTURES=1 writes the file\n" +
@@ -434,6 +437,20 @@ public class DesktopDenyListTests
         var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
 
         Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
+    /// The desktop spells the chat's variable once, in its permission model, and sets it in every host's environment by
+    /// that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_chat_turn_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const chatTurnVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(Confinement.ChatTurnVariable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>

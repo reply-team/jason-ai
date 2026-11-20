@@ -825,13 +825,15 @@ public partial class ClaimerTests
     /// automatic mode, its text passed by the critic, it parks <c>sent_from_chat</c>; under every message it parks under the
     /// reason every first park has, and a standing approval that would have released it says <c>sent_from_chat</c>; under the
     /// automatic mode with such a standing approval it parks <c>sent_from_chat</c> too. The same send written outside the
-    /// chat goes, automatically or under the standing approval.
+    /// chat goes, automatically or under the standing approval, and under every message with no standing approval it parks
+    /// for the person as any send does: a send without the mark follows the send mode, whoever wrote it.
     /// </summary>
     [Theory]
     [InlineData("automatic", false, true, "sent_from_chat")]
     [InlineData("every_message", true, true, "approval_required")]
     [InlineData("automatic", true, true, "sent_from_chat")]
     [InlineData("automatic", false, false, "automatic_mode")]
+    [InlineData("every_message", false, false, "approval_required")]
     [InlineData("every_message", true, false, "standing_approval")]
     [Critical(Family.S2, "a send written in the chat always waits for the person")]
     public async Task SendMode_ASendWrittenInTheChat_AlwaysWaitsForThePerson(string mode, bool standing, bool chat, string reason)

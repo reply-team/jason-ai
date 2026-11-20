@@ -4,7 +4,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { helpNouns, readFence } from '../src/chat-deny.ts';
+import { helpNouns, modeFence, readFence } from '../src/chat-deny.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
 import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
@@ -89,15 +90,15 @@ test('no allowed rule begins the spellings that ran with no prompt under one rul
     assert.ok(prefixes.every((prefix) => prefix.startsWith('jason ') && prefix.length > 'jason '.length), 'a rule for all of jason');
 });
 
-test('the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
-    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
+test('in Plan only the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
+    const disallowed = valuesOf(realTurn('plan_only'), '--disallowedTools');
     assert.ok(entries.length > 10);
     for (const entry of entries) assert.ok(disallowed.includes(`Bash(jason ${entry}:*)`), `${entry} is not fenced`);
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 71 verbs are allowed', () => {
-    const args = claudeArguments(turn);
+test('in Plan only a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: the plan list\'s 47 verbs are allowed', () => {
+    const args = realTurn('plan_only');
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
     assert.ok(disallowed.includes('Bash(jason project link:*)'));
@@ -106,7 +107,7 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 71);
+    assert.equal(allowed.length, 47);
 });
 
 test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before', () => {
@@ -130,25 +131,32 @@ test('each noun with a verb on the allow list or the plan list has its help allo
     }
 });
 
-test('a Claude turn is denied starting a campaign in every mode, and keeps the acts that stop reaching a person', () => {
+/** A Claude turn's command line in a mode, under the fence a real turn of that mode runs under (`modeFence`). */
+function realTurn(mode: ChatMode): string[] {
+    const used = modeFence(fence, mode);
+    return claudeArguments({ ...turn, denied: used.commands, allowed: used.allowed, reads: used.reads, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
+}
+
+test('a Claude turn is denied starting a campaign in Plan only, and outside it the host runs it on the person\'s word; every mode keeps the acts that stop reaching a person', () => {
     for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
-        const args = claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
-        assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign start:*)'), mode);
-        assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign start:*)'), mode);
+        const args = realTurn(mode);
+        assert.equal(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign start:*)'), mode === 'plan_only', mode);
+        assert.equal(valuesOf(args, '--allowedTools').includes('Bash(jason campaign start:*)'), mode !== 'plan_only', mode);
     }
-    const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
-    for (const verb of ['campaign pause', 'suppression add', 'reply record', 'workitem cancel']) {
-        assert.ok(allowed.includes(`Bash(jason ${verb}:*)`), verb);
+    for (const mode of ['ask_first', 'auto_edit', 'full_access'] as const) {
+        const allowed = valuesOf(realTurn(mode), '--allowedTools');
+        for (const verb of ['campaign pause', 'suppression add', 'workitem cancel']) assert.ok(allowed.includes(`Bash(jason ${verb}:*)`), `${mode} ${verb}`);
+        assert.ok(!allowed.includes('Bash(jason reply record:*)'), `${mode}: a reply's verdict can let sends go, so it is the person's card`);
     }
 });
 
-test('a Claude turn is denied archiving a campaign in every mode, and keeps pausing one', () => {
+test('a Claude turn is denied archiving a campaign in Plan only, and outside it the host neither runs nor denies it: it is the mode\'s; pausing one runs in every mode but Plan only\'s reads', () => {
     for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
-        const args = claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
-        assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign archive:*)'), mode);
+        const args = realTurn(mode);
+        assert.equal(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign archive:*)'), mode === 'plan_only', mode);
         assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign archive:*)'), mode);
+        assert.equal(valuesOf(args, '--allowedTools').includes('Bash(jason campaign pause:*)'), mode !== 'plan_only', mode);
     }
-    assert.ok(valuesOf(claudeArguments(turn), '--allowedTools').includes('Bash(jason campaign pause:*)'));
 });
 
 test('the PowerShell and Monitor tools are taken out of every turn by a bare rule, so the one shell is the fenced one', () => {
@@ -376,12 +384,24 @@ test('the host\'s environment puts the bundled jason first on PATH and names the
     assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
-test('every host runs the CLI confined: the environment sets JASON_CONFINED whatever the desktop inherited', () => {
+test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED in Plan only, whatever the desktop inherited in any letter case', () => {
     for (const program of ['claude', 'codex'] as const) {
-        for (const inherited of [{}, { JASON_CONFINED: '' }, { jason_confined: '0' }, { Jason_Confined: '' }]) {
-            const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
-            assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), [['JASON_CONFINED', '1']], `${program} ${JSON.stringify(inherited)}`);
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only', undefined] as const) {
+                for (const inherited of [{}, { JASON_CONFINED: '1', JASON_CHAT_TURN: '' }, { jason_confined: '0', jason_chat_turn: '0' }, { Jason_Confined: '', Jason_Chat_Turn: 'x' }]) {
+                    const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {}, ...(mode === undefined ? {} : { mode }) });
+                    const said = `${program} ${platform} ${mode} ${JSON.stringify(inherited)}`;
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], said);
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], said);
+                }
+            }
         }
+    }
+});
+
+test('a Claude turn is denied, by the host itself, any command that names JASON_CHAT_TURN, in every mode', () => {
+    for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
+        assert.equal(valuesOf(claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn.settings.json' }), '--disallowedTools').filter((rule) => rule === 'Bash(*JASON_CHAT_TURN*)').length, 1, mode);
     }
 });
 
@@ -427,14 +447,14 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },
         { platform: 'darwin', bundleVersion: null, bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
     );
-    assert.deepEqual(Object.keys(env).sort(), ['JASON_CONFINED', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
+    assert.deepEqual(Object.keys(env).sort(), ['JASON_CHAT_TURN', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
     const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CONFINED', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CHAT_TURN', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
 });
@@ -521,7 +541,7 @@ test('every Claude Code turn asks the host to run nothing in the background, and
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
     const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
-    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CONFINED']);
+    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CHAT_TURN']);
 });
 
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {

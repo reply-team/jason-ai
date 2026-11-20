@@ -41,7 +41,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         { use: { tool: 'Read', input: { file_path: planted.path } } },
         { ask: { tool: 'Bash', input: { command: planted.command } } },
         { ask: { tool: 'Read', input: { file_path: planted.path } } },
-        { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_planted' } } },
+        { ask: { tool: 'Bash', input: { command: 'jason --actor human:planted runtime stop' } } },
     ]);
     const log = fileLogger(b.paths.logs);
     const events: ChatEvent[] = [];

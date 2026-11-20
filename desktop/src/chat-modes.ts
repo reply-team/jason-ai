@@ -2,8 +2,8 @@
 // conversation whose record names no mode is in Full access, the Feed's included (`feedDefaultMode`), and Full access is
 // given with no confirmation. Full access runs Claude Code in its default mode with a hook that lets a command run with no
 // card where Jason reads it plainly, refuses what Ask first refuses, and puts anything else to the person as Ask first's
-// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. Ask first
-// asks before anything that changes. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that
+// card; what Ask first refuses and the keys still hold wherever the desktop can see the attempt. Ask first asks before
+// anything that changes but the acts of the person's word (`modeFence`). Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that
 // the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by
 // the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
 // access on Codex, on a Claude Code below its floor, sent from a browser tab or while it is not offered; Auto-edit on

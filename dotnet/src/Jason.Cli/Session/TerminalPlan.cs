@@ -244,6 +244,7 @@ public static class TerminalPlan
         }
 
         block.Remove(Confinement.Variable);
+        block.Remove(Confinement.ChatTurnVariable);
         if (host is not null && HostsWindowsPowerShell(os, host))
         {
             block.Remove(ChildProcess.ModulePathVariable);

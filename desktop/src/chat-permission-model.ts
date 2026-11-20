@@ -179,8 +179,15 @@ const lengthRefusal = 'That path is longer than the system takes: the chat neith
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
+/** A jason that starts with an option, or carries a word that begins with @: refused in every mode, by the form to use. */
+const optionRefusal = 'That command starts jason with an option, or gives it a word that begins with @, which the chat never runs: write the verb first and its options after it, such as `jason approval approve <id> --actor human:<name>`. Nothing was run.';
 const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
-const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
+/**
+ * A command that names or clears Jason's own variables (`ownVariables`), in every mode: Jason alone sets them, and a jason
+ * started without the chat's environment may act on another installation than the one this window shows; and
+ * `JASON_CHAT_TURN` is what keeps a jason the chat runs from reading a file an option names.
+ */
+const confinedRefusal = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets: JASON_CHAT_TURN keeps a jason the chat runs from reading a file an option names, and a jason started without the chat\'s environment may act on another installation than the one this window shows. The chat never runs it. Nothing was run.';
 const attemptRefusal = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
@@ -657,13 +664,13 @@ function holdsEntry(words: readonly string[], entry: string): boolean {
 }
 
 /**
- * What the text holds of jason: `deny` when any jason command inside it, in any part, form or nesting, starts with an
- * option, carries a word that begins with `@` (a file of words), or holds a deny-list entry, or when the text names a
- * denied operation however it would reach the runtime; `help` when no such command or operation is there but a jason
+ * What the text holds of jason: `option` when any jason command inside it, in any part, form or nesting, starts with an
+ * option or carries a word that begins with `@` (a file of words); `deny` when one holds a deny-list entry, or when the
+ * text names a denied operation however it would reach the runtime, which only Plan only's fence names; `help` when no such command or operation is there but a jason
  * command starts with `--help`, which is refused as `deny` is, by a sentence that names the help the chat runs instead;
  * `jason` when it runs jason otherwise; null when it does not.
  */
-function jasonIn(command: string, scope: ChatScope): 'deny' | 'help' | 'jason' | null {
+function jasonIn(command: string, scope: ChatScope): 'deny' | 'option' | 'help' | 'jason' | null {
     let found: 'jason' | null = null;
     let help = false;
     for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
@@ -672,9 +679,9 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'help' | 'jason' |
             if (programOf(scope.platform, token) !== 'jason') continue;
             found = 'jason';
             const words = tokens.slice(at + 1);
-            if (words.some((word) => word.startsWith('@'))) return 'deny';
+            if (words.some((word) => word.startsWith('@'))) return 'option';
             if (words[0]?.toLowerCase() === '--help') help = true;
-            else if (words[0]?.startsWith('-')) return 'deny';
+            else if (words[0]?.startsWith('-')) return 'option';
             if (scope.denied.some((entry) => holdsEntry(words, entry))) return 'deny';
         }
     }
@@ -685,7 +692,7 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'help' | 'jason' |
 
 /** The refusal of what `jasonIn` found, or null where it found nothing refused. */
 function jasonRefusal(found: ReturnType<typeof jasonIn>): string | null {
-    return found === 'deny' ? commandRefusal : found === 'help' ? rootHelpRefusal : null;
+    return found === 'deny' ? commandRefusal : found === 'option' ? optionRefusal : found === 'help' ? rootHelpRefusal : null;
 }
 
 /**
@@ -748,18 +755,30 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
 }
 
 /**
- * The variable every host's environment carries so that the jason it runs is confined: an option that reads a file into
- * a request takes standard input only, and the provider check runs a bare name only (`hostEnvironment`). A command that
- * names it could clear it for the jason it runs, so it is refused by its name as a whole word, in any letter case on
- * every platform, whatever wraps it; the host's own deny rule (`confinedRule`) refuses the exact spelling first. A longer
- * name that only begins or ends like it is not it. A spelling that builds the name, as `JASON_CONF''INED`,
- * `${!JASON_CONF@}` or `env -i`, is not refused by this check and reaches a card; what holds then is the CLI's
- * own rule.
+ * The CLI's confining variable, which a Plan only turn's environment carries (`hostEnvironment`): under it the jason the
+ * turn runs refuses the verbs of a person's word and of the installation, and holds its file half as the chat's variable
+ * does. No turn in Ask first, Auto-edit or Full access sets it.
  */
 export const confinedVariable = 'JASON_CONFINED';
 
+/**
+ * The chat's own variable, which every turn's environment carries, in every mode and on every host (`hostEnvironment`):
+ * under it an option of the jason the turn runs that reads a file into a request takes standard input only, and the
+ * provider check runs a bare name only. It refuses no verb.
+ */
+export const chatTurnVariable = 'JASON_CHAT_TURN';
+
+/**
+ * Jason's own variables of a turn. A command that names one could clear or set it for the jason it runs, so it is refused
+ * by its name as a whole word, in any letter case on every platform, whatever wraps it; the host's own deny rules
+ * (`confinedRule`, `chatTurnRule`) refuse the exact spellings first. A longer name that only begins or ends like one is
+ * not it. A spelling that builds the name, as `JASON_CONF''INED`, `${!JASON_CONF@}` or `env -i`, is not refused by this
+ * check and reaches a card; what holds then is the CLI's own rule.
+ */
+const ownVariables = [confinedVariable, chatTurnVariable] as const;
+
 function namesConfinedVariable(command: string): boolean {
-    return new RegExp(`(?<![A-Za-z0-9_])${confinedVariable}(?![A-Za-z0-9_])`, 'i').test(command);
+    return ownVariables.some((name) => new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`, 'i').test(command));
 }
 
 /**
@@ -1103,7 +1122,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }
 
-const contentRefusal = 'That file names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never writes it. Nothing was written.';
+const contentRefusal = 'That file names one of Jason\'s own variables, the installation\'s own data, or a command this mode refuses: the chat never writes it. Nothing was written.';
 
 /**
  * The text a writer tool would put in a file: a whole file's content, or each replacement of an edit, and for an edit
@@ -1285,7 +1304,7 @@ function isPersonsTool(tool: string): boolean {
     return tool.startsWith('mcp__') && !tool.startsWith(`mcp__${serverName}__`);
 }
 
-const personsInputRefusal = 'That tool\'s input names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never sends it. Nothing was sent.';
+const personsInputRefusal = 'That tool\'s input names one of Jason\'s own variables, the installation\'s own data, or a command this mode refuses: the chat never sends it. Nothing was sent.';
 const personsLongRefusal = 'That tool\'s input is longer than the card can show whole, so nobody could read what they would allow: the chat never sends it. Nothing was sent.';
 
 /** Every string of a tool's input at any depth, the keys of its objects among them. */
@@ -1406,7 +1425,7 @@ function readingsOf(text: string): string[] {
 /**
  * The environment cleared around a jason: in one command part that begins with `env`, its option `-i`, `-`,
  * `--ignore-environment`, `-u` or `--unset`, alone or among other short options; or Bash's `exec -c`; and that same part
- * names jason. The confining variable goes with the rest without being named.
+ * names jason. Jason's own variables go with the rest without being named.
  */
 function clearsEnvironment(text: string): boolean {
     const jasonWord = /(?<![A-Za-z0-9_.-])jason(?![A-Za-z0-9_-])/i;
@@ -1865,7 +1884,7 @@ function percentDecoded(text: string): string {
 
 /**
  * True when a resolved command is env clearing or unsetting the environment, or exec clearing it, around a jason: the
- * confining variable would go with the rest without being named.
+ * variables Jason sets on a turn would go with the rest without being named.
  */
 function clearsConfinement(words: readonly string[]): boolean {
     const program = programName(words[0] ?? '');

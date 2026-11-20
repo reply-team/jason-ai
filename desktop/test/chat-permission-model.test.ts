@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { autoEditJudgement, commandPrefix, documentationAddressLimit, documentationPages, fullAccessJudgement, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
-import { denyListFile, helpNouns, parseDenyList, readFence } from '../src/chat-deny.ts';
+import { denyListFile, helpNouns, modeFence, parseDenyList, readFence } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
 
+// The scopes below carry a deny list, as only a Plan only turn's fence does (`modeFence`): a row that reads them for the
+// deny list says so in its title, and a row about another mode builds that mode's real scope (`real`).
 const denied = ['approval approve', 'approval set-standing', 'decision answer', 'runtime', 'plugin install', 'ui', 'journal watch'];
 // The operations are the file's own: the desktop refuses what the file it carries names, never a copy of it.
 const carried = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
@@ -84,6 +86,26 @@ function mac(): ChatScope {
 const read = (scope: ChatScope, file_path: string) => judge('Read', { file_path }, scope);
 const write = (scope: ChatScope, file_path: string) => judge('Write', { file_path, content: 'x' }, scope);
 const run = (scope: ChatScope, command: string) => judge('Bash', { command }, scope);
+/** The same scope as a real turn of Ask first, Auto-edit or Full access has it: none of the deny list (`modeFence`). */
+const real = (scope: ChatScope): ChatScope => ({ ...scope, denied: [], deniedOperations: [] });
+
+/** The one sentence for a command that names or clears Jason's own variables, in every mode. */
+const ownVariablesSentence = 'That command names or clears Jason\'s own variables, JASON_CONFINED and JASON_CHAT_TURN, which Jason alone sets: JASON_CHAT_TURN keeps a jason the chat runs from reading a file an option names, and a jason started without the chat\'s environment may act on another installation than the one this window shows. The chat never runs it. Nothing was run.';
+
+/** The sentence for a jason that starts with an option or carries a word that begins with @: the form to use instead. */
+const optionSentence = 'That command starts jason with an option, or gives it a word that begins with @, which the chat never runs: write the verb first and its options after it, such as `jason approval approve <id> --actor human:<name>`. Nothing was run.';
+
+test('a jason that starts with an option, or carries a word that begins with @, is refused in every mode by the form to use instead: the verb first, its options after it', () => {
+    const fence = readFence(join(import.meta.dirname, '..'));
+    for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only'] as const) {
+        const turn = modeFence(fence, mode);
+        const scope: ChatScope = { ...mac(), denied: turn.commands, deniedOperations: turn.operations };
+        for (const command of ['jason --actor human:me approval approve apr_1', 'jason -v campaign list', 'jason campaign create @args.txt']) {
+            assert.deepEqual(run(scope, command), { verdict: 'deny', message: optionSentence }, `${mode} ${command}`);
+        }
+    }
+    assert.ok(!optionSentence.includes('person runs it themselves'));
+});
 
 // ---- Files inside the chat's folders ---------------------------------------------------------------------------------
 
@@ -496,7 +518,7 @@ test('a command holding reply as a whole word is never remembered for the chat, 
     }
 });
 
-test('every deny-list command is refused without a card, with its arguments and whatever follows', () => {
+test('In Plan only: every deny-list command is refused without a card, with its arguments and whatever follows', () => {
     for (const scope of [windows(), mac()]) {
         assert.equal(run(scope, 'jason approval approve apr_01J').verdict, 'deny');
         assert.equal(run(scope, 'jason approval set-standing cmp_A --category interested').verdict, 'deny');
@@ -510,7 +532,7 @@ test('every deny-list command is refused without a card, with its arguments and 
     assert.equal(run(windows(), 'jason journal read cmp_A').verdict, 'ask');
 });
 
-test('with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
+test('In Plan only: with the file the desktop carries, export and import are refused, and so are the verbs the chat refuses beyond the CLI', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason export --stop', 'jason export', 'jason import --replace backup.zip', 'jason suppression remove --channel email --value a@example.com',
@@ -522,7 +544,7 @@ test('with the file the desktop carries, export and import are refused, and so a
     }
 });
 
-test('every operation line of the file the desktop carries is refused in the command of a program other than jason', () => {
+test('In Plan only: every operation line of the file the desktop carries is refused in the command of a program other than jason', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     assert.ok(file.operations.length > 0);
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
@@ -537,7 +559,7 @@ test('every operation line of the file the desktop carries is refused in the com
     }
 });
 
-test('adding a role is refused in every spelling a denied verb is tried in: its entry command is a program the dispatcher starts', () => {
+test('In Plan only: adding a role is refused in every spelling a denied verb is tried in: its entry command is a program the dispatcher starts', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason role add researcher --entry-command calc.exe', 'jason role add --file role.json', 'jason  role   add researcher',
@@ -554,7 +576,7 @@ test('adding a role is refused in every spelling a denied verb is tried in: its 
     assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason role list').verdict, 'ask');
 });
 
-test('linking a project\'s folder is refused in every spelling a denied verb is tried in: the folder it links becomes a working folder of the chat', () => {
+test('In Plan only: linking a project\'s folder is refused in every spelling a denied verb is tried in: the folder it links becomes a working folder of the chat', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason project link prj_01 --path /tmp/acme', 'jason project link prj_01', 'jason  project   link prj_01 --path x',
@@ -573,7 +595,7 @@ test('linking a project\'s folder is refused in every spelling a denied verb is 
     assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason project list').verdict, 'ask');
 });
 
-test('starting a campaign is refused in every spelling a denied verb is tried in: it lets the campaign\'s queued work run', () => {
+test('In Plan only: starting a campaign is refused in every spelling a denied verb is tried in: it lets the campaign\'s queued work run', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason campaign start cmp_01', 'jason campaign start cmp_01 --reason "The person said go."', 'jason  campaign   start cmp_01',
@@ -584,7 +606,7 @@ test('starting a campaign is refused in every spelling a denied verb is tried in
             'curl -X POST http://127.0.0.1:5000/v1/campaign.start -d \'{"campaign_id":"cmp_01"}\'',
             'node -e "fetch(\'http://127.0.0.1:5000/v1/campaign.start\', { method: \'POST\' })"']) {
             assert.equal(run(scope, command).verdict, 'deny', command);
-            assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+            assert.notEqual(autoEditJudgement('Bash', { command }, real(scope)).verdict, 'allow', `Auto-edit: ${command}`);
         }
         const powershell = 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/v1/campaign.start';
         assert.equal(judge('PowerShell', { command: powershell }, scope).verdict, 'deny', powershell);
@@ -599,7 +621,7 @@ test('starting a campaign is refused in every spelling a denied verb is tried in
     }
 });
 
-test('archiving a campaign is refused in every spelling a denied verb is tried in: it is final and cancels its open work', () => {
+test('In Plan only: archiving a campaign is refused in every spelling a denied verb is tried in: it is final and cancels its open work', () => {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason campaign archive cmp_01', 'jason campaign archive cmp_01 --reason "The person said it is over."', 'jason  campaign   archive cmp_01',
@@ -610,7 +632,7 @@ test('archiving a campaign is refused in every spelling a denied verb is tried i
             'curl -X POST http://127.0.0.1:5000/v1/campaign.archive -d \'{"campaign_id":"cmp_01"}\'',
             'node -e "fetch(\'http://127.0.0.1:5000/v1/campaign.archive\', { method: \'POST\' })"']) {
             assert.equal(run(scope, command).verdict, 'deny', command);
-            assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+            assert.notEqual(autoEditJudgement('Bash', { command }, real(scope)).verdict, 'allow', `Auto-edit: ${command}`);
         }
         const powershell = 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/v1/campaign.archive';
         assert.equal(judge('PowerShell', { command: powershell }, scope).verdict, 'deny', powershell);
@@ -629,15 +651,18 @@ function carriedScopes(): ChatScope[] {
     return [windows(), mac(), linux].map((scope) => ({ ...scope, denied: file.commands, deniedOperations: file.operations }));
 }
 
-/** Refused in Ask first, in Auto-edit and in Full access, as a Bash command; Plan only refuses every command besides. */
+/**
+ * Refused in Plan only, under the deny list the scope carries, and never let through unasked in a real turn of Ask first
+ * or Auto-edit: a card there, or a refusal of its own. Full access runs what the person would run in a terminal.
+ */
 function refusedInEveryMode(scope: ChatScope, command: string): void {
     const input = { command };
-    assert.equal(judge('Bash', input, scope).verdict, 'deny', `${scope.platform} Ask first: ${command}`);
-    assert.equal(autoEditJudgement('Bash', input, scope).verdict, 'deny', `${scope.platform} Auto-edit: ${command}`);
-    assert.equal(fullAccessJudgement('Bash', input, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+    assert.equal(judge('Bash', input, scope).verdict, 'deny', `${scope.platform} Plan only: ${command}`);
+    assert.notEqual(judge('Bash', input, real(scope)).verdict, 'allow', `${scope.platform} Ask first: ${command}`);
+    assert.notEqual(autoEditJudgement('Bash', input, real(scope)).verdict, 'allow', `${scope.platform} Auto-edit: ${command}`);
 }
 
-test('a campaign\'s send mode and the send-mode preferences are refused in every spelling, in every mode: how messages are sent is the person\'s to set', () => {
+test('a campaign\'s send mode and the send-mode preferences are refused in Plan only in every spelling, and never run unasked in Ask first or Auto-edit: how messages are sent is the person\'s to set', () => {
     const spellings = ['jason campaign set-send-mode cmp_A --cold automatic --actor human:Ada', 'jason campaign set-send-mode cmp_A --clear warm --actor human:Ada',
         'jason preference set send_mode.cold --value \'{"mode":"automatic"}\' --actor human:Ada',
         'jason preference set send_mode.warm --value \'{"mode":"automatic"}\' --actor human:Ada', 'jason preference unset send_mode.cold --actor human:Ada',
@@ -666,7 +691,7 @@ test('a campaign\'s send mode and the send-mode preferences are refused in every
 // The CLI matches a verb only in its own case, so a mis-cased verb is a usage error there and sends nothing
 // (ConfinedVerbsTests); the desktop refuses it anyway, rather than lean on the parser. The cost: a value spelled like a
 // denied verb in another case is refused too, as the lower-case value already is, since an entry's words may have gaps.
-test('a denied verb in another letter case is refused like its lower-case form, in every mode', () => {
+test('a denied verb in another letter case is refused in Plan only like its lower-case form, and never runs unasked in Ask first or Auto-edit', () => {
     for (const scope of carriedScopes()) {
         for (const command of ['jason Campaign Set-Send-Mode cmp_A --cold automatic', 'jason CAMPAIGN SET-SEND-MODE cmp_A', 'jason Preference Set send_mode.cold --value x',
             'jason PREFERENCE unset send_mode.warm', 'jason Approval Approve apr_A', 'jason Runtime stop', 'jason campaign list && jason Decision Answer dec_A',
@@ -677,11 +702,12 @@ test('a denied verb in another letter case is refused like its lower-case form, 
     }
 });
 
-test('an operation of the send modes escaped by percent is refused in Full access and shown as a card in Ask first, as an escaped approval is', () => {
+test('an operation of the send modes escaped by percent is a card in Ask first and Auto-edit, and refused under the deny list Plan only reads', () => {
     for (const scope of carriedScopes()) {
         for (const command of ['curl -X POST http://127.0.0.1:4011/v1/campaign%2Eset_send_mode', 'curl -X POST http://127.0.0.1:4011/v1/preference%2eset']) {
-            assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} Ask first: ${command}`);
-            assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+            assert.equal(run(real(scope), command).verdict, 'ask', `${scope.platform} Ask first: ${command}`);
+            assert.equal(autoEditJudgement('Bash', { command }, real(scope)).verdict, 'ask', `${scope.platform} Auto-edit: ${command}`);
+            assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `${scope.platform} under the deny list: ${command}`);
         }
     }
 });
@@ -704,7 +730,7 @@ test('options before the noun never move the anchor: a leading option is refused
     }
 });
 
-test('a denied verb anywhere in a command refuses it, whatever form names the program', () => {
+test('In Plan only: a denied verb anywhere in a command refuses it, whatever form names the program', () => {
     for (const scope of [windows(), mac()]) {
         assert.equal(run(scope, 'jason campaign list && jason approval approve apr_A').verdict, 'deny');
         assert.equal(run(scope, 'echo $(jason decision answer dec_A --answer y)').verdict, 'deny');
@@ -770,6 +796,37 @@ test('a command naming a place in the data directory is refused however it is sp
     }
 });
 
+test('a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string: the model refuses it wherever it is asked; an allow-ruled form in Ask first and Auto-edit is not held by these rows', () => {
+    // The shell opens the file, so the CLI's rule that a file option takes only standard input never sees a path: the
+    // model reads the command's text for the place, whichever door feeds it to the verb. A real Ask first or Auto-edit turn
+    // never asks the model about a form the host's allow rule matches, so these rows prove the model's answer, not the turn's.
+    const fed = (verb: string, file: string): string[] => [
+        `${verb} --value-file - < ${file}`,
+        `${verb} < ${file}`,
+        `cat ${file} | ${verb} --value-file -`,
+        `${verb} --value-file - <<< "$(cat ${file})"`,
+        `${verb} --value-file - <<<$(< ${file})`,
+    ];
+    const verb = 'jason preference set tone_of_voice';
+    const cases: [ChatScope, string[]][] = [
+        [windows(), ['C:/Users/someone/.jason/config/settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json', '$USERPROFILE/.jason/config/settings.json',
+            '$JASON_DATA_DIR/run/runtime.json', '../../config/settings.json', '../../run/runtime.json']],
+        [mac(), ['~/.jason/config/settings.json', '/Users/someone/.jason/run/runtime.json', '$HOME/.jason/run/runtime.json', '../../config/settings.json',
+            '../../run/runtime.json']],
+    ];
+    for (const [scope, files] of cases) {
+        for (const file of files) {
+            for (const command of fed(verb, file)) {
+                assert.equal(judge('Bash', { command }, real(scope)).verdict, 'deny', `${scope.platform} Ask first: ${command}`);
+                assert.equal(autoEditJudgement('Bash', { command }, real(scope)).verdict, 'deny', `${scope.platform} Auto-edit: ${command}`);
+                assert.equal(fullAccessJudgement('Bash', { command }, real(scope)).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+            }
+        }
+        // A file of the chat folder fed the same ways is the chat's own and runs.
+        for (const command of fed(verb, 'tone.json')) assert.equal(judge('Bash', { command }, real(scope)).verdict === 'deny', false, `${scope.platform}: ${command}`);
+    }
+});
+
 test('the data directory\'s variable is refused by its name, whatever wraps it, even where it leads to the chat folder', () => {
     const wrapped = ['cat ${JASON_DATA_DIR:-}/config/settings.json', 'Get-Content ${env:JASON_DATA_DIR}\\run\\runtime.json',
         'type !JASON_DATA_DIR!\\run\\runtime.json', 'printenv JASON_DATA_DIR', 'JASON_DATA_DIR=/x jason status',
@@ -790,20 +847,22 @@ test('the data directory\'s variable is refused by its name, whatever wraps it, 
     }
 });
 
-test('a command that names JASON_CONFINED is refused in any letter case, on every platform, whatever wraps it', () => {
+test('a command that names JASON_CONFINED or JASON_CHAT_TURN is refused in any letter case, on every platform, whatever wraps it, by a sentence that says why without a word of confinement', () => {
     const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
     const named = ['JASON_CONFINED= jason contact create --file c.json', 'unset JASON_CONFINED; jason status', 'env -u jason_confined jason status',
-        'printenv Jason_Confined', 'echo ${JASON_CONFINED:-}', 'Remove-Item Env:JASON_CONFINED', 'set jason_confined=', 'echo %Jason_Confined%'];
+        'printenv Jason_Confined', 'echo ${JASON_CONFINED:-}', 'Remove-Item Env:JASON_CONFINED', 'set jason_confined=', 'echo %Jason_Confined%',
+        'JASON_CHAT_TURN= jason rolenote set cmp_A researcher --note-file n.json', 'unset JASON_CHAT_TURN; jason status', 'env -u jason_chat_turn jason status',
+        'printenv Jason_Chat_Turn', 'echo ${JASON_CHAT_TURN:-}', 'Remove-Item Env:JASON_CHAT_TURN', 'set jason_chat_turn=', 'echo %Jason_Chat_Turn%'];
     for (const command of named) {
         for (const scope of [windows(), mac(), linux]) {
             const judged = run(scope, command);
             assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
-            assert.equal(judged.verdict === 'deny' ? judged.message : '',
-                'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.', command);
+            assert.equal(judged.verdict === 'deny' ? judged.message : '', ownVariablesSentence, command);
         }
     }
+    assert.doesNotMatch(ownVariablesSentence.replace(/JASON_CONFINED/g, ''), /confin/i, 'no word of confinement but the variable name');
     // A longer name that only begins or ends like it is not it.
-    for (const command of ['echo $JASON_CONFINED_X', 'printenv MY_JASON_CONFINED']) {
+    for (const command of ['echo $JASON_CONFINED_X', 'printenv MY_JASON_CONFINED', 'echo $JASON_CHAT_TURNS', 'printenv MY_JASON_CHAT_TURN']) {
         for (const scope of [windows(), mac(), linux]) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
     }
 });
@@ -828,7 +887,7 @@ test('a command that names JASON_ATTEMPT_ID is refused in every mode, in any let
     }
 });
 
-test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
+test('In Plan only: a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
     assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/approval.approve -d "{}"').verdict, 'deny');
     assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.set_standing').verdict, 'deny');
     assert.equal(run(mac(), 'curl -X POST http://127.0.0.1:5000/v1/system.shutdown').verdict, 'deny');
@@ -1015,9 +1074,10 @@ test('PowerShell commands are judged as shell commands, and never allowed withou
     }
 });
 
-test('any tool whose input carries a command is judged as a command: Monitor with jason runtime stop is refused', () => {
+test('any tool whose input carries a command is judged as a command: Monitor naming the chat\'s variable is refused in every mode, and Monitor with jason runtime stop in Plan only', () => {
     for (const scope of [windows(), mac()]) {
         assert.equal(judge('Monitor', { command: 'jason runtime stop' }, scope).verdict, 'deny');
+        assert.equal(judge('Monitor', { command: 'echo $JASON_CHAT_TURN' }, real(scope)).verdict, 'deny');
         assert.equal(judge('Monitor', { command: 'curl http://127.0.0.1:5000/v1/system.shutdown', description: 'x' }, scope).verdict, 'deny');
         assert.equal(judge('SomeLaterTool', { command: 'jason approval --actor human:x approve apr_A' }, scope).verdict, 'deny');
         const card = judge('Monitor', { command: 'tail -f build.log' }, scope);

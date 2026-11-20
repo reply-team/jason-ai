@@ -77,7 +77,7 @@ import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
-import { helpNouns, type ChatFence } from './chat-deny.ts';
+import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
     askFirstThisTurn,
@@ -1808,7 +1808,8 @@ export class Chat {
             }
         };
         try {
-            const fence = this.#options.fence();
+            // Outside Plan only a turn refuses nothing of the deny list (`modeFence`).
+            const fence = modeFence(this.#options.fence(), running.mode);
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
@@ -1892,6 +1893,7 @@ export class Chat {
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
             effortNamed: resolved.effort !== undefined,
+            mode: running.mode,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
         // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.

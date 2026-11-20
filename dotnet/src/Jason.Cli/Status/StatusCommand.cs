@@ -143,7 +143,7 @@ public static class StatusCommand
         interpreter and script it names, and never a script only a shell could run. The check says which file
         it resolved to, and, when it looked the name up on a PATH, whose: the CLI's PATH; the runtime's PATH
         may differ, see the install page. Which provider you use is yours, so this build knows no vendor's
-        command by heart. With JASON_CONFINED set, only a bare name is run, found in a fully qualified entry
+        command by heart. With JASON_CONFINED or JASON_CHAT_TURN set, only a bare name is run, found in a fully qualified entry
         of PATH; a path is not run. Relative and empty entries are skipped, so a working folder is never
         searched by name, and the check says what was not run: name a program on the search path, or run
         the check in a terminal.

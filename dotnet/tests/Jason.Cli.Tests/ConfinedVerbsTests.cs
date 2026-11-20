@@ -1,3 +1,5 @@
+using System.CommandLine;
+
 namespace Jason.Cli.Tests;
 
 /// <summary>
@@ -366,7 +368,23 @@ public class ConfinedVerbsTests
         Assert.Empty(run.Requests);
     }
 
-    /// <summary>Help is not a run of the verb: a refused command still shows its help, and the help states the rule.</summary>
+    /// <summary>
+    /// The person's own word, whose help says the act is the person's: the verbs that take no default actor and name the
+    /// person. Three entries of the same kind are left out, as a role runs them itself: <c>workitem review</c>, which the
+    /// critic sends from its own run, <c>report submit</c>, whose reporter may be <c>role:&lt;id&gt;</c>, and
+    /// <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not.
+    /// </summary>
+    private static readonly string[] PersonsOwnWord =
+    [
+        "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer",
+        "preference set", "preference unset", "campaign set-send-mode", "block clear", "subscription rewind",
+    ];
+
+    /// <summary>
+    /// Help is not a run of the verb: a refused command still shows its help, and the help says what is true of it for every
+    /// caller. A person's own word (<see cref="PersonsOwnWord"/>) says the act is the person's, run by an agent on their word
+    /// and recorded as theirs; every entry says that the variable a Plan only turn sets refuses it.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Entries))]
     public async Task Confined_the_help_of_a_refused_command_is_shown_and_states_the_rule(string entry)
@@ -377,10 +395,107 @@ public class ConfinedVerbsTests
 
         var exit = await CliApp.RunAsync([.. entry.Split(' '), "--help"], env, TestContext.Current.CancellationToken);
 
-        var text = output.ToString();
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
         Assert.Equal(ExitCodes.Success, exit);
+        const string act = "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.";
+        if (PersonsOwnWord.Contains(entry))
+        {
+            Assert.Contains(act, text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("The act is the person's", text, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request.", text, StringComparison.Ordinal);
         Assert.Contains("A higher bar, not a boundary", text, StringComparison.Ordinal);
-        Assert.Contains("JASON_CONFINED", text, StringComparison.Ordinal);
         Assert.Contains("a claim, not a proof", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not for an agent", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Jason's window", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The person's own word is exactly the table's entries of that kind that name the person with no default actor, less
+    /// the three a role runs itself; a verb added to either side is red here until it is placed.
+    /// </summary>
+    [Fact]
+    public void The_person_s_own_word_is_the_entries_that_name_the_person_less_those_a_role_runs()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(new StringWriter(), new StringWriter(), paths.Paths));
+        var namingThePerson = ConfinedVerbs.Table
+            .Where(each => each.Kind == ConfinedVerbs.Kind.PersonsWord)
+            .Select(each => each.Command)
+            .Where(command => Find(root, command)!.Description!.Contains(ActorOption.NoDefault, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal([.. namingThePerson.Except(["workitem review"]).Order(StringComparer.Ordinal)], PersonsOwnWord.Order(StringComparer.Ordinal));
+        Assert.Contains("workitem review", namingThePerson);
+    }
+
+    /// <summary>
+    /// No verb a role's skill names says in its help that the act is the person's: a role runs what its skill teaches from
+    /// its own run, and a help that called that act the person's would teach the role it is not its own.
+    /// </summary>
+    [Fact]
+    public void No_verb_a_role_s_skill_names_says_in_its_help_that_the_act_is_the_person_s()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(new StringWriter(), new StringWriter(), paths.Paths));
+        var roles = Path.Combine(RepositoryRoot(), "skills", "runtime", "roles");
+        var files = Directory.GetFiles(roles, "*.md", SearchOption.AllDirectories);
+        Assert.NotEmpty(files);
+        var named = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(file), @"\bjason((?: [a-z][a-z-]*)+)"))
+            {
+                // The longest run of words that names a command of the tree.
+                var words = match.Groups[1].Value.Trim().Split(' ');
+                Command? command = root;
+                var path = new List<string>();
+                foreach (var word in words)
+                {
+                    var next = command.Subcommands.FirstOrDefault(sub => sub.Name == word);
+                    if (next is null)
+                    {
+                        break;
+                    }
+
+                    command = next;
+                    path.Add(word);
+                }
+
+                if (path.Count > 0 && command.Description?.Contains(ConfinedVerbs.PersonsWordHelp, StringComparison.Ordinal) == true)
+                {
+                    named.Add($"{Path.GetRelativePath(roles, file)}: jason {string.Join(' ', path)}");
+                }
+            }
+        }
+
+        Assert.Empty(named);
+    }
+
+    private static Command? Find(Command root, string verb)
+    {
+        Command? command = root;
+        foreach (var word in verb.Split(' '))
+        {
+            command = command?.Subcommands.FirstOrDefault(sub => sub.Name == word);
+        }
+
+        return command;
+    }
+
+    private static string RepositoryRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        return root.FullName;
     }
 }
