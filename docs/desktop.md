@@ -544,8 +544,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
   runs with your own settings, and in the chat in Full access, which loads them on either program as a terminal
-  does; the chat's other modes run without them. Servers of the folder Open in opens, of a plugin, and claude.ai
-  connectors or ChatGPT apps are not listed here and work there all the same.
+  does; the chat's other modes run without them, and so does a turn on a provider's key, which runs with Jason
+  Desktop's own folder for the program. Servers of the folder Open in opens, of a plugin, and claude.ai connectors or
+  ChatGPT apps are not listed here and work there all the same.
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
   roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
   answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
@@ -659,7 +660,8 @@ Claude Code.
   there is not used; connect a key on the Connect card.** Nor are the MCP servers it names loaded, since Codex asks no
   one before such a tool runs, nor your ChatGPT apps (connectors), which every Codex turn turns off; its sign-in is still
   used. A Full access turn reads your `config.toml`, its MCP servers, providers and profiles with it; the connectors stay
-  off and the search stays on the cached index, both set for the run.
+  off and the search stays on the cached index, both set for the run. A turn on a provider's key reads Jason Desktop's
+  own Codex folder in its place, so none of yours.
 - **On Windows, a read-only Codex turn needs its elevated sandbox.** Every such turn names it
   (`windows.sandbox="elevated"`), since a command in Codex's other Windows sandbox can read the runtime's run file, and
   with it the token that lets a program act as you through Jason's API. A Full access turn runs in no sandbox, names
@@ -1280,5 +1282,5 @@ removal takes them off too.
 Managing Reply accounts beyond connecting and reconnecting one, a marketplace and plugins in frames, and a Linux build
 for arm64 are not here. Outside Full access a Claude Code turn loads none of your own configuration, and a Codex turn
 does not read your `config.toml`, so the MCP servers it names are not loaded either; in Full access a turn on either
-loads yours, as in a terminal. Everything in this
+loads yours, as in a terminal, except a turn on a provider's key. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

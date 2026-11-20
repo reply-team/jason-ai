@@ -112,10 +112,12 @@ fixed name an earlier version used included, answers a card, and a tool of any s
 Full access, Plan only included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a
 provider or profile set there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded,
 since a Codex turn asks no one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which
-config.toml does not hold: every Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under
-the composer while Codex is the chat's host outside Full access. Its sign-in is still read from `CODEX_HOME`. A Full
-access Codex turn reads the person's config.toml, as Codex in a terminal does, its MCP servers, providers and profiles
-with it; it still sets the cached search and `features.apps=false` for the run (`codexFullAccessSettings`).
+config.toml does not hold: every Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does.
+The page says the sentence under the composer while Codex is the chat's host outside Full access. Its sign-in is still
+read from `CODEX_HOME`. A Full access Codex turn reads the person's config.toml, as Codex in a terminal does, its MCP
+servers, providers and profiles with it; it still sets the cached search and `features.apps=false` for the run
+(`codexFullAccessSettings`). One on a provider's key reads the config.toml of the desktop's own `CODEX_HOME`
+(`keyedFolder`) in its place, so none of the person's, as a keyed Claude Code turn loads none of theirs.
 
 The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
 CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
