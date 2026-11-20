@@ -156,7 +156,7 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
     private (string? Id, string? Source) Default()
     {
         var prefixes = places.CurrentDesktop.Select(desktop => desktop.ToLowerInvariant() + "-").Append(string.Empty).ToList();
-        foreach (var folder in new[] { places.ConfigHome }.Concat(places.ConfigDirs).Concat(places.Data.Select(data => Path.Combine(data, "applications"))))
+        foreach (var folder in new[] { places.ConfigHome }.Concat(places.ConfigDirs).Concat(places.Data.Select(share => Path.Combine(share, "applications"))))
         {
             foreach (var prefix in prefixes)
             {
@@ -171,11 +171,11 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
             }
         }
 
-        foreach (var data in places.Data)
+        foreach (var share in places.Data)
         {
             foreach (var prefix in new[] { places.MenuPrefix, string.Empty })
             {
-                foreach (var file in new[] { "defaults.list", "mimeinfo.cache" }.Select(name => Path.Combine(data, "applications", prefix + name)))
+                foreach (var file in new[] { "defaults.list", "mimeinfo.cache" }.Select(name => Path.Combine(share, "applications", prefix + name)))
                 {
                     var line = Lines(file).FirstOrDefault(line => line.Contains(Type + "=", StringComparison.Ordinal));
                     if (line is not null && line[(line.IndexOf('=', StringComparison.Ordinal) + 1)..].Split(';')[0] is { Length: > 0 } app)
@@ -188,9 +188,9 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
 
         string? best = null;
         var preference = -1;
-        foreach (var data in places.Data)
+        foreach (var share in places.Data)
         {
-            foreach (var entry in Entries(Path.Combine(data, "applications")).Where(entry => (Text(entry) ?? string.Empty).Contains(Type + ";", StringComparison.Ordinal)))
+            foreach (var entry in Entries(Path.Combine(share, "applications")).Where(entry => (Text(entry) ?? string.Empty).Contains(Type + ";", StringComparison.Ordinal)))
             {
                 var initial = Lines(entry).Select(line => line.Split('=')).FirstOrDefault(parts => parts.Length > 1 && parts[0].EndsWith("InitialPreference", StringComparison.Ordinal)) is { } parts
                     && int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
@@ -225,10 +225,10 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
     }
 
     /// <summary>The entry xdg-open runs for a name: the first found under the data home and dirs whose program is there.</summary>
-    private string? Started(string id) => places.Data.SelectMany(data => Named(Path.Combine(data, "applications"), id)).FirstOrDefault(entry => ProgramOf(entry) is not null);
+    private string? Started(string id) => places.Data.SelectMany(share => Named(Path.Combine(share, "applications"), id)).FirstOrDefault(entry => ProgramOf(entry) is not null);
 
     /// <summary>The first entry of a name under the data home and dirs, as xdg-mime looks one up to ask whether its program is there.</summary>
-    private string? EntryNamed(string id) => places.Data.SelectMany(data => Named(Path.Combine(data, "applications"), id)).FirstOrDefault();
+    private string? EntryNamed(string id) => places.Data.SelectMany(share => Named(Path.Combine(share, "applications"), id)).FirstOrDefault();
 
     /// <summary>A name in one <c>applications</c> folder: the file itself, its vendor folder's form, then each folder below, in order.</summary>
     private static IEnumerable<string> Named(string folder, string id)
@@ -295,7 +295,7 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
     /// <summary>Jason Desktop's entry in every way but its program's path, which is quoted, and that program; null where none is.</summary>
     private (string Entry, string Program)? Quoted()
     {
-        foreach (var entry in places.Data.SelectMany(data => Entries(Path.Combine(data, "applications"))))
+        foreach (var entry in places.Data.SelectMany(share => Entries(Path.Combine(share, "applications"))))
         {
             if (Value(entry, "MimeType") is { } types && types.Split(';').Contains(Type, StringComparer.Ordinal)
                 && Value(entry, "Exec") is { } exec && exec.StartsWith('"') && exec.EndsWith("\" -- %U", StringComparison.Ordinal)
@@ -324,7 +324,7 @@ public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath
 
     /// <summary>Jason Desktop's entry by name, where one in its own form is in an <c>applications</c> folder at all; null where none is.</summary>
     private string? Declared() =>
-        places.Data.SelectMany(data => Entries(Path.Combine(data, "applications"))).Where(entry => Ours(entry) is not null).Select(Path.GetFileName).FirstOrDefault();
+        places.Data.SelectMany(share => Entries(Path.Combine(share, "applications"))).Where(entry => Ours(entry) is not null).Select(Path.GetFileName).FirstOrDefault();
 
     /// <summary>A key's value in an entry's <c>[Desktop Entry]</c> group, as written; null where the group has none.</summary>
     private static string? Value(string entry, string key)
