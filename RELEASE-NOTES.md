@@ -21,6 +21,9 @@ replaces the title and the body together.
 
 # Jason 0.49.2-rc.1
 
+This is a candidate, published as a pre-release. It is built on 0.49.0 and carries 0.49.2's work on Jason Desktop's
+chat, with the fixes below.
+
 The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm.
 It acts on your word: when you say so, it approves and answers what waits for you, starts and archives the campaigns you
 name, and sets your sender's name and tone of voice. In the modes that ask, it asks first for anything that could let a
@@ -54,7 +57,6 @@ message go without your approval.
 - **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
   `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
   is kept seven days, and the removal dialog says so; nothing is deleted at once.
-- **GAP (R1): reading a file you name wherever it lies, and another chat's folder.** Written when that change lands.
 - **GAP (C1): your own Claude Code configuration in the chat.** Written when that change lands.
 - **GAP (I1): the chat's instructions and the skills.** Written when that change lands.
 - **A conversation as a file.** Type `/export <file name>` in the message box, for example `/export notes.md`, and the
@@ -91,3 +93,8 @@ message go without your approval.
   keep the mode or the folder this release writes with a chat.
   [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says how
   to go back to an earlier release.
+
+## Known issues
+
+- In this candidate the chat does not yet read a file outside its own folders without asking; that comes in a later
+  release.
