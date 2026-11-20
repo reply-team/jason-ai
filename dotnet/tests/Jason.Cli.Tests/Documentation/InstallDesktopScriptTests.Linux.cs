@@ -44,6 +44,8 @@ public sealed partial class InstallDesktopScriptTests
         Directory.CreateDirectory(Path.Combine(linux.WorkingDirectory, "relative-tmp"));
         linux.Variables["TMPDIR"] = "relative-tmp";
         linux.Variables["http_proxy"] = "http://proxy.example.test:3128/a b";
+        // The machine running the row may have its own; this row's count holds the one proxy it gives.
+        linux.Variables["https_proxy"] = string.Empty;
 
         var run = linux.Run(linux.Feed());
 
@@ -202,22 +204,36 @@ public sealed partial class InstallDesktopScriptTests
     /// A runtime of an earlier build still running once the package is this release's, installed now over an older one or
     /// earlier by the system: the line leaves it running, since a restart ends a turn it may be running and the person
     /// chooses when, and says what brings it up, as Jason Desktop's next start offers it; its last line is still the full
-    /// path. Catches the line ending as if the update were whole while the runtime still runs the older build.
+    /// path. A runtime of a later build, the release a candidate goes before included, is no earlier one and is not named.
+    /// Catches the line ending as if the update were whole while the runtime still runs the older build, and a restart named
+    /// that would start an older build over a newer one's data.
     /// </summary>
     [Theory]
-    [InlineData("0.49.0")]
-    [InlineData(LinuxVersion)]
+    [InlineData("0.49.0", LinuxVersion, "0.49.0", true)]
+    [InlineData(LinuxVersion, LinuxVersion, "0.49.0", true)]
+    [InlineData("0.49.2~rc.1", "0.49.2-rc.2", "0.49.2", false)]
+    [InlineData(LinuxVersion, LinuxVersion, LinuxVersion + "+14315ba2", false)]
     [UnsupportedOSPlatform("windows")]
-    public void Linux_a_runtime_of_an_earlier_build_is_left_running_and_the_line_says_what_brings_it_up(string placed)
+    public void Linux_a_runtime_of_an_earlier_build_is_left_running_and_the_line_says_what_brings_it_up(string? placed, string release, string running, bool said)
     {
         var linux = Linux.Start(_tree, apt: true);
-        linux.PlaceDeb(placed);
-        File.WriteAllText(linux.Running, "{\"state\":\"running\",\"runtime_version\":\"0.49.0\"}\n");
+        if (placed is not null)
+        {
+            linux.PlaceDeb(placed);
+        }
 
-        var run = linux.Run(linux.Feed());
+        File.WriteAllText(linux.Running, $"{{\"state\":\"running\",\"runtime_version\":\"{running}\"}}\n");
+
+        var run = linux.Run(linux.Feed(release));
 
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
-        Assert.Contains($"The runtime still runs Jason 0.49.0 and was left running, since a restart ends a turn it may be running: Restart Jason and Its Runtime to Finish the Update to {LinuxVersion}, which Jason Desktop offers when it opens, or `jason runtime restart`, brings it to {LinuxVersion}.", run.Stdout, StringComparison.Ordinal);
+        if (!said)
+        {
+            Assert.DoesNotContain("The runtime still runs", run.Stdout, StringComparison.Ordinal);
+            return;
+        }
+
+        Assert.Contains($"The runtime still runs Jason {running} and was left running, since a restart ends a turn it may be running: Restart Jason and Its Runtime to Finish the Update to {release}, which Jason Desktop offers when it opens, or `jason runtime restart`, brings it to {release}.", run.Stdout, StringComparison.Ordinal);
         Assert.DoesNotContain(linux.Calls(), call => call.StartsWith("runtime restart", StringComparison.Ordinal) || call.StartsWith("runtime stop", StringComparison.Ordinal) || call.StartsWith("runtime start", StringComparison.Ordinal));
         Assert.StartsWith("A terminal opened from now on finds jason by name", Lines(run.Stdout)[^1], StringComparison.Ordinal);
     }

@@ -388,7 +388,8 @@ set_up_and_end() {
     if [ "$DEST" = "${DEB_PLACE:-}" ] && [ -n "$ANSWERED_BEFORE" ]; then
         RUNNING="$("$CARRIED" runtime status 2>/dev/null | sed -n 's/.*"runtime_version":"\([^"\\]*\)".*/\1/p' | head -n 1)" || RUNNING=""
         RUNNING="${RUNNING%%+*}"
-        if [ -n "$RUNNING" ] && [ "$RUNNING" != "$INSTALLED" ] && ! older_than "$INSTALLED" "$RUNNING"; then
+        # Earlier by the package system's own order, which puts a candidate before its release.
+        if [ -n "$RUNNING" ] && "$DPKG" --compare-versions "$(printf '%s' "$INSTALLED" | tr '-' '~')" gt "$(printf '%s' "$RUNNING" | tr '-' '~')"; then
             echo "The runtime still runs Jason $RUNNING and was left running, since a restart ends a turn it may be running: Restart Jason and Its Runtime to Finish the Update to $INSTALLED, which Jason Desktop offers when it opens, or \`jason runtime restart\`, brings it to $INSTALLED."
         fi
     fi

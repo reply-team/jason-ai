@@ -44,7 +44,8 @@ public static class UninstallCommand
              account's, on Windows including the task an earlier version registered as Jason. On macOS it
              comes just after step 2: taking the job out of launchd ends the runtime launchd started, with
              no drain, and the job starts no runtime that stopped. On Linux from the deb it comes just after
-             the package, below, so a package that stays leaves it as it was
+             the package, below, so a package that stays leaves it as it was; one that cannot be taken off
+             then is named among the problems, with the commands that take it off by hand, and the rest goes
           2. the runtime — and if it will not stop, nothing further is removed. Before the runtime is looked
              for and before anything is removed, a runtime that is still starting is waited for, up to {StartInFlight.Seconds(StartInFlight.Bound)},
              and then stopped; a dry run never waits. Where another jason of this installation still runs

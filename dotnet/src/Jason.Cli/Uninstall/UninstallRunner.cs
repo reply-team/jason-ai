@@ -168,10 +168,11 @@ public static class UninstallRunner
                 }
             }
 
-            // And from the deb, the registration now, with the package off.
-            if (registrationAt is RegistrationAt.AfterThePackage && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterThePackage)
+            // And from the deb, the registration now, with the package off: one that cannot be taken is a problem, not a
+            // refusal, since the `jason` a refusal would send the person back to went with the package.
+            if (registrationAt is RegistrationAt.AfterThePackage)
             {
-                return new UninstallReport(plan, done, kept, problems, refusedAfterThePackage.Code, refusedAfterThePackage.Message);
+                _ = Step1RemoveAutostart(env, plan, done, kept, afterThePackage: problems);
             }
 
             // And the application's own start at sign-in, only now, so a runtime that will not stop leaves it where it was
@@ -289,7 +290,11 @@ public static class UninstallRunner
     /// Takes the logon registration away. Removing one that is not there is not an error, and a machine that
     /// has no way to register anything has nothing to take away either.
     /// </summary>
-    private static RemovalRefused? Step1RemoveAutostart(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> kept)
+    /// <param name="afterThePackage">
+    /// From the deb, once the package is off: a refusal there is said in this list and ends nothing. The `jason` a refusal
+    /// would send the person back to went with the package, and the unit starts nothing, the program it runs gone.
+    /// </param>
+    private static RemovalRefused? Step1RemoveAutostart(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> kept, List<string>? afterThePackage = null)
     {
         var registrar = RuntimeAutostartCommands.Registrar(env);
         if (registrar.Platform is AutostartPlatform.Unsupported)
@@ -312,6 +317,15 @@ public static class UninstallRunner
             if (refusal.LegacyRemoved)
             {
                 done.Add(LegacyRemovedLine);
+            }
+
+            if (afterThePackage is not null)
+            {
+                afterThePackage.Add(
+                    $"The runtime's start at logon could not be taken away: {refusal.Message} With the package off it starts nothing, since the "
+                    + $"program it runs is gone; `systemctl --user disable {AutostartArtifacts.UnitName}` and deleting "
+                    + $"{RuntimeAutostartCommands.Removal(env, registrar.Platform, leavesNoMark: true).ArtifactPath} take it off.");
+                return null;
             }
 
             // A denial carries its case, and is said for this verb, by both of its routes: on an administrator's own

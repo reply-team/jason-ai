@@ -1857,6 +1857,49 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
     }
 
+    /// <summary>
+    /// From the deb, a start at logon that cannot be taken away once the package is off ends nothing: what the purge took is
+    /// gone with this account's `jason`, so a refusal naming `jason runtime autostart disable` would leave the rest with no
+    /// command to take it off. The rest goes, and the report names the unit and the commands that take it off by hand; the
+    /// unit itself starts nothing, its program gone. Catches an uninstall that stops half done after the package.
+    /// </summary>
+    [Fact]
+    public async Task From_the_deb_a_start_at_logon_that_cannot_be_taken_after_the_package_is_named_and_the_rest_goes()
+    {
+        var places = LinuxPlaces();
+        var carried = Deb(places);
+        var (atLogin, wrapper, skill, updater) = PlantForTheDeb(places, carried);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        var (env, output, remover) = Environment(places, carried, log);
+        var registrar = (RecordingRegistrar)env.Autostart!;
+        registrar.State = new Jason.Cli.Autostart.AutostartState(true, [carried], null);
+        remover.Purges = _ =>
+        {
+            Directory.Delete(places.DebApplication, recursive: true);
+            registrar.Refuses = new Jason.Cli.Autostart.AutostartException(Jason.Cli.Autostart.AutostartCodes.Refused, "systemctl could not be run, made up.");
+            return new PackageRun(true, 0, string.Empty);
+        };
+        env = env with { Processes = processes, HttpHandler = StopsWhenAsked(log, processes) };
+
+        await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("refusal_code").ValueKind);
+        var problems = string.Join(" | ", report.GetProperty("problems").EnumerateArray().Select(problem => problem.GetString()));
+        Assert.Contains("systemctl could not be run, made up.", problems, StringComparison.Ordinal);
+        Assert.Contains("systemctl --user disable jason.service", problems, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason runtime autostart disable", problems, StringComparison.Ordinal);
+        foreach (var gone in new[] { atLogin, wrapper, skill })
+        {
+            Assert.False(File.Exists(gone), $"{gone} is still there");
+        }
+
+        Assert.False(Directory.Exists(updater), "the updater's cache is still there");
+    }
+
     [Theory]
     [Critical(Family.I3, "on Linux a package that stays leaves everything of this account's in place")]
     [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
