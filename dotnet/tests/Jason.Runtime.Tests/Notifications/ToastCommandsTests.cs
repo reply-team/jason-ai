@@ -243,6 +243,9 @@ public sealed class ToastCommandsTests
     public void A_click_s_environment_is_the_session_s_now_with_only_a_fresh_token(string? token)
     {
         var runtime = new Dictionary<string, string> { ["PATH"] = "/usr/bin", ["JASON_DATA_DIR"] = "/data", ["XDG_ACTIVATION_TOKEN"] = "from-the-runtime-s-start", ["INVOCATION_ID"] = "0123", ["JOURNAL_STREAM"] = "8:123" };
+        // As systemd 255 sets them for the logon unit: the memory one names that unit's cgroup.
+        runtime["MEMORY_PRESSURE_WATCH"] = "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/jason.service/memory.pressure";
+        runtime["MEMORY_PRESSURE_WRITE"] = "c29tZQ==";
         var session = new Dictionary<string, string> { ["WAYLAND_DISPLAY"] = "wayland-1", ["XDG_ACTIVATION_TOKEN"] = "from-the-session-s-start", ["DESKTOP_STARTUP_ID"] = "old" };
 
         var environment = ToastCommands.ClickEnvironment(runtime, session, token);
@@ -250,7 +253,7 @@ public sealed class ToastCommandsTests
         Assert.Equal(("/usr/bin", "/data", "wayland-1"), (environment["PATH"], environment["JASON_DATA_DIR"], environment["WAYLAND_DISPLAY"]));
         Assert.Equal(token, environment.GetValueOrDefault("XDG_ACTIVATION_TOKEN"));
         Assert.False(environment.ContainsKey("DESKTOP_STARTUP_ID"));
-        Assert.False(environment.ContainsKey("INVOCATION_ID") || environment.ContainsKey("JOURNAL_STREAM"), "the runtime's unit's own variables reached the handler");
+        Assert.DoesNotContain(environment.Keys, name => name is "INVOCATION_ID" or "JOURNAL_STREAM" or "MEMORY_PRESSURE_WATCH" or "MEMORY_PRESSURE_WRITE");
     }
 
     /// <summary>

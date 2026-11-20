@@ -177,10 +177,16 @@ public static class ToastCommands
 
     /// <summary>
     /// What systemd gives the processes of a unit it runs, the runtime's logon unit among them, and a launcher never gives
-    /// an application: a Jason Desktop that carried them would take itself for part of that unit.
+    /// an application (systemd.exec(5), "Environment Variables Set or Propagated by the Service Manager"): a Jason Desktop
+    /// that carried them would take itself for part of that unit, and GLib's memory monitor would watch the unit's cgroup.
     /// </summary>
     private static readonly string[] UnitNames =
-        ["INVOCATION_ID", "JOURNAL_STREAM", "MANAGERPID", "SYSTEMD_EXEC_PID", "NOTIFY_SOCKET", "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "WATCHDOG_PID", "WATCHDOG_USEC"];
+    [
+        "INVOCATION_ID", "JOURNAL_STREAM", "LOG_NAMESPACE", "MAINPID", "MANAGERPID", "SYSTEMD_EXEC_PID", "NOTIFY_SOCKET",
+        "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "WATCHDOG_PID", "WATCHDOG_USEC", "FDSTORE", "PIDFILE",
+        "MEMORY_PRESSURE_WATCH", "MEMORY_PRESSURE_WRITE", "CREDENTIALS_DIRECTORY", "RUNTIME_DIRECTORY", "STATE_DIRECTORY",
+        "CACHE_DIRECTORY", "LOGS_DIRECTORY", "CONFIGURATION_DIRECTORY",
+    ];
 
     /// <summary>The inside of a <c>$'…'</c> value with its backslash escapes undone; an escape it does not know is kept as written.</summary>
     private static string Unquoted(string quoted)
