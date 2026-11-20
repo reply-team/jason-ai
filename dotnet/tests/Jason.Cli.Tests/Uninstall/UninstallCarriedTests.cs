@@ -1743,7 +1743,9 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// folder the install line made for the file, <c>~/Applications</c>, goes once it holds nothing else, while a folder of the
     /// person's own choosing stays: catches an empty <c>~/Applications</c> left in the home. The menu entry and Open Jason at
     /// Login's entry are found by what their writers write, whatever the file's path holds: catches either left behind for a
-    /// folder whose name holds a quote, a backslash or a dollar sign, the menu entry for one with a per-cent too.
+    /// folder whose name holds a quote, a backslash or a dollar sign, the menu entry for one with a per-cent too. The folder's
+    /// menu cache is written again without the entry, and taken off where it then names nothing, as before the install
+    /// wrote it: catches a cache line left naming an entry that is gone.
     /// </summary>
     [Theory]
     [InlineData(false, false, """My "Apps" 100% \ $x""")]
@@ -1769,7 +1771,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
             : linePlace
                 ? OpenAtLoginEntry(file)
                 : OpenAtLoginEntry(Path.Combine(Home, """My "Apps" \\ $x""", "Jason.AppImage"), "\"" + Path.Combine(Home, """My \\"Apps\\" \\\\ \\$x""", "Jason.AppImage") + "\"");
-        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), $"[Desktop Entry]\nTryExec={DesktopRemoval.DesktopEntryString(file)}\nName=Jason\nExec={DesktopRemoval.DesktopEntryArgument(file)} %U\nIcon=jason-desktop-app\n");
+        var menu = Written(Path.Combine(XdgData, "applications", "jason-desktop.desktop"), AppImageMenuEntry.Form("[Desktop Entry]\nName=Jason\nExec=AppRun %U\nIcon=jason-desktop-app\n", file));
+        var cache = Written(Path.Combine(XdgData, "applications", "mimeinfo.cache"), "[MIME Cache]\nx-scheme-handler/jason-desktop=jason-desktop.desktop;\n");
         string[] icons = [.. new[] { "256x256", "512x512" }.Select(size => Written(Path.Combine(XdgData, "icons", "hicolor", size, "apps", "jason-desktop-app.png"), "png"))];
         var anotherIcon = Written(Path.Combine(XdgData, "icons", "hicolor", "256x256", "apps", "another-app.png"), "png");
         var desktop = Path.Combine(_dir.Paths.Root, "desktop");
@@ -1779,6 +1782,20 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var updater = Plant(Path.Combine(XdgCache, "jason-desktop-updater"));
         var harnessRoot = Plant(Path.Combine(Home, "Jason"));
         var (env, output, remover) = Environment(places, copy);
+        // The cache tool writes the folder's cache from the entries left there: here none declares a type.
+        var tools = Plant(Path.Combine(Home, "tools"));
+        Written(Path.Combine(tools, AppImageMenuEntry.CacheTool), "not run");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(Path.Combine(tools, AppImageMenuEntry.CacheTool), UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        }
+
+        var cacheTool = new FakeProgramRunner(request =>
+        {
+            File.WriteAllText(Path.Combine(request.Arguments[0], "mimeinfo.cache"), "[MIME Cache]\n");
+            return new Jason.Cli.Process.ProgramResult(0, string.Empty, string.Empty, false);
+        });
+        env = env with { Programs = cacheTool, SearchPath = tools };
 
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, purge, false), Ct);
 
@@ -1786,7 +1803,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
         Assert.Equal("deleted", plan.GetProperty("application_fate").GetString());
         Assert.Equal(file, plan.GetProperty("application").GetString());
-        foreach (var gone in new[] { wrapper, profile, skill, atLogin ?? menu, menu, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
+        Assert.Equal([Path.Combine(XdgData, "applications")], cacheTool.Requested.Single(request => request.Program.EndsWith(AppImageMenuEntry.CacheTool, StringComparison.Ordinal)).Arguments);
+        foreach (var gone in new[] { wrapper, profile, skill, atLogin ?? menu, menu, cache, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
         }

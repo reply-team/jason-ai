@@ -213,6 +213,10 @@ public static class MachineSetup
                 run.RepointCopy();
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
+
+            // An earlier version's line or move wrote its menu entry in an earlier form, which an update of the file leaves as
+            // it was: brought to this version's, so the system hands this Jason Desktop its links.
+            await run.Step("Bringing Jason Desktop's menu entry up to date", () => run.MenuEntryAsync(cancellationToken)).ConfigureAwait(false);
         }
 
         // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
@@ -825,6 +829,19 @@ public static class MachineSetup
         /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
         /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
         /// </summary>
+        /// <summary>
+        /// An AppImage's menu entry that Jason wrote for this file, in an earlier form, brought to this version's
+        /// (<see cref="AppImageMenuEntry.BringUpToDateAsync"/>); one that is not there or not Jason's is left alone.
+        /// </summary>
+        public async Task MenuEntryAsync(CancellationToken cancellationToken)
+        {
+            var file = AppImageCopy.FileOf(carried.Executable, places.Home);
+            if (await AppImageMenuEntry.BringUpToDateAsync(env, Path.Combine(places.Share, "applications"), file, cancellationToken).ConfigureAwait(false) is { } said)
+            {
+                (said.Changed ? Done : Problems).Add(said.Said);
+            }
+        }
+
         public void RepointCopy()
         {
             var registrar = RuntimeAutostartCommands.Registrar(env);

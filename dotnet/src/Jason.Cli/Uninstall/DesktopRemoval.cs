@@ -226,7 +226,7 @@ public static partial class DesktopRemoval
             : null;
     }
 
-    private static bool SamePath(string one, string other)
+    internal static bool SamePath(string one, string other)
     {
         try
         {
@@ -625,7 +625,7 @@ public static partial class DesktopRemoval
         if (Present(menu))
         {
             var text = Installation.CommandFiles.ReadSmall(menu);
-            if (text is not null && ((DesktopEntryValue(text, "TryExec") is { } tried && SamePath(tried, file)) || (DesktopEntryProgram(text) is { } starts && SamePath(starts, file))))
+            if (text is not null && Installation.AppImageMenuEntry.Starts(text, file))
             {
                 found.Add(menu);
             }
@@ -653,6 +653,44 @@ public static partial class DesktopRemoval
         return found;
     }
 
+    /// <summary>
+    /// Linux, an AppImage, once its menu entry is gone: the folder's cache written again, so it no longer names Jason
+    /// Desktop's entry for its link scheme, and the cache itself taken off where it then names nothing at all, as before
+    /// the install wrote it.
+    /// </summary>
+    private static void ForgetMenuEntry(CliEnvironment env, string applications, List<string> done, List<string> problems)
+    {
+        var cache = Path.Combine(applications, "mimeinfo.cache");
+        if (!File.Exists(cache))
+        {
+            return;
+        }
+
+        if (!Installation.AppImageMenuEntry.RefreshCacheAsync(env, applications, CancellationToken.None).GetAwaiter().GetResult())
+        {
+            if ((Installation.CommandFiles.ReadSmall(cache) ?? string.Empty).Contains("=" + MenuEntryName, StringComparison.Ordinal))
+            {
+                problems.Add($"{cache} still names {MenuEntryName}, and {Installation.AppImageMenuEntry.CacheTool} is not here to write it again: running it on {applications} does.");
+            }
+
+            return;
+        }
+
+        done.Add($"Wrote {cache} again without Jason Desktop's menu entry.");
+        try
+        {
+            if (Installation.CommandFiles.ReadSmall(cache) is { } text && !text.Split('\n').Any(line => line.Contains('=', StringComparison.Ordinal)))
+            {
+                env.Removes!.RemoveFile(cache);
+                done.Add($"Removed {cache}, which named nothing else.");
+            }
+        }
+        catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"{cache}, which names nothing, could not be removed: {refused.Message}");
+        }
+    }
+
     /// <summary>Linux: Open Jason at Login's XDG autostart entry, under <c>XDG_CONFIG_HOME</c>, <c>~/.config</c> by default (<c>desktop/src/login-item.ts</c>).</summary>
     public static string AutostartEntryFile(SetupPlaces places)
     {
@@ -661,7 +699,7 @@ public static partial class DesktopRemoval
     }
 
     /// <summary>A desktop entry's value for <paramref name="key"/>, the string value's own escapes undone; null where it has none.</summary>
-    private static string? DesktopEntryValue(string text, string key)
+    internal static string? DesktopEntryValue(string text, string key)
     {
         if (text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..] is not { } written)
         {
@@ -1273,6 +1311,11 @@ public static partial class DesktopRemoval
             {
                 problems.Add($"{place}, the AppImage's own, could not be removed: {refused.Message} Deleting it takes it off.");
             }
+        }
+
+        if (env.Setup is { } setup && plan.ApplicationState.Contains(Path.Combine(setup.Share, "applications", MenuEntryName)))
+        {
+            ForgetMenuEntry(env, Path.Combine(setup.Share, "applications"), done, problems);
         }
 
         if (!File.Exists(file))

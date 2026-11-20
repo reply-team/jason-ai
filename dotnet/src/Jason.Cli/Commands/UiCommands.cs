@@ -99,7 +99,7 @@ public static class UiCommands
 
     private static Command Open(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("open", "Open Jason Desktop at what waits, or at one approval or question, by the desktop's own jason-desktop: link; never a browser. It asks the runtime nothing. Where no Jason Desktop that takes its links is installed for this account it opens nothing and refuses with desktop_not_installed. Prints the address on stdout; exits 0 opened (or handed to the system and not yet answered, said on stderr), 1 refused, 2 usage, and 3 only under --web, which asks the runtime what ui pair asks.");
+        var command = new Command("open", "Open Jason Desktop at what waits, or at one approval or question, by the desktop's own jason-desktop: link; never a browser. It asks the runtime nothing. Where no Jason Desktop that takes its links is installed for this account it opens nothing and refuses with desktop_not_installed; on Linux, where the system would hand its link to another program or a menu entry that is gone, with desktop_links_elsewhere. Prints the address on stdout; exits 0 opened (or handed to the system and not yet answered, said on stderr), 1 refused, 2 usage, and 3 only under --web, which asks the runtime what ui pair asks.");
         var approval = new Option<string?>("--approval") { Description = "Open at one approval, by its id as approval list shows it." };
         var question = new Option<string?>("--question") { Description = "Open at one question, by its id as decision list shows it." };
         var noOpen = new Option<bool>("--no-open") { Description = "Print the address and open nothing; for an agent handing it to a person." };

@@ -26,8 +26,10 @@
  *   address arrives by `open-url` alone, at a cold start as at a running one; a link in a start's arguments is refused
  *   there.
  * - Linux: the deb's menu entry declares `MimeType=x-scheme-handler/jason-desktop;` (electron-builder's `deb.mimeTypes`)
- *   and starts the program with `--` before the address (`Exec=... -- %U`, the deb's `executableArgs`). An AppImage
- *   declares no scheme and takes no link, nor does a development build anywhere (`linksTaken`).
+ *   and starts the program with `--` before the address (`Exec=... -- %U`, the deb's `executableArgs`). An AppImage's
+ *   entry, which the install line, the move from a command-line install and `jason install` write in the account's own
+ *   applications folder (the CLI's `AppImageMenuEntry`), does the same for its file. A development build takes no link
+ *   anywhere (`linksTaken`).
  */
 
 import type { LinuxPackage } from './linux-package.ts';
@@ -109,11 +111,11 @@ export function linkIn(args: readonly string[], platform?: NodeJS.Platform): { k
     return alone ? { kind: 'link', raw } : { kind: 'refused', reason: 'beside_flag' };
 }
 
-/** Whether this form of the application takes links: a packaged one on Windows or macOS, and the deb on Linux. */
+/** Whether this form of the application takes links: a packaged one on Windows or macOS, and the deb or an AppImage on Linux. */
 export function linksTaken(at: { packaged: boolean; platform: NodeJS.Platform; form: LinuxPackage | null }): boolean {
     if (!at.packaged) return false;
     if (at.platform === 'win32' || at.platform === 'darwin') return true;
-    return at.platform === 'linux' && at.form?.form === 'deb';
+    return at.platform === 'linux' && (at.form?.form === 'deb' || at.form?.form === 'appimage');
 }
 
 /** What the start registers: on a packaged Windows application, the scheme with `--` before the address; else nothing. */

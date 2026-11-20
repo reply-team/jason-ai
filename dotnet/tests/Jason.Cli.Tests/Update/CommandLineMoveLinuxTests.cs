@@ -79,10 +79,12 @@ public sealed class CommandLineMoveLinuxTests
     /// Where there is no apt: the release's AppImage downloaded and held to its line, put in the account's Applications folder
     /// by one rename, executable, with nothing staged left beside it; its menu entry written to start that file and hidden once
     /// it is gone, its icons beside it; and the copy of the jason it carries made under the data directory, which runs the
-    /// routine and starts the runtime. The entry spells the file's path as the Desktop Entry Specification reads it, whatever
-    /// the home's name holds: TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a
-    /// backslash taking a backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher
-    /// reads as another file. A per-cent is spelled as the specification asks, and GLib's launchers still list no such entry.
+    /// routine and starts the runtime. The entry takes the desktop's links (MimeType) and starts the file with -- before the
+    /// address, its path bare wherever nothing in it needs quoting, which xdg-open in every mode starts; else spelled as the
+    /// Desktop Entry Specification reads it: TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar
+    /// sign and a backslash taking a backslash and a per-cent doubled, then every backslash doubled again. Catches a path a
+    /// launcher reads as another file, and an entry that takes no link. A per-cent is spelled as the specification asks, and
+    /// GLib's launchers still list no such entry.
     /// </summary>
     [Theory]
     [InlineData("home", "home", "home")]
@@ -106,8 +108,9 @@ public sealed class CommandLineMoveLinuxTests
 
         var share = Path.Combine(rig.Home, ".local", "share");
         var entry = File.ReadAllLines(Path.Combine(share, "applications", "jason-desktop.desktop"));
-        Assert.Equal(["[Desktop Entry]", $"TryExec={Path.Combine(rig.Installation.Root, tryExecHome, "Applications", AppImageCopy.FileName)}"], entry[..2]);
-        Assert.Contains($"Exec=\"{Path.Combine(rig.Installation.Root, execHome, "Applications", AppImageCopy.FileName)}\" %U", entry);
+        Assert.Equal(["[Desktop Entry]", $"TryExec={Path.Combine(rig.Installation.Root, tryExecHome, "Applications", AppImageCopy.FileName)}", "MimeType=x-scheme-handler/jason-desktop;"], entry[..3]);
+        var exec = Path.Combine(rig.Installation.Root, execHome, "Applications", AppImageCopy.FileName);
+        Assert.Contains(home == "home" ? $"Exec={exec} -- %U" : $"Exec=\"{exec}\" -- %U", entry);
         Assert.Single(entry, line => line.StartsWith("TryExec=", StringComparison.Ordinal));
         Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(share, "icons", "hicolor", "512x512", "apps", "jason-desktop-app.png")));

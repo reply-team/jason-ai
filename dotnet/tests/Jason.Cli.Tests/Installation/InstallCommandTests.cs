@@ -1950,6 +1950,46 @@ public sealed class InstallCommandTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// From an AppImage's copy, at a new version's first start, the menu entry an earlier line or move wrote for that file —
+    /// 0.49.1's: quoted Exec with no "--", no MimeType — is brought to this version's form, which takes the desktop's links,
+    /// and said; an entry under that name that starts another program is left as it is. Breaks if an installation updated
+    /// from 0.49.1 keeps an entry that takes no link, or if a person's own entry is rewritten.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task On_linux_an_appimage_s_copy_brings_its_menu_entry_up_to_date(bool jasons)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row, which CI's Linux leg runs.");
+        var executable = Carried(under: Path.Combine(_tree.Paths.Root, "data", "desktop", "bundle", "0.50.1"), linux: "appimage");
+        var places = LinuxPlaces();
+        var file = Path.Combine(Home, "Applications", "jason-desktop-linux-x64.AppImage");
+        var menu = Path.Combine(places.Share, "applications", AppImageMenuEntry.Name);
+        Directory.CreateDirectory(Path.GetDirectoryName(menu)!);
+        var before = jasons
+            ? $"[Desktop Entry]\nTryExec={file}\nName=Jason AI Harness\nExec=\"{file}\" %U\nTerminal=false\nType=Application\nIcon=jason-desktop-app\n"
+            : "[Desktop Entry]\nName=Mine\nExec=/opt/mine/run %U\n";
+        File.WriteAllText(menu, before);
+        var (env, output) = Environment(places, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: "/usr/bin:/bin"), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var done = Report(output).GetProperty("done").EnumerateArray().Select(line => line.GetString()).ToList();
+        if (jasons)
+        {
+            Assert.Equal(AppImageMenuEntry.Form(before, file), File.ReadAllText(menu));
+            Assert.Contains($"Exec={file} -- %U", File.ReadAllLines(menu));
+            Assert.Contains(done, line => line!.StartsWith($"Brought Jason Desktop's menu entry {menu} up to date", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Equal(before, File.ReadAllText(menu));
+            Assert.DoesNotContain(done, line => line!.Contains(menu, StringComparison.Ordinal));
+        }
+    }
+
     /// <summary>Note 11: a profile that is a link to a regular file is appended through; a link to anything else is refused with the hand line.</summary>
     [Fact]
     public async Task A_profile_link_is_followed_only_to_a_regular_file()

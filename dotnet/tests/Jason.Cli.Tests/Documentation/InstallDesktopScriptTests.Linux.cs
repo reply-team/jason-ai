@@ -158,12 +158,15 @@ public sealed partial class InstallDesktopScriptTests
     /// <summary>
     /// Without apt the AppImage is the installation, per account and with no password: placed at
     /// ~/Applications/jason-desktop-linux-x64.AppImage by one rename, the menu entry written under ~/.local/share with
-    /// TryExec naming the file, so it hides once the file is gone, and Exec starting it, the icons beside it, and the jason it
-    /// carries copied under the data directory as the application's own start copies it, whose `jason install` then runs.
-    /// The entry spells the file's path as the Desktop Entry Specification reads it, whatever the home's name holds: TryExec
-    /// with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a backslash and
-    /// a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file. A per-cent
-    /// is spelled as the specification asks, and GLib's launchers still list no such entry.
+    /// TryExec naming the file, so it hides once the file is gone, MimeType declaring the desktop's link scheme, and Exec
+    /// starting it with -- before the address, the folder's cache written again so GIO finds it, the icons beside it, and the
+    /// jason it carries copied under the data directory as the application's own start copies it, whose `jason install` then
+    /// runs. The entry is the one the jason it carries writes (AppImageMenuEntry.Form): the path bare in Exec wherever nothing
+    /// in it needs quoting, which xdg-open in every mode starts; else spelled as the Desktop Entry Specification reads it,
+    /// TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a
+    /// backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file,
+    /// an entry that takes no link, and the line and the jason writing two forms. A per-cent is spelled as the specification
+    /// asks, and GLib's launchers still list no such entry.
     /// </summary>
     [Theory]
     [InlineData("home", "home", "home")]
@@ -179,12 +182,18 @@ public sealed partial class InstallDesktopScriptTests
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         var placed = Path.Combine(linux.Applications, "jason-desktop-linux-x64.AppImage");
         Assert.Equal([placed], linux.InApplications());
-        var entry = File.ReadAllLines(Path.Combine(linux.Home, ".local", "share", "applications", "jason-desktop.desktop"));
+        var applications = Path.Combine(linux.Home, ".local", "share", "applications");
+        var written = File.ReadAllText(Path.Combine(applications, "jason-desktop.desktop"));
+        var entry = written.Split('\n');
         Assert.Equal("[Desktop Entry]", entry[0]);
         var above = Path.GetDirectoryName(linux.Home)!;
         Assert.Equal($"TryExec={Path.Combine(above, tryExecHome, "Applications", "jason-desktop-linux-x64.AppImage")}", entry[1]);
-        Assert.Contains($"Exec=\"{Path.Combine(above, execHome, "Applications", "jason-desktop-linux-x64.AppImage")}\" %U", entry);
+        Assert.Equal("MimeType=x-scheme-handler/jason-desktop;", entry[2]);
+        var exec = Path.Combine(above, execHome, "Applications", "jason-desktop-linux-x64.AppImage");
+        Assert.Contains(home == "home" ? $"Exec={exec} -- %U" : $"Exec=\"{exec}\" -- %U", entry);
         Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
+        Assert.Equal(Jason.Cli.Installation.AppImageMenuEntry.Form(Linux.CarriedEntry, placed), written);
+        Assert.Contains($"update-desktop-database {applications}|", linux.Calls());
         Assert.True(File.Exists(Path.Combine(linux.Home, ".local", "share", "icons", "hicolor", "256x256", "apps", "jason-desktop-app.png")));
         var copy = Path.Combine(linux.Data, "desktop", "bundle", LinuxVersion);
         Assert.Equal(["jason", "version.json"], Directory.EnumerateFiles(copy).Select(Path.GetFileName).Order(StringComparer.Ordinal));
@@ -289,6 +298,7 @@ public sealed partial class InstallDesktopScriptTests
             Stub("id", "case \"${1:-}\" in -u) echo \"${STUB_UID:-1000}\" ;; -nG) echo \"${STUB_GROUPS:-user sudo}\" ;; *) exit 1 ;; esac\n");
             Stub("pgrep", "[ -n \"${STUB_RUNNING:-}\" ]\n");
             Stub("timeout", $"echo \"timeout $1|\" >> '{Log}'\nshift\nexec \"$@\"\n");
+            Stub("update-desktop-database", $"echo \"update-desktop-database $*|\" >> '{Log}'\n");
             Stub("unshare", userNamespaces ? "exit 0\n" : "echo 'unshare: write failed /proc/self/uid_map: Operation not permitted' >&2\nexit 1\n");
             if (fuse)
             {
@@ -364,6 +374,9 @@ public sealed partial class InstallDesktopScriptTests
             File.WriteAllText(DebPlace + ".version", version);
         }
 
+        /// <summary>The menu entry the AppImage carries, as the release's does in its parts the line reads.</summary>
+        public const string CarriedEntry = "[Desktop Entry]\nName=Jason\nExec=AppRun %U\nTerminal=false\nType=Application\nIcon=jason-desktop-app\n";
+
         /// <summary>
         /// A feed of the release's deb and AppImage, its manifest and checksums. The AppImage answers --appimage-extract as
         /// the runtime does, with the files the script reads at their paths: the bundle (the stand-in jason and its
@@ -383,7 +396,7 @@ public sealed partial class InstallDesktopScriptTests
                 + $"echo '{jason}' | base64 -d > \"$r/resources/bundle/jason\"\n"
                 + "chmod 755 \"$r/resources/bundle/jason\"\n"
                 + $"printf '{{\\n  \"version\": \"{version}\"\\n}}\\n' > \"$r/resources/bundle/version.json\"\n"
-                + "printf '[Desktop Entry]\\nName=Jason\\nExec=AppRun %%U\\nTerminal=false\\nType=Application\\nIcon=jason-desktop-app\\n' > \"$r/jason-desktop-app.desktop\"\n"
+                + "printf '" + CarriedEntry.Replace("%", "%%", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal) + "' > \"$r/jason-desktop-app.desktop\"\n"
                 + "printf 'png' > \"$r/usr/share/icons/hicolor/256x256/apps/jason-desktop-app.png\"\n");
             File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"" + version + "\"\n}\n");
             File.WriteAllText(

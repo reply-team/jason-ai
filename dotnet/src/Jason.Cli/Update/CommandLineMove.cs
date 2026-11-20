@@ -591,10 +591,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     /// <summary>
     /// Linux, an AppImage: what the install line writes beside the file, made here as there. The copy of the jason it carries
-    /// under the data directory, for its version, which sets the machine up; then the menu entry, which starts the file where it
-    /// is and is hidden once that file is gone (<c>TryExec</c>), the path spelled as the Desktop Entry Specification reads it
-    /// (<see cref="Uninstall.DesktopRemoval.DesktopEntryArgument"/>), and the icons, in the account's data folder. Null where all of it
-    /// is there; else why not.
+    /// under the data directory, for its version, which sets the machine up; then the menu entry in its one form
+    /// (<see cref="AppImageMenuEntry"/>), which starts the file where it is, is hidden once that file is gone and takes the
+    /// desktop's links, with the folder's cache written again; and the icons, in the account's data folder. Null where all of
+    /// it is there; else why not.
     /// </summary>
     private async Task<string?> PrepareAppImageAsync(SetupPlaces places, string file, SemanticVersion version, CancellationToken cancellationToken)
     {
@@ -615,23 +615,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 return $"Jason Desktop's menu entry could not be read out of {file}; the command-line install was not touched. `jason update apply` carries the move on.";
             }
 
-            var entry = new List<string>();
-            foreach (var line in File.ReadAllLines(carriedEntry))
-            {
-                if (line.StartsWith("TryExec=", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                entry.Add(line.StartsWith("Exec=", StringComparison.Ordinal) ? $"Exec={Uninstall.DesktopRemoval.DesktopEntryArgument(file)} %U" : line);
-                if (line == "[Desktop Entry]")
-                {
-                    entry.Add($"TryExec={Uninstall.DesktopRemoval.DesktopEntryString(file)}");
-                }
-            }
-
             var applications = Directory.CreateDirectory(Path.Combine(share, "applications")).FullName;
-            File.WriteAllText(Path.Combine(applications, "jason-desktop.desktop"), string.Join('\n', entry) + "\n");
+            File.WriteAllText(Path.Combine(applications, AppImageMenuEntry.Name), AppImageMenuEntry.Form(File.ReadAllText(carriedEntry), file));
+
+            // The folder's cache, without which GIO finds no program for the desktop's link scheme there; a system with no tool
+            // to write it still starts the entry from its menu, and xdg-open outside GNOME finds it by its own scan.
+            await AppImageMenuEntry.RefreshCacheAsync(env, applications, cancellationToken).ConfigureAwait(false);
 
             // The icons are the entry's look: a file the runtime reads none out of is still started from the menu.
             var hicolor = Path.Combine(root, "usr", "share", "icons", "hicolor");

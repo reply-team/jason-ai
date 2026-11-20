@@ -160,8 +160,9 @@ public static class UninstallCommand
             jason-desktop.desktop under XDG_DATA_HOME (~/.local/share by default) where it starts that file, its icons
             icons/hicolor/<size>/apps/jason-desktop-app.png there, the copies of its jason under
             <data>/desktop/bundle/, the copy an update kept under <data>/desktop/rollback/, <data>/desktop/
-            appimage.json, and ai.jasonharness.desktop there (jason install's record of the profiles it created).
-            --keep-application keeps all of it.
+            appimage.json, and ai.jasonharness.desktop there (jason install's record of the profiles it created);
+            once the entry is gone, the folder's mimeinfo.cache written again by update-desktop-database, and taken
+            off where it then names nothing. --keep-application keeps all of it.
           - with the data kept: run/start-owed.json, the note that a start is owed, since with this
             installation taken off none is.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
