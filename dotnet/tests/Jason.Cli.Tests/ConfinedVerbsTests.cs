@@ -367,9 +367,9 @@ public class ConfinedVerbsTests
     }
 
     /// <summary>
-    /// Help is not a run of the verb: a refused command still shows its help, and the help says what is true for every
-    /// caller: the act is the person's, an agent runs it on their word and it is recorded as theirs, and Plan only's
-    /// variable refuses it.
+    /// Help is not a run of the verb: a refused command still shows its help, and the help says what is true of it for every
+    /// caller. A person's own word says the act is the person's, run by an agent on their word and recorded as theirs; every
+    /// entry says that the variable a Plan only turn sets refuses it.
     /// </summary>
     [Theory]
     [MemberData(nameof(Entries))]
@@ -383,7 +383,16 @@ public class ConfinedVerbsTests
 
         var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.", text, StringComparison.Ordinal);
+        const string act = "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.";
+        if (ConfinedVerbs.Table.Single(each => each.Command == entry).Kind == ConfinedVerbs.Kind.PersonsWord)
+        {
+            Assert.Contains(act, text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("The act is the person's", text, StringComparison.Ordinal);
+        }
+
         Assert.Contains("Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request.", text, StringComparison.Ordinal);
         Assert.Contains("A higher bar, not a boundary", text, StringComparison.Ordinal);
         Assert.Contains("a claim, not a proof", text, StringComparison.Ordinal);

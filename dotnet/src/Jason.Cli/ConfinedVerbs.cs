@@ -88,15 +88,17 @@ public static class ConfinedVerbs
         "Under JASON_CONFINED this is refused: it is a person's word or changes this installation; the person does it in Jason's window or a terminal.";
 
     /// <summary>
-    /// What a refused command's <c>--help</c> says, true for every caller: the act is the person's, an agent runs it when
-    /// the person said so, and it is recorded as theirs. An attempt id in the environment is no exception under the
-    /// variable: it is a claim, not a proof.
+    /// What a refused command's <c>--help</c> says, true for every caller: that the variable refuses it, before any request.
+    /// An attempt id in the environment is no exception under the variable: it is a claim, not a proof.
     /// </summary>
     public const string Help =
-        "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs. "
-        + "Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request. "
+        "Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request. "
         + "A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, "
         + "and an attempt id in the environment is a claim, not a proof, so it changes nothing here.";
+
+    /// <summary>What the help of a person's own word says before <see cref="Help"/>.</summary>
+    public const string PersonsWordHelp =
+        "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.";
 
     /// <summary>The entry that covers <paramref name="verb"/> (<c>runtime</c> covers <c>runtime stop</c>), or null.</summary>
     public static string? Covering(string verb) =>
@@ -124,9 +126,10 @@ public static class ConfinedVerbs
             foreach (var sub in command.Subcommands)
             {
                 var path = verb.Length == 0 ? sub.Name : verb + " " + sub.Name;
-                if (Covering(path) is not null)
+                if (Covering(path) is { } covering)
                 {
-                    sub.Description = string.IsNullOrEmpty(sub.Description) ? Help : sub.Description + " " + Help;
+                    var help = Table.Single(entry => entry.Command == covering).Kind == Kind.PersonsWord ? PersonsWordHelp + " " + Help : Help;
+                    sub.Description = string.IsNullOrEmpty(sub.Description) ? help : sub.Description + " " + help;
                 }
 
                 Walk(sub, path);
