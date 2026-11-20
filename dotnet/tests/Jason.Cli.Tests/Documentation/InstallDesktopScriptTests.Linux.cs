@@ -165,15 +165,17 @@ public sealed partial class InstallDesktopScriptTests
     /// in it needs quoting, which xdg-open in every mode starts; else spelled as the Desktop Entry Specification reads it,
     /// TryExec with a string's escapes, Exec quoted, a double quote, a backtick, a dollar sign and a backslash taking a
     /// backslash and a per-cent doubled, then every backslash doubled again. Catches a path a launcher reads as another file,
-    /// an entry that takes no link, and the line and the jason writing two forms. A per-cent is spelled as the specification
-    /// asks, and GLib's launchers still list no such entry.
+    /// an entry that takes no link, and the line and the jason writing two forms, a path with a space of another script's
+    /// among them, whatever the locale the line runs in. A per-cent is spelled as the specification asks, and GLib's
+    /// launchers still list no such entry.
     /// </summary>
     [Theory]
-    [InlineData("home", "home", "home")]
-    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""")]
+    [InlineData("home", "home", "home", true)]
+    [InlineData("""Jo "Q" `b` $x 100% \y""", """Jo "Q" `b` $x 100% \\y""", """Jo \\"Q\\" \\`b\\` \\$x 100%% \\\\y""", false)]
+    [InlineData("Jo\u2003Doe", "Jo\u2003Doe", "Jo\u2003Doe", true)]
     [Critical(Family.I1, "install.sh places the AppImage, its menu entry and its copy on Linux with no password")]
     [UnsupportedOSPlatform("windows")]
-    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up(string home, string tryExecHome, string execHome)
+    public void Linux_without_apt_the_appimage_is_placed_with_its_menu_entry_and_its_copy_then_set_up(string home, string tryExecHome, string execHome, bool bare)
     {
         var linux = Linux.Start(_tree, apt: false, home: home);
 
@@ -190,7 +192,7 @@ public sealed partial class InstallDesktopScriptTests
         Assert.Equal($"TryExec={Path.Combine(above, tryExecHome, "Applications", "jason-desktop-linux-x64.AppImage")}", entry[1]);
         Assert.Equal("MimeType=x-scheme-handler/jason-desktop;", entry[2]);
         var exec = Path.Combine(above, execHome, "Applications", "jason-desktop-linux-x64.AppImage");
-        Assert.Contains(home == "home" ? $"Exec={exec} -- %U" : $"Exec=\"{exec}\" -- %U", entry);
+        Assert.Contains(bare ? $"Exec={exec} -- %U" : $"Exec=\"{exec}\" -- %U", entry);
         Assert.Single(entry, line => line.StartsWith("Exec=", StringComparison.Ordinal));
         Assert.Equal(Jason.Cli.Installation.AppImageMenuEntry.Form(Linux.CarriedEntry, placed), written);
         Assert.Contains($"update-desktop-database {applications}|", linux.Calls());
@@ -420,6 +422,8 @@ public sealed partial class InstallDesktopScriptTests
                 ["XDG_DATA_HOME"] = Path.Combine(Home, ".local", "share"),
                 ["XDG_CONFIG_HOME"] = Path.Combine(Home, ".config"),
                 ["PATH"] = Stubs,
+                // A person's terminal speaks UTF-8, where gawk's character classes reach past ASCII.
+                ["LC_ALL"] = "C.UTF-8",
                 ["STANDIN_DEFAULT"] = Report(placed: true, runtime: "not_running", completed: true),
             };
             return wrapper is null

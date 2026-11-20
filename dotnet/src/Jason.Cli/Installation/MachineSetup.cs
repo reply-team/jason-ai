@@ -826,10 +826,6 @@ public static class MachineSetup
         }
 
         /// <summary>
-        /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
-        /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
-        /// </summary>
-        /// <summary>
         /// An AppImage's menu entry that Jason wrote for this file, in an earlier form, brought to this version's
         /// (<see cref="AppImageMenuEntry.BringUpToDateAsync"/>); one that is not there or not Jason's is left alone.
         /// </summary>
@@ -842,6 +838,10 @@ public static class MachineSetup
             }
         }
 
+        /// <summary>
+        /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
+        /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
+        /// </summary>
         public void RepointCopy()
         {
             var registrar = RuntimeAutostartCommands.Registrar(env);

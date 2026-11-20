@@ -622,10 +622,10 @@ install_appimage() {
     # program. Else it is spelled as the Desktop Entry Specification reads it: quoted in Exec, where a double quote, a
     # backtick, a dollar sign and a backslash take a backslash and a per-cent is doubled; then, in both lines, every
     # backslash doubled as a string's own escape. awk reads the path from its environment, since -v would take its
-    # backslashes as escapes.
+    # backslashes as escapes, and byte by byte (LC_ALL=C), as the jason it carries judges the path, whatever the locale.
     SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$SHARE/applications"
-    PLACED="$DEST" awk '
+    LC_ALL=C PLACED="$DEST" awk '
         function spelled(path, quoted,    out, i, c) {
             out = ""
             for (i = 1; i <= length(path); i++) {

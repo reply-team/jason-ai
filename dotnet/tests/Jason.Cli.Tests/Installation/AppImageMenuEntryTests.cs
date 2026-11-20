@@ -35,6 +35,7 @@ public sealed class AppImageMenuEntryTests : IDisposable
     [InlineData("/home/jo$x/Applications/jason-desktop-linux-x64.AppImage", "\"/home/jo\\\\$x/Applications/jason-desktop-linux-x64.AppImage\"")]
     [InlineData("/home/100%/Applications/jason-desktop-linux-x64.AppImage", "\"/home/100%%/Applications/jason-desktop-linux-x64.AppImage\"")]
     [InlineData("/home/Юля/Applications/jason-desktop-linux-x64.AppImage", "/home/Юля/Applications/jason-desktop-linux-x64.AppImage")]
+    [InlineData("/home/Jo\u2003Doe/Applications/jason-desktop-linux-x64.AppImage", "/home/Jo\u2003Doe/Applications/jason-desktop-linux-x64.AppImage")]
     public void The_entry_takes_links_and_starts_the_file_bare_wherever_its_path_allows(string file, string exec)
     {
         var carried = "[Desktop Entry]\nName=Jason AI Harness\nExec=AppRun %U\nTerminal=false\nType=Application\nIcon=jason-desktop-app\nStartupWMClass=Jason AI Harness\nCategories=Office;\n";
@@ -51,10 +52,13 @@ public sealed class AppImageMenuEntryTests : IDisposable
     /// An entry 0.49.1's install line or move wrote — quoted <c>Exec</c> with no <c>--</c>, no <c>MimeType</c> — is brought
     /// to this form by <c>jason install</c>, the folder's cache written again, and the Desktop then takes its links, as the
     /// presence check behind <c>jason ui open</c> and a click reads them. Breaks if an install updated from 0.49.1 keeps an
-    /// entry that takes no link.
+    /// entry that takes no link. Where the cache tool is not there, or ran and failed, the words say which.
     /// </summary>
-    [Fact]
-    public async Task An_entry_in_0_49_1_s_form_is_brought_up_to_date_and_the_desktop_then_takes_its_links()
+    [Theory]
+    [InlineData("written", "")]
+    [InlineData("failed", "; update-desktop-database failed to write the folder's cache, so GNOME may not find it until something does")]
+    [InlineData("missing", "; update-desktop-database is not here to write the folder's cache, so GNOME may not find it until something does")]
+    public async Task An_entry_in_0_49_1_s_form_is_brought_up_to_date_and_the_desktop_then_takes_its_links(string cache, string said)
     {
         var file = Path.Combine(Root, "home", "Applications", "jason-desktop-linux-x64.AppImage");
         Executable(file);
@@ -63,14 +67,22 @@ public sealed class AppImageMenuEntryTests : IDisposable
         File.WriteAllText(menu, $"[Desktop Entry]\nTryExec={file}\nName=Jason AI Harness\nExec=\"{file}\" %U\nTerminal=false\nType=Application\nIcon=jason-desktop-app\n");
         var reader = Reader();
         Assert.Equal(CliErrors.DesktopNotInstalled, DesktopLinks.Absent(reader)?.Code);
-        var (env, runner, bin) = Environment();
+        var (env, runner, bin) = Environment(exit: cache == "failed" ? 1 : 0);
+        if (cache == "missing")
+        {
+            File.Delete(Path.Combine(bin, AppImageMenuEntry.CacheTool));
+        }
 
-        var said = await AppImageMenuEntry.BringUpToDateAsync(env, applications, file, Ct);
+        var brought = await AppImageMenuEntry.BringUpToDateAsync(env, applications, file, Ct);
 
-        Assert.Equal((true, $"Brought Jason Desktop's menu entry {menu} up to date, so the system hands it its links."), said);
+        Assert.Equal((true, $"Brought Jason Desktop's menu entry {menu} up to date, so the system hands it its links{said}."), brought);
         Assert.Contains($"Exec={file} -- %U", File.ReadAllLines(menu));
-        var ran = Assert.Single(runner.Requested);
-        Assert.Equal((Path.Combine(bin, AppImageMenuEntry.CacheTool), applications), (ran.Program, Assert.Single(ran.Arguments)));
+        Assert.Equal(cache == "missing" ? 0 : 1, runner.Requested.Count);
+        if (cache != "missing")
+        {
+            Assert.Equal((Path.Combine(bin, AppImageMenuEntry.CacheTool), applications), (runner.Requested[0].Program, Assert.Single(runner.Requested[0].Arguments)));
+        }
+
         Assert.Null(DesktopLinks.Absent(reader));
         Assert.Equal(file, reader.Program());
         Assert.Equal([menu], Directory.EnumerateFiles(applications).Where(name => !name.EndsWith("mimeinfo.cache", StringComparison.Ordinal)));
@@ -112,11 +124,11 @@ public sealed class AppImageMenuEntryTests : IDisposable
         new(new XdgPlaces(Path.Combine(Root, "home", ".config"), [], Path.Combine(Root, "home", ".local", "share"), [Path.Combine(Root, "usr", "share")], [], string.Empty), new ProgramSearchPath(Path.Combine(Root, "bin"), null));
 
     /// <summary>An environment whose search path has the cache tool, run by a runner that only records it.</summary>
-    private (CliEnvironment Env, FakeProgramRunner Runner, string Bin) Environment()
+    private (CliEnvironment Env, FakeProgramRunner Runner, string Bin) Environment(int exit = 0)
     {
         var bin = Directory.CreateDirectory(Path.Combine(Root, "bin")).FullName;
         Executable(Path.Combine(bin, AppImageMenuEntry.CacheTool));
-        var runner = new FakeProgramRunner();
+        var runner = new FakeProgramRunner(_ => new Jason.Cli.Process.ProgramResult(exit, string.Empty, exit == 0 ? string.Empty : "cache: refused", false));
         return (new CliEnvironment(new StringWriter(), new StringWriter(), _dir.Paths, Programs: runner, SearchPath: bin), runner, bin);
     }
 

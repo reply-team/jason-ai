@@ -666,11 +666,13 @@ public static partial class DesktopRemoval
             return;
         }
 
-        if (!Installation.AppImageMenuEntry.RefreshCacheAsync(env, applications, CancellationToken.None).GetAwaiter().GetResult())
+        var refreshed = Installation.AppImageMenuEntry.RefreshCacheAsync(env, applications, CancellationToken.None).GetAwaiter().GetResult();
+        if (refreshed is not Installation.AppImageMenuEntry.CacheRefresh.Written)
         {
             if ((Installation.CommandFiles.ReadSmall(cache) ?? string.Empty).Contains("=" + MenuEntryName, StringComparison.Ordinal))
             {
-                problems.Add($"{cache} still names {MenuEntryName}, and {Installation.AppImageMenuEntry.CacheTool} is not here to write it again: running it on {applications} does.");
+                var why = refreshed is Installation.AppImageMenuEntry.CacheRefresh.Failed ? "failed to write it again" : "is not here to write it again";
+                problems.Add($"{cache} still names {MenuEntryName}, and {Installation.AppImageMenuEntry.CacheTool} {why}: running it on {applications} does.");
             }
 
             return;

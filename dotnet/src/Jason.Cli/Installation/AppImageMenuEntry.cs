@@ -29,6 +29,14 @@ public static class AppImageMenuEntry
     /// <summary>The program that writes an <c>applications</c> folder's cache.</summary>
     public const string CacheTool = "update-desktop-database";
 
+    /// <summary>How writing an <c>applications</c> folder's cache again went.</summary>
+    public enum CacheRefresh
+    {
+        Written,
+        Failed,
+        NotHere,
+    }
+
     /// <summary>The characters the Desktop Entry Specification reserves in <c>Exec</c>, and a per-cent, which starts a field code.</summary>
     private const string Reserved = "\"'\\><~|&;$*?#()`%";
 
@@ -127,24 +135,30 @@ public static class AppImageMenuEntry
         }
 
         var cache = await RefreshCacheAsync(env, applications, cancellationToken).ConfigureAwait(false);
-        return (true, $"Brought Jason Desktop's menu entry {menu} up to date, so the system hands it its links{(cache ? string.Empty : $"; {CacheTool} is not here to write the folder's cache, so GNOME may not find it until something does")}.");
+        return (true, $"Brought Jason Desktop's menu entry {menu} up to date, so the system hands it its links{cache switch
+        {
+            CacheRefresh.Written => string.Empty,
+            CacheRefresh.Failed => $"; {CacheTool} failed to write the folder's cache, so GNOME may not find it until something does",
+            _ => $"; {CacheTool} is not here to write the folder's cache, so GNOME may not find it until something does",
+        }}.");
     }
 
     /// <summary>
-    /// The folder's cache written again by <c>update-desktop-database</c>, found on the search path; true where it ran and
-    /// ended 0. Bounded: a tool that hangs is a step that says so, never one that holds the rest.
+    /// The folder's cache written again by <c>update-desktop-database</c>, found on the search path: written where it ran and
+    /// ended 0, failed where it ran otherwise, not here where nothing could run it. Bounded: a tool that hangs is a step
+    /// that says so, never one that holds the rest.
     /// </summary>
-    public static async Task<bool> RefreshCacheAsync(CliEnvironment env, string applications, CancellationToken cancellationToken)
+    public static async Task<CacheRefresh> RefreshCacheAsync(CliEnvironment env, string applications, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
         if (env.Programs is not { } programs
             || ProgramRunners.FullPathOf(CacheTool, env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"), null) is not { } tool)
         {
-            return false;
+            return CacheRefresh.NotHere;
         }
 
         var result = await programs.RunAsync(tool, [applications], null, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
-        return result is { NotStarted: false, TimedOut: false, ExitCode: 0 };
+        return result is { NotStarted: false, TimedOut: false, ExitCode: 0 } ? CacheRefresh.Written : CacheRefresh.Failed;
     }
 
     private static void TryDelete(string path)
