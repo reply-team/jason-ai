@@ -121,7 +121,10 @@ public static class UninstallCommand
             the job and launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt takes it out. A job
             launchctl could not be asked about refuses nothing: its step reads it again, takes it out if it is
             loaded then, keeps it, ShipIt's cache, the application and its state if it is running then, and
-            leaves it and says so if it is still unread.
+            leaves it and says so if it is still unread. An account with no login session, reached over ssh or
+            run by a management tool while it is not signed in at the screen, has no login domain and so no
+            such job: where launchctl cannot answer for the job, launchctl print gui/<uid> asks launchd about
+            the domain itself, and one it says is not there reads as no job.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
             jason, in any session (jason_running), at once and with no wait: a runtime still starting, a
             runtime of another data directory, a journal watch, a call of an agent host opened by hand. The
@@ -147,7 +150,8 @@ public static class UninstallCommand
             update, taken out with /bin/launchctl bootout gui/<uid>/ai.jasonharness.desktop.ShipIt where launchd
             says it is loaded and not running; one running or set to run keeps ShipIt's cache, the application
             and its state, one found running just before the application goes keeps the application and its
-            state, and one launchctl could not be asked about is left; each is said). Then, on Windows, the
+            state, and one launchctl could not be asked about, in a login domain launchd says is there, is left;
+            each is said). Then, on Windows, the
             jason-retired-<id> folders, as step 6 says, beside the older command-line install's folder too.
           - macOS, just before the application and only where it goes: its own state under ~/Library, each
             where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through

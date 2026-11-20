@@ -35,7 +35,9 @@
 #   enable-starts-now              jason runtime autostart enable with no runtime running: whether a runtime answers
 #                                  within 30 s after it, said by name and asserted neither way
 #   refuse-while-open              jason uninstall while Jason Desktop runs: refused, nothing removed
-#   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged
+#   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged; the first in a
+#                                  job reads, before it, what launchd answers an account with no login session, a
+#                                  reading for the record, never a failure (read_no_login_domain)
 #   uninstall-menu                 the uninstall the application's Uninstall Jason item starts: the carried jason with
 #                                  --wait-for the application's process, which then quits
 #   from-previous <previous> <feed> <version>
@@ -168,6 +170,38 @@ launchd_records() {
                 print domain "\t" label " " state
             }'
     done
+}
+
+# A reading for the record, never a failure, as the Windows proof reads ModulePath: what launchd answers an account with
+# no login session, asked about Jason Desktop's ShipIt job in that account's own login domain and about the domain
+# itself - the two questions jason uninstall asks there, whose answers no code of jason's assumes (LaunchdJobs.Read). The
+# account is daemon, which no login session has: it has no password, so the login window never signs it in, and a login
+# domain, gui/<uid>, is the domain of a login session. Each question is asked as daemon, of its own domain, as jason asks
+# of its own, through sudo -n, which a GitHub-hosted runner allows without a password, with launchctl by its full path;
+# each is bounded by within inside a subshell, whose exit is kept as the answer's and whose words, within's own
+# included, go to the answer's file, so no answer, refusal or hang ends the step. Each exit and first line are said, and
+# kept in $OUT with the whole answers. Once in a job, at its first uninstall from a terminal, a step CI's union job and
+# the release's proof job both run.
+read_no_login_domain() {
+    [ ! -e "$OUT/no-login-domain.txt" ] || return 0
+    : > "$OUT/no-login-domain.txt" 2> /dev/null || true
+    local uid asked target answer status first
+    uid="$(id -u daemon 2>/dev/null)" || uid=""
+    case "$uid" in
+        '' | *[!0-9]*)
+            say "launchd with no login session, a reading: no account daemon with a user id was found here, so nothing was asked"
+            return 0 ;;
+    esac
+    for asked in "job gui/$uid/ai.jasonharness.desktop.ShipIt" "domain gui/$uid"; do
+        target="${asked#* }"
+        answer="$OUT/no-login-domain-${asked%% *}.txt"
+        status=0
+        ( within 30 "launchctl print $target as daemon" sudo -n -u daemon /bin/launchctl print "$target" ) > "$answer" 2>&1 || status=$?
+        first="$(grep -m 1 . "$answer" 2>/dev/null)" || first=""
+        printf '%s\t%s\t%s\n' "$target" "$status" "$first" >> "$OUT/no-login-domain.txt" 2> /dev/null || true
+        say "launchd with no login session, a reading: launchctl print $target, asked as daemon (uid $uid, which no login session has), ended $status; its first line: ${first:-none}"
+    done
+    return 0
 }
 
 # This job's PATH without ~/.local/bin, which the runner's image puts there and a person's terminal does not have.
@@ -1202,6 +1236,7 @@ uninstall-terminal)
     # account's own login shell, and the profiles the product names for that shell held free of the line.
     by="${1:-}"
     case "$by" in ''|account-shell) ;; *) fail "uninstall-terminal takes account-shell or nothing, not '$by'" ;; esac
+    read_no_login_domain
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     # A runtime for the uninstall to stop: the one the application's start left running, once it answers, else one started.
     sleep 5

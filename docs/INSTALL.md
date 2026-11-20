@@ -740,7 +740,9 @@ terminal while Jason Desktop is open, it refuses with `desktop_running` before a
 On macOS, while Jason Desktop's updater installs an update, it refuses with `update_in_progress` before anything is
 removed: wait for the update to end, then run it again. If the update never ends,
 `launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
-`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out.
+`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out. An account with no login session,
+reached over ssh or run by a management tool while it is not signed in at the screen, has no login domain and so no
+such job.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no

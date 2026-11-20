@@ -861,8 +861,9 @@ public static partial class DesktopRemoval
     /// being installed, begun since the uninstall's own look: it is left, never ended part-way, and so are ShipIt's cache,
     /// the application and its own state, which their steps keep and say kept; this says that an update was being
     /// installed, names what of those <paramref name="plan"/> holds, so only what was there and was left, and says what to
-    /// do; it returns true. One launchd could not be asked about is left as it was, and said. One not loaded is nothing to
-    /// say.
+    /// do; it returns true. One launchd could not be asked about, in a login domain it says is there, is left as it was, and
+    /// said. One not loaded is nothing to say, and nor is one whose login domain launchd says is not there, as an account
+    /// with no login session has none (<see cref="Autostart.LaunchdJobs.Read"/>).
     /// </summary>
     public static bool TakeOutUpdaterJob(CliEnvironment env, SetupPlaces places, DesktopPlan plan, List<string> done, List<string> problems)
     {
