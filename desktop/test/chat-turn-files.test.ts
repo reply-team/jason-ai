@@ -48,7 +48,7 @@ test('the chat\'s agent is refused a read or a write of the configuration', (t) 
     const root = data();
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const paths = desktopPaths(root);
-    const file = writeTurnConfig(paths.turns, newTurnId(), 'http://127.0.0.1:50123/mcp', 's3cret');
+    const file = writeTurnConfig(paths.turns, newTurnId(), 'http://127.0.0.1:50123/mcp', 's3cret', 'jason_desktop_0123456789abcdef');
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
     const scope = { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [], denied: [], deniedOperations: [], home: root, real: realPathOf } as const;
     assert.equal(judge('Read', { file_path: file }, scope).verdict, 'deny');
@@ -62,8 +62,8 @@ test('a turn\'s file is never written twice, and only for an id the desktop made
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const desktop = desktopPaths(root).turns;
     const id = newTurnId();
-    writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'a');
-    assert.throws(() => writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'b'));
+    writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'a', 'jason_desktop_0123456789abcdef');
+    assert.throws(() => writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'b', 'jason_desktop_0123456789abcdef'));
     for (const bad of ['../x', 'ABC', '', `${id}/..`]) assert.throws(() => turnConfigPath(desktop, bad), /turn id/);
 });
 
@@ -72,7 +72,7 @@ test('the turn\'s file is removed when the turn ends, and removing it twice is n
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const desktop = desktopPaths(root).turns;
     const id = newTurnId();
-    const file = writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'a');
+    const file = writeTurnConfig(desktop, id, 'http://127.0.0.1:1/mcp', 'a', 'jason_desktop_0123456789abcdef');
     removeTurnFiles(desktop, id);
     assert.equal(existsSync(file), false);
     removeTurnFiles(desktop, id);
@@ -83,7 +83,7 @@ test('the start removes a turn file and a naming run\'s folder left behind, with
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const turns = desktopPaths(root).turns;
     const id = newTurnId();
-    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', newSecret());
+    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', newSecret(), 'jason_desktop_0123456789abcdef');
     const folder = namingFolderPath(turns, newTurnId());
     mkdirSync(join(folder, '.claude'), { recursive: true });
     writeFileSync(join(folder, '.claude', 'left.json'), '{}');

@@ -76,7 +76,7 @@ import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
-import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
+import { namingFolderPath, newSecret, newServerName, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
@@ -1906,7 +1906,10 @@ export class Chat {
                     },
                     ...(hooked ? { hook: (tool: string, input: Record<string, unknown>, use: string | null) => this.#broker.hook(id, tool, input, use) } : {}),
                 });
-                const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
+                // The prompt tool's server is named for this turn alone, so no server of the person's own, which a turn
+                // outside Plan only loads beside it, is ever the one the host asks (`turnServerName`).
+                const server = newServerName();
+                const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret, server);
                 const hookUrl = endpoint.hookUrl;
                 let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode) : undefined;
                 narrowSettings = () => {
@@ -1921,7 +1924,7 @@ export class Chat {
                 // are refused in every mode (`ChatScope.shared`), and every other mode keeps the rules over them.
                 const rulesNow = () => [...data, ...(running.mode === 'full_access' && own ? [] : chatRules(this.#platform, folder))];
                 argsFor = (resumed) =>
-                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
+                    claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
                 argsFor = (resumed) => codexArguments({ platform: this.#platform, model: resolved.model, effort: resolved.effort, resume: resumed });
             }

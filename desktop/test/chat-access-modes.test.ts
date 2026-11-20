@@ -939,8 +939,9 @@ test('Auto-edit is given with no box, and its turn starts Claude Code exactly as
     await r.chat.setMode(id, 'ask_first');
     await r.turn(id, 'hello again', claude);
     const asked = r.hosts()[1]?.args ?? [];
-    // The two turns differ only by the turn's own files and the session resumed.
-    const without = (args: string[]) => args.filter((arg, at) => !arg.endsWith('.mcp.json') && !arg.endsWith('.settings.json') && arg !== '--resume' && args[at - 1] !== '--resume');
+    // The two turns differ only by the turn's own files, the name of the turn's own permission server and the session resumed.
+    const without = (args: string[]) =>
+        args.filter((arg, at) => !arg.endsWith('.mcp.json') && !arg.endsWith('.settings.json') && !/^mcp__jason_desktop_[0-9a-f]{16}__decide$/.test(arg) && arg !== '--resume' && args[at - 1] !== '--resume');
     assert.deepEqual(without(edited), without(asked));
 });
 
