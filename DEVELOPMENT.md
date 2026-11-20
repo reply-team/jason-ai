@@ -60,7 +60,8 @@ What it leaves you with:
   (each detected host's skills root), which an installed release shares.
 - **The UI served from `ui/dist`**, linked as the data directory's `ui/custom/`, which the runtime serves before
   anything else. `npm run build` writes the `manifest.json` the runtime asks for, so every later build is served by the
-  next request; while you work on the UI, `npm run dev` in `ui/` rebuilds on every change.
+  next request; while you work on the UI, `npm run dev` in `ui/` rebuilds on every change. Jason Desktop draws it, started
+  on the same data directory as [desktop/README.md](desktop/README.md) says; a browser tab draws one sentence of it.
 - **The runtime on port 52766**, or the next free one if an installed runtime already has it. `jason status` lists the
   rest; its `path` check fails, because this build is not on your PATH, on purpose.
 

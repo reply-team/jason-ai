@@ -760,7 +760,7 @@ public partial class PageClaimsTests
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at `v{{version}}`, which `jason plugin install slack` places in `~/.jason/plugins/slack` |")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |")]
     [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |")]
-    [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the UI's package, the build Jason Desktop draws: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
     [InlineData("docs/plugins.md", "`jason plugin install <id>` installs a package the release you run publishes: it downloads the file the manifest names, from that release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
@@ -799,7 +799,7 @@ public partial class PageClaimsTests
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>
     [Theory]
-    [InlineData("docs/handbook.md", "`jason ui install` places this release's browser UI, the build Jason Desktop draws; a runtime works without it.")]
+    [InlineData("docs/handbook.md", "`jason ui install` places this release's UI, the build Jason Desktop draws; a runtime works without it.")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older than that step places none, so `jason ui install` follows it; `jason status` names it until it has.")]
     public void The_walk_throughs_say_when_jason_ui_install_follows(string page, string said) =>
         Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
@@ -1283,7 +1283,7 @@ public partial class PageClaimsTests
     /// <summary>The two sentences of the README that may name TypeScript, as the README says them.</summary>
     private static readonly string[] TypeScriptSentences =
     [
-        "The browser UI is TypeScript.",
+        "Jason Desktop is TypeScript.",
         "TypeScript would need a build step on every machine that edits the plugin, and the runtime would still load only the JavaScript it produces, so we do not recommend it.",
     ];
 
@@ -1291,7 +1291,7 @@ public partial class PageClaimsTests
     /// The README says what a plugin author meets today: a plugin is plain JavaScript, run by the engine the runtime
     /// embeds, and a <c>.ts</c> entry is refused at load. It never says TypeScript comes first, nor that plugins or the
     /// changes a person or an agent makes are written in TypeScript, which would send an agent to write a package the
-    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says the browser UI is
+    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says Jason Desktop is
     /// TypeScript, and the one that says why it is not recommended for a plugin. Any other sentence that names it fails.
     /// </summary>
     [Fact]

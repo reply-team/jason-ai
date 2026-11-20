@@ -1,15 +1,15 @@
 # Jason Desktop
 
 Jason Desktop is a window onto the installation the `jason` command line uses. It is one more client of that
-installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
+installation: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
 and the settings file a person would edit. It runs on one installation, yours; in [the demo](#the-demo) it shows a page of sample data instead and runs
 no installation. Nothing in the runtime exists for the desktop.
 
-It adds three things the browser cannot do: a chat that is a session with your own agent, started for you on this
-computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
-what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
-else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
+Its screens are a UI the runtime serves ([ui.md](ui.md)), and it adds three things of its own: a chat that is a session
+with your own agent, started for you on this computer (Claude Code, which by default asks you before it acts, or Codex,
+which reads and advises), a tray that counts what waits for you, and the one-step setup of Reply, your notification
+channels and your AI provider's key. The terminal stays open to you at any time:
 on macOS, Windows and Linux the first start of each version puts `jason` where a new terminal finds it and gives your agents
 Jason's skills, by the `jason install` the application carries, and the Command Line item of its menu says what that
 placed and puts it back ([The command line, and the login items](#the-command-line-and-the-login-items)).
@@ -154,7 +154,7 @@ shows before anything is typed and what you send waits, while the window is open
   and a turn that fails, gives the queued words back to the box, above what you typed there; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
-- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
+- In the console's Live the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
   macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
@@ -162,7 +162,7 @@ shows before anything is typed and what you send waits, while the window is open
   System holds.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
+- The other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
   [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
@@ -555,9 +555,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
-  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts;
+  The Accounts screen shows the same card, drawn by the same code and acting through the same acts;
   the notification channels as the runtime reports them are in Settings, under Notifications; see
-  [the browser UI](ui.md#notifications-in-settings).
+  [ui.md](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -630,7 +630,7 @@ Claude Code.
   the key Jason's own commands use, its run token. Codex runs it read-only.** Neither says anything of the network or
   of acting for you, which nobody has seen. Keep a plugin's secret out of `settings.json`
   ([plugins.md](plugins.md#hostconfig)). A browser you paired keeps its token in its own profile, which a command of a
-  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-browsers)).
+  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-pages)).
 
 ### Conversations
 

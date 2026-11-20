@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening Jason Desktop on what waits or unpairing a browser, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which journal kinds a subscribing plugin is handed and where each stands, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening Jason Desktop on what waits or unpairing a page, and installing Jason or taking it off again.
 metadata:
   status: draft
 ---
@@ -64,8 +64,9 @@ If no UI build is in place, `jason ui install` places this release's build as `u
 command says so: then say that a build is made from `ui/` as its README says and unzipped into `ui/custom`, and do not
 build anything yourself.
 
-`jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
-the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served,
+`jason ui tokens` lists the paired pages, Jason Desktop's window among them; `jason ui revoke <token-id>` unpairs one,
+`--all` every one, the window's too, which then says it is not paired until the desktop's next start or the runtime's
+restart. Revoke when the person says a page should no longer have access. `jason status`'s `ui_module` check says which build is served,
 names `jason ui install` where none is or the default one is another release's, and never decides readiness.
 
 `jason session open --approval <id>` (or `--question <id>`) opens a new terminal on the person's desktop running their

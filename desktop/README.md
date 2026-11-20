@@ -1,7 +1,7 @@
 # Jason Desktop
 
-An Electron window onto the installation the `jason` command line uses. It is one more client of that installation, as
-the browser UI is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise `~/.jason`), shows the UI the
+An Electron window onto the installation the `jason` command line uses. It is one more client of that installation: it
+finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise `~/.jason`), shows the UI the
 runtime serves at its loopback address, and changes the installation only through CLI verbs and the settings file a
 person would edit.
 
@@ -669,8 +669,8 @@ a chat, no card, approval or question answered, no chat mode, no setting (`src/d
 desktop's own on every platform. `jason:` is the runtime's: on Windows its toast host registers it for the command line,
 which handles `jason://attention...` ([`docs/notifications.md`](../docs/notifications.md), section 7); the desktop never
 registers, declares or removes it. Where the desktop's registration names a program that is there, the command line
-hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens the browser UI
-otherwise. The addresses are a closed table:
+hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens nothing
+otherwise, never a browser. The addresses are a closed table:
 
 | Address | Opens |
 | --- | --- |

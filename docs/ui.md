@@ -51,8 +51,9 @@ name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. Jason Desktop runs it at a start where `jason status` finds
-the UI the runtime serves missing or not in order, the install guide runs it, `jason update apply` runs it at its end, and `jason status` names
-it where the default build is missing or another release's. A build from source has no published UI to fetch.
+the UI the runtime serves missing or not in order, the install guide runs it, `jason update apply` runs it at its end,
+and `jason status` names it where the default build is missing or another release's. A build from source has no
+published UI to fetch.
 
 To try a build that is not the installed one, a CI run's `jason-ui.zip` say, unzip it into `~/.jason/ui/custom/` and
 start Jason Desktop, whose window draws whatever the runtime serves; `jason status` and `jason runtime status --human`
