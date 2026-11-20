@@ -406,8 +406,8 @@ public partial class ReleaseWorkflowTests
     /// files the release's own install script installs to its checksums.txt by their digests and says the others
     /// unverified; it comes before the one leg that needs it, which hands the folder it fetched to the step that updates from
     /// it, and compares the uninstall after it with the machine before. The job's summary says that release's handing proven
-    /// only where the leg's step succeeded having run to its end, and otherwise that the leg failed or was not run. CI's
-    /// union jobs fetch no one-installation release (<see cref="ReleaseOnly"/> says why).
+    /// only where the leg's step succeeded having run to its end, and otherwise that the leg failed, was cancelled or was not
+    /// run. CI's union jobs fetch no one-installation release (<see cref="ReleaseOnly"/> says why).
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a one-installation pin read as the latest published, or not before the version a release builds, fails the leg updating from it and blocks the release")]
@@ -428,12 +428,13 @@ public partial class ReleaseWorkflowTests
                 "./.github/scripts/Test-InstallationWindows.ps1 -Step FromOneInstallation -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -OneInstallation $env:ONE_INSTALLATION",
                 "./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before",
                 "$ended = Join-Path $env:OUT 'legs-ended.txt'\n"
-                    + "$handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } else { 'is not proven here: its leg was not run' }\n"),
+                    + "$handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'cancelled') { 'is not proven here: its leg was cancelled' } else { 'is not proven here: its leg was not run' }\n"),
             ("proof-macos", "verified=\"jason-desktop-macos-arm64.zip\"", "unverifiable=\"install.sh manifest.json\"",
                 "bash .github/scripts/test-installation-macos.sh from-one-installation \"$ONE_INSTALLATION\" \"$FEED\" \"$VERSION\"",
                 "bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before",
                 "if [ \"$ONE_INSTALLATION_LEG\" = success ] && grep -qxF -- \"$ONE_INSTALLATION_LEG_NAME\" \"$OUT/legs-ended.txt\" 2>/dev/null; then handed=\"is proven here, by its leg\"\n"
                     + "elif [ \"$ONE_INSTALLATION_LEG\" = failure ]; then handed=\"is not proven here: its leg failed\"\n"
+                    + "elif [ \"$ONE_INSTALLATION_LEG\" = cancelled ]; then handed=\"is not proven here: its leg was cancelled\"\n"
                     + "else handed=\"is not proven here: its leg was not run\"; fi\n"),
         })
         {

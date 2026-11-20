@@ -1731,7 +1731,7 @@ public partial class InstallScriptTests
     /// under a bound that keeps what it said in the leg's file as it says it; past the bound, what the verb set going and
     /// that outlived it - Jason Desktop and whatever runs from the updater's folder - is ended by what it is. After the
     /// update, Installed apps is read once its one entry is this version's, or at the bound, and nothing of the update may
-    /// be left running, each one left named.
+    /// be left running 30 s on, the setup it ran being given that long to end, each one left named.
     /// </summary>
     [Fact]
     public void The_Windows_one_installation_leg_begins_from_its_pinned_release_and_leaves_nothing_of_the_update_running()
@@ -1771,11 +1771,13 @@ public partial class InstallScriptTests
         var read = At("$fault = Get-HandedFinishFault $update.Exit (Read-Document $update.Said) $fromVersion $Version\n");
         var waited = At("while (-not (& $oneAtVersion) -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 500 }\n");
         var entries = At("$entries = @(Get-JasonUninstallEntries)\n");
-        var still = At("$stillRunning = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater)\n");
+        var still = At("$leftOf = { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater) }\n");
+        var grace = At("$graceUntil = [DateTime]::UtcNow.AddSeconds(30)\n");
+        var given = At("while ($stillRunning.Count -ne 0 -and [DateTime]::UtcNow -lt $graceUntil) { Start-Sleep -Seconds 1; $stillRunning = @(& $leftOf) }\n");
         var named2 = At("if ($stillRunning.Count -ne 0) { Fail ");
         var shell = At("$found = @(Find-InNewShell 'jason')\n");
-        Assert.True(read < waited && waited < entries && entries < still && still < named2 && named2 < shell,
-            "the step FromOneInstallation does not wait for Installed apps' entry, then hold that nothing of the update runs, before a new shell is asked for jason");
+        Assert.True(read < waited && waited < entries && entries < still && still < grace && grace < given && given < named2 && named2 < shell,
+            "the step FromOneInstallation does not wait for Installed apps' entry, then give what the update left 30 s to end and hold that nothing of it runs, before a new shell is asked for jason");
         Assert.Contains("$oneAtVersion = { $now = @(Get-JasonUninstallEntries); $now.Count -eq 1 -and $now[0].PSObject.Properties['DisplayVersion'] -and [string]$now[0].DisplayVersion -ceq $Version }\n", step, StringComparison.Ordinal);
         Assert.Contains("$until = [DateTime]::UtcNow.AddSeconds(120)\n", step, StringComparison.Ordinal);
         Assert.Contains("$($_.ProcessId) $($_.CommandLine)", step[named2..shell], StringComparison.Ordinal);
@@ -1784,9 +1786,13 @@ public partial class InstallScriptTests
     /// <summary>
     /// The Windows proof's <c>Invoke-Program</c>, run as the proof runs it: given a file to keep what the program says, it
     /// writes each line there as it is said, so a run its bound ends leaves the lines said before it; at the bound it ends
-    /// the program and every process under it, the one the program started included, and fails the step. A run within the
-    /// bound gives its exit code, its file holding every line. <c>Write-JasonProcesses</c>, which names the machine's own
-    /// processes of Jason's, is a stand-in here, so the row reads none of them.
+    /// the program and every process under it, the one the program started included, and fails the step. It ends nothing
+    /// else: not the feed server the step started before the program, not a stranger whose dead parent's id the process
+    /// table gives as the program's, not one of the runner's own processes, and not one the table makes this shell's
+    /// parent, the last two shown under the program as created after it. A run within the bound gives its exit code, its
+    /// file holding every line. <c>Write-JasonProcesses</c>, which names the machine's own processes of Jason's, is a
+    /// stand-in here, so the row reads none of them, and so is <c>Get-CimInstance</c>, which shows the real table as the
+    /// row makes it.
     /// </summary>
     [Fact]
     [SupportedOSPlatform("windows")]
@@ -1817,18 +1823,45 @@ public partial class InstallScriptTests
         Assert.True(Line("bound").EndsWith("did not end within 15 s", StringComparison.Ordinal), $"a run past its bound did not fail the step at the bound:{output}");
         Assert.True(Line("kept at the bound") == "said before the bound", $"a run past its bound did not leave the lines it said before it:{output}");
         Assert.True(Line("the process the program started") == "ended", $"a run past its bound left the process the program started:{output}");
+        Assert.True(Line("the feed server") == "left alone", $"a run past its bound ended the feed server the step started before it:{output}");
+        Assert.True(Line("a stranger under a reused id") == "left alone", $"a run past its bound ended a stranger whose dead parent's id is the program's:{output}");
+        Assert.True(Line("one of the runner's") == "left alone", $"a run past its bound ended one of the runner's processes:{output}");
+        Assert.True(Line("this shell's parent") == "left alone", $"a run past its bound ended this shell's parent:{output}");
     }
 
     /// <summary>
     /// The pwsh the bound's row runs: the settings lines of the proof's own prelude, a folder of its own for the step's
     /// failure record, a stand-in for <c>Write-JasonProcesses</c>, and the proof's own <c>Fail</c> and
     /// <c>Invoke-Program</c>; then a program that ends by itself, and one that says a line, starts a process of its own
-    /// and never ends, under a bound of 15 s. One line per finding, its label and what was seen, apart by a colon.
+    /// and never ends, under a bound of 15 s. Four processes of the row's own, started before that program, stand for
+    /// what the bound must leave alone; <c>Get-CimInstance</c> shows the real process table with the stranger's parent
+    /// given as the program, the runner's process and this shell's parent shown under the program, created a second after
+    /// it, and this shell's parent being the last of the four. One line per finding, its label and what was seen, apart by
+    /// a colon.
     /// </summary>
     private const string BoundHarness = """
         @PRELUDE@
         $Out = @OUT@
         function Write-JasonProcesses { Write-Host '  (the machine''s own processes are not named by this row)' }
+        function Start-Sleeper { Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow }
+        function Get-CimInstance {
+            $real = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process)
+            $program = @($real | Where-Object { $_.ParentProcessId -eq $PID -and "$($_.CommandLine)".Contains('said before the bound') }) | Select-Object -First 1
+            foreach ($process in $real) {
+                $shown = [pscustomobject]@{ ProcessId = $process.ProcessId; ParentProcessId = $process.ParentProcessId; Name = $process.Name; CreationDate = $process.CreationDate; ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine }
+                if ($program) {
+                    if ($process.ProcessId -eq $stranger.Id) { $shown.ParentProcessId = $program.ProcessId }
+                    if ($process.ProcessId -eq $runner.Id) { $shown.ParentProcessId = $program.ProcessId; $shown.Name = 'Runner.Listener.exe'; $shown.CreationDate = $program.CreationDate.AddSeconds(1) }
+                    if ($process.ProcessId -eq $ancestor.Id) { $shown.ParentProcessId = $program.ProcessId; $shown.CreationDate = $program.CreationDate.AddSeconds(1) }
+                    if ($process.ProcessId -eq $PID) { $shown.ParentProcessId = $ancestor.Id }
+                }
+                $shown
+            }
+        }
+        function Write-Left([string] $label, [System.Diagnostics.Process] $process) {
+            [Console]::Out.WriteLine("${label}: $(if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) { 'left alone' } else { 'ended' })")
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
 
         @FUNCTIONS@
 
@@ -1837,7 +1870,12 @@ public partial class InstallScriptTests
         $ran = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', "Write-Output 'one'; Write-Output 'two'; exit 3") @{} 120 $normal
         [Console]::Out.WriteLine("exit: $($ran.Exit)")
         [Console]::Out.WriteLine("kept: $(@(Get-Content -LiteralPath $normal) -join '|')")
-        $inner = "Write-Output 'said before the bound'; `$p = Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow; Set-Content -LiteralPath '@PIDFILE@' -Value `$p.Id; Start-Sleep -Seconds 120"
+        $server = Start-Sleeper
+        $stranger = Start-Sleeper
+        $runner = Start-Sleeper
+        $ancestor = Start-Sleeper
+        Start-Sleep -Seconds 1
+        $inner ="Write-Output 'said before the bound'; `$p = Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow; Set-Content -LiteralPath '@PIDFILE@' -Value `$p.Id; Start-Sleep -Seconds 120"
         try {
             $null = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', $inner) @{} 15 $bounded
             [Console]::Out.WriteLine('bound: not reached')
@@ -1851,17 +1889,22 @@ public partial class InstallScriptTests
         [Console]::Out.WriteLine("kept at the bound: $(@(Get-Content -LiteralPath $bounded -ErrorAction SilentlyContinue) -join '|')")
         [Console]::Out.WriteLine("the process the program started: $(if ($started -le 0) { 'never started' } elseif (Get-Process -Id $started -ErrorAction SilentlyContinue) { 'still running' } else { 'ended' })")
         if ($started -gt 0) { Stop-Process -Id $started -Force -ErrorAction SilentlyContinue }
+        Write-Left 'the feed server' $server
+        Write-Left 'a stranger under a reused id' $stranger
+        Write-Left 'one of the runner''s' $runner
+        Write-Left 'this shell''s parent' $ancestor
         exit 0
         """;
 
     /// <summary>
     /// The macOS leg that updates from the one-installation release keeps, by one trap for its way out however it ends, the
-    /// feed server it starts ended and the desktop's log and ShipIt's logs in the leg's folder before the uninstall after it
-    /// takes them. It begins from the release its fetched manifest.json names, read by an isolated python3. Its runtime start
-    /// and its verb each run in a subshell, so a bound reached ends in a line of the leg's own: the start waits only where
-    /// it refuses because the runtime it started is still running. After the update, the processes of Jason Desktop and of
-    /// ShipIt are printed and given 30 s to end, launchd's ShipIt job is printed whole, and one still running fails the leg
-    /// by name.
+    /// feed server it starts ended, what of Jason Desktop and its ShipIt is still running printed and kept, and the
+    /// desktop's log and ShipIt's logs in the leg's folder before the uninstall after it takes them. It begins from the
+    /// release its fetched manifest.json names, read by an isolated python3. Its runtime start and its verb each run in a
+    /// subshell, so a bound reached ends in a line of the leg's own: the start waits only where it refuses because the
+    /// runtime it started is still running. After the update, the processes of Jason Desktop and of its own ShipIt, never
+    /// another application's, are printed and given 30 s to end, launchd's ShipIt job is printed whole, and one still
+    /// running fails the leg by name.
     /// </summary>
     [Fact]
     public void The_macOS_one_installation_leg_begins_from_its_pinned_release_and_says_what_the_update_leaves()
@@ -1879,6 +1922,7 @@ public partial class InstallScriptTests
         foreach (var said in new[]
         {
             "[ -z \"$server\" ] || kill \"$server\" 2>/dev/null || true",
+            "[ -z \"${placed:-}\" ] || { left=\"$(left_running \"$placed\")\"; echo \"${left:-none}\" > \"$OUT/one-installation-left-running.txt\"; echo \"left running as this step ends: ${left:-none}\"; }",
             "keep_desktop_log one-installation-desktop.jsonl",
             "for log in \"$HOME\"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f \"$log\" ] || cp \"$log\" \"$OUT/one-installation-$(basename \"$log\")\" 2>/dev/null || true; done",
         })
@@ -1902,7 +1946,7 @@ public partial class InstallScriptTests
 
         var update = At("( within 900 \"$old's jason update apply --version $version\" \"$carried\" update apply --version \"$version\" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 ) > \"$OUT/update-from-one-installation.json\" 2> \"$OUT/update-from-one-installation.err\" || status=$?\n");
         var handed = At("[ -z \"$handed_read\" ] || fail ");
-        var processes = At("still_running=\"$( { pgrep -lf \"$placed/Contents/MacOS/\" || true; pgrep -lf ShipIt || true; } | tr '\\n' ';')\"\n");
+        var processes = At("still_running=\"$(left_running \"$placed\")\"\n");
         var job = At("launchctl print \"gui/$(id -u)/ai.jasonharness.desktop.ShipIt\" > \"$OUT/one-installation-shipit-job.txt\" 2>&1");
         var shown = At("cat \"$OUT/one-installation-shipit-job.txt\"\n");
         var left = At("[ -z \"$still_running\" ] || fail ");
@@ -1910,7 +1954,59 @@ public partial class InstallScriptTests
         Assert.True(waited < update && update < handed && handed < processes && processes < job && job < shown && shown < left && left < shell,
             "the step from-one-installation does not print what the update leaves running and launchd's ShipIt job, then fail on what is left, before a new login shell is asked for jason");
         Assert.Contains("deadline=$(( $(date +%s) + 30 ))\n", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("pgrep -lf ShipIt", macos, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// What the macOS proof names as left running of Jason Desktop at its place, run as the proof runs it: the
+    /// application's own processes, and its ShipIt, known by launchd's job of Jason Desktop's or by the Squirrel.framework
+    /// inside the application; another application's ShipIt, or its own processes, are never named. <c>pgrep</c> is a
+    /// stand-in here, matching its pattern to a process table of the row's own as <c>pgrep -lf</c> does, so the row reads
+    /// none of the machine's processes. It runs in bash: /bin/bash on Linux and macOS, Git Bash on a Windows that has it.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_names_only_its_own_desktop_and_ShipIt_as_left_running()
+    {
+        var bash = OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe") : "/bin/bash";
+        Assert.SkipUnless(File.Exists(bash), $"This machine has no {bash} to run the macOS proof's functions in.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        using var tree = new TempTree();
+        var harness = Path.Combine(tree.Root, "harness.sh");
+        File.WriteAllText(harness, LeftRunningHarness
+            .Replace("@SETTINGS@", MacProofSettings(script), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", MacProofFunction(script, "left_running"), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Run(bash, new Dictionary<string, string>(), "--noprofile", "--norc", harness.Replace('\\', '/'));
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var left = SaidLine(stdout, "left").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(process => process.Split(' ')[0]).ToList();
+        Assert.True(left.SequenceEqual(["4101", "4102"]), $"what is left running of Jason Desktop at its place is not its own process and its own ShipIt alone:{output}");
+        Assert.True(SaidLine(stdout, "another's alone") == string.Empty, $"another application's ShipIt and processes were named as left running:{output}");
+    }
+
+    /// <summary>
+    /// The bash the row of what is left running runs: the shell options of the proof's own prelude, a stand-in for
+    /// <c>pgrep</c> matching its pattern to a table of the row's own as <c>pgrep -lf</c> does, and the proof's own
+    /// <c>left_running</c>, asked of Jason Desktop at its place with its own processes running, and then with another
+    /// application's alone. One line per finding, its label and what was seen, apart by a colon.
+    /// </summary>
+    private const string LeftRunningHarness = """
+        @SETTINGS@
+        TABLE='4101 /Applications/Jason.app/Contents/MacOS/Jason --update-apply --await-go
+        4102 /Applications/Jason.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt ai.jasonharness.desktop.ShipIt /Users/runner/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipItState.plist
+        4103 /Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.example.other.ShipIt /Users/runner/Library/Caches/com.example.other.ShipIt/ShipItState.plist
+        4104 /Applications/Other.app/Contents/MacOS/Other'
+        pgrep() { [ "$1" = -lf ] || return 2; printf '%s\n' "$TABLE" | grep -E -- "$2"; }
+
+        @FUNCTIONS@
+
+        echo "left: $(left_running /Applications/Jason.app)"
+        TABLE='4103 /Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.example.other.ShipIt /Users/runner/Library/Caches/com.example.other.ShipIt/ShipItState.plist
+        4104 /Applications/Other.app/Contents/MacOS/Other'
+        echo "another's alone: $(left_running /Applications/Jason.app)"
+        """;
 
     /// <summary>
     /// Each leg of both proofs says its time where it ends, in whole seconds from its begin, with the job's time so far
@@ -2223,7 +2319,8 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// The words the jason the one-installation release hands the rest to says once it has finished, which both proof
-    /// scripts read: this build's own, where <c>UpdateApplier</c> says them.
+    /// scripts read: this build's own, where <c>UpdateApplier</c> says them, and the swap its finish records, where
+    /// <c>UpdateCommands</c> adds it to the handing's steps.
     /// </summary>
     private static void AssertTheFinishSaysWhatTheReadersRead()
     {
@@ -2231,6 +2328,8 @@ public partial class InstallScriptTests
         Assert.Contains("Say(UpdateStep.Healthy, $\"{info.RuntimeVersion}, {info.Database.AppliedMigrations.Count} migrations applied\");", applier, StringComparison.Ordinal);
         Assert.Contains("Say(UpdateStep.Complete, $\"{ledger.FromVersion} -> {ledger.ToVersion}\");", applier, StringComparison.Ordinal);
         Assert.Contains("private void Say(UpdateStep step, string what) => Say(step.ToString().ToLowerInvariant(), what);", applier, StringComparison.Ordinal);
+        var commands = File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Commands", "UpdateCommands.cs"));
+        Assert.Contains("handing.Steps.Add($\"swapped: the application is {inFlight.ToVersion}\");", commands, StringComparison.Ordinal);
     }
 
     /// <summary>
