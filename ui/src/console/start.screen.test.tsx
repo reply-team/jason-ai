@@ -375,7 +375,7 @@ describe('the start screen', () => {
         expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
     });
 
-    it('with Codex picked, whose turns run in Ask first, takes Ask first chosen there as the person’s choice: the chat it makes is put in Ask first', async () => {
+    it('with Codex picked, draws Full access in Codex’s own line, and Ask first chosen there makes the chat start in Ask first', async () => {
         const both: DesktopSetup = {
             ...setupFound,
             hosts: setupFound.hosts.map((each) =>
@@ -386,9 +386,15 @@ describe('the start screen', () => {
         renderConsole(desktop);
         await ready();
         fireEvent.click(item(openMenu(/Model:/), 'Codex'));
-        // Drawn as its turns run on Codex: Ask first.
-        await waitFor(() => within(startForm()).getByRole('button', { name: 'Access mode: Ask first' }));
+        // Codex runs Full access as itself, with no sandbox, and the line says so in its own words.
+        await waitFor(() =>
+            expect(within(startForm()).getByRole('status', { name: 'Full access is on' }).textContent).toBe(
+                'Full access · Codex runs commands on this computer without asking, with no sandbox',
+            ),
+        );
+        expect(within(startForm()).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
+        await waitFor(() => within(startForm()).getByRole('button', { name: 'Access mode: Ask first' }));
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);

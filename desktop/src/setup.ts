@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type ChatMode } from './chat-modes.ts';
+import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type ChatMode } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -523,17 +523,15 @@ export class Setup {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
             return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
-        // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
-        // While this version does not offer it, every host that drives the chat says so.
+        // Codex has Full access with no floor; Claude Code has it from its floor of Full access. A Claude Code not found offers
+        // nothing yet. While this version does not offer it, every host that drives the chat says so.
         const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
         const fullAccessOn = (program: string, drives: boolean) =>
             !drives
                 ? null
                 : !offeredHere
                     ? fullAccessNotYet
-                    : program === 'codex'
-                      ? codexFullAccess
-                      : program === 'claude'
+                    : program === 'claude'
                         ? claude === null
                             ? null
                             : claude.fullAccess

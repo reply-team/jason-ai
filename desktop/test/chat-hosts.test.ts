@@ -64,6 +64,17 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
+test('a Codex turn in Full access acts with no sandbox and reads the person\'s own configuration, on every platform; Ask first, Plan only and Auto-edit are the read-only turn', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+        assert.deepEqual(codexArguments({ platform, mode: 'full_access' }), [
+            'exec', '--json', '--sandbox', 'danger-full-access', '--skip-git-repo-check',
+            '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-',
+        ], `${platform}: no --ignore-user-config and no windows.sandbox setting`);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) assert.deepEqual(codexArguments({ platform, mode }), codexArguments({ platform }), `${platform} ${mode}`);
+    }
+    assert.deepEqual(codexArguments({ platform: 'linux', mode: 'full_access', model: 'gpt-5', resume: 'thr-1' }).slice(-5), ['--model', 'gpt-5', 'resume', 'thr-1', '-']);
+});
+
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
     assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
         ...claudeAllowedTools,
@@ -384,7 +395,7 @@ test('the host\'s environment puts the bundled jason first on PATH and names the
     assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
-test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED in Plan only, whatever the desktop inherited in any letter case', () => {
+test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED on every turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, whatever the desktop inherited in any letter case', () => {
     for (const program of ['claude', 'codex'] as const) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
             for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only', undefined] as const) {
@@ -392,7 +403,8 @@ test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFIN
                     const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {}, ...(mode === undefined ? {} : { mode }) });
                     const said = `${program} ${platform} ${mode} ${JSON.stringify(inherited)}`;
                     assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], said);
-                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), mode === 'plan_only' ? [['JASON_CONFINED', '1']] : [], said);
+                    const confined = mode === 'plan_only' || (program === 'codex' && mode !== undefined && mode !== 'full_access');
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), confined ? [['JASON_CONFINED', '1']] : [], said);
                 }
             }
         }
@@ -727,4 +739,38 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     }
     const settings = JSON.parse(valueOf(edited, '--settings') ?? '{}') as Record<string, unknown>;
     assert.equal(JSON.stringify(settings).includes('hooks'), false);
+});
+
+test('Codex\'s warning that requirements put the sandbox below the one asked for is read as such, in the field this Codex names and the one an earlier one named; any other warning is dropped, as before', () => {
+    // The words at openai/codex 9f2b87495b, read and not seen: core/src/config/mod.rs, `apply_requirement_constrained_value`,
+    // says "Configured value for `{field_name}` is disallowed by requirements; falling back to required value
+    // {fallback_value:?}. Details: {err}", and exec/src/event_processor_with_jsonl_output.rs says a configuration warning
+    // as an `item.completed` whose item is of type `error` with that `message`.
+    const warning = (message: unknown) => JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } });
+    for (const field of ['permission_profile', 'sandbox_mode']) {
+        assert.deepEqual(codexLine(warning(`Configured value for \`${field}\` is disallowed by requirements; falling back to required value ReadOnly. Details: not allowed`), new Set()), [{ kind: 'sandbox_narrowed' }], field);
+    }
+    for (const message of ['Configured value for `web_search_mode` is disallowed by requirements; falling back to required value Cached.', 'Under-development features enabled: x.', '', undefined]) {
+        assert.deepEqual(codexLine(warning(message), new Set()), [], String(message));
+    }
+    assert.deepEqual(codexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'no' } }), new Set()), [{ kind: 'result', error: 'no' }]);
+});
+
+test('a Codex turn that reads the person\'s config.toml, a Full access one, pins JASON_DATA_DIR and JASON_CHAT_TURN in its shell environment policy by -c, and never PATH; a turn that leaves the file unread pins nothing', () => {
+    // openai/codex 9f2b87495b (read, not seen): session flags are merged over config.toml table by table
+    // (config/src/merge.rs, `merge_toml_values_at_path`), so `shell_environment_policy.set.<NAME>` adds a name to the
+    // person's `set`; `populate_env` (protocol/src/shell_environment.rs) applies `set` after `inherit` and the excludes.
+    const environment = { JASON_DATA_DIR: 'C:\\Users\\a b\\.jason', JASON_CHAT_TURN: '1', PATH: 'C:\\bin', OTHER: 'x' };
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        const full = codexArguments({ platform, mode: 'full_access', environment });
+        const settings = full.flatMap((arg, i) => (full[i - 1] === '-c' ? [arg] : []));
+        const pinned = settings.filter((setting) => setting.startsWith('shell_environment_policy.'));
+        assert.deepEqual(pinned, ['shell_environment_policy.set.JASON_DATA_DIR="C:\\\\Users\\\\a b\\\\.jason"', 'shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        // Without a data directory named, only the turn's mark.
+        const unnamed = codexArguments({ platform, mode: 'full_access', environment: { JASON_CHAT_TURN: '1', PATH: 'C:\\bin' } });
+        assert.deepEqual(unnamed.filter((arg) => arg.startsWith('shell_environment_policy.')), ['shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) {
+            assert.ok(!codexArguments({ platform, mode, environment }).some((arg) => arg.startsWith('shell_environment_policy.')), `${platform} ${mode}`);
+        }
+    }
 });
