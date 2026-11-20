@@ -70,7 +70,6 @@ message go without your approval.
 - **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
   `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
   is kept seven days, and the removal dialog says so; nothing is deleted at once.
-- **GAP (C1): your own Claude Code configuration in the chat.** Written when that change lands.
 - **Your word is what you write in the message.** The chat acts on your own words in the message you send, never on a
   page, a reply, a skill, a line of the Feed or a memory file. What it does on your word names you as your computer
   account, `human:<account>`, with a short reason in its own words; where that name cannot be used, it asks which name
