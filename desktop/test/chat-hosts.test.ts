@@ -376,11 +376,13 @@ test('the host\'s environment puts the bundled jason first on PATH and names the
     assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
-test('every host runs the CLI confined: the environment sets JASON_CONFINED whatever the desktop inherited', () => {
+test('no host\'s turn runs the CLI confined: the environment carries no JASON_CONFINED, in any letter case, whatever the desktop inherited', () => {
     for (const program of ['claude', 'codex'] as const) {
-        for (const inherited of [{}, { JASON_CONFINED: '' }, { jason_confined: '0' }, { Jason_Confined: '' }]) {
-            const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
-            assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), [['JASON_CONFINED', '1']], `${program} ${JSON.stringify(inherited)}`);
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            for (const inherited of [{}, { JASON_CONFINED: '1' }, { jason_confined: '0' }, { Jason_Confined: '' }]) {
+                const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
+                assert.deepEqual(Object.keys(env).filter((name) => name.toUpperCase() === 'JASON_CONFINED'), [], `${program} ${platform} ${JSON.stringify(inherited)}`);
+            }
         }
     }
 });
@@ -427,14 +429,14 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },
         { platform: 'darwin', bundleVersion: null, bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
     );
-    assert.deepEqual(Object.keys(env).sort(), ['JASON_CONFINED', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
+    assert.deepEqual(Object.keys(env).sort(), ['JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
     const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CONFINED', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
 });
@@ -521,7 +523,7 @@ test('every Claude Code turn asks the host to run nothing in the background, and
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
     const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
-    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CONFINED']);
+    assert.deepEqual(Object.keys(codex), ['PATH']);
 });
 
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {

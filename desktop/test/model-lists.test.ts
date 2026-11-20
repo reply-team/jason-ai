@@ -251,7 +251,7 @@ test('an ask starts codex app-server in the chat folder with no message, as a tu
     const [run] = b.record().filter((each) => each.name === 'codex');
     assert.deepEqual(run?.args, ['app-server']);
     assert.equal(run?.cwd.toLowerCase(), b.paths.chat.toLowerCase());
-    assert.equal(run?.env.JASON_CONFINED, '1');
+    assert.equal(run?.env.JASON_CONFINED, undefined, 'the environment a turn has: no confinement');
     assert.equal(run?.env.OPENAI_API_KEY, 'sk-inherited', "a plain ask keeps the person's own configuration, as a plain turn does");
     assert.ok(!('CLAUDE_AUTO_BACKGROUND_TASKS' in (run?.env ?? {})));
     const said = readFileSync(log, 'utf8').split('\n').filter(Boolean);

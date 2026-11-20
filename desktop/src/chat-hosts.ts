@@ -507,10 +507,10 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
  * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
- * `JASON_CONFINED=1`, whatever the desktop inherited, so the jason it runs reads a request's content from standard
- * input only and runs a provider check's program by a bare name only; the desktop's own calls of jason do not carry
- * it. No host's turn carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). No host's turn carries
+ * `JASON_CONFINED`, not even one the desktop inherited: the jason a chat runs is not confined, and what it may run is
+ * the turn's mode's to say (`modeFence`). No host's turn carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn
+ * is never a role's attempt. Every
  * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
  * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
@@ -560,7 +560,6 @@ export function hostEnvironment(
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
-    env[confinedVariable] = '1';
     if (options.program === 'claude') {
         if (options.platform !== 'linux') env[scrub] = '1';
         env[maintainFolder] = '1';
