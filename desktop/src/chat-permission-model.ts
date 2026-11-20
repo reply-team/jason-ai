@@ -226,6 +226,8 @@ const serversRefusal = 'That file would name MCP servers for the chat\'s own AI,
 function ownRefusal(kind: NonNullable<GuardedName['chatsOwn']>): string {
     return kind === 'instructions' ? instructionsRefusal : kind === 'servers' ? serversRefusal : configurationRefusal;
 }
+/** What a command that names one of them is told after the write's sentence: the file tools read it. */
+const ownByCommand = ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools, Read, Grep and Glob. Nothing was run.';
 const longRefusal ='That command is longer than the card can show whole, so nobody could read what they would allow: the chat never runs it. '
     + 'Put the content in a file in the chat\'s folder and give it as --file - < <file>, or split the work. Nothing was run.';
 
@@ -1432,15 +1434,15 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
 /**
  * The refusal a command earns when one of its places is the chat's own: its instructions, or its agent settings and
  * skills, directly in the chat folder. Refused in every mode but Full access, as the file tools refuse a write there: a
- * command cannot be told apart as a read or a write. In Full access the folder is the turn's own, and the desktop puts
- * back what it placed there before the next turn.
+ * command cannot be told apart as a read or a write, so its sentence says that the file tools read it. In Full access
+ * the folder is the turn's own, and the desktop puts back what it placed there before the next turn.
  */
 function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | null {
     for (const path of places) {
         const { parts, working } = guardedParts(scope, path);
         if (working?.chat !== true) continue;
         const found = guardAt(scope, parts);
-        if (found?.at === 0 && found.guarded.chatsOwn !== undefined) return ownRefusal(found.guarded.chatsOwn);
+        if (found?.at === 0 && found.guarded.chatsOwn !== undefined) return ownRefusal(found.guarded.chatsOwn).replace(/ Nothing was done\.$/, ownByCommand);
     }
     return null;
 }
