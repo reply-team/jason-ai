@@ -197,6 +197,7 @@ public static class TerminalStartInfo
 
         start.WorkingDirectory = workingDirectory;
         start.Environment.Remove(Confinement.Variable);
+        start.Environment.Remove(Confinement.ChatTurnVariable);
         if (platform == TerminalPlatform.Windows && argv.Count > 2 && argv[1] == "--" && TerminalPlan.HostsWindowsPowerShell(platform, argv.Skip(2).ToList()))
         {
             start.Environment.Remove(ChildProcess.ModulePathVariable);

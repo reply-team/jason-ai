@@ -1769,16 +1769,17 @@ internal static partial class StatusChecks
             return new StatusCheck("provider_cli", false, CheckState.Unknown, $"This environment cannot run programs, so '{command}' was not run.", null);
         }
 
-        // A confined call runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
+        // A confined call, or a chat turn's, runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
         // anyone who can write there chose, so it is neither looked up nor started.
-        var confined = env.Confined();
+        var variable = env.FileHalfVariable();
+        var confined = variable is not null;
         if (confined && IsPath(providerCli))
         {
             return new StatusCheck(
                 "provider_cli",
                 false,
                 CheckState.Unknown,
-                $"This environment cannot run a program named by a path, so '{command}' was not run: {Confinement.Variable} is set. "
+                $"This environment cannot run a program named by a path, so '{command}' was not run: {variable} is set. "
                     + "Name a program on the search path, or run it in a terminal.",
                 null);
         }

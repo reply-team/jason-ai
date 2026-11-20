@@ -146,6 +146,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         // The confinement is the call's that started this runtime, never the runtime's: a runtime lives on past that call.
         // Nor is an update's lock ever handed to a runtime.
         startInfo.Environment.Remove(Confinement.Variable);
+        startInfo.Environment.Remove(Confinement.ChatTurnVariable);
         startInfo.Environment.Remove(Jason.Cli.Update.UpdateLock.Variable);
 
         return startInfo;
@@ -202,6 +203,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
         startInfo.Environment.Remove(UpdateLaunch.Variable);
         startInfo.Environment.Remove(Confinement.Variable);
+        startInfo.Environment.Remove(Confinement.ChatTurnVariable);
 
         // The update's lock goes to the one child that goes on under it, and to no other.
         if (updateLock is { Length: > 0 })
