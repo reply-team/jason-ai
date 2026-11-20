@@ -91,7 +91,8 @@ public class UiDocTests
         Assert.Contains("`jason ui pair`", section, StringComparison.Ordinal);
         Assert.Contains("`jason ui open --web`", section, StringComparison.Ordinal);
         Assert.Contains("`--web --no-open`", section, StringComparison.Ordinal);
-        Assert.Contains($"`{Jason.Cli.CliErrors.CustomUiNotInstalled}`", section, StringComparison.Ordinal);
+        Assert.Contains($"`{Jason.Cli.CliErrors.CustomUiNotInstalled}`, exit {Jason.Cli.ExitCodes.ApiError}", section, StringComparison.Ordinal);
+        Assert.Contains($"`http://127.0.0.1:<port>{UiPaths.Prefix}/#/attention?t=<ticket>`", section, StringComparison.Ordinal);
         Assert.Contains("`<data>/ui/custom/`", section, StringComparison.Ordinal);
         Assert.Contains($"`POST {UiPaths.Door}`", section, StringComparison.Ordinal);
         Assert.Contains($"{(int)UiTickets.Lifetime.TotalSeconds} seconds", section, StringComparison.Ordinal);

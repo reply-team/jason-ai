@@ -65,8 +65,8 @@ command says so: then say that a build is made from `ui/` as its README says and
 build anything yourself.
 
 `jason ui tokens` lists the paired pages, Jason Desktop's window among them; `jason ui revoke <token-id>` unpairs one,
-`--all` every one, the window's too, which then says it is not paired until the desktop's next start or the runtime's
-restart. Revoke when the person says a page should no longer have access. `jason status`'s `ui_module` check says which build is served,
+`--all` every one, the window's too, which then says it is not paired until the desktop pairs it again: at its next
+start, once the runtime has restarted, or at Reload in its View menu. Revoke when the person says a page should no longer have access. `jason status`'s `ui_module` check says which build is served,
 names `jason ui install` where none is or the default one is another release's, and never decides readiness.
 
 `jason session open --approval <id>` (or `--question <id>`) opens a new terminal on the person's desktop running their

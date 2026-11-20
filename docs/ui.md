@@ -50,8 +50,8 @@ Every file is served by the exact name its directory holds: a request in another
 name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
-release's `checksums.txt`, and swaps it in as `ui/default/`. Jason Desktop runs it at a start where `jason status` finds
-the UI the runtime serves missing or not in order, the install guide runs it, `jason update apply` runs it at its end,
+release's `checksums.txt`, and swaps it in as `ui/default/`. Jason Desktop runs it at a start where the runtime is its
+own version and `jason status` finds the UI the runtime serves missing or not in order, the install guide runs it, `jason update apply` runs it at its end,
 and `jason status` names it where the default build is missing or another release's. A build from source has no
 published UI to fetch.
 
@@ -122,8 +122,8 @@ dimmed, since a private window that closed or a browser whose data was cleared n
 **Revoke all other browsers** revokes every one but the window's own.
 
 The desktop's window keeps its token in memory only and pairs afresh at each start; `jason ui revoke --all` unpairs it
-too, and the window then says it is not paired until the desktop pairs it again, at its next start or once the runtime
-has restarted. A browser you paired keeps its token in its own profile, which a command of a Codex chat may
+too, and the window then says it is not paired until the desktop pairs it again: at its next start, once the runtime has
+restarted, or at **Reload** in its View menu. A browser you paired keeps its token in its own profile, which a command of a Codex chat may
 read; revoke a browser you no longer use. The first start of a desktop that kept its window's token on disk before
 revokes every UI token once, so a browser you paired must be paired again once.
 
@@ -158,7 +158,8 @@ place, still chosen, and Approve belongs to that one; if its text is not the one
 work item after the save, its panel says so. If that approval was decided before the list held it, or the work ended
 another way, the row goes as a row decided elsewhere does. The list's counts do not fall because of the edit. The
 page learns that the runtime asked again from the journal: a line that names the work item has each list holding the row
-read where it stands at its next read. The kept row is the page's own memory, the same in
+read where it stands at its next read, and an approval's open panel also watches for the new approval for half a minute
+after the save. The kept row is the page's own memory, the same in
 Attention, a campaign's Sequence, Needs you and an agent's chat: a reload of the page forgets it, and the row comes back
 when the runtime has asked again. If the
 text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
@@ -314,7 +315,7 @@ failures. Each tab's number is `jason workitem count` for that tab's statuses an
 and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
 --query`, `jason contact list --query`: any part of a name, company, title, email, phone, profile link or custom
 field's value), a kind, a role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a
-day at a time. They are part of the page's address, so a bookmark or a link from another screen keeps them. Opening an
+day at a time. They are part of the page's address, so a reload or a link from another screen keeps them. Opening an
 item shows what the runtime recorded about it: its facts, its attempts, its input and its history; a failure is shown as
 the error the runtime recorded, with its class and the attempts it used. Open work can take a new priority, start and
 due time, or be cancelled with a reason, through `jason workitem update` and `jason workitem cancel`; work waiting for
