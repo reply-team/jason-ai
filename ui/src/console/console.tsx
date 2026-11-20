@@ -18,6 +18,7 @@ import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
 import { NoDesktopPage } from './no-desktop';
 import { OpenIn } from './open-in';
+import { RowMenu } from './row-menu';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -729,6 +730,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         </div>
                     </div>
                     <Palette system={desktop.platform} />
+                    <RowMenu />
                 </>
             )}
         </div>

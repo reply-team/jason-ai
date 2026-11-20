@@ -10,9 +10,9 @@ import * as store from './store';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
 import { ReasonField } from '../../layout/reason-field';
+import { verbs, type Transition } from './moves-model';
 
-/** Pause stops an active campaign's work; Resume releases a paused one's again; Start releases a draft's for the first time. */
-export type Transition = 'pause' | 'resume' | 'start';
+export { transitions, verbs, type Transition } from './moves-model';
 
 /**
  * The campaign a move is offered for: its id, name and status, as every list of campaigns carries them, and the
@@ -22,20 +22,6 @@ export type Transition = 'pause' | 'resume' | 'start';
 export type Movable = CampaignSummary & { external_ids?: ExternalId[] };
 
 type Props = { campaign: Movable; kind: Transition; onDone: () => void; onClose: () => void };
-
-/** Each move by the word its button and its dialog say. */
-export const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resume', start: 'Start' };
-
-/**
- * What the runtime lets this campaign's status move to: an active one pauses, a paused one resumes and a draft starts,
- * each through `campaign.pause` or `campaign.start`; an archived campaign is over and moves nowhere.
- */
-export function transitions(campaign: Pick<CampaignSummary, 'status'>): Transition[] {
-    if (campaign.status === 'active') return ['pause'];
-    if (campaign.status === 'paused') return ['resume'];
-    if (campaign.status === 'draft') return ['start'];
-    return [];
-}
 
 /** The provider campaign's own name for itself: the plugin that holds its pin, as a person would write it. */
 export function provider(campaign: Movable): string | null {
