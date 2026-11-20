@@ -110,9 +110,9 @@ without it, through Claude Code, Codex or any other agent, and that Jason is ope
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New GTM agent** brings it forward. **New chat**, the
-button under it, makes a chat about no agent directly, and such a chat says so on a line at its top, "Chat · no agent",
-from before its first message; an agent's chat is named by the agent's header instead, and the Feed by its own.
+**New GTM agent** brings it forward. **New chat**, the button under it, makes a chat about no agent directly, and such
+a chat says so on a line at its top, "Chat · no agent", from before its first message; an agent's chat is named by the
+agent's header instead, and the Feed by its own.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
@@ -163,10 +163,11 @@ from before its first message; an agent's chat is named by the agent's header in
   ends while a tab may no longer send to its chat; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
-- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
-  macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
-  the **Feed** under it; **Accounts**, where an account is connected; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
-  addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
+- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under
+  **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds every page, agent, chat and
+  person; **Needs you**, with the number of approvals and questions waiting; the **Feed** under it; **Accounts**, where
+  an account is connected; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it
+  does not draw keep their addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
   System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
   it, return to the place you opened Settings from, or to Start when the page does not remember one (after a reload,
@@ -734,9 +735,9 @@ and the file it belongs in, by its path; the file is yours to edit, at that path
 ### The Feed
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn in the sidebar under
-**Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
-approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
-paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
+**Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen. It shows what happens in the
+campaigns as the runtime writes it, one line each: a reply observed, an approval or a question waiting, an approval
+approved or rejected, a question answered, a campaign created, started, paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
 scheduled, a reply sent, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability
 specialist. Consecutive lines of the same kind and campaign fold into one with a count; a message sent or scheduled and
 an invitation sent or scheduled are not the same kind of line, so sends that alternate with other lines are shown one by
