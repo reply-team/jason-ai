@@ -481,8 +481,15 @@ public partial class InteractiveSkillTests
             kept.Add(line);
         }
 
-        return CraftBlockText().Replace(string.Join('\n', kept), " ");
+        // The form of the person's word in the chat is rule 13 of the chat's instructions, given where each skill sets or
+        // runs an act on that word; quoting the chat's own rule is not copying a sibling's.
+        var prose = Regex.Replace(CraftBlockText().Replace(string.Join('\n', kept), " "), @"\s+", " ");
+        return ChatsForm().Replace(prose, " ");
     }
+
+    /// <summary>The form of the person's word that rule 13 of the chat's instructions gives, as a skill quotes it.</summary>
+    [GeneratedRegex(@"with `--actor human:<account>` as Jason's first paragraph names them and `--reason '\.\.\.'` in your own words(?: \([^)]*\))?, at the end of the command")]
+    private static partial Regex ChatsForm();
 
     /// <summary>Every run of eight consecutive words, lower-cased, punctuation and emphasis dropped.</summary>
     private static HashSet<string> Runs(string prose)
@@ -549,8 +556,8 @@ public partial class InteractiveSkillTests
         Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
 
         // The plan says once, as a fact and never as a question, that messages can later go on their own, in the product's
-        // own terms: the two kinds of contact, and where a person sets it.
-        Assert.Contains("Say once, as a fact and never as a question, how messages go: \"Every message waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who have; in Jason Desktop that is Settings, \\\"How messages go\\\", and anywhere else tell me when you want it.\"", skill, StringComparison.Ordinal);
+        // own terms: the two kinds of contact, and that the person may say so or set it in Jason Desktop's Settings.
+        Assert.Contains("Say once, as a fact and never as a question, how messages go: \"Every message waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who have: tell me when you want it, or in Jason Desktop set it in Settings, \\\"How messages go\\\".\"", skill, StringComparison.Ordinal);
         Assert.Contains("and you never ask it here or set it: step 3 has said the fact, once.", skill, StringComparison.Ordinal);
         Assert.Contains("\"Email goes out through {provider}.\" and \"LinkedIn goes out through {provider}.\"", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("I read as soon as you say go", skill, StringComparison.Ordinal);
