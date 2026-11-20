@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jason.Cli.Files;
 using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
@@ -87,11 +88,7 @@ internal static class AppImageCopy
         var reading = Path.Combine(bundles, $".{version}.tmp-{Environment.ProcessId}");
         try
         {
-            if (Directory.Exists(reading))
-            {
-                Directory.Delete(reading, recursive: true);
-            }
-
+            DirectoryTrees.Delete(reading);
             Directory.CreateDirectory(reading);
             if (!await extract(appImage, "resources/bundle/*", reading, cancellationToken).ConfigureAwait(false))
             {
@@ -116,10 +113,7 @@ internal static class AppImageCopy
         {
             try
             {
-                if (Directory.Exists(reading))
-                {
-                    Directory.Delete(reading, recursive: true);
-                }
+                DirectoryTrees.Delete(reading);
             }
             catch (Exception left) when (left is IOException or UnauthorizedAccessException)
             {

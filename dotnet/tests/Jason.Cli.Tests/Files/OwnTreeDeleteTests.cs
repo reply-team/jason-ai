@@ -12,8 +12,9 @@ namespace Jason.Cli.Tests.Files;
 
 /// <summary>
 /// A tree the command-line client made of its own is deleted whole through one delete, <c>DirectoryTrees.Delete</c>: a
-/// skill a deployment staged, the skill a swap replaced, the UI's staging directory and the build it set aside, and the
-/// update's staging directory, as well as the uninstall's purge and a staged skills fetch that already went through it.
+/// skill a deployment staged, the skill a swap replaced, the UI's staging directory and the build it set aside, the
+/// update's staging directory, and the folder an AppImage was read into, as well as the uninstall's purge and a staged
+/// skills fetch that already went through it.
 /// A recursive <c>Directory.Delete</c> refuses a read-only file on Windows, as git leaves the packs of every clone, and
 /// refuses a junction there after removing it; the one delete clears the marks and removes a link as itself.
 /// </summary>
@@ -206,6 +207,46 @@ public sealed partial class OwnTreeDeleteTests
             await new UpdateStager(new HttpClient(release, disposeHandler: false)).StageAsync(manifest, FakeRelease.Rid, release.Feed, paths, Ct);
 
             Assert.False(Directory.Exists(earlier), $"'{earlier}' is still there, holding: {string.Join(", ", Left(earlier))}.");
+            AsItWas(outside, kept);
+        }
+        finally
+        {
+            Clear(dir.Paths.Root);
+        }
+    }
+
+    /// <summary>
+    /// The folder beside an AppImage's copies that the file's own runtime wrote what it carries into, discarded once the copy
+    /// is placed or refused: here refused, since the bundle read names another version. What the runtime writes keeps the
+    /// image's own modes, so beside the plant a directory without its write permission holds a file, which a recursive
+    /// delete cannot empty anywhere.
+    /// </summary>
+    [Fact]
+    public async Task The_folder_an_appimage_was_read_into_goes_whole()
+    {
+        using var dir = new TempPaths();
+        var (outside, kept) = Outside(dir);
+        var bundles = AppImageCopy.BundlesUnder(dir.Paths.Root);
+        var appImage = Path.Combine(dir.Paths.Root, AppImageCopy.FileName);
+        File.WriteAllText(appImage, "an AppImage");
+
+        try
+        {
+            var made = await AppImageCopy.MakeAsync(appImage, bundles, SemanticVersion.Parse("0.49.1"), (_, _, folder, _) =>
+            {
+                var bundle = Path.Combine(folder, "squashfs-root", "resources", "bundle");
+                Directory.CreateDirectory(bundle);
+                File.WriteAllText(Path.Combine(bundle, "jason"), "jason");
+                Installation.CarriedRecord.Beside(Path.Combine(bundle, "jason"));
+                Plant(bundle, outside);
+                var closed = Directory.CreateDirectory(Path.Combine(folder, "squashfs-root", "usr"));
+                File.WriteAllText(Path.Combine(closed.FullName, "lib"), "a file the image carries");
+                closed.Attributes |= FileAttributes.ReadOnly;
+                return Task.FromResult(true);
+            }, Ct);
+
+            Assert.False(made, "A bundle naming another version was placed as the copy.");
+            Gone(bundles, ".tmp-");
             AsItWas(outside, kept);
         }
         finally
