@@ -77,32 +77,35 @@ export interface About {
     } | null;
 }
 
-/** The longest account name the header names the person by, in characters. */
-export const accountLimit = 256;
+/** The longest account name the header names the person by, in UTF-16 units: the runtime's `Actors.MaxIdLength`. */
+export const accountLimit = 100;
 
-/** One character that draws nothing or ends a line: `unseen`, without the global flag a test of one name must not carry. */
-const unseenOne = new RegExp(unseen.source, 'u');
+/** The characters a name the header gives may hold: letters of any script, digits, dots, underscores, hyphens and spaces. */
+const nameCharacters = /^[\p{L}\p{N}._ -]+$/u;
 
 /**
  * The sentence that names the person a turn's words come from by the actor the carried `jason` writes a person's acts
  * under: this account's name as the operating system gives it (`os.userInfo().username` here, `Environment.UserName`
- * there), after `human:`. A name of letters of any script, digits, dots, underscores and hyphens stands as it is; any
- * other is one JSON string with the prefix inside it, so a space a shell would split at or a quote cannot end it. A name
- * that cannot stand on one line exactly as the system gives it (none, empty, longer than `accountLimit`, white space at
- * either end, or a character that draws nothing or ends a line) is never given or changed: the sentence says to ask.
+ * there), after `human:`, in backticks, since a dot is a character of a name and a bare actor at the end of a sentence
+ * would leave it unclear where the name ends. A name with a space is given as well as the command gives it, in single
+ * quotes, so a shell does not split it. A name of any other character, or one that cannot stand exactly as the system
+ * gives it (none, empty, longer than `accountLimit`, white space at either end), is never given or changed: the sentence
+ * says to ask, since a record that goes wrong silently is worse than one question.
  */
 function personSentence(account: unknown): string {
     const usable =
         typeof account === 'string' &&
         account.length > 0 &&
-        Array.from(account).length <= accountLimit &&
+        account.length <= accountLimit &&
         account.trim() === account &&
-        !unseenOne.test(account);
+        nameCharacters.test(account);
     if (!usable) {
         return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word.";
     }
     const actor = `human:${account}`;
-    return `The person you talk with acts as ${/^[\p{L}\p{N}._-]+$/u.test(account) ? actor : quoted(actor)}.`;
+    return account.includes(' ')
+        ? `The person you talk with acts as \`${actor}\`, which a command gives in single quotes: \`--actor '${actor}'\`.`
+        : `The person you talk with acts as \`${actor}\`.`;
 }
 
 /**

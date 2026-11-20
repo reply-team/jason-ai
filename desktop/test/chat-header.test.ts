@@ -156,23 +156,32 @@ test('the header, a recap and the Feed\'s lines never pass for the person\'s wor
 });
 
 test('the header names the person by this account, as the actor the carried jason writes a person\'s acts under', () => {
-    // Rules 11, 13 and 19 of the chat's instructions take the actor from this sentence, so a name is said once, right after
-    // Jason's own, in every conversation: a campaign's, a set-up chat and the Feed.
-    const sentence = 'The person you talk with acts as human:ada.';
+    // Rules 11, 12, 13 and 19 of the chat's instructions take the actor from this sentence, so a name is said once, right
+    // after Jason's own, in every conversation: a campaign's, a set-up chat and the Feed. The actor stands in backticks, since
+    // a dot is a character of a name and a bare actor at the end of a sentence would leave it unclear where the name ends.
+    const sentence = 'The person you talk with acts as `human:ada`.';
     for (const said of [header(campaign('Spring'), 'ada'), header({ campaign: null }, 'ada'), header({ main: true, campaign: null }, 'ada')]) {
         assert.ok(said.startsWith(`Jason, not the person, wrote this first paragraph. ${sentence} This conversation `), said);
         assert.equal(said.split(sentence).length, 2, 'said once');
         assert.doesNotMatch(said, /\n/);
     }
-    // A name a shell would split, or a quote would end, is one JSON string with the prefix inside it; letters of any script,
-    // digits, dots, underscores and hyphens stand as they are.
-    assert.ok(header({ campaign: null }, 'Ada Lovelace').includes('The person you talk with acts as "human:Ada Lovelace".'));
-    assert.ok(header({ campaign: null }, 'a"b').includes('The person you talk with acts as "human:a\\"b".'));
-    assert.ok(header({ campaign: null }, 'ada.l_1-x').includes('The person you talk with acts as human:ada.l_1-x.'));
-    assert.ok(header({ campaign: null }, 'Ада').includes('The person you talk with acts as human:Ада.'));
-    // A name that cannot stand on one line as the system gives it, or none, is never given or changed: the chat is told to ask.
+    // Letters of any script, digits, dots, underscores, hyphens and spaces stand; a name with a space is single-quoted in
+    // the command, so a shell does not split it.
+    assert.ok(header({ campaign: null }, 'ada.l_1-x.').includes('The person you talk with acts as `human:ada.l_1-x.`.'));
+    assert.ok(header({ campaign: null }, 'Ада').includes('The person you talk with acts as `human:Ада`.'));
+    assert.ok(
+        header({ campaign: null }, 'Ada Lovelace').includes(
+            "The person you talk with acts as `human:Ada Lovelace`, which a command gives in single quotes: `--actor 'human:Ada Lovelace'`.",
+        ),
+    );
+    // The runtime's limit on an actor's name is 100 UTF-16 units (Actors.MaxIdLength): at it the name stands, beyond it
+    // the chat is told to ask.
+    assert.ok(header({ campaign: null }, 'a'.repeat(100)).includes(`acts as \`human:${'a'.repeat(100)}\`.`));
+    assert.ok(header({ campaign: null }, `${'a'.repeat(99)}\u{1F600}`).includes('could not read'), 'an emoji is two units, and no letter');
+    // Any other character, a name that cannot stand on one line as the system gives it, or none, is never given or changed:
+    // the chat is told to ask, since a record that goes wrong silently is worse than one question.
     const ask = "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word.";
-    for (const unusable of [null, '', ' ada', 'ada\n', 'a‮b', 'a​b', 'x'.repeat(257), 42 as unknown as string]) {
+    for (const unusable of [null, '', ' ada', 'ada ', 'ada\n', 'a\u202eb', 'a\u200bb', 'a'.repeat(101), 'a$(x)', 'Jo$hn', 'a`b', "O'Brien", 'a"b', 'a;b', 'a\\b', 42 as unknown as string]) {
         const said = header({ campaign: null }, unusable);
         assert.ok(said.startsWith(`Jason, not the person, wrote this first paragraph. ${ask} This conversation `), JSON.stringify(unusable));
         assert.doesNotMatch(said, /acts as/);
