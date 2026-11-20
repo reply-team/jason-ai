@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { withoutMount } from './linux-package.ts';
+import { inAppImageMount, withoutMount } from './linux-package.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 const marker = '__JASON_PATH__';
@@ -33,9 +33,6 @@ function usualPlaces(home: string, platform: NodeJS.Platform): string[] {
     return [join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), ...brew];
 }
 
-/** A folder the AppImage runtime mounts an AppImage in, `<temporary folder>/.mount_<name>`, or one inside it. */
-const appImageMount = /(^|\/)\.mount_[^/]*(\/|$)/;
-
 /**
  * Pure: the PATH a start of the desktop was handed, less what an earlier start put on its own PATH for the programs it
  * starts. A desktop started by another inherits that one's environment: an AppImage's update starts the new file with
@@ -53,7 +50,7 @@ const appImageMount = /(^|\/)\.mount_[^/]*(\/|$)/;
 export function handedPath(path: string, appdir: string | undefined, home: string, platform: NodeJS.Platform): string {
     if (platform !== 'darwin' && platform !== 'linux') return path;
     const mount = appdir !== undefined && appdir.startsWith('/') ? appdir : undefined;
-    const entries = (withoutMount({ PATH: path }, mount).PATH ?? '').split(delimiter).filter((entry) => entry !== '' && !appImageMount.test(entry));
+    const entries = (withoutMount({ PATH: path }, mount).PATH ?? '').split(delimiter).filter((entry) => entry !== '' && !inAppImageMount(entry));
     const usual = usualPlaces(home, platform);
     while (entries.length > 0 && usual.includes(entries[entries.length - 1]!)) entries.pop();
     return entries.join(delimiter);

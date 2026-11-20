@@ -221,6 +221,10 @@ public static class UninstallRunner
                 DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
                 DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
             }
+            else
+            {
+                Step4RemovePathEntry(env, plan, done, kept, problems);
+            }
 
             // The record of the machine set-up Jason Desktop's start ran, where the data is kept, once what that set-up placed
             // is taken off: a later start of the same version from the same place would read it as done and place nothing
@@ -237,10 +241,6 @@ public static class UninstallRunner
                 {
                     problems.Add($"{setupRecord}, the record of the set-up Jason Desktop's start ran, could not be removed ({refused.Message}): delete it, or a later start of this version places no jason and no skills.");
                 }
-            }
-            else
-            {
-                Step4RemovePathEntry(env, plan, done, kept, problems);
             }
 
             // Rendered once and thrown away, while this process can still load whatever rendering it needs.

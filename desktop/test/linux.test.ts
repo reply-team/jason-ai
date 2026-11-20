@@ -104,7 +104,16 @@ test('an AppImage’s mount reaches no child: its folders leave PATH, LD_LIBRARY
         XDG_DATA_DIRS: '/usr/share/gnome:/usr/local/share/:/usr/share/',
         HOME: '/home/a',
     });
-    assert.deepEqual(withoutMount({ PATH: `${appdir}-other/bin:/usr/bin` }, appdir), { PATH: `${appdir}-other/bin:/usr/bin` }, 'a folder beside the mount is not under it');
+    const extracted = '/tmp/appimage_extracted_ab12';
+    assert.deepEqual(withoutMount({ PATH: `${extracted}:${extracted}-other/bin:/usr/bin` }, extracted), { PATH: `${extracted}-other/bin:/usr/bin` }, 'a folder beside the mount is not under it');
+    // A start an earlier one's update restarted inherits that one's lists, its own mount's folders on them: they vanished
+    // with it, and a folder of that name in the shared temporary folder could be anyone's, so none reaches a child either.
+    const earlier = '/tmp/.mount_jason-COlmoo';
+    assert.deepEqual(
+        withoutMount({ ...env, PATH: `${appdir}:${earlier}:${earlier}/usr/sbin:/usr/bin`, LD_LIBRARY_PATH: `${appdir}/usr/lib:${earlier}/usr/lib:/opt/cuda/lib64`, GSETTINGS_SCHEMA_DIR: `${appdir}/usr/share/glib-2.0/schemas:${earlier}/usr/share/glib-2.0/schemas` }, appdir),
+        { PATH: '/usr/bin', LD_LIBRARY_PATH: '/opt/cuda/lib64', XDG_DATA_DIRS: '/usr/share/gnome:/usr/local/share/:/usr/share/', HOME: '/home/a' },
+    );
+    assert.deepEqual(withoutMount({ PATH: '/home/a/.mounts/bin:/tmp/mount_x/bin' }, appdir), { PATH: '/home/a/.mounts/bin:/tmp/mount_x/bin' }, 'no AppImage mount by its name');
     assert.deepEqual(withoutMount(env, undefined), env, 'no AppImage, nothing taken');
     assert.equal(mountOf({ form: 'appimage', file: '/home/a/Jason.AppImage' }, { APPDIR: appdir }), appdir);
     assert.equal(mountOf({ form: 'appimage', file: '/home/a/Jason.AppImage' }, { APPDIR: 'relative' }), undefined);

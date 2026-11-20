@@ -312,13 +312,16 @@ public sealed partial class UninstallCarriedTests : IDisposable
     /// Jason Desktop's start ran too, on every system that writes one, the deb's included and with the application kept as
     /// the Windows uninstaller keeps it: what that set-up placed is taken off, and a start of the same version again, a file
     /// downloaded anew say, would otherwise read the record as done and place no jason and no skills. A dry run leaves both.
+    /// With no record, as before 0.49.1 or at a second uninstall, nothing is said of it, and the application's jason is never
+    /// looked for as a command-line install's PATH entry.
     /// </summary>
     [Theory]
-    [InlineData("macos", false)]
-    [InlineData("macos", true)]
-    [InlineData("appimage", false)]
-    [InlineData("deb", false)]
-    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed_and_the_set_ups_record(string system, bool keepApplication)
+    [InlineData("macos", false, true)]
+    [InlineData("macos", true, true)]
+    [InlineData("appimage", false, true)]
+    [InlineData("deb", false, true)]
+    [InlineData("macos", false, false)]
+    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed_and_the_set_ups_record(string system, bool keepApplication, bool recorded)
     {
         var places = system == "macos" ? MacPlaces() : LinuxPlaces();
         var executable = system switch
@@ -329,7 +332,12 @@ public sealed partial class UninstallCarriedTests : IDisposable
         };
         Directory.CreateDirectory(_dir.Paths.RunDirectory);
         File.WriteAllText(_dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
-        var record = Written(Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json"), "{\"ran_for\":\"0.34.0\",\"completed\":true}");
+        var record = Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json");
+        if (recorded)
+        {
+            Written(record, "{\"ran_for\":\"0.34.0\",\"completed\":true}");
+        }
+
         var (env, output, remover) = Environment(places, executable);
         if (system == "deb")
         {
@@ -342,7 +350,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false, KeepApplication: keepApplication), Ct));
         Assert.True(File.Exists(_dir.Paths.StartOwedFile), "a dry run took the note back");
-        Assert.True(File.Exists(record), "a dry run took the set-up's record back");
+        Assert.Equal(recorded, File.Exists(record));
 
         output.GetStringBuilder().Clear();
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: keepApplication), Ct);
@@ -351,9 +359,11 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
         Assert.False(File.Exists(record), "the set-up's record outlived the uninstall, so a start of the same version sets nothing up");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
-        var done = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
         Assert.Contains(done, line => line.Contains("start-owed.json", StringComparison.Ordinal));
-        Assert.Contains(done, line => line.Contains(record, StringComparison.Ordinal));
+        Assert.Equal(recorded, done.Any(line => line.Contains(record, StringComparison.Ordinal)));
+        Assert.DoesNotContain(report.GetProperty("kept").EnumerateArray(), line => line.GetString()!.Contains("no PATH entry was looked for", StringComparison.Ordinal));
     }
 
     /// <summary>

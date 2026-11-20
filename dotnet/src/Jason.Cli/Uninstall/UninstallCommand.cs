@@ -126,10 +126,11 @@ public static class UninstallCommand
             there is a terminal, else through the desktop's own dialog (pkexec), and through that dialog started by
             the user manager (systemd-run --user) where this process cannot gain privileges, as under a Jason
             Desktop its update or a switch of mode started again; its scripts take back what it placed for every
-            account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask in, the
-            package system held, apt failing - nothing of this account's is removed, the runtime's start at
-            logon included, the runtime this stopped is started again, and the verb exits 1 naming sudo apt purge
-            jason-desktop as the way by hand.
+            account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask in, no
+            way to ask from a process that cannot gain privileges (the refusal says to open Jason Desktop again from
+            the applications menu), the package system held, apt failing - nothing of this account's is removed, the
+            runtime's start at logon included, the runtime this stopped is started again, and the verb exits 1 naming
+            sudo apt purge jason-desktop as the way by hand.
           - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
             where it starts this application; on Linux the XDG autostart entry ai.jasonharness.desktop.desktop under
             XDG_CONFIG_HOME (~/.config by default). On macOS, with --keep-application, its file goes and its job is not unloaded, since the application kept
