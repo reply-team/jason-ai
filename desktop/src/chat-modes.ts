@@ -3,7 +3,8 @@
 // given with no confirmation. Full access runs Claude Code in its own bypass mode, with Jason's hook in front of every
 // tool use refusing three kinds alone: the installation's settings files and run file, its data directory outside the
 // chat's folder, and Jason's own variables; what Claude Code asks about in that mode itself is a card. Ask first asks
-// before anything that changes. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that
+// before anything that changes outside the allow list's verbs and the acts of the person's word (`modeFence`). Plan only
+// reads and proposes and changes nothing. Auto-edit is Ask first, except that
 // the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by
 // the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
 // access on Codex, on a Claude Code below its floor, sent from a browser tab, while it is not offered, or where Claude

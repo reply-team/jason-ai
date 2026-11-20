@@ -887,6 +887,37 @@ describe('Plan only’s plan card', () => {
         expect(calls(desktop, 'chat.setMode').length).toBe(before);
     });
 
+    it('an /export after the plan is no turn: the card stays live, its answer is said beside it, and a refusal gives the words back', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        const id = await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        // Sent from another host, the export leaves the plan the plan of the host that made it.
+        chooseHost('codex');
+        fireEvent.change(box(), { target: { value: '/export plan.md' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+        expect(calls(desktop, 'chat.send')[1]!.args[1]).toBe('/export plan.md');
+        flush(() => {
+            desktop.emit(id, { kind: 'notice', text: 'Written: /h/plan.md' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => expect(screen.getByText('Written: /h/plan.md')).toBeTruthy());
+        expect(screen.queryByText('/export plan.md')).toBeNull();
+        chooseHost('claude');
+        await waitFor(() => expect(approve()).not.toBeNull());
+        // A refusal is said beside the plan, and the words go back to the box.
+        fireEvent.change(box(), { target: { value: '/export plan.md' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(3));
+        flush(() => desktop.emit(id, { kind: 'done', error: 'A file or folder of that name is already there.' }));
+        await waitFor(() => expect(screen.getByText('A file or folder of that name is already there.')).toBeTruthy());
+        expect(box().value).toBe('/export plan.md');
+        expect(approve()).not.toBeNull();
+    });
+
     it('Keep planning puts the card aside, keeps Plan only, asks the desktop nothing and gives the box the focus', async () => {
         const desktop = renderConsole();
         await planned(desktop);
@@ -905,27 +936,30 @@ describe('Plan only’s plan card', () => {
 });
 
 describe('the empty chat’s sentence about approval', () => {
-    const sentence = 'Nothing written here reaches a person without your approval.';
+    // What is true of each mode: in Plan only nothing written reaches a person unapproved; in Ask first and Auto-edit a
+    // message follows its campaign's send mode, and the AI approves on the person's word, as theirs.
+    const planOnly = 'Nothing written here reaches a person without your approval.';
+    const onYourWord = "A message written here follows its campaign's send mode; the AI approves when you tell it to.";
     // The sentence of the hero under the heading, or null when that hero draws none.
     const said = (heading = 'What should Jason work on?') => {
         const text = screen.getByRole('heading', { name: heading }).closest('.hero')!.querySelector('p')?.textContent;
-        return text === sentence ? text : null;
+        return text === planOnly || text === onYourWord ? text : null;
     };
 
-    it('is drawn in Ask first, Plan only and Auto-edit, and not in Full access, and follows a switch of mode both ways', async () => {
+    it('says in each of Ask first, Plan only and Auto-edit what is true of it, draws none in Full access, and follows a switch of mode both ways', async () => {
         renderConsole();
         await waitFor(() => menu());
         await waitFor(() => expect(line()).not.toBeNull());
         expect(said()).toBeNull();
         choose('ask_first');
         await waitFor(() => expect(line()).toBeNull());
-        expect(said()).not.toBeNull();
+        expect(said()).toBe(onYourWord);
         choose('plan_only');
         await waitForMenus(() => expect(value()).toBe('plan_only'));
-        expect(said()).not.toBeNull();
+        expect(said()).toBe(planOnly);
         choose('auto_edit');
         await waitForMenus(() => expect(value()).toBe('auto_edit'));
-        expect(said()).not.toBeNull();
+        expect(said()).toBe(onYourWord);
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
         expect(said()).toBeNull();
@@ -1013,7 +1047,8 @@ describe('the empty chat’s sentence about approval', () => {
         let stale = false;
         const watching = new MutationObserver(() => {
             const heading = screen.queryByRole('heading', { name: 'What should Jason do in Spring?' });
-            if (heading?.closest('.hero')?.querySelector('p')?.textContent === sentence) stale = true;
+            const text = heading?.closest('.hero')?.querySelector('p')?.textContent;
+            if (text === planOnly || text === onYourWord) stale = true;
         });
         watching.observe(document.body, { childList: true, subtree: true, characterData: true });
         open('Spring');
@@ -1022,6 +1057,6 @@ describe('the empty chat’s sentence about approval', () => {
         expect(stale).toBe(false);
         expect(said('What should Jason do in Spring?')).toBeNull();
         flush(() => desktop.emit('conv_01JDKEPT0000000000000000A1', { kind: 'mode', mode: 'plan_only' }));
-        expect(said('What should Jason do in Spring?')).not.toBeNull();
+        expect(said('What should Jason do in Spring?')).toBe(planOnly);
     });
 });

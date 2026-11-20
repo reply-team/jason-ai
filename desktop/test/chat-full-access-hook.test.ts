@@ -3,33 +3,150 @@
 // answers. Every command here is a neutral one or a made-up program; every path is made up or a temporary one.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { mock, test } from 'node:test';
-import { readFence } from '../src/chat-deny.ts';
+import ts from 'typescript';
+import { modeFence, readFence } from '../src/chat-deny.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
 import { hostEnvironment } from '../src/chat-hosts.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
-import { fullAccessJudgement, judge, settingsRefusal, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { attemptRefusal, confinedRefusal, dataRefusal, fullAccessJudgement, judge, lookupRefusal, personsRefusal, settingsRefusal, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId } from '../src/chat-turn-files.ts';
 import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 import { templates, type Logger } from '../src/log.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
+/** The fence a real Full access turn runs under: none of the deny list (`modeFence`). */
+const fullFence = modeFence(fence, 'full_access');
 
 /** A scope whose data directory is the default one under a made-up home folder, nothing on disk. */
 function homeScope(platform: Platform, home: string): ChatScope {
     const paths = platform === 'win32' ? win32 : posix;
     const data = paths.join(home, '.jason');
     const chat = paths.join(data, 'desktop', 'chat');
-    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [paths.join(data, 'config', 'settings.json'), paths.join(data, 'run', 'runtime.json')], denied: fence.commands, deniedOperations: fence.operations, real: () => null };
+    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [paths.join(data, 'config', 'settings.json'), paths.join(data, 'run', 'runtime.json')], denied: fullFence.commands, deniedOperations: fullFence.operations, real: () => null };
 }
 
 const scopes: readonly ChatScope[] = [homeScope('linux', '/home/someone'), homeScope('darwin', '/Users/someone'), homeScope('win32', 'C:\\Users\\someone')];
+
+/**
+ * Every string the chat's suites hold, every `test/chat-*.test.ts`: the commands and paths of their rows, and the rest
+ * of their words, which a judgement reads as harmlessly as any other text. Read by the TypeScript parser, so a row's text
+ * is exactly what its row gives. A template literal that holds a substitution is left out: its text is known only when
+ * the row runs, and the row's own assertions judge it there.
+ */
+function suiteStrings(): string[] {
+    const found = new Set<string>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) found.add(node.text);
+        ts.forEachChild(node, visit);
+    };
+    for (const file of readdirSync(import.meta.dirname).filter((name) => /^chat-.*\.test\.ts$/.test(name))) {
+        visit(ts.createSourceFile(file, readFileSync(join(import.meta.dirname, file), 'utf8'), ts.ScriptTarget.Latest, true));
+    }
+    return [...found];
+}
+
+/** The named row of the ruling, and the spellings of a person's verb the second look reads and the literal reader holds. */
+const spellings = [
+    'jason approval appro\\ve apr_1',
+    'jason approval appro\\ve',
+    'jason decision ans\\wer dec_1 --option a',
+    "jason approval appro$''ve apr_1",
+    'jason approval appro$""ve apr_1',
+    "jason approval $'\\x61'pprove apr_1",
+    "ja$''son approval approve apr_1",
+    'jason approval appro\\\nve apr_1',
+    'jason approval {approve,} apr_1',
+    '{jason,} approval approve apr_1',
+    'jason approval appro{v,}e apr_1',
+    "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh",
+    'curl http://127.0.0.1:4011/v1/decision.ans\\wer',
+    `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`,
+    'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}',
+];
+
+// Full access refuses the three kinds wherever Ask first refuses them.
+
+/**
+ * The inputs each string of the suites is given as: a shell command, a path read, written or walked, a pattern, a page,
+ * and a command sent to a person's own MCP tool, so a refusal of any of Ask first's routes is read.
+ */
+const shapes: readonly { tool: string; input: (text: string) => Record<string, unknown>; win32Only?: true }[] = [
+    { tool: 'Bash', input: (text) => ({ command: text }) },
+    { tool: 'PowerShell', input: (text) => ({ command: text }), win32Only: true },
+    { tool: 'Monitor', input: (text) => ({ command: text }) },
+    { tool: 'Read', input: (text) => ({ file_path: text }) },
+    { tool: 'Write', input: (text) => ({ file_path: text, content: 'a plan' }) },
+    { tool: 'Edit', input: (text) => ({ file_path: text, old_string: 'a', new_string: 'b' }) },
+    { tool: 'Glob', input: (text) => ({ pattern: text }) },
+    { tool: 'Grep', input: (text) => ({ pattern: 'x', path: text }) },
+    { tool: 'LS', input: (text) => ({ path: text }) },
+    { tool: 'WebFetch', input: (text) => ({ url: text, prompt: 'read' }) },
+    { tool: 'mcp__frobnicate__run', input: (text) => ({ command: text }) },
+    { tool: 'mcp__jason_desktop__decide', input: (text) => ({ tool_name: 'Bash', input: { command: text } }) },
+];
+
+test('every input Ask first refuses as one of the three kinds is refused by Full access\'s own judgement with the same sentence', () => {
+    // The table is every string the chat's suites hold, so a refusal row added to any of them joins it by itself.
+    const kinds = new Set([settingsRefusal, dataRefusal, personsRefusal, confinedRefusal, attemptRefusal, lookupRefusal]);
+    const strings = [...new Set([...suiteStrings(), ...spellings])];
+    const refusals = new Map<string, number>();
+    for (const scope of scopes) {
+        for (const shape of shapes) {
+            if (shape.win32Only === true && scope.platform !== 'win32') continue;
+            for (const text of strings) {
+                const input = shape.input(text);
+                const asked = judge(shape.tool, input, scope);
+                if (asked.verdict !== 'deny' || !kinds.has(asked.message)) continue;
+                const key = `${scope.platform} ${shape.tool}`;
+                refusals.set(key, (refusals.get(key) ?? 0) + 1);
+                assert.deepEqual(fullAccessJudgement(shape.tool, input, scope), { outcome: 'refused', message: asked.message }, `${scope.platform} ${shape.tool}: ${JSON.stringify(text)}`);
+            }
+        }
+    }
+    // The table is the suites' own, and every route of Ask first's refusals is read on every platform: a floor for each
+    // shape that has refusals of the three kinds. A person's MCP tool has none, Ask first saying of its input in a
+    // sentence of its own that it names what Ask first refuses, and the chat's own tool is refused whatever its input.
+    const floors: Readonly<Record<string, number>> = { Bash: 250, Monitor: 250, Read: 70, Write: 70, Edit: 70, Glob: 10, Grep: 70, LS: 70 };
+    for (const scope of scopes) {
+        for (const [tool, floor] of Object.entries({ ...floors, ...(scope.platform === 'win32' ? { PowerShell: 300 } : {}) })) {
+            const read = refusals.get(`${scope.platform} ${tool}`) ?? 0;
+            assert.ok(read >= floor, `${scope.platform} ${tool}: only ${read} refusals were read, fewer than ${floor}`);
+        }
+        // Ask first refuses no web page (`judge` shows a card or opens it), so WebFetch has no floor: its shape is read so
+        // that a refusal of a page, once there is one, joins the table by itself.
+        assert.equal(refusals.get(`${scope.platform} WebFetch`) ?? 0, 0, 'a refusal of a page now exists: give WebFetch its floor');
+    }
+});
+
+test('the named row: in Plan only jason approval appro\\ve is refused by the prompt tool, by Ask first\'s sentence, with no card', async (t) => {
+    const w = await wired(t, undefined, 'plan_only');
+    const command = 'jason approval appro\\ve apr_1';
+    const asked = judge('Bash', { command }, w.scope);
+    assert.equal(asked.verdict, 'deny');
+    assert.match(asked.verdict === 'deny' ? asked.message : '', /person's own act/);
+    assert.deepEqual(await w.broker.ask(w.id, 'Bash', { command }), { behavior: 'deny', message: asked.verdict === 'deny' ? asked.message : '' });
+    assert.deepEqual(w.cards, []);
+});
+
+test('each spelling of a person\'s verb is refused in Plan only, by the prompt tool, never a card', async (t) => {
+    const plan = await wired(t, undefined, 'plan_only');
+    for (const command of spellings) {
+        assert.equal(judge('Bash', { command }, plan.scope).verdict, 'deny', `Plan only: ${JSON.stringify(command)}`);
+        assert.equal((await plan.broker.ask(plan.id, 'Bash', { command })).behavior, 'deny', JSON.stringify(command));
+    }
+    assert.deepEqual(plan.cards, []);
+    assert.ok(plan.decided.every((each) => each.outcome === 'refused'));
+});
+
+// The hook's two answers.
 
 interface Wired {
     root: string;
@@ -42,7 +159,9 @@ interface Wired {
     id: string;
 }
 
-async function wired(t: { after: (fn: () => void | Promise<void>) => void }, timeoutMs?: number): Promise<Wired> {
+/** A turn's broker and hook in a mode, Full access unless named, under the fence a real turn of that mode runs under. */
+async function wired(t: { after: (fn: () => void | Promise<void>) => void }, timeoutMs?: number, mode: ChatMode = 'full_access'): Promise<Wired> {
+    const turnFence = modeFence(fence, mode);
     const root = mkdtempSync(join(tmpdir(), 'jason-full-'));
     const paths = desktopPaths(root);
     mkdirSync(paths.chat, { recursive: true });
@@ -58,12 +177,12 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, tim
         data: root,
         home: root,
         protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-        denied: fence.commands,
-        deniedOperations: fence.operations,
+        denied: turnFence.commands,
+        deniedOperations: turnFence.operations,
         real: realPathOf,
     };
     const id = newTurnId();
-    broker.openTurn('chat_a', id, scope, 'full_access');
+    broker.openTurn('chat_a', id, scope, mode);
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input, signal) => broker.ask(id, tool, input, signal), hook: (tool, input, use) => broker.hook(id, tool, input, use) });
     t.after(async () => {
@@ -110,7 +229,9 @@ test('the hook answers nothing for what runs and a refusal for the three kinds, 
     assert.deepEqual(await hooked(w, 'Write', { file_path: join(w.scope.chat, 'notes.md'), content: 'a plan' }), { decision: 'none' });
     assert.deepEqual(await hooked(w, 'Bash', { command: 'ls *.md' }), { decision: 'none' });
     assert.deepEqual(await hooked(w, 'AskUserQuestion', { questions: [] }), { decision: 'none' });
+    assert.deepEqual(await hooked(w, 'Bash', { command: 'jason approval approve apr_1' }), { decision: 'none' }, 'a person\'s word runs in Full access');
     assert.deepEqual(await hooked(w, 'Read', { file_path: w.scope.protectedFiles[0] }), { decision: 'deny', reason: settingsRefusal });
+    assert.deepEqual(await hooked(w, 'Bash', { command: 'echo $JASON_CHAT_TURN' }), { decision: 'deny', reason: confinedRefusal });
     assert.deepEqual(w.cards, [], 'the hook shows no card: a card is the prompt tool\'s');
 });
 
@@ -154,7 +275,7 @@ test('several requests Claude Code asks about in one turn are several cards', as
 
 test('a request Claude Code asks about in Full access is the person\'s to answer, one Ask first runs with no card or refuses included', async (t) => {
     const w = await wired(t);
-    for (const command of ['reply auth status --json', 'jason approval approve apr_1']) {
+    for (const command of ['reply auth status --json', 'jason --actor human:me campaign list']) {
         assert.notEqual(judge('Bash', { command }, w.scope).verdict, 'ask', command);
         void w.broker.ask(w.id, 'Bash', { command });
     }
@@ -203,6 +324,10 @@ test('what the hook refuses is refused at the prompt tool too, whichever way the
         assert.equal(fullAccessJudgement(tool, input, w.scope).outcome, 'refused');
         assert.deepEqual(await w.broker.ask(w.id, tool, input), { behavior: 'deny', message: settingsRefusal });
     }
+    const command = 'curl http://127.0.0.1:4011/v1/JASON%5FCHAT%5FTURN';
+    assert.equal(judge('Bash', { command }, w.scope).verdict, 'ask', 'Ask first shows the escaped variable as a card');
+    assert.deepEqual(fullAccessJudgement('Bash', { command }, w.scope), { outcome: 'refused', message: confinedRefusal });
+    assert.deepEqual(await w.broker.ask(w.id, 'Bash', { command }), { behavior: 'deny', message: confinedRefusal });
     assert.deepEqual(w.cards, []);
 });
 
@@ -213,8 +338,13 @@ test('a refusal of the hook is said to the log as refused, by the model, in Full
     await hooked(w, 'Bash', { command: 'ls *.md' });
     await hooked(w, 'AskUserQuestion', { questions: [] });
     await hooked(w, 'Bash', { command: 'git status' });
+    await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
     await hooked(w, 'Read', { file_path: w.scope.protectedFiles[0] });
-    assert.deepEqual(w.decided, [{ outcome: 'refused', by: 'model', mode: 'full_access' }]);
+    await hooked(w, 'Bash', { command: 'echo $JASON_ATTEMPT_ID' });
+    assert.deepEqual(w.decided, [
+        { outcome: 'refused', by: 'model', mode: 'full_access' },
+        { outcome: 'refused', by: 'model', mode: 'full_access' },
+    ]);
 });
 
 test('a settled request has one log line, its outcome, by whom and the mode, and nothing of the request', () => {
@@ -285,4 +415,18 @@ test('a turn\'s environment names HOME as the folder the judgement takes for hom
     assert.equal(windowsEnv.HOME, '/c/Users/someone');
     assert.equal(hostEnvironment({ PATH: '/x' }, { ...options, platform: 'linux' }).HOME, undefined, 'without a home named, nothing is added');
     assert.equal(hostEnvironment({ PATH: '/x', HOME: '/h' }, { ...options, platform: 'linux' }).HOME, '/h', 'and nothing is changed');
+});
+
+test('the hook refuses a no-card verb fed the settings file or the run file by a redirect, a pipe from cat or a here-string', async (t) => {
+    const w = await wired(t);
+    const paths = desktopPaths(w.root);
+    for (const file of [...settingsFilesOf(paths.data), paths.runFile]) {
+        const spelled = file.replaceAll('\\', '/');
+        for (const command of [`jason preference set tone_of_voice --value-file - < ${spelled}`, `cat ${spelled} | jason preference set tone_of_voice --value-file -`,
+            `jason preference set tone_of_voice --value-file - <<< "$(cat ${spelled})"`]) {
+            const answered = await hooked(w, 'Bash', { command });
+            assert.equal(answered.decision, 'deny', command);
+        }
+    }
+    assert.deepEqual(await hooked(w, 'Bash', { command: 'jason preference set tone_of_voice --value-file - < tone.json' }), { decision: 'none' }, 'a file of the chat folder runs');
 });

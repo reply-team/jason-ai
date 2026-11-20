@@ -15,6 +15,8 @@ public class ConfinedFileOptionsTests
 {
     private const string Variable = "JASON_CONFINED";
 
+    private const string ChatTurn = "JASON_CHAT_TURN";
+
     /// <summary>
     /// The options the command tree says read a file into a request, each with the words its verb needs besides it. A
     /// file option added later is a difference here before it is a path the confinement does not cover.
@@ -128,6 +130,57 @@ public class ConfinedFileOptionsTests
         }
 
         Assert.True(run.Exit == ExitCodes.Success && run.Requests == 1, $"exit {run.Exit}, {run.Requests} requests: {run.Error}");
+    }
+
+    /// <summary>
+    /// A chat turn of the desktop sets <c>JASON_CHAT_TURN</c> in every mode, Plan only and the three that set no
+    /// <c>JASON_CONFINED</c> alike: under it every file option takes standard input only, the verbs the bar covers included,
+    /// since the chat's variable holds this rule and never the bar. The refusal names the chat's variable and the cure.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Keys))]
+    public async Task In_a_chat_turn_a_path_is_refused_before_the_file_is_opened_and_before_any_request(string key)
+    {
+        using var file = new HeldFile("{}");
+        var run = await RunAsync(key, file.Path, new Dictionary<string, string> { [ChatTurn] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Equal(0, run.Requests);
+        Assert.Equal(string.Empty, run.Output);
+        var option = Option(key);
+        Assert.Contains($"{option} - < ", run.Error, StringComparison.Ordinal);
+        Assert.Contains("here-document", run.Error, StringComparison.Ordinal);
+        Assert.Contains(ChatTurn, run.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain(ConfinedVerbs.Sentence, run.Error, StringComparison.Ordinal);
+    }
+
+    /// <summary>In a chat turn a dash reads standard input, the verbs the bar covers among them: the chat's variable is no bar.</summary>
+    [Theory]
+    [MemberData(nameof(Keys))]
+    public async Task In_a_chat_turn_a_dash_reads_standard_input(string key)
+    {
+        var run = await RunAsync(key, "-", new Dictionary<string, string> { [ChatTurn] = "1" }, standardInput: "{}");
+
+        Assert.True(run.Exit == ExitCodes.Success && run.Requests == 1, $"exit {run.Exit}, {run.Requests} requests: {run.Error}");
+    }
+
+    /// <summary>
+    /// The way a chat turn could hand the installation's secrets back: a role note read from the settings file and then
+    /// read back with <c>rolenote get</c>. In a chat turn the file is never opened and nothing is sent, and the refusal
+    /// carries nothing of the file.
+    /// </summary>
+    [Fact]
+    public async Task In_a_chat_turn_a_role_note_is_never_read_from_the_installation_s_settings_file()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.Paths.UserSettingsFile)!);
+        File.WriteAllText(paths.Paths.UserSettingsFile, """{"Plugins":{"Config":{"reply":{"ApiKey":"planted-secret-key"}}}}""");
+
+        var run = await RunAsync("rolenote set --note-file", paths.Paths.UserSettingsFile, new Dictionary<string, string> { [ChatTurn] = "1" });
+
+        Assert.Equal((ExitCodes.ApiError, 0), (run.Exit, run.Requests));
+        Assert.DoesNotContain("planted-secret-key", run.Error + run.Output, StringComparison.Ordinal);
+        Assert.Contains(ChatTurn, run.Error, StringComparison.Ordinal);
     }
 
     /// <summary>Unset and empty are today's behaviour, byte for byte: the same exit, the same words, the same request.</summary>

@@ -359,12 +359,13 @@ Jason does as much as it can on its own, and nothing that should be yours.
 
 - **Every message waits for you until you choose otherwise.** Every operation that reaches a real person is parked
   with a record of exactly what would be done, until you decide. Approve in Jason Desktop, where you see
-  the person, the account it goes from and the full message.
+  the person, the account it goes from and the full message, or say it in its chat in your own words: approve or reject
+  what waits, answer a question or start a campaign, and the AI does it on your word, recorded as yours.
 - **Or it goes on its own, where you say so.** You choose, separately for people who have not answered and for people
   who have, that messages go automatically, for every campaign or for one. A critic reads each such message before it
-  goes, and a message it or another role doubts, one to a person whose reply has not been judged yet, one written in the
-  desktop's chat and any past the campaign's daily limit still wait for you. Only a named person turns it on, a role
-  never can, and every message it lets go is logged under that person's name.
+  goes, and a message it or another role doubts, one to a person whose reply has not been judged yet and any past the
+  campaign's daily limit still wait for you. Only a named person turns it on, a role never can, and every message it
+  lets go is logged under that person's name.
 - **A yes in advance, only if you give one.** You can pre-approve drafted replies to one category of reply in one
   campaign, such as `interested`, with an expiry and a ceiling if you want them. A search for people sends nothing, but
   it spends your provider's credits, so the first search for a new audience always waits for you; after it, you can let
@@ -701,8 +702,9 @@ skills · release notes on every release.
 **Does it ever send on its own?**
 Only where you say so. Until you choose otherwise, every message to a real person waits for your approval. You can
 choose, separately for people who have not answered and for people who have, that messages go automatically; a critic
-reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the
-desktop's chat and any past the campaign's daily limit still wait for you. One nuance, said plainly: if a campaign
+reads each one first, and a doubted message, one to a person whose reply has not been judged yet and any past the
+campaign's daily limit still wait for you; in Jason Desktop's chat you can approve them in your own words, and the AI
+records the approval as yours. One nuance, said plainly: if a campaign
 enrols someone into your provider's own sequence, you approve that enrolment once for that person, and the provider then
 sends the sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one
 campaign, and let the searches that top up one of a campaign's audiences find more people up to a number you set: a

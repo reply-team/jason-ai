@@ -8,7 +8,7 @@ import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules, helpNouns, helpRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import { attemptVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
+import { attemptVariable, chatTurnVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
 import { compareVersions, noChromeFrom } from './host-version.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
@@ -67,7 +67,11 @@ export interface ClaudeTurn {
     reads?: readonly string[] | undefined;
     /** The chat's mode; absent, Ask first. */
     mode?: ChatMode | undefined;
-    /** Full access only: the turn's settings file (`fullAccessSettings`), which carries the turn's secret, so never argv. */
+    /**
+     * A turn the hook rides: its settings file (`hookedSettings`), which carries the turn's secret, so never argv. Full
+     * access always has one; Ask first and Auto-edit have one from the floor of Full access on, and the inline settings
+     * below it.
+     */
     settingsFile?: string | undefined;
     /** The host's file rules for the installation's data outside the chat folder (`dataRules`). */
     dataRules: readonly string[];
@@ -156,11 +160,14 @@ export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: st
 }
 
 /**
- * The host's own refusal of any Bash command that names `JASON_CONFINED`, anywhere in it: the variable confines the jason
- * the chat runs (`hostEnvironment`), and a command that names it could clear it. The rule is the exact spelling; the
+ * The host's own refusal of any Bash command that names `JASON_CONFINED`, anywhere in it: Jason alone sets its own
+ * variables (`hostEnvironment`), and a command that names one could set or clear it. The rule is the exact spelling; the
  * permission model refuses the name in any letter case.
  */
 export const confinedRule = `Bash(*${confinedVariable}*)`;
+
+/** The host's own refusal of any Bash command that names `JASON_CHAT_TURN`, anywhere in it, as `confinedRule` is. */
+export const chatTurnRule = `Bash(*${chatTurnVariable}*)`;
 
 /**
  * The host's own refusal of any Bash command that names `JASON_ATTEMPT_ID`, anywhere in it: the variable names the
@@ -222,7 +229,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
@@ -367,10 +374,14 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
 /**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
  * `desktop` but the turn's chat folder (the turns' configurations among them), the known ones whether they exist or not,
- * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
- * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
- * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
- * harness root) are refused whole, the folder and everything under it, with no entry left open.
+ * refused to its file tools. The host's reference says it checks a redirection's target, and a file command it
+ * recognizes in Bash (`cat`, `head`), against these rules as if its own file tools read or wrote that file (Anthropic,
+ * https://code.claude.com/docs/en/permissions, read 2026-11-20); no test of the real host has seen it, and a command an
+ * allow rule matches is never put to the permission model. The turn's `PreToolUse` hook holds it (`hookedSettings`): in
+ * Full access, and in Ask first and Auto-edit from Claude Code's floor of Full access on, it refuses such a command
+ * before the host's allow rules let it run. The permission model refuses the same paths when it is asked. In a demo run
+ * the person's own directories (`whole`: the person's data directory and harness root) are refused whole, the folder and
+ * everything under it, with no entry left open.
  */
 export function dataRules(
     platform: Platform,
@@ -522,9 +533,11 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
  * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
- * `JASON_CONFINED=1`, whatever the desktop inherited, so the jason it runs reads a request's content from standard
- * input only and runs a provider check's program by a bare name only; the desktop's own calls of jason do not carry
- * it. No host's turn carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
+ * `JASON_CHAT_TURN=1`, in every mode, whatever the desktop inherited, so the jason it runs reads a request's content from
+ * standard input only and runs a provider check's program by a bare name only; a Plan only turn carries `JASON_CONFINED=1`
+ * beside it, so its jason also refuses the verbs of a person's word and of the installation, and no other turn carries
+ * `JASON_CONFINED`, not even one the desktop inherited. The desktop's own calls of jason carry neither. No host's turn
+ * carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
  * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
  * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
@@ -544,6 +557,8 @@ export function hostEnvironment(
         bundleVersion: string | null;
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
+        /** The turn's mode: Plan only alone sets `JASON_CONFINED`. Absent, a run that is no turn of a mode, none. */
+        mode?: ChatMode;
         /**
          * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
          * of any spelling of it the base carries, so the host's shell and the judgement take the same home. That folder is
@@ -565,7 +580,7 @@ export function hostEnvironment(
             path = value;
             continue;
         }
-        if (upper === 'JASON_DATA_DIR' || upper === confinedVariable || upper === attemptVariable) continue;
+        if (upper === 'JASON_DATA_DIR' || upper === confinedVariable || upper === chatTurnVariable || upper === attemptVariable) continue;
         if (options.home !== undefined && (options.platform === 'win32' ? upper : name) === 'HOME') continue;
         env[name] = value;
     }
@@ -574,7 +589,8 @@ export function hostEnvironment(
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
-    env[confinedVariable] = '1';
+    env[chatTurnVariable] = '1';
+    if (options.mode === 'plan_only') env[confinedVariable] = '1';
     if (options.program === 'claude') {
         if (options.platform !== 'linux') env[scrub] = '1';
         env[maintainFolder] = '1';

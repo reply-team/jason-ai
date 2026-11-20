@@ -41,7 +41,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         { use: { tool: 'Read', input: { file_path: planted.path } } },
         { ask: { tool: 'Bash', input: { command: planted.command } } },
         { ask: { tool: 'Read', input: { file_path: planted.path } } },
-        { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_planted' } } },
+        { ask: { tool: 'Bash', input: { command: 'jason --actor human:planted runtime stop' } } },
         { ask: { tool: 'Bash', input: { command: 'echo planted $JASON_CONFINED' } } },
     ]);
     const log = fileLogger(b.paths.logs);
@@ -97,8 +97,8 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(endLine?.Steps, 5, 'a tool the allowed tools let through is a step and no request');
     assert.equal(endLine?.Requests, 4);
     assert.equal(endLine?.Exit, 0);
-    // What the host asks about in Full access is a card the person answers, a verb of the deny list among them; one of
-    // the three kinds is the model's refusal.
+    // What the host asks about in Full access is a card the person answers, a jason command Ask first refuses among them;
+    // one of the three kinds is the model's refusal.
     assert.deepEqual(
         lines.filter((line) => line.EventName === 'chat_request_decided').map((line) => `${line.Outcome} ${line.By}`),
         ['allowed person', 'allowed person', 'allowed person', 'refused model'],

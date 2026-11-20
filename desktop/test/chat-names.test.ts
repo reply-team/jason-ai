@@ -247,7 +247,7 @@ test('a set-up chat is named once after its first turn ended well, by Claude Cod
     assert.equal(run?.stdin, quoted(Array.from(words).slice(0, 1000).join('')), 'the first thousand characters, as one JSON string, on standard input');
     assert.ok(!run?.args.some((arg) => arg.includes('dentists')), 'never on the command line');
     assert.equal(run?.env.CLAUDE_CODE_EFFORT_LEVEL, undefined, 'an inherited effort is withheld');
-    assert.equal(run?.env.JASON_CONFINED, '1', 'the environment a turn has');
+    assert.deepEqual([run?.env.JASON_CONFINED, run?.env.JASON_CHAT_TURN], [undefined, '1'], 'the environment a turn has: the chat variable and no confinement');
     // It ran in an empty folder of the desktop's own under turns/, removed after with what was left in it.
     assert.equal(join(run!.cwd, '..'), r.b.paths.turns);
     assert.deepEqual(readdirSync(r.b.paths.turns), []);

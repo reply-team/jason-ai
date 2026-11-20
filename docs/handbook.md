@@ -281,7 +281,7 @@ or the executable its package ships, then `--version`. Which provider you use is
 be this product naming a vendor in its own sources, which it does not. In its own output it names the file the
 name resolved to and, for npm's shim, what that runs, and, whenever it read a PATH, whose it was: the CLI's,
 which the runtime's may differ from. It prints no credential — not the key, not a prefix of it, not its length.
-With `JASON_CONFINED` set, only a bare name is run, looked up in the fully qualified entries of PATH alone: relative and
+With `JASON_CONFINED` or `JASON_CHAT_TURN` set, only a bare name is run, looked up in the fully qualified entries of PATH alone: relative and
 empty entries are skipped, so a working folder is never searched by name, and a value with a directory or a root in it,
 or on Windows a colon, as `C:acme` names `acme` in the current folder of drive C, is neither looked up nor started. The
 check says what it did not run and why, and names the cure: name a program on the search path, or run the check in a
@@ -444,6 +444,10 @@ three starts drop it, a runtime it starts, the role work a runtime launches and 
 every other child inherits it, and none reads it. Every request the call sends carries the header `Jason-Confined`, and
 a send it creates, or whose text it edits, then waits for a person whatever the send mode
 ([docs/work-execution.md](work-execution.md), "The send mode at the claim"). Unset or empty, nothing changes.
+
+`JASON_CHAT_TURN`, which Jason Desktop's chat sets on every turn, holds the same file half and nothing else: an option
+that reads a file's content into a request takes only `-`, and `status --provider-cli` runs a bare name only. It refuses
+no verb and sends no header, and the same three starts drop it.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get

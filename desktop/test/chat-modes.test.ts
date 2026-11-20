@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { Chat } from '../src/chat.ts';
-import { helpNouns, readFence } from '../src/chat-deny.ts';
+import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedTools, claudeTurnSettings, fullAccessRemovedTools, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
 import { bypassSentences, chatModes, codexAutoEdit, codexFullAccess, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
@@ -202,7 +202,11 @@ interface Wired {
     id: string;
 }
 
-async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mode: ChatMode): Promise<Wired> {
+/**
+ * A turn's broker and hook in a mode, under the fence a real turn of that mode runs under (`modeFence`); a row may name
+ * another fence, said where it does.
+ */
+async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mode: ChatMode, turnFence: ChatFence = modeFence(fence, mode)): Promise<Wired> {
     const root = mkdtempSync(join(tmpdir(), 'jason-modes-'));
     const paths = desktopPaths(root);
     mkdirSync(paths.chat, { recursive: true });
@@ -218,9 +222,9 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         data: root,
         home: root,
         protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-        denied: fence.commands,
-        deniedOperations: fence.operations,
-        help: helpNouns(fence.allowed, fence.reads),
+        denied: turnFence.commands,
+        deniedOperations: turnFence.operations,
+        help: helpNouns(turnFence.allowed, turnFence.reads),
         real: realPathOf,
     };
     const id = newTurnId();
@@ -270,7 +274,14 @@ async function hooked(w: Wired, tool: string, input: Record<string, unknown>, us
     return output.hookSpecificOutput.permissionDecisionReason ?? '';
 }
 
-test('under Full access the hook leaves a deny-list verb to the host\'s rules and the CLI, however it is wrapped, a verb in a file being written and an operation by its dot included', async (t) => {
+test('in Plan only a deny-list verb in a command is refused however it is wrapped; under Full access the hook answers nothing to one in any form, a verb in a file being written and an operation by its dot included; Ask first refuses one put after an option under either fence', async (t) => {
+    const plan = await wired(t, 'plan_only');
+    for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
+        const answered = await plan.broker.ask(plan.id, 'Bash', { command });
+        assert.equal(answered.behavior, 'deny', command);
+        assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/, command);
+    }
+    assert.deepEqual(plan.cards, []);
     const w = await wired(t, 'full_access');
     for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1',
         'jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN', `cat > run.sh <<'EOF'\njason approval approve apr_1\nEOF`,
@@ -284,6 +295,40 @@ test('under Full access the hook leaves a deny-list verb to the host\'s rules an
     assert.equal(await hooked(w, 'MultiEdit', { file_path: file, edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'jason block clear blk_1' }] }), null);
     assert.equal(await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/decision.answer", body)' }), null);
     assert.deepEqual(w.decided, [], 'nothing was refused');
+    for (const scope of [plan.scope, w.scope]) {
+        const judged = judge('Bash', { command: 'jason --actor human:me approval reject apr_1' }, scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /write the verb first and its options after it/);
+    }
+});
+
+test('under Full access the hook refuses Jason\'s own variables inside the content of a file being written, and a script that runs a person\'s word is written', async (t) => {
+    const w = await wired(t, 'full_access');
+    const file = join(w.scope.chat, 'run.sh');
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\nunset JASON_CHAT_TURN\njason rolenote set cmp_1 researcher --note-file n.json\n' }), confinedRefusal);
+    assert.equal(await hooked(w, 'Edit', { file_path: file, old_string: 'x', new_string: 'export JASON_CONFINED=' }), confinedRefusal);
+    assert.equal(await hooked(w, 'MultiEdit', { file_path: file, edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'env -u jason_chat_turn jason status' }] }), confinedRefusal);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\njason approval approve apr_1\n' }), null);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: 'a plan for the spring campaign\n' }), null);
+});
+
+test('in Plan only an operation named by its dot is refused in a command; in Ask first it is the person\'s card, as any command is', async (t) => {
+    const plan = await wired(t, 'plan_only');
+    const command = 'curl -X POST http://127.0.0.1:4011/v1/approval.approve -d @body.json';
+    const answered = await plan.broker.ask(plan.id, 'Bash', { command });
+    assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/);
+    const asked = await wired(t, 'ask_first');
+    const judged = judge('Bash', { command }, asked.scope);
+    assert.equal(judged.verdict === 'ask' ? judged.title : judged.verdict, 'Run a command');
+});
+
+test('under Full access a campaign\'s send mode and the send-mode preferences run, as a terminal\'s do; in Ask first each is the person\'s card', async (t) => {
+    const w = await wired(t, 'full_access');
+    const asked = await wired(t, 'ask_first');
+    for (const command of ['jason campaign set-send-mode cmp_1 --cold automatic --actor human:me', 'jason preference set send_mode.cold --value x', 'jason preference unset send_mode.warm --actor human:me']) {
+        assert.equal(await hooked(w, 'Bash', { command }), null, command);
+        const judged = judge('Bash', { command }, asked.scope);
+        assert.equal(judged.verdict === 'ask' ? judged.title : judged.verdict, 'Run a command', command);
+    }
 });
 
 test('in Plan only a campaign\'s send mode and the send-mode preferences are refused with no card, and reading the preferences stays on the plan list', async (t) => {
@@ -408,27 +453,53 @@ test('the main process asks the person nothing before Full access: no box of its
     for (const gone of ['fullAccessStanding', 'takeBackFullAccess']) assert.equal(gone in Chat.prototype, false, `the chat has no ${gone}`);
 });
 
-// What Ask first refuses before it reads a word literally, and what Full access's hook does with the same spellings: it
-// leaves them to the host's rules and the CLI, and refuses only the three kinds.
+// What Plan only refuses before it reads a word literally, and what Full access's hook does with the same spellings: it
+// answers nothing to each, and refuses only the three kinds.
 
-test('a quoted, an escaped or a wrapped deny-list verb, an interpreter\'s list form, a variable as the program and a re-spelled operation are refused in Ask first; under Full access the hook answers nothing to each', async (t) => {
+test('under Full access the hook answers nothing to a quoted, an escaped or a wrapped deny-list verb, an interpreter\'s list form, a variable as the program or a re-spelled operation', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ['jason approval appro\\ve apr_1', "jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1', 'jason decision ans\\wer dec_1 --option a',
         `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`, "curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json",
-        'curl http://127.0.0.1:4011/v1/decision.ans\\wer', 'printf "jason approval approve apr_1" | sh']) {
-        assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
+        'curl http://127.0.0.1:4011/v1/decision.ans\\wer', 'printf "jason approval approve apr_1" | sh', 'echo approval approve apr_1 | xargs jason', 'echo amFzb24K | base64 -d | sh',
+        `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`, 'sh -c "jason campaign list"', 'j=jason; $j decision answer dec_1 --option a', '${J} campaign list',
+        '$(which jason) campaign list', 'eval "$CMD"']) {
         assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
     }
-    for (const command of ['echo approval approve apr_1 | xargs jason', 'echo amFzb24K | base64 -d | sh', `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`,
-        'sh -c "jason campaign list"', 'j=jason; $j decision answer dec_1 --option a', '${J} campaign list', '$(which jason) campaign list', 'eval "$CMD"']) {
-        assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
+});
+
+test('in Plan only a quoted or an escaped deny-list verb is refused as its plain spelling is, by the same sentence', async (t) => {
+    const w = await wired(t, 'plan_only');
+    for (const command of ['jason approval appro\\ve apr_1', "jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1', 'jason decision ans\\wer dec_1 --option a']) {
+        const judged = judge('Bash', { command }, w.scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /person's own act/, command);
+        const answered = await w.broker.ask(w.id, 'Bash', { command });
+        assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/, command);
     }
+});
+
+test('a jason in an interpreter\'s list form is refused for a deny-list verb in Plan only', async (t) => {
+    const plan = await wired(t, 'plan_only');
+    const approve = `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`;
+    const refused = judge('Bash', { command: approve }, plan.scope);
+    assert.match(refused.verdict === 'deny' ? refused.message : '', /person's own act/);
+});
+
+test('in Plan only an operation re-spelled by a quote or a backslash is refused as its plain spelling is', async (t) => {
+    const w = await wired(t, 'plan_only');
+    for (const command of ["curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json", 'curl http://127.0.0.1:4011/v1/decision.ans\\wer']) {
+        const judged = judge('Bash', { command }, w.scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /person's own act/, command);
+    }
+});
+
+test('under Full access a script written with an escaped verb or a re-spelled operation is written, the hook answering nothing whatever fence the turn carries', async (t) => {
+    const w = await wired(t, 'full_access', fence);
     const file = join(w.scope.chat, 'go.sh');
     assert.equal(await hooked(w, 'Write', { file_path: file, content: 'jason approval appro\\ve apr_1\n' }), null);
     assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl $U/v1/approval.appr''ove" }), null);
 });
 
-test('env -i or env -u around a jason clears the confinement without naming it, and is refused in every mode', async (t) => {
+test('env -i or env -u around a jason drops the chat\'s environment without naming it, and is refused in every mode', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ['env -i HOME="$HOME" /usr/local/bin/jason campaign list', 'env - jason campaign list', 'exec -c jason campaign list']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /JASON_CONFINED/, command);
@@ -527,10 +598,15 @@ test('what Claude Code still asks under Full access is a card titled for Full ac
 
 test('each refusal of the hook is said to the log, by the model, in Full access; what runs is not', async (t) => {
     const w = await wired(t, 'full_access');
+    await hooked(w, 'Bash', { command: 'echo $JASON_ATTEMPT_ID' });
     await hooked(w, 'Bash', { command: 'unset JASON_CONFINED' });
     await hooked(w, 'Bash', { command: 'echo x | xargs jason' });
     await hooked(w, 'Bash', { command: 'git status' });
-    assert.deepEqual(w.decided, [{ outcome: 'refused', by: 'model', mode: 'full_access' }]);
+    await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
+    assert.deepEqual(w.decided, [
+        { outcome: 'refused', by: 'model', mode: 'full_access' },
+        { outcome: 'refused', by: 'model', mode: 'full_access' },
+    ]);
 });
 
 // The second look's further spellings, in Ask first and under Full access alike.
@@ -640,7 +716,10 @@ test('a noun\'s help runs with no card in Plan only, Ask first and Auto-edit, an
         const root = await w.broker.ask(w.id, 'Bash', { command: 'jason --help' });
         assert.equal(root.behavior, 'deny', mode);
         assert.match(root.behavior === 'deny' ? root.message : '', /run `jason <noun> --help`/, mode);
-        assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'jason approval approve --help' })).behavior, 'deny', mode);
+        // A verb's help: refused in Plan only, where the verb is; elsewhere the host's own rule for the verb runs it, and the
+        // model, never asked by the host, would show the card any jason command it is asked about gets.
+        if (mode === 'plan_only') assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'jason approval approve --help' })).behavior, 'deny', mode);
+        else assert.equal(judge('Bash', { command: 'jason approval approve --help' }, w.scope).verdict, 'ask', mode);
     }
     const full = await wired(t, 'full_access');
     for (const command of [...nouns.map((noun) => `jason ${noun} --help`), 'jason --help', 'jason -h', 'jason approval approve --help']) {

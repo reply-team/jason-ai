@@ -9,12 +9,14 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
-import { readFence } from '../src/chat-deny.ts';
+import { modeFence, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { heldByWhatRuns, readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
-import { autoEditJudgement, fullAccessJudgement, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { autoEditJudgement, confinedRefusal, fullAccessJudgement, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
+/** The fence of a real turn in Ask first, Auto-edit and Full access alike: none of the deny list (`modeFence`). */
+const turnFence = modeFence(fence, 'full_access');
 const linux: LiteralContext = { platform: 'linux', home: '/home/someone' };
 
 /** The resolved words of each simple command, or a failure saying why it was held. */
@@ -29,15 +31,21 @@ function reasonOf(tool: string, command: string, context: LiteralContext = linux
     return reading.held ? reading.reason : null;
 }
 
-/** A scope whose data directory is the default one under a made-up home folder, nothing on disk. */
-function homeScope(platform: Platform, home: string): ChatScope {
+/**
+ * A scope whose data directory is the default one under a made-up home folder, nothing on disk, under the fence a real
+ * turn of Ask first, Auto-edit and Full access runs under; `planned` gives it Plan only's, the deny list whole.
+ */
+function homeScope(platform: Platform, home: string, planned = false): ChatScope {
     const paths = platform === 'win32' ? win32 : posix;
     const data = paths.join(home, '.jason');
     const chat = paths.join(data, 'desktop', 'chat');
-    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [], denied: fence.commands, deniedOperations: fence.operations, real: () => null };
+    const used = planned ? fence : turnFence;
+    return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [], denied: used.commands, deniedOperations: used.operations, real: () => null };
 }
 
 const scope = homeScope('linux', '/home/someone');
+/** The same, under Plan only's fence: the deny list whole. */
+const planned = homeScope('linux', '/home/someone', true);
 const runs = { outcome: 'runs' };
 
 /** The reasons an earlier Full access held a command for that were its own, not the literal reading's. */
@@ -245,40 +253,84 @@ test('cmd, a .bat or a .cmd with arguments is held whole by the reading, in eith
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'go.bat' }, scope), runs, 'a batch file with no arguments is a file the agent wrote');
 });
 
-// 1.3 (a): a person's verbs are Ask first's and Auto-edit's to refuse; in Full access the host's deny rules hold them as
-// written, and the hook refuses only the three kinds.
+// 1.3 (a): a person's verbs are Plan only's to refuse; Ask first and Auto-edit card them or let the host's allow rule run
+// them, and in Full access the hook refuses only the three kinds, so each runs there in every form.
 
-test('a person\'s verbs are refused in Ask first, never a card; in Full access the hook leaves them to the host\'s rules', () => {
+test('in Plan only a person\'s verbs are refused in every form, never a card; in a real Full access turn a plain one runs, and in Ask first the permission model cards each, while the host\'s allow rule runs those of the no-card set before the model is asked', () => {
     for (const command of ['jason approval approve apr_1', 'jason decision answer dec_1 --option a', 'jason block clear blk_1', "jason approval 'approve' apr_1", 'jason approval ap"pro"ve apr_1', 'sudo jason approval approve apr_1', 'echo approval approve apr_1 | xargs jason approval approve']) {
-        const judged = judge('Bash', { command }, scope);
-        assert.equal(judged.verdict, 'deny', `Ask first: ${command}`);
-        assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, command);
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
+        const judged = judge('Bash', { command }, planned);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, `Plan only: ${command}`);
     }
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope), runs);
+    for (const command of ['jason approval approve apr_1', 'jason decision answer dec_1 --option a', 'jason block clear blk_1']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
+        assert.equal(judge('Bash', { command }, scope).verdict, 'ask', `Ask first: ${command}`);
+    }
+    // The host's allow rule is one per form of the no-card set (`claudeArguments`, chat-hosts.test.ts): approving and
+    // answering are among them, so the host runs them unasked; clearing a block is not, so its card is the model's.
+    assert.ok(personsWordForms.includes('approval approve') && personsWordForms.includes('decision answer'));
+    assert.ok(!personsWordForms.includes('block clear'));
 });
 
-test('starting or archiving a campaign is refused in Ask first and Auto-edit in every form, never a card; in Full access the hook leaves it to the host\'s rules', () => {
-    for (const verb of ['start', 'archive']) {
-        for (const command of [`jason campaign ${verb} cmp_1`, `jason campaign ${verb} cmp_1 --reason "go"`, `jason campaign '${verb}' cmp_1`, `sudo jason campaign ${verb} cmp_1`,
-            `jason campaign list && jason campaign ${verb} cmp_1`, `echo cmp_1 | xargs jason campaign ${verb}`, `curl -X POST http://127.0.0.1:5000/v1/campaign.${verb}`,
-            `jason --actor human:x campaign ${verb} cmp_1`, `jason campaign \\\n  ${verb} cmp_1`, `env X=1 jason campaign ${verb} cmp_1`,
-            `python3 -c "import subprocess; subprocess.run(['jason', 'campaign', '${verb}', 'cmp_1'])"`, `jason campaign ${verb} cmp_1 || true`]) {
-            assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
-            assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
-            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
-        }
+test('in Plan only starting a campaign is refused in every form, never a card; in a real Full access turn it runs, as pausing one does', () => {
+    for (const command of ['jason campaign start cmp_1', 'jason campaign start cmp_1 --reason "go"', "jason campaign 'start' cmp_1", 'jason campaign st"ar"t cmp_1',
+        'sudo jason campaign start cmp_1', 'jason campaign list && jason campaign start cmp_1', 'echo cmp_1 | xargs jason campaign start',
+        'curl -X POST http://127.0.0.1:5000/v1/campaign.start']) {
+        const judged = judge('Bash', { command }, planned);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, `Plan only: ${command}`);
     }
-    for (const command of ['jason campaign pause cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
+    for (const command of ['jason campaign start cmp_1', 'jason campaign pause cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
 });
 
-test('a URL word is read with its percent-escapes decoded: a file URL into the data directory is refused however it is escaped', () => {
+test('in Plan only archiving a campaign is refused in every form, never a card; in a real Full access turn it runs, as pausing one does', () => {
+    for (const command of ['jason campaign archive cmp_1', 'jason campaign archive cmp_1 --reason "over"', "jason campaign 'archive' cmp_1", 'jason campaign ar"chi"ve cmp_1',
+        'sudo jason campaign archive cmp_1', 'jason campaign list && jason campaign archive cmp_1', 'echo cmp_1 | xargs jason campaign archive',
+        'curl -X POST http://127.0.0.1:5000/v1/campaign.archive']) {
+        const judged = judge('Bash', { command }, planned);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, `Plan only: ${command}`);
+    }
+    for (const command of ['jason campaign archive cmp_1', 'jason campaign pause cmp_1']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+});
+
+test('in Plan only archiving a campaign is refused in the forms that hide its verb; the form that puts an option first is refused in every mode Jason judges and runs in Full access, and no other is ever let through unasked but by Full access', () => {
+    const hiding = ['jason --actor human:x campaign archive cmp_1', 'jason campaign \\\n  archive cmp_1', 'env X=1 jason campaign archive cmp_1',
+        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'archive\', \'cmp_1\'])"',
+        'jason campaign archive cmp_1 || true'];
+    for (const command of hiding) assert.equal(judge('Bash', { command }, planned).verdict, 'deny', `Plan only: ${command}`);
+    const first = hiding[0] as string;
+    assert.equal(judge('Bash', { command: first }, scope).verdict, 'deny', `Ask first: ${first}`);
+    assert.equal(autoEditJudgement('Bash', { command: first }, scope).verdict, 'deny', `Auto-edit: ${first}`);
+    for (const command of hiding) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
+    for (const command of hiding.slice(1)) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'ask', `Ask first: ${command}`);
+        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'ask', `Auto-edit: ${command}`);
+    }
+});
+
+test('in Plan only starting a campaign is refused in the forms that hide its verb; the form that puts an option first is refused in every mode Jason judges and runs in Full access, and no other is ever let through unasked but by Full access', () => {
+    const hiding = ['jason --actor human:x campaign start cmp_1', 'jason campaign \\\n  start cmp_1', 'env X=1 jason campaign start cmp_1',
+        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'start\', \'cmp_1\'])"',
+        'jason campaign start cmp_1 || true'];
+    for (const command of hiding) assert.equal(judge('Bash', { command }, planned).verdict, 'deny', `Plan only: ${command}`);
+    const first = hiding[0] as string;
+    assert.equal(judge('Bash', { command: first }, scope).verdict, 'deny', `Ask first: ${first}`);
+    assert.equal(autoEditJudgement('Bash', { command: first }, scope).verdict, 'deny', `Auto-edit: ${first}`);
+    for (const command of hiding) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
+    for (const command of hiding.slice(1)) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'ask', `Ask first: ${command}`);
+        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'ask', `Auto-edit: ${command}`);
+    }
+});
+
+test('a URL word is read with its percent-escapes decoded: a file URL into the data directory and an escaped variable of Jason\'s are refused however they are escaped', () => {
     for (const command of ['curl file:///home/someone/.jason/run/runtime.json', 'curl file:///home/someone/%2Ejason/run/runtime.json', 'curl file:///home/someone/.jason%2Frun%2Fruntime.json']) {
         assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', command);
     }
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, scope), runs, 'an operation is the host\'s rules\' and the CLI\'s to hold');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'curl http://127.0.0.1:4011/v1/JASON%5FCHAT%5FTURN' }, scope), { outcome: 'refused', message: confinedRefusal });
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, scope), runs, 'an operation of the deny list runs in Full access');
+    const plan = fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, planned);
+    assert.equal(plan.outcome, 'runs', 'Full access\'s judgement reads the three kinds alone, whatever fence the scope carries');
 });
 
 test('the data directory is refused by its resolved path, the home folder\'s ~ resolved', () => {
@@ -298,7 +350,7 @@ test('the shared chat folder\'s own instructions and agent settings are refused 
     assert.deepEqual(fullAccessJudgement('Read', { file_path: '.claude/settings.json' }, shared), runs, 'a read of them by the file tool runs');
 });
 
-test('a resolved command that clears the environment around a jason is refused for the confined variable', () => {
+test('a resolved command that clears the environment around a jason is refused by the sentence for Jason\'s own variables', () => {
     const judged = fullAccessJudgement('Bash', { command: 'env -i jason campaign list' }, scope);
     assert.equal(judged.outcome, 'refused');
     assert.match(judged.outcome === 'refused' ? judged.message : '', /JASON_CONFINED/);
@@ -399,7 +451,7 @@ test('the data directory is reached through a link by its resolved path, never b
     mkdirSync(chat, { recursive: true });
     const link = join(root, 'link');
     symlinkSync(data, link, 'junction');
-    const linked: ChatScope = { platform, cwd: chat, chat, added: [], data, home: join(root, 'home'), protectedFiles: [], denied: fence.commands, deniedOperations: fence.operations, real: realPathOf };
+    const linked: ChatScope = { platform, cwd: chat, chat, added: [], data, home: join(root, 'home'), protectedFiles: [], denied: turnFence.commands, deniedOperations: turnFence.operations, real: realPathOf };
     const slashed = (path: string) => path.replace(/\\/g, '/');
     assert.equal(fullAccessJudgement('Bash', { command: `cat ${slashed(join(link, 'run', 'runtime.json'))}` }, linked).outcome, 'refused');
     assert.equal(fullAccessJudgement('Bash', { command: `cd ${slashed(link)} && cat run/runtime.json` }, linked).outcome, 'refused');
@@ -457,6 +509,7 @@ test('a person\'s MCP tool whose input has a command is read as text for the thr
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'grep -r mcp notes' }, scope), runs);
     assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), runs);
     assert.equal(fullAccessJudgement('mcp__s__run', { command: 'cat /home/someone/.jason/run/runtime.json' }, scope).outcome, 'refused', 'its input is still read for a refusal');
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'echo $JASON_CHAT_TURN' }, scope), { outcome: 'refused', message: confinedRefusal });
 });
 
 // The fix round, POSIX first: what the module called the program was not always the program that runs.
@@ -631,6 +684,7 @@ test('the PowerShell tool runs its commands in Full access, a hold of the readin
     }
     runsHeld('PowerShell', 'Invoke-Expression frobnicate', 'runner');
     assert.equal(fullAccessJudgement('PowerShell', { command: 'Get-Content /home/someone/.jason/run/runtime.json' }, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'echo $env:JASON_CHAT_TURN' }, scope), { outcome: 'refused', message: confinedRefusal });
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo a' }, scope), runs, 'the Bash tool\'s literal commands still run');
 });
 

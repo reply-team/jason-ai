@@ -55,6 +55,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
+import { ExportRefused, exportInto, exportName, exportNotTyped, exportStart } from './chat-export.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
 import { readMemoryFile, readMemoryWithin } from './chat-memory-files.ts';
@@ -76,7 +77,7 @@ import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
-import { helpNouns, type ChatFence } from './chat-deny.ts';
+import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
     askFirstThisTurn,
@@ -169,6 +170,11 @@ export interface ChatSendOptions {
      * built, when the conversation is in another mode as it is read; absent, the turn runs in the mode it is in.
      */
     mode?: ChatMode;
+    /**
+     * Present, and true, when the words are the ones the person typed in the message box: only such words are an
+     * `/export` (`chat-export.ts`). The page sends it with an export alone.
+     */
+    typed?: true;
     /**
      * Present, and true, on a send a browser tab made, which the bridge marks (`browser-bridge.ts`): a turn of a
      * conversation in Full access then runs in Ask first.
@@ -1331,6 +1337,11 @@ export class Chat {
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
+        // `/export <file name>` writes the conversation to a file and starts no turn (`chat-export.ts`), and only from
+        // words the person typed in the message box, as the page says with `typed`: a card's option or field, or a page
+        // that does not say the words were typed, writes nothing.
+        const exported = exportName(text);
+        if (exported !== null) return given.typed === true ? this.#export(conversation, chatId, exported) : refuse(exportNotTyped);
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
         if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
         // A go approved for one mode never runs in another: a mode the person chose from the menu meanwhile refuses it.
@@ -1366,8 +1377,9 @@ export class Chat {
             const hostVersion = resolved.program === 'claude' ? await this.#claudeVersion() : await this.#codexVersion();
             const version = resolved.program === 'claude' ? hostVersion : null;
             const below = resolved.program === 'claude' ? floorSentence(hostVersion) : codexFloorSentence(hostVersion);
-            // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the turn runs in
-            // Ask first.
+            // Full access runs only on a Claude Code at its floor, where the hook blocks the tool when it fails and has been
+            // seen to stand in front of the host's rules, and where the bypass is available: elsewhere the turn runs in Ask
+            // first.
             if (below === null && running.mode === 'full_access') {
                 const read = turnMode(recorded, resolved.program, { ...place, claudeVersion: version });
                 if (read.why !== null) {
@@ -1406,6 +1418,30 @@ export class Chat {
             this.#setupTurns.delete(conversation.id);
             if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned || error instanceof SandboxUnproven) refuse(error.message);
             else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    /**
+     * Writes the conversation's words to a new file named `name`: in the campaign's folder for a campaign's chat, in the
+     * harness root otherwise, as the runtime reports them. Says where, or why not, and starts no turn.
+     */
+    async #export(conversation: Conversation, chatId: string, name: string): Promise<void> {
+        // A window that closed meanwhile is told nothing, and nothing is written.
+        const say = (event: ChatEvent) => {
+            if (!this.#closed) this.#options.emit(chatId, event);
+        };
+        try {
+            const text = exportStart(conversation, name, new Date(this.#now()));
+            const campaign = conversation.campaign_id;
+            const folder = campaign === null ? null : ((await this.#readCampaign(campaign, false)).about.campaign?.folder ?? null);
+            const place: MemoryPlace | null = campaign === null ? await this.#rootPlace() : folder === null ? null : { level: 'campaign', folder, id: campaign };
+            if (this.#closed) return;
+            const said = await exportInto(place, campaign === null ? 'root' : 'campaign', name, text, () => !this.#closed);
+            if (said === null) return;
+            say({ kind: 'notice', text: said });
+            say({ kind: 'done', error: null });
+        } catch (error) {
+            say({ kind: 'done', error: error instanceof ExportRefused ? error.message : `The file could not be written: ${error instanceof Error ? error.message : String(error)}` });
         }
     }
 
@@ -1818,7 +1854,8 @@ export class Chat {
             }
         };
         try {
-            const fence = this.#options.fence();
+            // Outside Plan only a turn refuses nothing of the deny list (`modeFence`).
+            const fence = modeFence(this.#options.fence(), running.mode);
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
@@ -1911,6 +1948,7 @@ export class Chat {
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
             effortNamed: resolved.effort !== undefined,
+            mode: running.mode,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
         // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.

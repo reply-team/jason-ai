@@ -21,19 +21,23 @@ public class ExecutorConfinementTests
         using var directory = new TempDataDir();
         var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
         var original = Environment.GetEnvironmentVariable(Confinement.Variable);
+        var turn = Environment.GetEnvironmentVariable(Confinement.ChatTurnVariable);
         try
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, "1");
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, "1");
 
             await AiRoleCommandTests.RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"));
         }
         finally
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, original);
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, turn);
         }
 
         var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
         Assert.Contains("confined-in-env=unset", stderr, StringComparison.Ordinal);
+        Assert.Contains("chat-turn-in-env=unset", stderr, StringComparison.Ordinal);
     }
 }
 

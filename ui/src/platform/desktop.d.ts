@@ -121,6 +121,12 @@ export interface DesktopChatOptions {
      * in the mode the conversation is in.
      */
     mode?: DesktopChatMode;
+    /**
+     * Present, and true, when the words are the ones the person typed in the message box. A message whose first word is
+     * `/export` is written to a file only with it; without it the desktop answers a `done` saying to type it there.
+     * The page sends it with such a message alone.
+     */
+    typed?: true;
 }
 
 /**
