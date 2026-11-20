@@ -1882,7 +1882,8 @@ export class Chat {
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
-                argsFor = (resumed) => codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) =>
+                    codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: env });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.

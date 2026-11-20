@@ -752,3 +752,22 @@ test('a Codex warning, a completed item of type error, is read as a warning what
     assert.deepEqual(codexLine(JSON.stringify({ type: 'item.started', item: { id: 'item_0', type: 'error', message: 'x' } }), new Set()), []);
     assert.deepEqual(codexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'no' } }), new Set()), [{ kind: 'result', error: 'no' }]);
 });
+
+test('a Codex turn that reads the person\'s config.toml, a Full access one, pins JASON_DATA_DIR and JASON_CHAT_TURN in its shell environment policy by -c, and never PATH; a turn that leaves the file unread pins nothing', () => {
+    // openai/codex 9f2b87495b (read, not seen): session flags are merged over config.toml table by table
+    // (config/src/merge.rs, `merge_toml_values_at_path`), so `shell_environment_policy.set.<NAME>` adds a name to the
+    // person's `set`; `populate_env` (protocol/src/shell_environment.rs) applies `set` after `inherit` and the excludes.
+    const environment = { JASON_DATA_DIR: 'C:\\Users\\a b\\.jason', JASON_CHAT_TURN: '1', PATH: 'C:\\bin', OTHER: 'x' };
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        const full = codexArguments({ platform, mode: 'full_access', environment });
+        const settings = full.flatMap((arg, i) => (full[i - 1] === '-c' ? [arg] : []));
+        const pinned = settings.filter((setting) => setting.startsWith('shell_environment_policy.'));
+        assert.deepEqual(pinned, ['shell_environment_policy.set.JASON_DATA_DIR="C:\\\\Users\\\\a b\\\\.jason"', 'shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        // Without a data directory named, only the turn's mark.
+        const unnamed = codexArguments({ platform, mode: 'full_access', environment: { JASON_CHAT_TURN: '1', PATH: 'C:\\bin' } });
+        assert.deepEqual(unnamed.filter((arg) => arg.startsWith('shell_environment_policy.')), ['shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) {
+            assert.ok(!codexArguments({ platform, mode, environment }).some((arg) => arg.startsWith('shell_environment_policy.')), `${platform} ${mode}`);
+        }
+    }
+});

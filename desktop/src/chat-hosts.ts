@@ -272,6 +272,27 @@ export const codexConnectorsOff = 'features.apps=false';
 export const codexFullAccessSettings: readonly string[] = [...codexSearchSettings, codexConnectorsOff];
 
 /**
+ * The variables a Codex turn that reads the person's config.toml pins for the commands it runs, so that a
+ * `shell_environment_policy` there (`inherit = "core"` or `"none"`, or an exclude) cannot keep from a command the data
+ * directory the desktop runs on or the turn's mark, and the `jason` it runs act on another installation or read a file
+ * an option names. PATH is never pinned: `set` would replace the person's whole PATH. openai/codex 9f2b87495b, read and
+ * not seen: session flags are merged over config.toml table by table (config/src/merge.rs,
+ * `merge_toml_values_at_path`), so `-c shell_environment_policy.set.<NAME>=<value>` adds a name to the person's `set`;
+ * `populate_env` (protocol/src/shell_environment.rs) applies `set` after `inherit`, the default excludes and `exclude`,
+ * and before `include_only`, so a policy that keeps only listed names, by `include_only` or an include filter, still
+ * removes them, as it removes the bundle's folder from PATH.
+ */
+export const codexPinnedVariables: readonly string[] = ['JASON_DATA_DIR', 'JASON_CHAT_TURN'];
+
+/** The `-c` settings that pin `codexPinnedVariables` the environment holds, each value a TOML basic string. */
+function codexPinned(environment: Readonly<Record<string, string>>): string[] {
+    return codexPinnedVariables.flatMap((name) => {
+        const value = environment[name];
+        return value === undefined ? [] : [`shell_environment_policy.set.${name}=${JSON.stringify(value)}`];
+    });
+}
+
+/**
  * The command line of one Codex turn: `codex exec` emitting JSON events, the prompt read from standard input (`-`),
  * resumed as `codex exec resume <thread>` from the chat's second turn on. In Full access it runs with no sandbox
  * (`--sandbox danger-full-access`) and reads the person's own `config.toml`, as a terminal's Codex does; in every other
@@ -319,10 +340,25 @@ export const codexFullAccessSettings: readonly string[] = [...codexSearchSetting
  * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
  * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
-export function codexArguments(turn: { platform: Platform; mode?: ChatMode | undefined; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
+export function codexArguments(turn: {
+    platform: Platform;
+    mode?: ChatMode | undefined;
+    model?: string | undefined;
+    effort?: Effort | undefined;
+    resume?: string | undefined;
+    /** The turn's environment, whose `codexPinnedVariables` a turn that reads the person's config.toml pins. */
+    environment?: Readonly<Record<string, string>> | undefined;
+}): string[] {
     const args =
         turn.mode === 'full_access'
-            ? ['exec', '--json', '--sandbox', 'danger-full-access', '--skip-git-repo-check', ...codexFullAccessSettings.flatMap((setting) => ['-c', setting])]
+            ? [
+                  'exec',
+                  '--json',
+                  '--sandbox',
+                  'danger-full-access',
+                  '--skip-git-repo-check',
+                  ...[...codexFullAccessSettings, ...codexPinned(turn.environment ?? {})].flatMap((setting) => ['-c', setting]),
+              ]
             : ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);

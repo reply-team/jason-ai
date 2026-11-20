@@ -715,6 +715,19 @@ test('a Full access Codex turn that Codex refuses before any event ends in Codex
     assert.deepEqual(done(await r.turn(asked.id, 'hello', { host: 'codex' })), { kind: 'done', error: refusedByRequirements });
 });
 
+test('a Full access Codex turn pins the data directory and the turn\'s mark it was started with in its shell environment policy, and never PATH', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', { host: 'codex' });
+    const host = r.hosts()[0]!;
+    const settings = host.args.flatMap((arg, i) => (host.args[i - 1] === '-c' ? [arg] : []));
+    assert.deepEqual(
+        settings.filter((setting) => setting.startsWith('shell_environment_policy.')),
+        [`shell_environment_policy.set.JASON_DATA_DIR=${JSON.stringify(host.env?.JASON_DATA_DIR)}`, 'shell_environment_policy.set.JASON_CHAT_TURN="1"'],
+    );
+    assert.equal(host.env?.JASON_DATA_DIR, r.b.paths.data);
+});
+
 test('on Windows the sandbox check runs in the turn\'s own folder for a read-only Codex turn, and a Full access Codex turn runs none', async (t) => {
     const options = { chat: { platform: 'win32' as const }, env: { SystemRoot: 'C:\\Windows' } };
     const r = rig(t, options);
