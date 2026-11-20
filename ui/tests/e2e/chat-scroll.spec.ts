@@ -257,4 +257,49 @@ test('the chat keeps the end of its conversation in view above the cards that wa
     const again = await layout();
     expect(Math.abs(again.end - again.view / 2), 'the conversation ends half the view down').toBeLessThanOrEqual(2);
     expect(again.cardsTop).toBeLessThan(again.view);
+
+    // The person goes to Needs you while the answer comes, and back to the chat. What the box says as it goes out of
+    // sight and comes back is noted in the page, for a failure to show: its scroll events and its sizes, in order.
+    await scroller.evaluate((box) => {
+        box.dataset.probe = 'chat';
+        const noted: unknown[] = [];
+        (window as unknown as { boxNoted: unknown[] }).boxNoted = noted;
+        const at = (what: string) =>
+            noted.push({ what, top: box.scrollTop, view: box.clientHeight, height: box.scrollHeight });
+        box.addEventListener('scroll', () => at('scroll'));
+        new ResizeObserver(() => at('resized')).observe(box);
+    });
+    const noted = () => page.evaluate(() => JSON.stringify((window as unknown as { boxNoted: unknown[] }).boxNoted));
+    /** Needs you is shown, two parts of the answer come into the chat out of sight, and the chat is shown again. */
+    const awayWhile = async (first: number) => {
+        await page.evaluate(() => (location.hash = '#/attention'));
+        await expect(page.locator('.chat-scroll[data-probe="chat"]')).toBeHidden();
+        await page.evaluate(() => (window as unknown as { boxNoted: unknown[] }).boxNoted.push('hidden'));
+        for (const n of [first, first + 1]) {
+            await say({ kind: 'text', text: part(n) });
+            await expect(page.locator('.chat-scroll[data-probe="chat"]')).toContainText(`Part ${n}.`);
+        }
+        await frames();
+        await page.evaluate(() => (window as unknown as { boxNoted: unknown[] }).boxNoted.push('shown'));
+        await page.evaluate((id) => (location.hash = `#/campaigns/${id}/chat`), campaign);
+        await expect(pane.locator('.chat-scroll[data-probe="chat"]')).toBeVisible();
+        await frames();
+    };
+
+    // Left at the foot: back, the end of what came out of sight is half the view down.
+    await awayWhile(6);
+    const back = await layout();
+    expect(Math.abs(back.end - back.view / 2), `followed while out of sight: ${await noted()}`).toBeLessThanOrEqual(2);
+
+    // Left scrolled up well past the slack: back, the place is where it was left.
+    await scroller.hover();
+    await page.mouse.wheel(0, -600);
+    await expect.poll(async () => (await layout()).end).toBeGreaterThan(back.view / 2 + 400);
+    await frames();
+    const left = await scroller.evaluate((box) => box.scrollTop);
+    await awayWhile(8);
+    expect(
+        Math.abs((await scroller.evaluate((box) => box.scrollTop)) - left),
+        `the place left is kept: ${await noted()}`,
+    ).toBeLessThanOrEqual(1);
 });
