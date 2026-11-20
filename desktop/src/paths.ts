@@ -42,6 +42,12 @@ export interface DesktopPaths {
     chatFullRecords: string;
     /** `<data>/desktop/conversations/`: one record per conversation of the chat, the desktop's alone. */
     conversations: string;
+    /**
+     * `<data>/desktop/conversations-stamped`: written once every record of the conversations carries the shape this
+     * desktop writes (`recordShape`), at the first start that found records, or before the first record is written; from
+     * then on a record without it is one an earlier desktop wrote last. No earlier desktop reads or writes it.
+     */
+    conversationsStamped: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
     providerKeys: string;
     /**
@@ -116,6 +122,7 @@ export function desktopPaths(data: string): DesktopPaths {
         chatFullEnded: join(desktop, 'chat-full-ended'),
         chatFullRecords: join(desktop, 'chat-full-records'),
         conversations: join(desktop, 'conversations'),
+        conversationsStamped: join(desktop, 'conversations-stamped'),
         providerKeys: join(desktop, 'provider-keys'),
         claudeKeyed: join(desktop, 'claude-keyed'),
         codexKeyed: join(desktop, 'codex-keyed'),

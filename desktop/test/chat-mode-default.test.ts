@@ -11,11 +11,11 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
-import { newConversationId } from '../src/chat-conversations.ts';
+import { newConversationId, parseConversation, recordShape, type Conversation } from '../src/chat-conversations.ts';
 import { registerChat } from '../src/chat-ipc.ts';
 import { readFence } from '../src/chat-deny.ts';
 import * as chatModes from '../src/chat-modes.ts';
@@ -288,6 +288,125 @@ test('a console of an earlier version that names a host when it makes a chat is 
         const made = await (r.chat.create as (...args: unknown[]) => Promise<{ mode: string }>)(null, host);
         assert.equal(made.mode, 'full_access', `${host}: made when the chat itself is given a host`);
     }
+});
+
+// The round trip through an earlier desktop. Jason Desktop 0.49.0 writes a record again with only the fields it knows,
+// so it drops the mode, but Plan only, and the folder; the record's shape, which this desktop writes on every record, tells
+// such a record apart from one found at this desktop's first start.
+
+/**
+ * Jason Desktop 0.49.0's own `serialize`, copied byte for byte from `desktop/src/chat-conversations.ts` at the tag v0.49.0,
+ * lines 288 to 296, and never written by hand: the record exactly as that version leaves it when it keeps a conversation.
+ */
+function serializeAt049(conversation: Conversation): string {
+    const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, memory_given, entries, dropped, chosen } = conversation;
+    const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
+    const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
+    const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
+    const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
+    const memory = memory_given === undefined || Object.keys(memory_given).length === 0 ? {} : { memory_given };
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
+}
+
+/** What Jason Desktop 0.49.0 leaves of a record when it keeps that conversation: the record read, and written by its serialize. */
+function keptByEarlier(r: Rig, id: string): void {
+    const file = join(r.b.paths.conversations, `${id}.json`);
+    const read = parseConversation(readFileSync(file, 'utf8'), id);
+    assert.ok(read !== null, 'the record reads');
+    writeFileSync(file, serializeAt049(read));
+}
+
+const inode = (r: Rig, id: string) => statSync(join(r.b.paths.conversations, `${id}.json`), { bigint: true }).ino;
+const earlierAskFirst =
+    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access again, choose Full access from its menu.";
+
+test('the records a desktop finds at its first start are taken as they are and stamped with their shape once and only once; the file that says so is its own', async (t) => {
+    const r = rig(t);
+    const plain = earlierRecord(r);
+    const planned = earlierRecord(r, { mode: 'plan_only' });
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'nothing is said to be stamped before a record was kept');
+    const chat = r.restart();
+    assert.equal(chat.open(plain).mode, 'full_access', 'a record found at the first start is taken as it is: no mode, Full access');
+    assert.equal(chat.open(planned).mode, 'plan_only');
+    for (const id of [plain, planned]) assert.equal(recordOf(r, id).shape, recordShape, 'stamped');
+    assert.equal(recordOf(r, plain).mode, undefined, 'and taken as it was');
+    assert.ok(existsSync(r.b.paths.conversationsStamped), 'the desktop\'s own file says the records were stamped');
+    const written = [inode(r, plain), inode(r, planned)];
+    const again = r.restart();
+    assert.deepEqual([inode(r, plain), inode(r, planned)], written, 'a second start writes neither again');
+    assert.equal(again.open(plain).mode, 'full_access');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(notices(r.events.get(plain)), [], 'nothing is said of either');
+    assert.deepEqual(notices(r.events.get(planned)), []);
+    // The file lost: a start stamps again, as a first start does, and a record with no stamp is taken as it is.
+    keptByEarlier(r, plain);
+    rmSync(r.b.paths.conversationsStamped);
+    assert.equal(r.restart().open(plain).mode, 'full_access');
+    assert.equal(recordOf(r, plain).shape, recordShape);
+    assert.ok(existsSync(r.b.paths.conversationsStamped));
+});
+
+test('a conversation an earlier desktop kept after the stamp, its record as that desktop\'s own serialize leaves it, opens in Ask first, says why once, and is written with Ask first and the stamp', async (t) => {
+    const r = rig(t);
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    await r.turn(asked.id, 'hello', claude);
+    const full = await r.chat.create();
+    await r.turn(full.id, 'hello', claude);
+    assert.equal(recordOf(r, asked.id).shape, recordShape, 'this desktop stamps what it writes');
+    assert.ok(existsSync(r.b.paths.conversationsStamped));
+    for (const id of [asked.id, full.id]) {
+        keptByEarlier(r, id);
+        assert.deepEqual([recordOf(r, id).shape, recordOf(r, id).mode, recordOf(r, id).folder], [undefined, undefined, undefined], 'the earlier desktop dropped all three');
+    }
+    const chat = r.restart();
+    for (const id of [asked.id, full.id]) {
+        assert.equal(chat.list().find((each) => each.id === id)?.mode, 'ask_first', 'listed in Ask first');
+        assert.equal(chat.open(id).mode, 'ask_first', 'never Full access, which the record no longer says it is not');
+        await settled(() => notices(r.events.get(id)).length > 0, 'the chat says why');
+        assert.deepEqual(notices(r.events.get(id)), [earlierAskFirst]);
+        assert.deepEqual([recordOf(r, id).shape, recordOf(r, id).mode, recordOf(r, id).folder], [recordShape, 'ask_first', 'own'], 'written with Ask first and the stamp, its folder its own again');
+        chat.open(id);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+    }
+    const later = r.restart();
+    assert.equal(later.open(full.id).mode, 'ask_first', 'after a restart too');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(notices(r.events.get(full.id)).length, 1, 'and not said again');
+    assert.equal((await later.setMode(full.id, 'full_access', 'claude')).mode, 'full_access', 'Full access is the person\'s to choose again');
+});
+
+test('a conversation an earlier desktop kept without its folder runs in its own folder again, resumes its session there and gets the folder back on its record', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    keptByEarlier(r, id);
+    assert.equal(recordOf(r, id).folder, undefined);
+    r.restart();
+    await r.turn(id, 'again', claude);
+    const [first, second] = r.hosts();
+    assert.ok(same(second?.cwd, ownFolder(r, id)), `the turn ran in ${second?.cwd}`);
+    assert.equal(flag(first?.args ?? [], '--resume'), undefined);
+    assert.equal(flag(second?.args ?? [], '--resume'), 'stub-session-1', 'the session the record names is resumed');
+    assert.equal(recordOf(r, id).folder, 'own');
+    assert.equal(existsSync(join(r.b.paths.chat, id)), false);
+});
+
+test('a Plan only conversation through an earlier desktop and back is in Plan only, says nothing, and is stamped again', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    await r.turn(id, 'hello', claude);
+    keptByEarlier(r, id);
+    assert.deepEqual([recordOf(r, id).shape, recordOf(r, id).mode], [undefined, 'plan_only'], 'the earlier desktop keeps Plan only');
+    const chat = r.restart();
+    assert.equal(chat.open(id).mode, 'plan_only');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(notices(r.events.get(id)), [], 'its mode was kept, so nothing is said');
+    await r.turn(id, 'again', claude);
+    assert.deepEqual([recordOf(r, id).shape, recordOf(r, id).mode, recordOf(r, id).folder], [recordShape, 'plan_only', 'own']);
+    assert.equal(r.started.at(-1), 'plan_only');
 });
 
 // The folder: one per conversation made from now on.

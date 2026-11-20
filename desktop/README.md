@@ -136,6 +136,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each (see below).
+- `<data>/desktop/conversations-stamped`: written once every record carries the shape this desktop writes, which no
+  earlier desktop reads or writes (see below).
 - `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI
   key (see "Models and effort").
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
@@ -217,6 +219,16 @@ entry of a kind this desktop does not know, written by another version, is skipp
 the folder that is not a record is counted in the log and left as it was. On a Claude Code turn the desktop's file
 rules deny the agent a read or an edit of the folder; a Codex turn is held only by its own read-only sandbox, which the
 desktop does not narrow, so it may read the records.
+
+Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
+a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
+start that finds records with no `shape` takes each as it is, one with no `mode` in Full access, writes it again with
+its shape and then writes `conversations-stamped`; with no record at all, the first record written writes that file
+first, and a start that finds the file lost is a first start again. From then on a record with no `shape` is one an
+earlier desktop wrote last: it opens in Ask first, unless it is in Plan only, says why once when it is opened, and is
+then written again with its mode and its shape. A record with no `folder` whose `chats/<id>/` stands as a folder is
+that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
+does not find it.
 
 - **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
   conversation is about, its name quoted on one line, with every control, format and separator character dropped and

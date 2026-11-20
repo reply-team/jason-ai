@@ -30,7 +30,7 @@
  * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
@@ -49,6 +49,7 @@ import {
     newConversationId,
     noteMemoryGiven,
     readConversations,
+    recordShape,
     removeConversation,
     writeConversation,
     type Conversation,
@@ -81,6 +82,7 @@ import {
     askFirstThisTurn,
     codexAutoEdit,
     codexFullAccess,
+    earlierDesktopAskFirst,
     feedDefaultMode,
     fullAccessNotYet,
     fullAccessOffered,
@@ -513,6 +515,26 @@ function unmarkPlans(entries: KeptEntry[]): boolean {
     return had;
 }
 
+/** Whether anything stands at a name, by `lstat`: one that cannot be looked at counts as standing. */
+function standing(path: string): boolean {
+    try {
+        lstatSync(path);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException | null)?.code !== 'ENOENT';
+    }
+}
+
+/** Whether a conversation's own folder stands at its place: a folder itself, never a link or a junction to one. */
+function ownFolderStands(path: string): boolean {
+    try {
+        const stat = lstatSync(path);
+        return stat.isDirectory() && !stat.isSymbolicLink();
+    } catch {
+        return false;
+    }
+}
+
 function objectOf(text: string): Record<string, unknown> | null {
     try {
         const value: unknown = JSON.parse(text);
@@ -558,6 +580,15 @@ export class Chat {
     #daily: NodeJS.Timeout;
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
     #leftOut = new Set<string>();
+    /**
+     * Whether the records are known to carry their shape (`recordShape`): the desktop's own file says so, or this run wrote
+     * it. Until then, the first record written writes that file first.
+     */
+    #stamped = false;
+    /** The records with no shape this start read once the records were stamped: each written again when it is opened. */
+    #unshaped = new Set<string>();
+    /** Of those, the ones put in Ask first for it, which are told why once, when each is opened. */
+    #earlier = new Set<string>();
     /** Folders an earlier desktop's grants left that this start moved, by conversation: said once, when it is opened. */
     #movedAtStart = new Map<string, string>();
     /**
@@ -604,6 +635,7 @@ export class Chat {
             this.#conversations.set(conversation.id, conversation);
             this.#kept.add(conversation.id);
         }
+        this.#settleShapes(read.kept, read.unstamped);
         this.#settleFeed();
         options.conversationsRead?.(read.kept.length, read.unreadable);
         this.#broker = new PermissionBroker({
@@ -625,6 +657,69 @@ export class Chat {
 
     #now(): number {
         return this.#options.now?.() ?? Date.now();
+    }
+
+    /**
+     * The records' shape (`recordShape`), which an earlier desktop drops when it writes a record again, with the mode but
+     * Plan only and the folder. A conversation's own folder that such a write dropped from its record is the
+     * conversation's again wherever that folder stands, so its turns run there once more. The first start that finds
+     * records with no shape takes each as it is, a record with no mode in Full access, and writes it again with its shape;
+     * then it writes its own file that says so (`conversationsStamped`), which no earlier desktop reads or writes. With no
+     * record at all, the first record written writes that file first. A start that finds the file is no first start: a
+     * record with no shape is one an earlier desktop wrote last, and it opens in Ask first, unless it is in Plan only,
+     * which that desktop keeps; it is told why once, and written again with its mode and its shape, when it is opened. A
+     * file that is lost makes the next start a first start again.
+     */
+    #settleShapes(kept: readonly Conversation[], unstamped: readonly string[]): void {
+        const { paths } = this.#options;
+        for (const conversation of kept) {
+            if (conversation.folder === undefined && ownFolderStands(join(paths.chats, conversation.id))) conversation.folder = 'own';
+        }
+        const unshaped = new Set(unstamped);
+        this.#stamped = standing(paths.conversationsStamped);
+        if (this.#stamped) {
+            for (const conversation of kept) {
+                if (!unshaped.has(conversation.id)) continue;
+                this.#unshaped.add(conversation.id);
+                if (conversation.mode === 'plan_only') continue;
+                conversation.mode = 'ask_first';
+                this.#earlier.add(conversation.id);
+            }
+            return;
+        }
+        if (kept.length === 0) return;
+        let all = true;
+        for (const conversation of kept) if (unshaped.has(conversation.id)) all = this.#rewrite(conversation) && all;
+        // A record that could not be written again is taken up by the next start, which is a first start still.
+        if (all) this.#stamp();
+    }
+
+    /** Writes the desktop's own file that says the records carry their shape, never through anything at its name. */
+    #stamp(): void {
+        const { conversationsStamped } = this.#options.paths;
+        try {
+            mkdirSync(dirname(conversationsStamped), { recursive: true });
+            const handle = openSync(conversationsStamped, 'wx', 0o600);
+            try {
+                writeSync(handle, `${recordShape}\n`);
+            } finally {
+                closeSync(handle);
+            }
+            this.#stamped = true;
+        } catch (error) {
+            this.#options.conversationUnwritten?.((error as NodeJS.ErrnoException | null)?.code ?? 'unknown');
+        }
+    }
+
+    /** Writes a record again as it stands, its time untouched; whether it was written. */
+    #rewrite(conversation: Conversation): boolean {
+        try {
+            writeConversation(this.#options.paths.conversations, conversation);
+            return true;
+        } catch (error) {
+            this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
+            return false;
+        }
     }
 
     #fullFolders() {
@@ -861,6 +956,10 @@ export class Chat {
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
+        if (this.#unshaped.delete(conversation.id)) {
+            if (this.#earlier.delete(conversation.id)) queueMicrotask(() => this.#options.emit(conversation.id, { kind: 'notice', text: earlierDesktopAskFirst }));
+            this.#rewrite(conversation);
+        }
         const moved = this.#movedAtStart.get(conversation.id);
         if (moved !== undefined) {
             this.#movedAtStart.delete(conversation.id);
@@ -913,6 +1012,8 @@ export class Chat {
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
         this.#choices.delete(conversation.id);
+        this.#unshaped.delete(conversation.id);
+        this.#earlier.delete(conversation.id);
         if (conversation.folder === 'own') endConversationFolder(this.#options.paths.chats, this.#fullFolders(), conversation.id, this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
     }
 
@@ -1383,6 +1484,8 @@ export class Chat {
         conversation.entries = within.entries;
         conversation.dropped = within.dropped;
         conversation.updated_at = new Date().toISOString();
+        // The first record this desktop writes, with no record before it, says first that the records carry their shape.
+        if (!this.#stamped) this.#stamp();
         try {
             writeConversation(this.#options.paths.conversations, conversation);
         } catch (error) {

@@ -363,11 +363,13 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     // A chat turn in Ask first writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes
     // it when the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, places
     // that text and the recorded skills in the conversation's own folder under desktop/chats/, where the turn runs, and
-    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end.
+    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end; the
+    // first record kept writes desktop/conversations-stamped beside them, which says the records carry their shape.
     const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
     const ownFolderFile = /^desktop\/chats\/conv_[0-9A-HJKMNP-TV-Z]{26}\/(?:CLAUDE\.md|AGENTS\.md|\.(?:claude|agents)\/skills\/[a-z-]+\/SKILL\.md)$/;
     const conversationFile = /^desktop\/conversations\/conv_[0-9A-HJKMNP-TV-Z]{26}\.json$/;
     const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
+    const stampFile = 'desktop/conversations-stamped';
     let during: string[] = [];
     await act('a chat turn', async () => {
         b.env.STUB_HOST_PLAN = JSON.stringify([{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
@@ -400,8 +402,8 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
         await done;
         // The set-up chat's naming run, which leaves nothing behind when the host gives no name.
         await chat.idle();
-    }, [...instructionFiles, ownFolderFile, conversationFile], []);
-    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !ownFolderFile.test(path) && !conversationFile.test(path));
+    }, [...instructionFiles, stampFile, ownFolderFile, conversationFile], []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && path !== stampFile && !ownFolderFile.test(path) && !conversationFile.test(path));
     assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');
     assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
     assert.match(turnFiles[0] ?? '', turnFile);

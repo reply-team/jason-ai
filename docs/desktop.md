@@ -221,6 +221,8 @@ them on.
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each.
+- `<data>/desktop/conversations-stamped`: written once every record carries the shape this version writes, so a
+  record an earlier version of the desktop wrote again is told apart: that chat opens in Ask first and says why.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system. On Linux a key is kept and read
   only where the session offers a keyring (GNOME Keyring or KWallet); where Electron would fall back to its fixed-key
   store, the card says so and the key is not kept.

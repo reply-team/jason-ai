@@ -77,6 +77,13 @@ export function askFirstThisTurn(why: string): string {
     return `${why} This turn runs in Ask first, and the chat keeps its mode.`;
 }
 
+/**
+ * What a conversation is told, once, when it is opened in Ask first because an earlier Jason Desktop wrote its record last:
+ * that version keeps no mode on a record but Plan only, so the mode the person chose is not known.
+ */
+export const earlierDesktopAskFirst =
+    "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access again, choose Full access from its menu.";
+
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
 
