@@ -60,21 +60,24 @@ public class SendReviewApiTests
     }
 
     /// <summary>
-    /// A send the desktop's chat creates no longer carries the chat's header, since the chat no longer sets
-    /// <c>JASON_CONFINED</c>; such a send follows the campaign's send mode as a send from a terminal does: under the
-    /// campaign's automatic mode it waits on the critic the runtime made, and its created line carries no mark. The same
+    /// A send the desktop's chat creates in Ask first, Auto-edit or Full access carries no chat's header, since only a Plan
+    /// only turn sets <c>JASON_CONFINED</c>; such a send follows the campaign's send mode as a send from a terminal does,
+    /// and its created line carries no mark. Under the campaign's automatic mode it waits on the critic the runtime made;
+    /// under every message it is given none and is left created for the claim, which parks it for the person
+    /// (<c>ClaimerTests.SendMode_ASendWrittenInTheChat_AlwaysWaitsForThePerson</c>, its rows without the mark). The same
     /// send created with the header is marked the chat's and is given no critic, as it always parks for the person.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_send_created_without_the_chat_s_header_follows_the_campaign_s_send_mode(bool header)
+    [InlineData("automatic", false)]
+    [InlineData("every_message", false)]
+    [InlineData("automatic", true)]
+    public async Task A_send_created_without_the_chat_s_header_follows_the_campaign_s_send_mode(string mode, bool header)
     {
         await using var api = await RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"DefaultEntryCommand":["agent-host"]}}"""));
         var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Work" }, Ct)).Id;
-        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = campaign, cold = "automatic", actor = Ada }, Ct);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = campaign, cold = mode, actor = Ada }, Ct);
         var contact = (await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ada", channels = new[] { new { channel = "email", value = "ada@example.test" } } }, Ct)).Id;
         await api.PostOkAsync<AddContactsResult>(Operations.CampaignAddContacts, new { campaign_id = campaign, contacts = new[] { new { contact_id = contact } }, actor = Ada }, Ct);
 
@@ -106,9 +109,10 @@ public class SendReviewApiTests
         Assert.True(linesStatus == System.Net.HttpStatusCode.OK, lines);
         var created = Assert.Single(JsonNode.Parse(lines)!["items"]!.AsArray());
         Assert.Equal(header ? "true" : null, created!["new"]!["confined"]?.ToJsonString());
-        if (header)
+        if (header || mode == "every_message")
         {
             Assert.True(send["wait"] is null, body);
+            Assert.Equal("created", (string?)send["status"]);
             return;
         }
 
