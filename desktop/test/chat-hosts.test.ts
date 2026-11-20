@@ -53,7 +53,7 @@ test('every Claude Code turn blocks reads outside its working folders, so a read
 
 test('the person\'s words are never on a host\'s command line: every argument is a flag or a flag\'s value', () => {
     const claude = claudeArguments({ ...turn, model: 'sonnet', resume: 'ses-1', addDirs: ['/c', '/p'] });
-    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
+    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--permission-mode', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
     for (let i = 0; i < claude.length; i++) {
         const arg = claude[i] ?? '';
         assert.ok(arg.startsWith('-'), `${arg} is not a flag`);
@@ -121,7 +121,8 @@ test('each noun with a verb on the allow list or the plan list has its help allo
         // The deny rules are not touched: every jason that starts with an option stays refused by the host, root help included.
         const refused = valuesOf(args, '--disallowedTools');
         assert.ok(refused.includes('Bash(jason -*)'), mode);
-        for (const rule of denied) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
+        // Full access keeps the PowerShell tool, as a terminal's session does (`fullAccessRemovedTools`).
+        for (const rule of denied.filter((rule) => mode !== 'full_access' || rule !== 'PowerShell')) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
     }
     // Only `--help`, and no rule for all of a noun, the root's help or a noun the deny list takes away whole.
     const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
@@ -537,6 +538,7 @@ test('a recorded Claude Code turn maps to its session, its words and one step pe
     assert.deepEqual(lines, [
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
+        { kind: 'permission_mode', mode: 'default' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
         { kind: 'tool_use', id: 'toolu_1', name: 'Bash' },
         { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list --json' },
@@ -566,6 +568,13 @@ test('the init line says where the turn\'s key came from, by a closed word: the 
     for (const absent of [undefined, 7, null]) assert.deepEqual(source(absent), [{ kind: 'key_source', source: 'absent' }], String(absent));
     // A session id of a shape the desktop does not pass on still says where the key came from.
     assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: '--x', apiKeySource: 'oauth' })), [{ kind: 'key_source', source: 'elsewhere' }]);
+});
+
+test('the init line says the permission mode the turn runs in, as one word, and nothing for any other value', () => {
+    const mode = (value: unknown) => claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'stub-session-1', ...(value === undefined ? {} : { permissionMode: value }) })).filter((line) => line.kind === 'permission_mode');
+    assert.deepEqual(mode('bypassPermissions'), [{ kind: 'permission_mode', mode: 'bypassPermissions' }]);
+    assert.deepEqual(mode('default'), [{ kind: 'permission_mode', mode: 'default' }]);
+    for (const other of [undefined, 7, null, '', 'bypass Permissions', 'x'.repeat(33), 'default\n']) assert.deepEqual(mode(other), [], JSON.stringify(other));
 });
 
 test('a retry Claude Code reports on a 401, a 403 or a failed authentication is a refused key; any other retry says nothing', () => {
@@ -699,7 +708,7 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     const edited = claudeArguments({ ...turn, mode: 'auto_edit' });
     assert.deepEqual(edited, asked);
     assert.deepEqual(claudeArguments({ ...turn, mode: 'auto_edit', resume: 'ses-1', addDirs: ['/c'] }), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] }));
-    assert.equal(edited.includes('--permission-mode'), false);
+    assert.equal(valueOf(edited, '--permission-mode'), 'default', "the host's default, by name");
     assert.ok(edited.includes('--permission-prompt-tool'));
     // No argument and no setting names the host's own accept-edits mode or a default mode of any kind.
     for (const arg of edited) {

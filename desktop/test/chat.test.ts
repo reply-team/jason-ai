@@ -177,7 +177,8 @@ test('a turn with nothing to ask starts Claude Code in the conversation\'s own f
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'conversations-stamped', 'settings.json', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to, its folder, and the file that says the records carry their shape');
+    // The file that says the records carry their shape is written by the next start, which lists the folder this one made.
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'settings.json', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to and its folder');
     assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
     assert.deepEqual(readdirSync(r.b.paths.chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'the turn writes nothing into the chat folder but the instruction text');
     assert.deepEqual(readdirSync(join(r.b.paths.chats, r.chat.idOf('c1') as string)).sort(), ['AGENTS.md', 'CLAUDE.md'], 'nor into its own folder');
@@ -345,7 +346,7 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     assert.ok(same(first?.cwd ?? '', join(r.b.paths.chats, r.chat.idOf('c1') as string)));
     // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
     await r.chat.idle();
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'conversations-stamped', 'settings.json', 'turns'], 'a Codex turn writes no turn file');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'chats', 'conversations', 'settings.json', 'turns'], 'a Codex turn writes no turn file');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
@@ -1217,7 +1218,7 @@ test('closing the window removes every running turn\'s file before it returns, s
     await r.chat.send('c1', words, { host: 'claude' });
     assert.ok(await settle(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8') !== ''));
     const turnFiles = () => readdirSync(r.b.paths.turns).filter((name) => name.startsWith('turn-'));
-    assert.equal(turnFiles().length, 1);
+    assert.equal(turnFiles().length, 2, 'its MCP configuration and its settings');
     r.chat.closeAll();
     assert.deepEqual(turnFiles(), []);
     await done;
@@ -1268,7 +1269,8 @@ test('the chat folder carries the instruction text as CLAUDE.md and AGENTS.md, b
     rmSync(r.b.paths.chat, { recursive: true });
     await r.turn('c2', words, { host: 'codex' });
     assert.ok(sameBytes(r.b.paths.chat), 'after a Codex turn');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'chats', 'conversations', 'conversations-stamped', 'settings.json'], 'nothing beside the chat folder but the conversations\' own folders, their records, the file that says the records carry their shape, and the settings');
+    // The file that says the records carry their shape is the next start's to write, which lists the folder this one made.
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'chats', 'conversations', 'settings.json'], 'nothing beside the chat folder but the conversations\' own folders, their records and the settings');
 });
 
 test('an instruction file that was changed or deleted is written again before the next turn', async (t) => {

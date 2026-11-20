@@ -142,6 +142,27 @@ public class DesktopDenyListTests
         Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// No verb of the plan list takes a request on standard input: none has an option that <see cref="RequestFile"/>
+    /// reads, the one reader of a request's file or of standard input. A redirect into a verb a Plan only turn runs is
+    /// then neither stored nor printed back, which is why the desktop's hook, which refuses the installation's settings
+    /// file and run file in every other mode, does not ride a Plan only turn.
+    /// </summary>
+    [Fact]
+    public void No_verb_of_the_plan_list_takes_a_request_on_standard_input()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var planned = File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-plan-list.txt"))
+            .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+
+        Assert.NotEmpty(planned);
+        Assert.Empty(planned.Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).ToList());
+    }
+
+    private static Command LeafOf(Command root, string verb) =>
+        verb.Split(' ').Aggregate(root, (command, word) => command.Subcommands.Single(sub => sub.Name == word));
+
     private static List<string> AllowList() =>
         File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt"))
             .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();

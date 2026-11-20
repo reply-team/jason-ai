@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
+import { hookedSettings } from '../src/chat-hosts.ts';
 import { endedName, keptMs, newGrantId } from '../src/chat-full-folder.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
@@ -244,10 +245,12 @@ test('every turn\'s settings, in all three modes, carry disableSkillShellExecuti
     const during = r.turn(id, 'full', claude);
     await during;
     const [asked, planned, full] = r.hosts();
-    assert.equal(JSON.parse(flag(asked?.args ?? [], '--settings') ?? '{}').disableSkillShellExecution, true);
     assert.equal(JSON.parse(flag(planned?.args ?? [], '--settings') ?? '{}').disableSkillShellExecution, true);
-    // The Full access turn's file is removed with the turn; its text is the function's (`fullAccessSettings`), tested apart.
-    assert.match(flag(full?.args ?? [], '--settings') ?? '', /\.settings\.json$/);
+    // A turn the hook rides has its settings in a file of its own, removed with the turn; their text is the function's.
+    for (const hooked of [asked, full]) assert.match(flag(hooked?.args ?? [], '--settings') ?? '', /\.settings\.json$/);
+    for (const mode of ['ask_first', 'auto_edit', 'full_access'] as const) {
+        assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret').disableSkillShellExecution, true, mode);
+    }
 });
 
 test('a conversation\'s turn is refused the shared chat folder and the other conversations\' folders by the host\'s own rules, and may use its own', async (t) => {

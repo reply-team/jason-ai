@@ -1,7 +1,8 @@
-// Pure: the literal reading of one shell command, for Full access. A word runs only if it is literal for its shell, made
-// of the characters a shell passes on as they are, with quotes as the only change it undergoes. Anything else anywhere
-// in the command makes the whole command held, with a closed reason; nothing is re-spelled, so what is read is exactly
-// what the shell passes on. Ask first and Plan only never read a command this way: their cards show the text as written.
+// Pure: the literal reading of one shell command. A word is read only if it is literal for its shell, made of the
+// characters a shell passes on as they are, with quotes as the only change it undergoes. Anything else anywhere in the
+// command makes the whole command held, with a closed reason; nothing is re-spelled, so what is read is exactly what the
+// shell passes on. Auto-edit reads its six file commands this way, the turn's hook reads the places a literal command's
+// words name, and "always" never covers a command that follows links; a card shows the text as written.
 
 import { posix, win32 } from 'node:path';
 import type { Platform } from './chat-permission-model.ts';
@@ -730,8 +731,8 @@ export function linkOperands(words: readonly string[]): string[] | null {
 }
 
 /**
- * True when a command, its program first, walks a folder tree following the links in it (`followsLinks`): held in
- * Full access, and never covered by "always".
+ * True when a command, its program first, walks a folder tree following the links in it (`followsLinks`): never
+ * covered by "always".
  */
 export function followsLinksIn(words: readonly string[]): boolean {
     return followsLinks(programName(words[0] ?? ''), words.slice(1));

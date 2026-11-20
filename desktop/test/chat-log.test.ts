@@ -42,6 +42,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         { ask: { tool: 'Bash', input: { command: planted.command } } },
         { ask: { tool: 'Read', input: { file_path: planted.path } } },
         { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_planted' } } },
+        { ask: { tool: 'Bash', input: { command: 'echo planted $JASON_CONFINED' } } },
     ]);
     const log = fileLogger(b.paths.logs);
     const events: ChatEvent[] = [];
@@ -78,7 +79,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes('planted'), false, 'nothing planted reached the log');
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
-    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
+    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
     // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project, and asks the
     // runtime where the harness root is, for the client's memory file.
     assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get', 'runtime status']);
@@ -93,12 +94,14 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         EventName: 'chat_turn_started',
     });
     const endLine = lines.find((line) => line.EventName === 'chat_turn_ended');
-    assert.equal(endLine?.Steps, 4, 'a tool the allowed tools let through is a step and no request');
-    assert.equal(endLine?.Requests, 3);
+    assert.equal(endLine?.Steps, 5, 'a tool the allowed tools let through is a step and no request');
+    assert.equal(endLine?.Requests, 4);
     assert.equal(endLine?.Exit, 0);
+    // What the host asks about in Full access is a card the person answers, a verb of the deny list among them; one of
+    // the three kinds is the model's refusal.
     assert.deepEqual(
         lines.filter((line) => line.EventName === 'chat_request_decided').map((line) => `${line.Outcome} ${line.By}`),
-        ['allowed person', 'allowed person', 'refused model'],
+        ['allowed person', 'allowed person', 'allowed person', 'refused model'],
     );
 });
 

@@ -171,6 +171,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
         { kind: 'text', text: 'heard' },
         { kind: 'text', text: 'Here it is.' },
         { kind: 'step', text: 'Read a file', detail: '/x/notes.md' },
+        // The stub says what the turn's hook let run: the hook rides Ask first as well.
+        { kind: 'text', text: 'tool ran' },
         { kind: 'step', text: 'Ran a command', detail: 'git status' },
         { kind: 'permission', title: asked.title, detail: asked.detail, answer: 'deny' },
         { kind: 'text', text: 'decision deny' },

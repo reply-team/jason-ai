@@ -25,11 +25,10 @@ export const toolName = 'decide';
 export const promptToolName = `mcp__${serverName}__${toolName}`;
 
 /**
- * What the turn's hook answers a tool use: `allow`, it runs with no question; `ask`, Claude Code puts it to the permission
- * prompt tool, where the broker shows its card, and `reason` says why; `deny`, it does not run, and `reason` is what
- * the agent is told.
+ * What the turn's hook answers a tool use: `deny`, it does not run, and `reason` is what the agent is told; `none`, the
+ * hook decides nothing, and the host's own mode and rules do. The hook never allows and never asks.
  */
-export type HookAnswer = { decision: 'allow' } | { decision: 'ask'; reason: string } | { decision: 'deny'; reason: string };
+export type HookAnswer = { decision: 'deny'; reason: string } | { decision: 'none' };
 
 export interface EndpointOptions {
     secret: string;
@@ -38,8 +37,8 @@ export interface EndpointOptions {
     /** How often a waiting call's stream says it is alive; thirty seconds unless a test shortens it. */
     keepAliveMs?: number;
     /**
-     * A turn in Full access: what the turn's `PreToolUse` hook is answered for a tool use, by its tool, its input and the
-     * id Claude Code gave it (`HookAnswer`). Absent, the hook's path is not served.
+     * A turn the hook rides, every mode's but Plan only's: what the turn's `PreToolUse` hook is answered for a tool use,
+     * by its tool, its input and the id Claude Code gave it (`HookAnswer`). Absent, the hook's path is not served.
      */
     hook?: (tool: string, input: Record<string, unknown>, toolUseId: string | null) => HookAnswer;
 }
@@ -59,14 +58,13 @@ const unreadHook: HookAnswer = { decision: 'deny', reason: 'The desktop could no
 
 /**
  * The hook's answer, in the shape Anthropic gives (https://code.claude.com/docs/en/hooks, read 2026-11-11): a 2xx response
- * whose JSON body's `hookSpecificOutput` names the event and its `permissionDecision`: `"allow"` "skips the permission
- * prompt", `"ask"` "prompts the user to confirm", which under `-p` is the permission prompt tool, and `"deny"`
- * "prevents the tool call", each of the last two with its `permissionDecisionReason`. Every answer decides: none is the
- * empty body, which decides nothing.
+ * whose JSON body's `hookSpecificOutput` names the event and its `permissionDecision`, `"deny"`, which "prevents the tool
+ * call", with its `permissionDecisionReason`; or an object with no decision, which decides nothing, so the host's own
+ * mode and rules do. A call that cannot be read is a refusal, never the answer that decides nothing.
  */
 function hookAnswer(response: ServerResponse, answer: HookAnswer): void {
-    const output = answer.decision === 'allow' ? { permissionDecision: 'allow' } : { permissionDecision: answer.decision, permissionDecisionReason: answer.reason };
-    json(response, { hookSpecificOutput: { hookEventName: 'PreToolUse', ...output } });
+    if (answer.decision === 'none') return json(response, {});
+    json(response, { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: answer.reason } });
 }
 const bodyLimit = 8 * 1024 * 1024;
 const inputSchema = {

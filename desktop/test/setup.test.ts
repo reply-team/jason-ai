@@ -360,16 +360,16 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('configurePlugin journal-forwarder', () => setup.configurePlugin('journal-forwarder', { token: 'b', target: 'https://hooks.example.com/in' }), ['config/settings.json'], pluginKeys('journal-forwarder'));
     await act('Reload', () => setup.configurePlugin('slack', {}), [], []);
 
-    // A chat turn in Ask first writes one file, its MCP configuration in desktop/turns/ beside the chat folder, and removes
-    // it when the turn is over; the chat writes the instruction text into the chat folder as the hosts' two memory files, places
-    // that text and the recorded skills in the conversation's own folder under desktop/chats/, where the turn runs, and
-    // keeps the conversation's record in desktop/conversations/, written when the host names its session and at the end; the
-    // first record kept writes desktop/conversations-stamped beside them, which says the records carry their shape.
+    // A chat turn in Ask first writes two files in desktop/turns/ beside the chat folder, its MCP configuration and its
+    // settings, which carry its hook, and removes them when the turn is over; the chat writes the instruction text into the
+    // chat folder as the hosts' two memory files, places that text and the recorded skills in the conversation's own folder
+    // under desktop/chats/, where the turn runs, and keeps the conversation's record in desktop/conversations/, written when
+    // the host names its session and at the end. The file that says the records carry their shape is written by a start
+    // that listed their folder, which this one, the folder's first, did not.
     const instructionFiles = ['desktop/chat/CLAUDE.md', 'desktop/chat/AGENTS.md'];
     const ownFolderFile = /^desktop\/chats\/conv_[0-9A-HJKMNP-TV-Z]{26}\/(?:CLAUDE\.md|AGENTS\.md|\.(?:claude|agents)\/skills\/[a-z-]+\/SKILL\.md)$/;
     const conversationFile = /^desktop\/conversations\/conv_[0-9A-HJKMNP-TV-Z]{26}\.json$/;
-    const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.mcp\.json$/;
-    const stampFile = 'desktop/conversations-stamped';
+    const turnFile = /^desktop\/turns\/turn-[0-9a-f]{24}\.(?:mcp|settings)\.json$/;
     let during: string[] = [];
     await act('a chat turn', async () => {
         b.env.STUB_HOST_PLAN = JSON.stringify([{ ask: { tool: 'Bash', input: { command: 'git status' } } }]);
@@ -396,17 +396,17 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             ...loggedTurns(log),
         });
         const conversation = (await chat.create()).id;
-        // A new chat is in Full access, whose turn also writes the host's settings; this turn is the one Ask first runs.
+        // A new chat is in Full access; this turn is Ask first's, which shows the command it asks about as a card.
         await chat.setMode(conversation, 'ask_first', 'claude');
         await chat.send(conversation, 'hello', { host: 'claude' });
         await done;
         // The set-up chat's naming run, which leaves nothing behind when the host gives no name.
         await chat.idle();
-    }, [...instructionFiles, stampFile, ownFolderFile, conversationFile], []);
-    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && path !== stampFile && !ownFolderFile.test(path) && !conversationFile.test(path));
+    }, [...instructionFiles, ownFolderFile, conversationFile], []);
+    const turnFiles = during.filter((path) => !instructionFiles.includes(path) && !ownFolderFile.test(path) && !conversationFile.test(path));
     assert.equal([...snapshot(b.paths.data).keys()].filter((path) => conversationFile.test(path)).length, 1, 'one conversation kept');
-    assert.equal(turnFiles.length, 1, `while the turn waited: ${during.join(', ')}`);
-    assert.match(turnFiles[0] ?? '', turnFile);
+    assert.equal(turnFiles.length, 2, `while the turn waited: ${during.join(', ')}`);
+    for (const file of turnFiles) assert.match(file, turnFile);
     assert.ok(![...snapshot(b.paths.data).keys()].some((path) => turnFile.test(path)), 'the turn file is gone once the turn is over');
 
     // Jason's skills and the Reply ones sit in one folder per host, .claude/skills for Claude Code and .agents/skills for
@@ -1025,6 +1025,27 @@ test('every host hands what a turn on it runs in, by the mode a chat keeps, from
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.runs]));
     assert.deepEqual(off.get('claude'), { window: { full_access: ask(fullAccessNotYet) }, tab: { full_access: ask(tabFullAccess) } });
     assert.deepEqual(off.get('codex')?.window.full_access, ask(codexFullAccess), 'Codex before the switch, as a turn says it');
+});
+
+test('a listing whose Claude Code stands across the floor of Full access from the last listing\'s asks every page to read the hosts again, whichever page asked', async (t) => {
+    const { b, say } = claudeSaying(t);
+    say({ stdout: '2.1.290 (Claude Code)\n' });
+    const listing = setupOn(b);
+    let changed = 0;
+    listing.onChanged(() => void changed++);
+    await listing.status();
+    assert.equal(changed, 0, 'a first listing crosses nothing');
+    say({ stdout: '2.1.322 (Claude Code)\n' });
+    await listing.status();
+    assert.equal(changed, 1, 'up across the floor: a tab\'s listing tells the window too');
+    await listing.status();
+    assert.equal(changed, 1, 'the same side again: nothing');
+    say({ stdout: 'not a version\n' });
+    await listing.status();
+    assert.equal(changed, 2, 'down to a version that could not be read');
+    say({ stdout: '2.1.300 (Claude Code)\n' });
+    await listing.status();
+    assert.equal(changed, 2, 'below the floor still: nothing');
 });
 
 test('a sign-in whose chat folder cannot be put right keeps its own result: the folder\'s code is logged, never its sentence said', async (t) => {

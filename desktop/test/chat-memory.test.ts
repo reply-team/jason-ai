@@ -340,8 +340,8 @@ test("a campaign's chat is given the client's, the project's and the campaign's 
     assert.ok(stdin.startsWith('Jason, not the person, wrote this first paragraph.'), 'the header comes first');
     assert.ok(stdin.indexOf('<memory-files>') < stdin.indexOf('first'.padStart(6, '\n')), 'the files come before the words');
     assert.ok(stdin.endsWith('\n\nfirst'));
-    // The fence is as it was: the block on reads in the turn's settings, and no folder added but the campaign's and the project's.
-    assert.equal(flagValue(first?.args ?? [], '--settings'), claudeTurnSettings);
+    // The fence is as it was: the turn's own settings file, and no folder added but the campaign's and the project's.
+    assert.match(flagValue(first?.args ?? [], '--settings') ?? '', /turn-[0-9a-f]{24}\.settings\.json$/);
     assert.deepEqual(added(first?.args ?? []), [r.campaign, r.project]);
 
     await r.turn('c1', 'second', { host: 'claude' });

@@ -373,6 +373,52 @@ test('a first start whose rewrite of a record fails writes no stamp, at no later
     assert.deepEqual(notices(r.events.get(plain)), [], 'and nothing is said of it');
 });
 
+test('a first start that could not list the records writes no stamp, at no later write either: the next start is a first start, every record opens in Full access, and nothing is said', async (t) => {
+    const r = rig(t);
+    const plain = earlierRecord(r);
+    // At this start the records' folder cannot be listed: a file stands where it is, as a scanner may hold it a moment.
+    const aside = join(r.b.root, 'records-aside');
+    renameSync(r.b.paths.conversations, aside);
+    put(r.b.paths.conversations, 'not a folder');
+    const chat = r.restart();
+    rmSync(r.b.paths.conversations);
+    renameSync(aside, r.b.paths.conversations);
+    const { id } = await chat.create();
+    await r.turn(id, 'hello', claude);
+    assert.equal(recordOf(r, id).shape, recordShape, 'a record written later carries its shape');
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'and writes no stamp: the start listed nothing');
+    const again = r.restart();
+    assert.equal(again.open(plain).mode, 'full_access', 'the next start is a first start: the record is taken as it is');
+    assert.equal(again.open(id).mode, 'full_access');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(notices(r.events.get(plain)), [], 'and nothing is said of it');
+    assert.ok(existsSync(r.b.paths.conversationsStamped), 'that start, which read every record, stamps');
+});
+
+test('a first start that could not read one record beside readable ones writes no stamp: the next start is a first start, every record opens in Full access, and nothing is said', async (t) => {
+    const r = rig(t);
+    const plain = earlierRecord(r);
+    const busy = earlierRecord(r);
+    const file = join(r.b.paths.conversations, `${busy}.json`);
+    const text = readFileSync(file, 'utf8');
+    // At this start one record cannot be read, as a scanner holding it a moment leaves it.
+    writeFileSync(file, '{"id":"');
+    const chat = r.restart();
+    writeFileSync(file, text);
+    assert.equal(chat.open(plain).mode, 'full_access');
+    assert.equal(recordOf(r, plain).shape, recordShape, 'the readable record is written again with its shape');
+    const { id } = await chat.create();
+    await r.turn(id, 'hello', claude);
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false, 'no stamp, at no later write either: one record was not read');
+    const again = r.restart();
+    assert.equal(again.open(busy).mode, 'full_access', 'the next start is a first start: the record it could not read is taken as it is');
+    assert.equal(again.open(plain).mode, 'full_access');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(notices(r.events.get(busy)), [], 'and nothing is said of it');
+    assert.equal(recordOf(r, busy).shape, recordShape);
+    assert.ok(existsSync(r.b.paths.conversationsStamped));
+});
+
 test('a conversation an earlier desktop kept after the stamp, its record as that desktop\'s own serialize leaves it, opens in Ask first, says why once, and is written with Ask first and the stamp', async (t) => {
     const r = rig(t);
     const asked = await r.chat.create();
@@ -381,6 +427,10 @@ test('a conversation an earlier desktop kept after the stamp, its record as that
     const full = await r.chat.create();
     await r.turn(full.id, 'hello', claude);
     assert.equal(recordOf(r, asked.id).shape, recordShape, 'this desktop stamps what it writes');
+    // A first start that found no folder of records listed none, so its file waits for the next start, which finds every
+    // record written by this desktop.
+    assert.equal(existsSync(r.b.paths.conversationsStamped), false);
+    r.restart();
     assert.ok(existsSync(r.b.paths.conversationsStamped));
     for (const id of [asked.id, full.id]) {
         keptByEarlier(r, id);
@@ -648,6 +698,24 @@ test('a conversation an earlier desktop made, whose record names no folder, keep
     assert.equal(flag(asked?.args ?? [], '--resume'), 'session-made-before');
     assert.deepEqual(r.started, ['full_access', 'ask_first']);
     assert.equal(existsSync(ownFolder(r, id)), false, 'no folder of its own is made for it');
+});
+
+test('a Full access turn in the shared chat folder, of a conversation an earlier desktop made, is refused a write of the agent folders every such conversation loads; a conversation\'s own folder is its own', async (t) => {
+    const r = rig(t);
+    const old = earlierRecord(r);
+    const chat = r.restart();
+    const skill = (folder: string) => ({ use: { tool: 'Write', input: { file_path: join(folder, '.claude', 'skills', 'x', 'SKILL.md'), content: 'changed' } } });
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([skill(r.b.paths.chat)]);
+    const said = await r.turn(old, 'change the skill', claude);
+    const texts = said.flatMap((event) => (event.kind === 'text' ? [event.text] : []));
+    assert.ok(texts.some((text) => text.startsWith('tool refused: ') && text.includes('AI settings and skills')), JSON.stringify(texts));
+    const sharedArgs = r.hosts().at(-1)?.args ?? [];
+    assert.ok(sharedArgs.some((arg) => /^Edit\(.*\.claude\/\*\*\)$/.test(arg)), 'the host is denied edits under the shared folder\'s .claude');
+    const { id } = await chat.create();
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([skill(ownFolder(r, id))]);
+    const own = await r.turn(id, 'change the skill', claude);
+    assert.ok(own.some((event) => event.kind === 'text' && event.text === 'tool ran'), JSON.stringify(own));
+    assert.ok(!(r.hosts().at(-1)?.args ?? []).some((arg) => /^Edit\(.*\.claude\/\*\*\)$/.test(arg)), 'a conversation\'s own folder is its own in Full access');
 });
 
 test('a terminal continues a conversation in its own folder, and one an earlier desktop made in the shared chat folder', async (t) => {

@@ -1,19 +1,18 @@
 // The bar around a conversation's record, which keeps the conversation's mode: no turn of the chat can change it by any
 // plain act. (a) A turn not in Full access is refused it by the rules that already keep the data directory from the chat:
 // the permission model in Ask first and Plan only, and the host's own rules, which name the records' folder before it
-// exists. (b) A plain command of a Full access turn that would write it is refused the same way, before anything is read
-// literally, since Full access is never weaker than Ask first. A program the AI writes and runs is not read.
+// exists. (b) A plain command of a Full access turn that would write it is refused the same way by the turn's hook, the
+// data directory being one of the three kinds Full access refuses. A program the AI writes and runs is not read.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { dataRules } from '../src/chat-hosts.ts';
-import { fullAccessJudgement, judge, type ChatScope } from '../src/chat-permission-model.ts';
+import { dataRefusal, fullAccessJudgement, judge, type ChatScope } from '../src/chat-permission-model.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 
 const carried = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
-const dataRefusal = "That path is the installation's own data, outside the chat's folder: the chat neither reads nor writes it. Nothing was done.";
 
 const id = 'conv_01JD0000000000000000000000';
 /** The conversation's own folder, where its turns run. */
@@ -116,7 +115,7 @@ test('(a) the host\'s own rules refuse the records to every Claude Code turn, be
     }
 });
 
-test('(b) a plain command of a Full access turn that would write a conversation\'s record is refused, never held and never run', () => {
+test('(b) a plain command of a Full access turn that would write a conversation\'s record is refused and never run', () => {
     for (const scope of [linux(), linux('/home/someone/.jason/desktop/chat')]) {
         for (const command of commands) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: dataRefusal }, command);

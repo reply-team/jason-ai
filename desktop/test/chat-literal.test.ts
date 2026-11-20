@@ -1,6 +1,8 @@
-// The literal reading of a shell command, and Full access read through it: a word runs only if it is literal for its
-// shell, anything else in a command holds the command, and a literal command is still refused or held by what its
-// resolved words say. Every command here is a neutral one or a made-up program; every path is made up or a temporary one.
+// The literal reading of a shell command, and Full access read through it: a word is read only if it is literal for its
+// shell, and anything else in a command holds the command, with a closed reason. Full access is Claude Code's own bypass
+// now: a command the reading holds runs there all the same, the hook answering nothing, and a literal command is refused
+// only where its resolved words name one of the three kinds. Every command here is a neutral one or a made-up program;
+// every path is made up or a temporary one.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
@@ -8,9 +10,8 @@ import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
-import { readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
-import { powerShellRunsInFullAccess } from '../src/chat-modes.ts';
-import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { heldByWhatRuns, readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
+import { autoEditJudgement, fullAccessJudgement, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -37,8 +38,25 @@ function homeScope(platform: Platform, home: string): ChatScope {
 }
 
 const scope = homeScope('linux', '/home/someone');
-const heldAs = (reason: HeldReason) => ({ outcome: 'held', message: heldSentence, reason });
 const runs = { outcome: 'runs' };
+
+/** The reasons an earlier Full access held a command for that were its own, not the literal reading's. */
+const fullAccessOwn = new Set<HeldReason>(['guarded_name', 'search', 'local_jason', 'holds_data', 'reply', 'unknown_shell', 'tilde']);
+
+/** Why the literal reading holds a command: its grammar's reason, or what the command runs; null when it holds nothing. */
+function readingHolds(tool: string, command: string, at: ChatScope): HeldReason | null {
+    const reading = readLiteral(tool, command, { platform: at.platform, home: at.home });
+    return reading.held ? reading.reason : heldByWhatRuns(reading.commands);
+}
+
+/**
+ * A command an earlier Full access held, by the reason it held it for: it runs in Full access now, the hook answering
+ * nothing. Where the reason is the literal reading's own, the reading still gives it, as Ask first's "always" reads it.
+ */
+function runsHeld(tool: string, command: string, reason: HeldReason, at: ChatScope = scope): void {
+    assert.deepEqual(fullAccessJudgement(tool, { command }, at), runs, `Full access runs ${JSON.stringify(command)}`);
+    if (!fullAccessOwn.has(reason) && at.shellHome === undefined) assert.equal(readingHolds(tool, command, at), reason, JSON.stringify(command));
+}
 
 // Table 1.2, POSIX: the Bash tool's shell, Git Bash on Windows.
 
@@ -220,78 +238,47 @@ test('another tool\'s command is held whole: its shell\'s grammar is not known',
 
 // Table 1.2, cmd: never the tool's shell, so it is held whole.
 
-test('cmd, a .bat or a .cmd with arguments is held whole, in either shell', () => {
+test('cmd, a .bat or a .cmd with arguments is held whole by the reading, in either shell, and runs in Full access', () => {
     for (const tool of ['Bash', 'PowerShell']) {
-        for (const command of ['cmd /c echo a', 'cmd.exe /k frobnicate', 'go.bat a', 'tools/go.cmd a', 'echo a | cmd']) {
-            assert.deepEqual(fullAccessJudgement(tool, { command }, scope), heldAs('command_prompt'), `${tool}: ${command}`);
-        }
+        for (const command of ['cmd /c echo a', 'cmd.exe /k frobnicate', 'go.bat a', 'tools/go.cmd a', 'echo a | cmd']) runsHeld(tool, command, 'command_prompt');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'go.bat' }, scope), runs, 'a batch file with no arguments is a file the agent wrote');
 });
 
-// 1.3 (a): a literal command is still refused by its resolved words.
+// 1.3 (a): a person's verbs are Ask first's and Auto-edit's to refuse; in Full access the host's deny rules hold them as
+// written, and the hook refuses only the three kinds.
 
-test('a person\'s verbs are refused in every mode, Full access included, never a card', () => {
+test('a person\'s verbs are refused in Ask first, never a card; in Full access the hook leaves them to the host\'s rules', () => {
     for (const command of ['jason approval approve apr_1', 'jason decision answer dec_1 --option a', 'jason block clear blk_1', "jason approval 'approve' apr_1", 'jason approval ap"pro"ve apr_1', 'sudo jason approval approve apr_1', 'echo approval approve apr_1 | xargs jason approval approve']) {
-        const judged = fullAccessJudgement('Bash', { command }, scope);
-        assert.equal(judged.outcome, 'refused', command);
-        assert.match(judged.outcome === 'refused' ? judged.message : '', /a person's own act/, command);
-        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+        const judged = judge('Bash', { command }, scope);
+        assert.equal(judged.verdict, 'deny', `Ask first: ${command}`);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /a person's own act/, command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
     }
-    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope), runs);
 });
 
-test('starting a campaign is refused in Full access as in Ask first, in every form, never a card; pausing one runs', () => {
-    for (const command of ['jason campaign start cmp_1', 'jason campaign start cmp_1 --reason "go"', "jason campaign 'start' cmp_1", 'jason campaign st"ar"t cmp_1',
-        'sudo jason campaign start cmp_1', 'jason campaign list && jason campaign start cmp_1', 'echo cmp_1 | xargs jason campaign start',
-        'curl -X POST http://127.0.0.1:5000/v1/campaign.start']) {
-        const judged = fullAccessJudgement('Bash', { command }, scope);
-        assert.equal(judged.outcome, 'refused', command);
-        assert.match(judged.outcome === 'refused' ? judged.message : '', /a person's own act/, command);
-        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+test('starting or archiving a campaign is refused in Ask first and Auto-edit in every form, never a card; in Full access the hook leaves it to the host\'s rules', () => {
+    for (const verb of ['start', 'archive']) {
+        for (const command of [`jason campaign ${verb} cmp_1`, `jason campaign ${verb} cmp_1 --reason "go"`, `jason campaign '${verb}' cmp_1`, `sudo jason campaign ${verb} cmp_1`,
+            `jason campaign list && jason campaign ${verb} cmp_1`, `echo cmp_1 | xargs jason campaign ${verb}`, `curl -X POST http://127.0.0.1:5000/v1/campaign.${verb}`,
+            `jason --actor human:x campaign ${verb} cmp_1`, `jason campaign \\\n  ${verb} cmp_1`, `env X=1 jason campaign ${verb} cmp_1`,
+            `python3 -c "import subprocess; subprocess.run(['jason', 'campaign', '${verb}', 'cmp_1'])"`, `jason campaign ${verb} cmp_1 || true`]) {
+            assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+            assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `Full access: ${command}`);
+        }
     }
-    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign start cmp_1' }, scope).outcome, 'refused');
     for (const command of ['jason campaign pause cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
 });
 
-test('archiving a campaign is refused in Full access as in Ask first, in every form, never a card; pausing one runs', () => {
-    for (const command of ['jason campaign archive cmp_1', 'jason campaign archive cmp_1 --reason "over"', "jason campaign 'archive' cmp_1", 'jason campaign ar"chi"ve cmp_1',
-        'sudo jason campaign archive cmp_1', 'jason campaign list && jason campaign archive cmp_1', 'echo cmp_1 | xargs jason campaign archive',
-        'curl -X POST http://127.0.0.1:5000/v1/campaign.archive']) {
-        const judged = fullAccessJudgement('Bash', { command }, scope);
-        assert.equal(judged.outcome, 'refused', command);
-        assert.match(judged.outcome === 'refused' ? judged.message : '', /a person's own act/, command);
-        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+test('a URL word is read with its percent-escapes decoded: a file URL into the data directory is refused however it is escaped', () => {
+    for (const command of ['curl file:///home/someone/.jason/run/runtime.json', 'curl file:///home/someone/%2Ejason/run/runtime.json', 'curl file:///home/someone/.jason%2Frun%2Fruntime.json']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', command);
     }
-    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign archive cmp_1' }, scope).outcome, 'refused');
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'jason campaign pause cmp_1' }, scope), runs);
-});
-
-test('archiving a campaign is refused in Ask first, Auto-edit and Full access in the forms that hide its verb', () => {
-    for (const command of ['jason --actor human:x campaign archive cmp_1', 'jason campaign \\\n  archive cmp_1', 'env X=1 jason campaign archive cmp_1',
-        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'archive\', \'cmp_1\'])"',
-        'jason campaign archive cmp_1 || true']) {
-        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
-        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
-        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${command}`);
-    }
-});
-
-test('starting a campaign is refused in Ask first, Auto-edit and Full access in the forms that hide its verb', () => {
-    for (const command of ['jason --actor human:x campaign start cmp_1', 'jason campaign \\\n  start cmp_1', 'env X=1 jason campaign start cmp_1',
-        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'start\', \'cmp_1\'])"',
-        'jason campaign start cmp_1 || true']) {
-        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
-        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
-        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${command}`);
-    }
-});
-
-test('a URL word is read with its percent-escapes decoded', () => {
-    const judged = fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, scope);
-    assert.equal(judged.outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, scope), runs, 'an operation is the host\'s rules\' and the CLI\'s to hold');
 });
 
 test('the data directory is refused by its resolved path, the home folder\'s ~ resolved', () => {
@@ -301,8 +288,14 @@ test('the data directory is refused by its resolved path, the home folder\'s ~ r
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, scope), runs, 'a file in the chat folder');
 });
 
-test('the chat\'s own instructions and agent settings are refused to a literal command', () => {
-    for (const command of ['cat .claude/settings.json', 'echo a >> CLAUDE.md']) assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', command);
+test('the shared chat folder\'s own instructions and agent settings are refused to a literal command that writes them; a conversation\'s own folder\'s are its own', () => {
+    const shared: ChatScope = { ...scope, shared: true };
+    for (const command of ['echo a >> CLAUDE.md', 'echo {} > .claude/settings.json']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, shared).outcome, 'refused', command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `own folder: ${command}`);
+    }
+    assert.equal(fullAccessJudgement('Bash', { command: 'cat .claude/settings.json' }, shared).outcome, 'refused', 'a command that names them is refused, whatever it does with them');
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '.claude/settings.json' }, shared), runs, 'a read of them by the file tool runs');
 });
 
 test('a resolved command that clears the environment around a jason is refused for the confined variable', () => {
@@ -311,7 +304,8 @@ test('a resolved command that clears the environment around a jason is refused f
     assert.match(judged.outcome === 'refused' ? judged.message : '', /JASON_CONFINED/);
 });
 
-// 1.3 (b): held, every word literal.
+// 1.3 (b): held by the reading, every word literal. Each such command runs in Full access now (`runsHeld`); the reading's
+// reason stays what Ask first's card and its "always" read.
 
 test('a shell or an interpreter given code as text, or code piped or here-documented into it, is held', () => {
     for (const command of [
@@ -327,24 +321,24 @@ test('a shell or an interpreter given code as text, or code piped or here-docume
         'echo a | python3 x.py',
         "sh <<'EOF'\necho a\nEOF",
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     for (const command of ['pwsh -Command Get-Date', 'pwsh -c Get-Date', 'pwsh -EncodedCommand ZQBjAGgAbwA=', 'powershell Get-Date']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('PowerShell', command, 'inline_code');
     }
 });
 
 test('a shell or an interpreter given a file runs: it is a program the agent wrote', () => {
     for (const command of ['sh go.sh', 'python3 x.py', 'node build.js', 'awk -f prog.awk notes.md']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
-    assert.ok(!readLiteral('PowerShell', 'pwsh -File go.ps1', linux).held, 'PowerShell runs nothing unasked in Full access; its grammar still reads this');
+    assert.ok(!readLiteral('PowerShell', 'pwsh -File go.ps1', linux).held, 'the PowerShell grammar reads this');
 });
 
 test('a runner that starts a later or another command is held', () => {
     for (const command of ['xargs frobnicate', 'env frobnicate', 'sudo frobnicate', 'nohup frobnicate', 'timeout 5 frobnicate', 'eval frobnicate', 'source go.sh', '. go.sh', 'exec frobnicate', 'ssh host frobnicate', "find . -name x -exec frobnicate '{}' ';'", 'git -c alias.x=status x', 'git config core.hooksPath hooks']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+        runsHeld('Bash', command, 'runner');
     }
     for (const command of ['Start-Process frobnicate', 'Invoke-Expression frobnicate', 'iex frobnicate', 'Invoke-Command frobnicate']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('runner'), command);
+        runsHeld('PowerShell', command, 'runner');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'git status' }, scope), runs);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'find . -name notes.md' }, scope), runs);
@@ -352,41 +346,41 @@ test('a runner that starts a later or another command is held', () => {
 
 test('a builtin that changes how later words are read is held', () => {
     for (const command of ['alias frobnicate=ls', 'set -f', 'shopt -s extglob', 'enable -n echo', 'export X=1', 'unset X', 'trap frobnicate EXIT']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('builtin'), command);
+        runsHeld('Bash', command, 'builtin');
     }
     for (const command of ['Set-Alias frobnicate ls', 'New-Alias frobnicate ls', 'Set-Item function:frobnicate x']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('builtin'), command);
+        runsHeld('PowerShell', command, 'builtin');
     }
 });
 
 test('a command part holding mcp followed by add, remove or login is held, whatever its program', () => {
     for (const command of ['frobnicate mcp add tools', 'frobnicate mcp remove tools', 'frobnicate mcp login tools']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
+        runsHeld('Bash', command, 'servers');
     }
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo a && frobnicate --scope user MCP Add tools' }, scope), heldAs('servers'), 'options between, any case, a later part');
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'frobnicate mcp add tools' }, scope), heldAs('servers'));
+    runsHeld('Bash', 'echo a && frobnicate --scope user MCP Add tools', 'servers');
+    runsHeld('PowerShell', 'frobnicate mcp add tools', 'servers');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate mcp list' }, scope), runs);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate add mcp' }, scope), runs, 'the verb before the word is not the server command');
 });
 
 test('a guarded name in a path, at any depth, is held', () => {
     for (const command of ['cat notes/.git/config', 'echo a >> repo/.git/hooks/pre-commit', 'cat a/b/AGENTS.md', 'ls work/.jason']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('guarded_name'), command);
+        runsHeld('Bash', command, 'guarded_name');
     }
 });
 
 test('a search variable named, a jason of the agent\'s own, and a folder that holds the data directory are held', () => {
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo PATH' }, scope), heldAs('search'));
+    runsHeld('Bash', 'echo PATH', 'search');
     assert.equal(fullAccessJudgement('Bash', { command: 'PATH=/tmp frobnicate' }, scope).outcome, 'refused', 'a change of the search is refused as in Ask first');
-    assert.deepEqual(fullAccessJudgement('Bash', { command: './jason campaign list' }, scope), heldAs('local_jason'));
-    for (const command of ['ls /home/someone', 'ls ~', 'du -s /']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('holds_data'), command);
+    runsHeld('Bash', './jason campaign list', 'local_jason');
+    for (const command of ['ls /home/someone', 'ls ~', 'du -s /']) runsHeld('Bash', command, 'holds_data');
 });
 
 test('a relative word after a directory change to a relative target is held; after a literal absolute one it is read from there', () => {
     for (const command of ['cd sub && cat notes.md', 'cd sub/.. && ls', 'pushd sub; cat notes.md', 'cd - && ls', 'popd && ls']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('directory_change'), command);
+        runsHeld('Bash', command, 'directory_change');
     }
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location sub; cat notes.md' }, scope), heldAs('directory_change'));
+    runsHeld('PowerShell', 'Set-Location sub; cat notes.md', 'directory_change');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd sub' }, scope), runs, 'a change with nothing after it reads nothing');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd /home/someone/work && cat notes.md' }, scope), runs);
     const located = readLiteral('PowerShell', 'Set-Location -Path /home/someone/work && cat notes.md', linux);
@@ -414,11 +408,11 @@ test('the data directory is reached through a link by its resolved path, never b
 
 // Ruling 4: reply in Full access.
 
-test('reply is refused in Full access where Ask first refuses it, held but for its exact no-card forms, and never weaker', () => {
+test('reply is refused in Ask first beyond its no-card forms; in Full access it runs, the Reply card\'s account verbs among it', () => {
     const asAskFirst = (tool: string, command: string) => {
         const judged = judge(tool, { command }, scope);
         assert.equal(judged.verdict, 'deny', `Ask first: ${command}`);
-        return { outcome: 'refused', message: judged.verdict === 'deny' ? judged.message : '' };
+        return runs;
     };
     // The Reply card's account verbs among them: they stay the person's acts in both modes.
     for (const command of [
@@ -434,7 +428,7 @@ test('reply is refused in Full access where Ask first refuses it, held but for i
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), asAskFirst('Bash', command), command);
     }
     assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'reply sequence start seq_1' }, scope), asAskFirst('PowerShell', 'reply sequence start seq_1'));
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json > out.json' }, scope), heldAs('reply'), 'a form Ask first cards, not one of the exact no-card forms');
+    runsHeld('Bash', 'reply auth status --json > out.json', 'reply');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply auth status --json' }, scope), runs);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'reply account list --channel email' }, scope), runs);
 });
@@ -447,23 +441,22 @@ test('a plain literal command runs with no question', () => {
     }
 });
 
-// F4a's order: a tool of the person's own servers is held whatever its input, ahead of the literal reading.
+// A tool of the person's own servers runs in Full access whatever its input, which is read for the three kinds alone.
 
-test('a tool of an MCP server is held in Full access whatever its input', () => {
+test('a tool of an MCP server runs in Full access whatever its input, where nothing in it names the three kinds', () => {
     for (const input of [{}, { command: 'echo a' }, { file_path: 'notes.md' }]) {
-        assert.equal(fullAccessJudgement('mcp__frobnicate__run', input, scope).outcome, 'held', JSON.stringify(input));
+        assert.deepEqual(fullAccessJudgement('mcp__frobnicate__run', input, scope), runs, JSON.stringify(input));
     }
 });
 
-test('a person\'s MCP tool whose input has a command is held by the person\'s-tool hold, never read as a shell command', () => {
-    // Claude Code's and Codex's mcp command, any verb: Ask first cards it, so Full access holds it too.
+test('a person\'s MCP tool whose input has a command is read as text for the three kinds, never as a shell command', () => {
+    // Claude Code's and Codex's mcp command, any verb: Ask first cards it; Full access runs it.
     for (const command of ['claude mcp list', '/usr/local/bin/codex mcp get crm', '/opt/tools/claude-code --debug mcp list']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
+        runsHeld('Bash', command, 'servers');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'grep -r mcp notes' }, scope), runs);
-    // The person's-tool hold carries no shell reason; a shell reading of the input would give one, or run it.
-    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), { outcome: 'held', message: heldSentence });
-    assert.equal(fullAccessJudgement('mcp__s__run', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused', 'its input is still read for a refusal');
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), runs);
+    assert.equal(fullAccessJudgement('mcp__s__run', { command: 'cat /home/someone/.jason/run/runtime.json' }, scope).outcome, 'refused', 'its input is still read for a refusal');
 });
 
 // The fix round, POSIX first: what the module called the program was not always the program that runs.
@@ -473,10 +466,10 @@ test('POSIX: a reserved word in first position is held, bash\'s and zsh\'s, sinc
     const zsh = ['-', 'noglob', 'nocorrect', 'repeat', 'foreach'];
     for (const word of [...reserved, ...zsh]) {
         assert.equal(reasonOf('Bash', `${word} frobnicate a`), 'syntax', word);
-        assert.equal(fullAccessJudgement('Bash', { command: `echo a; ${word} frobnicate a` }, scope).outcome, 'held', `a later command: ${word}`);
+        runsHeld('Bash', `echo a; ${word} frobnicate a`, 'syntax');
     }
-    assert.equal(fullAccessJudgement('Bash', { command: 'if frobnicate a; then python3 -c x; fi' }, scope).outcome, 'held');
-    for (const command of ['builtin echo a', 'command echo a']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'if frobnicate a; then python3 -c x; fi' }, scope), runs);
+    for (const command of ['builtin echo a', 'command echo a']) runsHeld('Bash', command, 'runner');
     assert.deepEqual(wordsOf('Bash', 'echo if then fi'), [['echo', 'if', 'then', 'fi']], 'a reserved word as an argument is a word');
 });
 
@@ -532,24 +525,24 @@ test('code glued to its option, given by --command=, beside a file, or in a modu
         'julia -E 1',
         "perl -M'strict;print 1' x.pl",
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'perl -Mstrict x.pl' }, scope), runs, 'a module named, no code');
 });
 
 test('a builtin that evaluates text or runs a callback is held, and an array subscript handed to one that evaluates it', () => {
     for (const command of ["let 'a[1]'", 'mapfile -C frobnicate a', 'readarray a', 'compgen -C frobnicate', 'complete -C frobnicate x']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+        runsHeld('Bash', command, 'runner');
     }
     for (const command of ["printf -v 'a[1]' x", "read 'a[1]'", "test -v 'a[1]'", "getopts ab 'a[1]'", "wait -p 'a[1]'", "printf '$x'", "printf '`x`'"]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('expansion'), command);
+        runsHeld('Bash', command, 'expansion');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: "printf '%s' a" }, scope), runs);
 });
 
 test('a package runner given shell code, git\'s execute options, and the runners that start a command they are given are held', () => {
     for (const command of ["npx -c 'frobnicate a'", "npx --call='frobnicate a'", "npm exec -c 'frobnicate a'", "npm x --call='frobnicate a'", "pnpm exec -c 'frobnicate a'"]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     for (const command of [
         'git clone -u frobnicate repo',
@@ -571,9 +564,9 @@ test('a package runner given shell code, git\'s execute options, and the runners
         'tar -I frobnicate -xf a.tar',
         'sort --compress-program=frobnicate notes.md',
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+        runsHeld('Bash', command, 'runner');
     }
-    for (const command of ['vim -c q notes.md', 'vim +q notes.md', 'gdb -ex run frobnicate']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    for (const command of ['vim -c q notes.md', 'vim +q notes.md', 'gdb -ex run frobnicate']) runsHeld('Bash', command, 'inline_code');
     for (const command of ['git push -u origin main', 'git grep -n x', 'git clone repo', 'tar -xf a.tar', 'sort notes.md']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
@@ -581,7 +574,7 @@ test('a package runner given shell code, git\'s execute options, and the runners
 
 test('a server verb that starts with add, and the plugin verbs, are held whatever the program', () => {
     for (const command of ["frobnicate mcp add-json tools '{}'", 'frobnicate mcp add-from-claude-desktop', 'frobnicate plugin install tools', 'frobnicate plugin marketplace add tools', 'frobnicate plugins install tools', 'frobnicate plugin enable tools']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
+        runsHeld('Bash', command, 'servers');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate plugin list' }, scope), runs);
 });
@@ -596,7 +589,7 @@ test('a directory change sets the folder only when && joins it to the next comma
         'cd /home/someone/work && echo a || cat notes.md',
         'echo a | cd /home/someone/work && cat notes.md',
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('directory_change'), JSON.stringify(command));
+        runsHeld('Bash', command, 'directory_change');
     }
     for (const command of ['cd /home/someone/work && cat notes.md', 'cd /home/someone/work && echo a | cat notes.md', 'cd /home/someone/work && echo a && cat notes.md']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
@@ -605,19 +598,19 @@ test('a directory change sets the folder only when && joins it to the next comma
 
 test('~ resolves to the home the host\'s shell carries, and is held when that differs from the profile', () => {
     const elsewhere: ChatScope = { ...scope, shellHome: '/home/other' };
-    for (const command of ['ls ~/notes', 'cat ~', 'frobnicate > ~/out.txt']) assert.deepEqual(fullAccessJudgement('Bash', { command }, elsewhere), heldAs('tilde'), command);
+    for (const command of ['ls ~/notes', 'cat ~', 'frobnicate > ~/out.txt']) runsHeld('Bash', command, 'tilde', elsewhere);
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls /home/someone/notes' }, elsewhere), runs);
     const same: ChatScope = { ...scope, shellHome: '/home/someone/' };
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, same), runs);
     const windows = homeScope('win32', 'C:\\Users\\someone');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, { ...windows, shellHome: '/c/Users/someone' }), runs, 'Git Bash spells the same folder its own way');
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, { ...windows, shellHome: 'D:\\home' }), heldAs('tilde'));
+    runsHeld('Bash', 'ls ~/notes', 'tilde', { ...windows, shellHome: 'D:\\home' });
 });
 
 test('on Windows a Bash word Git Bash would rewrite for a Windows program is held; a drive\'s own path is not', () => {
     const windows = homeScope('win32', 'C:\\Users\\someone');
     for (const command of ['cat /tmp/x', 'frobnicate --out=/tmp/x', 'frobnicate /a:/b', '/usr/bin/frobnicate a', 'frobnicate > /tmp/x']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), heldAs('character'), command);
+        runsHeld('Bash', command, 'character', windows);
     }
     for (const command of ['cat /c/Work/notes.md', 'cat /d', 'frobnicate a 2>/dev/null', 'frobnicate --level=2']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), runs, command);
@@ -625,24 +618,23 @@ test('on Windows a Bash word Git Bash would rewrite for a Windows program is hel
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /tmp/x' }, scope), runs, 'not on Linux');
 });
 
-test('anything that goes wrong while a command is judged in Full access holds it, never runs it', () => {
+test('anything that goes wrong while a command is judged in Full access refuses it, never runs it', () => {
     const failing: ChatScope = { ...scope, real: () => { throw new Error('no reading'); } };
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing), heldAs('syntax'));
+    assert.equal(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing).outcome, 'refused');
 });
 
-// PowerShell in this version: every command of the PowerShell tool is held in Full access, the grammar kept behind one switch.
+// The PowerShell tool in Full access: its commands run as the Bash tool's do, read for the three kinds.
 
-test('the PowerShell tool runs nothing unasked in Full access while its switch is off: every command is held or refused', () => {
-    assert.equal(powerShellRunsInFullAccess, false);
+test('the PowerShell tool runs its commands in Full access, a hold of the reading included; a command naming the three kinds is refused', () => {
     for (const command of ['echo a', 'Get-ChildItem notes', 'frobnicate --level=2 notes.md', 'git status']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('unknown_shell'), command);
+        runsHeld('PowerShell', command, 'unknown_shell');
     }
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Invoke-Expression frobnicate' }, scope), heldAs('runner'), 'a hold of its own keeps its reason');
-    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused');
+    runsHeld('PowerShell', 'Invoke-Expression frobnicate', 'runner');
+    assert.equal(fullAccessJudgement('PowerShell', { command: 'Get-Content /home/someone/.jason/run/runtime.json' }, scope).outcome, 'refused');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo a' }, scope), runs, 'the Bash tool\'s literal commands still run');
 });
 
-// The PowerShell fixes behind the switch: each says what its grammar holds once the switch is on.
+// The PowerShell grammar: what it holds, as Ask first's "always" reads it.
 
 test('PowerShell: an empty quoted word, and a quoted word that holds whitespace and a backslash, are held', () => {
     for (const command of ["git '' status", 'echo ""', "frobnicate 'a \\' b 'c -x d'", "frobnicate 'a\\b c'"]) {
@@ -653,24 +645,24 @@ test('PowerShell: an empty quoted word, and a quoted word that holds whitespace 
 
 test('PowerShell: the built-in functions that change the folder leave it unknown', () => {
     for (const command of ['cd..; cat notes.md', 'cd.. && cat notes.md', 'cd\\; cat notes.md', 'D:; cat notes.md', 'd: && cat notes.md']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('directory_change'), command);
+        runsHeld('PowerShell', command, 'directory_change');
     }
 });
 
 test('PowerShell: the commands that run code from literal words are held', () => {
     for (const command of ['Add-Type -TypeDefinition x', '% Frobnicate', 'ForEach-Object Frobnicate', 'foreach Frobnicate', 'Invoke-WmiMethod x', 'iwmi x', 'wmic x', 'New-Object -ComObject x']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('runner'), command);
+        runsHeld('PowerShell', command, 'runner');
     }
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'New-Object Frobnicate.Thing' }, scope), heldAs('unknown_shell'), 'held only by the switch');
+    runsHeld('PowerShell', 'New-Object Frobnicate.Thing', 'unknown_shell');
 });
 
 test('PowerShell: a provider-qualified path is held, and a search variable is read case-folded on Windows', () => {
     for (const command of ['Get-Item Microsoft.PowerShell.Core\\Function::frobnicate', 'Get-Item Environment::path', 'Get-Item Alias::x']) {
-        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('builtin'), command);
+        runsHeld('PowerShell', command, 'builtin');
     }
     const windows = homeScope('win32', 'C:\\Users\\someone');
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'frobnicate path' }, windows), heldAs('search'));
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location -Path C:\\Work' }, windows), heldAs('unknown_shell'), 'an option named Path is not the variable');
+    runsHeld('PowerShell', 'frobnicate path', 'search', windows);
+    runsHeld('PowerShell', 'Set-Location -Path C:\\Work', 'unknown_shell', windows);
 });
 
 test('PowerShell: a word read as a number other than plain digits, and a dashed word holding a dot, are held', () => {
@@ -681,8 +673,8 @@ test('PowerShell: a word read as a number other than plain digits, and a dashed 
 });
 
 test('a program is named without the trailing dots Windows drops, and % in a PowerShell program\'s arguments is held unless it is an .exe', () => {
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'bash.exe. -c x' }, scope), heldAs('inline_code'));
-    assert.deepEqual(fullAccessJudgement('Bash', { command: "'go.bat.' a" }, scope), heldAs('command_prompt'));
+    runsHeld('Bash', 'bash.exe. -c x', 'inline_code');
+    runsHeld('Bash', "'go.bat.' a", 'command_prompt');
     for (const command of ['frobnicate 50%', 'tools\\frobnicate a%b']) assert.equal(reasonOf('PowerShell', command), 'command_prompt', command);
     assert.equal(reasonOf('PowerShell', 'frobnicate.exe 50%'), null);
 });
@@ -694,7 +686,7 @@ test('PowerShell: a redirection to a stream and the other quotes and dashes outs
     }
 });
 
-// The delta read's classes: each holds more.
+// The delta read's classes: each holds more in the reading, and runs in Full access all the same.
 
 test('delta F1: an option cluster is read with its digits, perl module text other than a name is code, fish -C, and a data: URL to node or deno', () => {
     for (const command of [
@@ -708,14 +700,14 @@ test('delta F1: an option cluster is read with its digits, perl module text othe
         'node --import=data:text/javascript,1 x.js',
         'deno run data:text/javascript,1',
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'perl -MList::Util=sum,max -Mstrict x.pl' }, scope), runs, 'module names and imports only');
 });
 
 test('delta F2: an editor or a debugger fed commands on its input is held, ed among the editors', () => {
     for (const command of ['echo a | vim -es notes.md', "ex -s notes.md <<'EOF'\nq\nEOF", 'echo run | gdb frobnicate', 'echo q | ed notes.md']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), JSON.stringify(command));
+        runsHeld('Bash', command, 'inline_code');
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'ed -s notes.md < cmds.txt' }, scope), runs, 'commands from a file the agent wrote, as an interpreter given a file');
 });
@@ -729,10 +721,10 @@ test('delta F3: a long execute option is matched by any prefix of three or more 
         'tar xIf frobnicate a.tar',
         'tar xfI a.tar frobnicate',
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+        runsHeld('Bash', command, 'runner');
     }
     for (const command of ["npx --cal='frobnicate a'", 'bash --comm=frobnicate', 'node --eva=1', 'gdb --eval-com=run frobnicate']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     for (const command of ['tar xf a.tar', 'tar -tf a.tar', 'git log --oneline', 'tar --to-stdout -xf a.tar']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
 });
@@ -756,10 +748,10 @@ test('delta F4: package runners by name and the execute options the lists missed
         'nodemon --exec frobnicate',
         'git send-email --smtp-server=frobnicate a.patch',
     ]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+        runsHeld('Bash', command, 'runner');
     }
     for (const command of ["sed 's/a/b/' notes.md", "sed -n 's/a/b/e' notes.md", "sed -e '1p' -e 'w out.txt' notes.md", "sed --expression='1e frobnicate' notes.md", 'sed -f prog.sed notes.md', "sed -ne '1e' notes.md"]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+        runsHeld('Bash', command, 'inline_code');
     }
     for (const command of ["sed -n '1,5p' notes.md", "sed '$d' notes.md", 'sed 10q notes.md', "sed -e '1!d' -e '2p' notes.md", "sed -n -e '$p' notes.md"]) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
@@ -768,14 +760,14 @@ test('delta F4: package runners by name and the execute options the lists missed
 
 test('delta F5: zsh\'s builtins that change how later words are read are held', () => {
     for (const command of ['setopt rc_quotes', 'unsetopt glob', 'emulate sh', 'zmodload zsh/files', 'disable -r if']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('builtin'), command);
+        runsHeld('Bash', command, 'builtin');
     }
 });
 
 test('delta F6 and F7: on Windows a Bash word Git Bash may rewrite or a program may expand is held', () => {
     const windows = homeScope('win32', 'C:\\Users\\someone');
     for (const command of ['frobnicate lib:/y', 'frobnicate ./a:/b', 'frobnicate -X/y', 'frobnicate --out=./x', "frobnicate '*'", "frobnicate 'a?b'", "frobnicate '[ab]'"]) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), heldAs('character'), command);
+        runsHeld('Bash', command, 'character', windows);
     }
     for (const command of ['frobnicate C:/Work/x', 'frobnicate x:/y', 'frobnicate https://example.com/x', "frobnicate 'a * b'", 'frobnicate -X y']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), runs, command);
