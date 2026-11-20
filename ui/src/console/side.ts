@@ -15,15 +15,15 @@ import { openPalette, paletteHint, paletteShortcut } from './palette';
 import { closeFilterMenu, recentView } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
-// The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
-// Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot. The menu and Recent scroll between the button and the foot, so
-// Settings stays at the foot of the window. Live draws the essentials alone: the brand, the button, Search, Needs you,
-// Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds
-// every page in both modes. Demo draws the whole list.
+// The console's sidebar, top to bottom: the brand, the button that makes an agent and the one under it that makes a chat
+// about no agent, Search, the Feed, Needs you with the number of what waits, People, Agents, Accounts, More (the screens
+// with no row of their own), the conversations under "Recent", and Settings in the foot. The menu and Recent scroll
+// between the buttons and the foot, so Settings stays at the foot of the window. Live draws the essentials alone: the
+// brand, the two buttons, Search, Needs you, Recent and Settings. The rows left out are only not drawn: each page keeps
+// its route and its code, and Search finds every page in both modes. Demo draws the whole list.
 
-/** Which of the sidebar's two menus is open. */
-const open = signal<'create' | 'more' | null>(null);
+/** Whether the sidebar's menu, More, is open. */
+const open = signal<'more' | null>(null);
 
 /** Closes whichever menu is open. */
 export function closeMenus(): void {
@@ -93,7 +93,7 @@ export function waitingCount(): Count {
 }
 
 define('side.menu', ([which]) => {
-    if (which !== 'create' && which !== 'more') return;
+    if (which !== 'more') return;
     open.value = open.value === which ? null : which;
 });
 define('side.close', () => closeMenus());
@@ -162,7 +162,6 @@ export function sideView(): Html {
               </button>`;
     };
     const full = mode.value === 'demo';
-    const accounts = pageOf('accounts');
     const settings = pageOf('settings');
     return html`${
             menu === null
@@ -181,47 +180,13 @@ export function sideView(): Html {
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
             <span class="alpha">Alpha</span>
         </div>
-        <div class="menuwrap create">
-            <div class="newrow">
-                <button
-                    class="newbtn"
-                    type="button"
-                    ${marked('start')}
-                    ${act('side.start')}
-                    ${offUnless('chat.create')}
-                >
-                    ${svg('plusc', 15)}New GTM agent
-                </button>
-                <button
-                    class="caret"
-                    type="button"
-                    aria-label="More to create"
-                    title="Create an agent or a chat, or connect an account"
-                    aria-haspopup="menu"
-                    aria-expanded="${menu === 'create' ? 'true' : 'false'}"
-                    ${act('side.menu', 'create')}
-                >
-                    ${svg('chev', 15)}
-                </button>
-            </div>
-            ${
-                menu === 'create'
-                    ? html`<div class="menu" role="menu" aria-label="Create">
-                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus', offUnless('chat.create'))}
-                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat', offUnless('chat.create'))}
-                          ${
-                              accounts === null
-                                  ? null
-                                  : entry(
-                                        'Connect an account',
-                                        'Link the accounts Jason works through',
-                                        act('side.page', accounts),
-                                        'plug',
-                                    )
-                          }
-                      </div>`
-                    : null
-            }
+        <div class="newstack">
+            <button class="newbtn" type="button" ${marked('start')} ${act('side.start')} ${offUnless('chat.create')}>
+                ${svg('plusc', 15)}New GTM agent
+            </button>
+            <button class="newbtn" type="button" ${act('side.new')} ${offUnless('chat.create')}>
+                ${svg('chat', 15)}${t('side.newChat')}
+            </button>
         </div>
         <div class="sscroll">
             <nav class="list" aria-label="Menu">

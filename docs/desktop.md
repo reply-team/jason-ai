@@ -110,8 +110,9 @@ without it, through Claude Code, Codex or any other agent, and that Jason is ope
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New GTM agent** brings it forward; that button's caret offers **New chat**, which still makes a chat directly, and
-**Connect an account**.
+**New GTM agent** brings it forward; **New chat**, the button directly under it, makes a chat about no agent directly.
+Every chat but the Feed says whose it is on a line at its top, from before its first message: "Chat · " and the agent's
+name for an agent's chat, "Chat · no agent" for any other.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
