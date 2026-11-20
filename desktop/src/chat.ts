@@ -83,6 +83,7 @@ import {
     askFirstThisTurn,
     codexAutoEdit,
     codexFullAccessRefused,
+    followsCodexRefusal,
     codexFullAccessNarrowed,
     earlierDesktopAskFirst,
     feedDefaultMode,
@@ -2112,9 +2113,16 @@ export class Chat {
                 // (exec/src/lib.rs), so an administrator's requirements that forbid `danger-full-access` make building its
                 // configuration fail (core/src/config/mod.rs) with Codex's words on standard error. Those words are not
                 // read: one sentence of ours follows them, every time, and nothing is remembered.
-                const fullCodex = resolved.program === 'codex' && running.mode === 'full_access';
-                const refusedAtStart =
-                    fullCodex && ended !== null && !running.stopped && last.heard === false && last.exit.startError === null && last.exit.code !== 0;
+                const refusedAtStart = followsCodexRefusal({
+                    program: resolved.program,
+                    mode: running.mode,
+                    ended,
+                    stopped: running.stopped,
+                    heard: last.heard,
+                    startError: last.exit.startError,
+                    code: last.exit.code,
+                    ours: last.ours,
+                });
                 const error = refusedAtStart ? `${ended}\n\n${codexFullAccessRefused}` : ended;
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });

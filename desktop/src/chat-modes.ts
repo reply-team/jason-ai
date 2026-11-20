@@ -77,6 +77,33 @@ export const codexFullAccessNarrowed =
 export const codexFullAccessRefused =
     'If these words say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.';
 
+/**
+ * Whether `codexFullAccessRefused` follows a turn's end: a Full access turn on Codex that ended in words, not stopped,
+ * with no line on standard output, a failing exit and no start error, and whose words are not the desktop's own sentence
+ * for a refused key (`ours`), which no sentence of Codex's precedes.
+ */
+export function followsCodexRefusal(turn: {
+    program: string;
+    mode: ChatMode;
+    ended: string | null;
+    stopped: boolean;
+    heard: boolean | undefined;
+    startError: string | null;
+    code: number | null;
+    ours: boolean | undefined;
+}): boolean {
+    return (
+        turn.program === 'codex' &&
+        turn.mode === 'full_access' &&
+        turn.ended !== null &&
+        !turn.stopped &&
+        turn.heard === false &&
+        turn.startError === null &&
+        turn.code !== 0 &&
+        turn.ours !== true
+    );
+}
+
 /** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 

@@ -12,6 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
+import { followsCodexRefusal } from '../src/chat-modes.ts';
 import { chatModes, codexAutoEdit, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, tabFullAccess, turnMode, unguardedSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
@@ -726,4 +727,17 @@ test('the help form of the PowerShell tool or another tool with a command is a c
         const full = await wired(t, 'full_access');
         assert.match((await hooked(full, tool, { command: 'jason campaign --help' })) ?? 'ran', /^ask: /, `${tool} Full access`);
     }
+});
+
+test('our sentence follows a Codex refusal only on a Full access Codex turn that ended in Codex\'s own words, not stopped, before any line, with a failing exit, and not in the desktop\'s sentence for a refused key', () => {
+    const refused = { program: 'codex', mode: 'full_access', ended: 'Error: no', stopped: false, heard: false, startError: null, code: 1, ours: false } as const;
+    assert.equal(followsCodexRefusal(refused), true);
+    assert.equal(followsCodexRefusal({ ...refused, ours: true }), false, 'a keyed turn ended in the desktop\'s refused-key sentence');
+    assert.equal(followsCodexRefusal({ ...refused, program: 'claude' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, mode: 'ask_first' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, ended: null }), false);
+    assert.equal(followsCodexRefusal({ ...refused, stopped: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, heard: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, startError: 'ENOENT' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, code: 0 }), false);
 });

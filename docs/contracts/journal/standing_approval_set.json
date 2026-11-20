@@ -34,7 +34,7 @@
           },
           "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing work; null where it does not expire." },
           "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." },
-          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, or by any other caller that sets the variable. A set so marked is the chat's, never a person's word, and sets nothing." }
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, by a Codex turn of its chat outside Full access since 0.49.2, or by any other caller that sets the variable. A set so marked is the chat's, never a person's word, and sets nothing." }
         }
       },
       "allowance": {
@@ -65,7 +65,7 @@
           },
           "max_people": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "The most people the searches under it may ask for, added up." },
           "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "The most people one search under it may ask for; null where it caps none." },
-          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, or by any other caller that sets the variable. A set so marked is the chat's, never a person's word, and sets nothing." }
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, by a Codex turn of its chat outside Full access since 0.49.2, or by any other caller that sets the variable. A set so marked is the chat's, never a person's word, and sets nothing." }
         }
       }
     },

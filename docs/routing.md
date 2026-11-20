@@ -532,7 +532,7 @@ at the claim):
    and the contact's warmth is not read;
 2. the contact's warmth, and the mode for it, which must be `automatic`;
 3. the send was not written under the chat's mark, the `Jason-Confined` header the CLI sends with `JASON_CONFINED` set,
-   as every chat turn did before 0.49.2 (`sent_from_chat`);
+   as every chat turn did before 0.49.2 and a Codex turn of the chat outside Full access does since (`sent_from_chat`);
 4. no doubt stands about it (`doubted`);
 5. the contact waits on no verdict (`awaiting_judgement`, `awaiting_nature`);
 6. an answer answers a person's reply, in a conversation nobody escalated at or after it (`answers_no_verdict`,

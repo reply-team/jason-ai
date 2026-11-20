@@ -1256,11 +1256,13 @@ test('a settings file whose folder is a link out of the data directory is refuse
     }
 });
 
-// Codex has no fence of the desktop's, and needs none for setup/: every Codex turn runs in Codex's own read-only sandbox,
-// which names no path and so holds every folder alike, the data directory and setup/ in it among them; no mode gives a
-// Codex turn more, since Full access and Auto-edit run on Claude Code only and a turn of a chat in either runs in Ask
-// first when it is sent to Codex, the chat keeping its mode. What that sandbox does not do is keep a Codex command from reading: it reads setup/ and the
-// secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line under the composer too.
+// Codex has no fence of the desktop's: outside Full access every Codex turn runs in Codex's own read-only sandbox, which
+// names no path and so holds every folder alike, the data directory and setup/ in it among them, and Auto-edit runs there
+// as Ask first; in Full access it runs with no sandbox. What that sandbox does not do is keep a Codex command from reading:
+// it reads setup/ and the secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line
+// under the composer too. No argument names the data directory but, in Full access, its pin in the shell environment
+// policy, which the row checks in both spellings: as it is, and escaped as a TOML string spells it, which on Windows,
+// where a path holds backslashes, is no longer the path as it is.
 test('a Codex turn in Ask first, Plan only or Auto-edit runs read-only with no way to write, setup/ held as every folder is; in Full access it runs with no sandbox; in no mode is a folder added', async (t) => {
     for (const mode of fenceModes) {
         const r = rig(t);
@@ -1277,7 +1279,10 @@ test('a Codex turn in Ask first, Plan only or Auto-edit runs read-only with no w
             assert.ok(!args.includes(widening), `${mode}: ${widening}`);
         }
         assert.ok(!args.some((arg) => /sandbox_workspace_write|writable_roots|sandbox_mode/.test(arg)), `${mode}: no setting widens the sandbox`);
-        assert.ok(!args.some((arg) => arg.includes(r.b.paths.data)), `${mode}: no argument names the data directory`);
+        const pin = `shell_environment_policy.set.JASON_DATA_DIR=${JSON.stringify(r.b.paths.data)}`;
+        const escaped = JSON.stringify(r.b.paths.data).slice(1, -1);
+        const naming = args.filter((arg) => arg.includes(r.b.paths.data) || arg.includes(escaped));
+        assert.deepEqual(naming, full ? [pin] : [], `${mode}: no argument names the data directory but its pin in Full access`);
         assert.equal(r.chat.open(id).mode, mode, mode);
     }
 });
