@@ -211,8 +211,9 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * (`permissionModes`). Ask first: the host's default, with the turn's settings file, whose hook refuses three kinds
  * before the host's own rules (`hookedSettings`), from the floor of Full access; below it, the inline settings and no
  * hook. Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool
- * as any other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only: plan, the
- * plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
+ * as any other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only: plan,
+ * which on macOS and Windows Claude Code meets by starting in its default mode, since the turn carries the scrub
+ * (`scrub`); the plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
  * nouns' help runs too, exactly as written (`helpRules`). Full access: the host's own bypass, with the turn's settings
  * file and its hook, and the PowerShell tool kept (`fullAccessRemovedTools`); what the host asks about in that mode
  * itself reaches the prompt tool. Below the floor, where no hook rides an Ask first or Auto-edit turn to read where a
@@ -558,6 +559,9 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
  * passed on there when the desktop inherited it: while the variable is set, Claude Code starts in its default mode
  * whatever mode the start asks for, its bypass included, and says so on its standard error ("Permission mode forced to
  * default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set", seen on 2.1.329), so no Full access turn would run in its bypass.
+ * Plan only keeps it, so on macOS and Windows a Plan only turn asks for Claude Code's plan mode and starts in its default
+ * mode, the same line said (seen on 2.1.329), and Jason's own rules hold the turn: the plan list, the deny rules, no way
+ * out of planning, `JASON_CONFINED` and the desktop's refusal of every other request.
  * Never set on Linux either, nor passed on there when the desktop inherited it:
  * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
  * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the

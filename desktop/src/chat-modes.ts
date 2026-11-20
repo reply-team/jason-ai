@@ -155,15 +155,17 @@ export interface Bypass {
 }
 
 /**
- * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." A cause that holds a minute
- * (`bypassLeadsTo`) says so: "... right now: <why>." No sentence asks for a restart of the desktop. A start that named
- * another mode and said nothing of why is said by `bypassSentence`, which names that mode.
+ * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." How long each holds is
+ * `bypassLeadsTo`'s, and the sentence says it: a cause that holds a minute "... right now: <why>.", a tool that ran
+ * unchecked, which holds for the rest of this run, "... until Jason Desktop starts again: <why>.", and running as root as
+ * it is, since a restart does not change it. A start that named another mode and said nothing of why is said by
+ * `bypassSentence`, which names that mode.
  */
 export const bypassSentences: Readonly<Record<Exclude<BypassWhy, 'bypass_off'>, string>> = {
     root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
     forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
     bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
-    unguarded: 'Full access is not available here: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+    unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
 };
 
 /**

@@ -863,8 +863,10 @@ is not available, an Auto-edit chat on Codex), when they say Ask first, with the
 chat stays set to its own mode. Choosing Ask first
 there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
-passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
-removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
+passes only the allowed verbs that read and the nouns' help, Jason asks Claude Code for its plan mode with the exit from
+it removed, and every other request is refused. On macOS and Windows, where a Plan only turn carries
+`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (below), Claude Code starts it in its default mode instead, and Jason's own rules hold
+the turn just the same. The cards left in Plan only are a read outside the chat's folders and a web
 page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
 access, where it runs with none.
 
@@ -933,23 +935,24 @@ that the menu shows the mode each next turn runs in, and that the chat stays set
 Code older than 2.1.322, sent from a browser tab, or sent while Full access is not offered. A turn on Codex runs in
 Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the
 composer drawn again. Where Claude Code's bypass mode is not available, the turn runs in Ask first, the chat keeping
-Full access on its record, and the chat says why once, the cause after "Full access is not available here right now":
-Claude Code started the turn in another mode, which the chat names as Claude Code named it ("Claude Code did not start
-in its bypass mode, and named its default mode instead."); Claude Code said it forced its permission mode to default;
-or Claude Code refused the mode in its restricted mode or under a policy. The turns of the next minute run in Ask first
-too, with no bypass asked for, and the first Full access turn after that minute asks Claude Code for its bypass again,
-so a cause that has gone away needs no restart of Jason Desktop. Where a tool ran that Jason's check never saw, a
-policy having filtered the check out, the turn it ran in stops, the chat says "Full access is not available here" with
-that cause after it, and every later turn on Claude Code runs in Ask first until Jason Desktop starts again; where Jason
-Desktop runs as root or under sudo, the chat says "Full access is not available here" with that cause, and every turn
-on Claude Code runs in Ask first. Of why Claude Code started in another mode, Jason reads one
-thing: Claude Code's own words that it forced its permission mode to default, which Claude Code 2.1.329 writes while
-`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is set where it starts. No Full access turn sets that variable, nor passes on one
-Jason Desktop inherited. Claude Code's own settings or an administrator's policy can also turn its bypass off, and the
-chat names none of them. A turn that started in another mode is stopped at its first line and started again in Ask
-first, as Ask first's own turn is, and Jason Desktop's log says the cause and the mode named each time a turn finds it,
-and running as root once as Jason Desktop starts, so `jason logs --source desktop` shows which it was. A turn you
-stopped ends with no word of a mode.
+Full access on its record, and each conversation is told why once while the cause holds, and again each time it comes
+to hold again, the cause after "Full access is not available here right now": Claude Code started the turn in another
+mode, which the chat names as Claude Code named it ("Claude Code did not start in its bypass mode, and named its default
+mode instead."); Claude Code said it forced its permission mode to default; or Claude Code refused the mode in its
+restricted mode or under a policy. The turns of the next minute run in Ask first too, with no bypass asked for, and the
+first Full access turn after that minute asks Claude Code for its bypass again, so a cause that has gone away needs no
+restart of Jason Desktop. Where a tool ran that Jason's check never saw, a policy having filtered the check out, the
+turn it ran in stops, the chat says "Full access is not available here until Jason Desktop starts again" with that
+cause after it, and every later turn on Claude Code runs in Ask first until it does; where Jason Desktop runs as root
+or under sudo, the chat says "Full access is not available here" with that cause, and every turn on Claude Code runs in
+Ask first. Of why Claude Code started in another mode, Jason reads one thing: Claude Code's own words that it forced
+its permission mode to default, which Claude Code 2.1.329 writes while `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is set where
+it starts. No Full access turn sets that variable, nor passes on one Jason Desktop inherited. Claude Code's own
+settings or an administrator's policy can also turn its bypass off, and the chat names none of them. A turn that
+started in another mode is stopped at its first line and started again in Ask first, as Ask first's own turn is, and
+so is the fresh session that follows a conversation Claude Code could not resume. Jason Desktop's log says each cause
+that comes to hold, by the cause and the mode named, and running as root once as Jason Desktop starts, so
+`jason logs --source desktop` shows which it was. A turn you stopped ends with no word of a mode.
 
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
 rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused
