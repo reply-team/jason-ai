@@ -374,11 +374,11 @@ the person asks:
 jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason 'read the weeks the runtime was off'
 ```
 
-Ask first, and run it on the person's yes, with their words as the reason. It reads and sends nothing, and leaves the
-account's own reading where it stands. What it finds that a campaign was not told, and that happened after the campaign
-went live, wakes that campaign's manager; what happened before is kept and says nothing. A span reaches at most 366
-days back and ends no later than now; eight may wait for one account. Each span asked for is listed under its source in
-`jason events sources`, with how it ended.
+Ask first, and run it on the person's yes, with a reason in your own words (in the chat, the reason of rule 13). It
+reads and sends nothing, and leaves the account's own reading where it stands. What it finds that a campaign was not
+told, and that happened after the campaign went live, wakes that campaign's manager; what happened before is kept and
+says nothing. A span reaches at most 366 days back and ends no later than now; eight may wait for one account. Each span
+asked for is listed under its source in `jason events sources`, with how it ended.
 
 `jason events signal` is for a program the person runs to receive a provider's webhooks: it has the account read at the
 next scan, never within a minute of its last read, and carries nothing of what the webhook said. Do not run it yourself

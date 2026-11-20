@@ -242,7 +242,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// An account whose events are read is a source, and its record is read, never its cursor. A span Jason did not read
-    /// is read again only on the person's yes, with their words as the reason — and the skill says what that does and does
+    /// is read again only on the person's yes, with a reason in its own words — and the skill says what that does and does
     /// not do, so that a session neither promises a reply was sent nor runs it on its own judgement because a gap showed.
     /// </summary>
     [Fact]
@@ -258,7 +258,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("A source never shows its cursor, and you do not need it.", skill, StringComparison.Ordinal);
         Assert.Contains("That column stays once a span asked for again has read it: the spans asked for again are listed below the table with how each ended, so read them before you offer to read a span again.", skill, StringComparison.Ordinal);
         Assert.Contains("It is read only when the person asks", skill, StringComparison.Ordinal);
-        Assert.Contains("Ask first, and run it on the person's yes, with their words as the reason.", skill, StringComparison.Ordinal);
+        Assert.Contains("Ask first, and run it on the person's yes, with a reason in your own words (in the chat, the reason of rule 13).", skill, StringComparison.Ordinal);
         Assert.Contains("It reads and sends nothing, and leaves the account's own reading where it stands.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "What it finds that a campaign was not told, and that happened after the campaign went live, wakes that campaign's manager; what happened before is kept and says nothing.",
