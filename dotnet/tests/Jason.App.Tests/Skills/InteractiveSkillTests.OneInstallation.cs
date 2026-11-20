@@ -93,7 +93,7 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("operating-the-installation");
 
-        Assert.Contains("Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran, `jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window, waits for it, and the new version's `jason` finishes it", skill, StringComparison.Ordinal);
+        Assert.Contains("Where `jason` is the one Jason Desktop carries, as it is on macOS, Windows and Linux once the install script ran, `jason update apply` replaces no file itself. On macOS and Windows it hands the update to the application's own updater, with no window, waits for it, and the new version's `jason` finishes it", skill, StringComparison.Ordinal);
         Assert.Contains("Jason Desktop's first start of each version runs `jason install` and `jason update apply --finish` itself", skill, StringComparison.Ordinal);
         Assert.Contains($"A refusal with `{UpdateCodes.InProgress}` or `{CliErrors.InstallInProgress}` means later, not a failure", skill, StringComparison.Ordinal);
         Assert.Contains($"`{UpdateCodes.DesktopNotInstalled}` means Jason Desktop's installer had not installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason Desktop that is running, one of another data directory included", skill, StringComparison.Ordinal);

@@ -134,7 +134,8 @@ The Linux job, which signs nothing, builds the deb and the AppImage around the l
 each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
 so the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu 24.04 and later, as shipped,
 the AppImage says so and names the deb, whose AppArmor profile lets the program make the user namespaces its sandbox
-uses; neither package has yet been seen on such a machine. Neither is signed.
+uses; on Ubuntu 24.04 and 26.04 as shipped the deb has been seen to start sandboxed and the AppImage to refuse. Neither is
+signed.
 Checked beside the deb,
 `sha256sum --check --ignore-missing checksums.txt` proves it is the file the release published, not who built it;
 checked beside the AppImage, it proves the same of the AppImage and no more. The deb's own updater is off: its updates
