@@ -18,16 +18,17 @@ public class UninstallPathEntryTests
     private const string Directory = "/home/a/.local/bin";
 
     /// <summary>
-    /// The marker has one definition and the install script is held to it. Two copies of a string that has to
-    /// match is how the verb that undoes an installer drifts away from the installer.
+    /// The marker has one definition and the install scripts that wrote it are held to it. Two copies of a string that
+    /// has to match is how the verb that undoes an installer drifts away from the installer.
     /// </summary>
     [Fact]
     public void The_marker_is_what_the_install_script_writes()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
-
-        Assert.Contains($"MARKER=\"{PathEntry.Marker}\"", script, StringComparison.Ordinal);
-        Assert.Contains("export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"", script, StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains($"MARKER=\"{PathEntry.Marker}\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another marker");
+            Assert.True(script.Contains("export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another line");
+        }
     }
 
     [Fact]
@@ -208,17 +209,21 @@ public class UninstallPathEntryTests
     };
 
     /// <summary>
-    /// <c>install.sh</c> carries that rule as the function the C# spells, word for word, and writes the line into the
-    /// file it names as well as into the login profile.
+    /// <c>install.sh</c> carries that rule as the function the C# spells, word for word; and the scripts that wrote the
+    /// lines carried it too, and wrote the line into the file it names as well as into the login profile.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_interactive_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = PathEntry.InteractiveProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-        Assert.Contains(PathEntry.InteractiveProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains("INTERACTIVE=\"$(interactive_profile)\"", script, StringComparison.Ordinal);
-        Assert.Contains("add_to_profile \"$INTERACTIVE\"", script, StringComparison.Ordinal);
+        Assert.Contains(function, CurrentScript(), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(function, StringComparison.Ordinal), $"{tag}'s install.sh carried another interactive_profile");
+            Assert.True(script.Contains("INTERACTIVE=\"$(interactive_profile)\"", StringComparison.Ordinal), $"{tag}'s install.sh did not ask interactive_profile");
+            Assert.True(script.Contains("add_to_profile \"$INTERACTIVE\"", StringComparison.Ordinal), $"{tag}'s install.sh did not write into the interactive file");
+        }
     }
 
     /// <summary>And the function, run in <c>sh</c> under the installer's <c>set -eu</c>, answers what the C# answers.</summary>
@@ -509,16 +514,21 @@ public class UninstallPathEntryTests
     };
 
     /// <summary>
-    /// <c>install.sh</c> carries the rule as the function the C# spells, word for word — and runs it, so the
-    /// installer, the repair and the check cannot disagree about which file a login shell reads.
+    /// <c>install.sh</c> carries the rule as the function the C# spells, word for word; and the scripts that wrote the
+    /// lines carried it too and wrote by it, so the installer, the repair and the check cannot disagree about which file
+    /// a login shell reads.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_login_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var function = PathEntry.LoginProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-        Assert.Contains(PathEntry.LoginProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains("add_to_profile \"$(login_profile)\"", script, StringComparison.Ordinal);
+        Assert.Contains(function, CurrentScript(), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(function, StringComparison.Ordinal), $"{tag}'s install.sh carried another login_profile");
+            Assert.True(script.Contains("add_to_profile \"$(login_profile)\"", StringComparison.Ordinal), $"{tag}'s install.sh did not write into the login profile");
+        }
     }
 
     /// <summary>
@@ -591,34 +601,37 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
-    /// <c>jason install</c> writes the block on macOS by <see cref="PathEntry.AddToProfile"/>, and <c>install.sh</c> by its
-    /// <c>add_to_profile</c>: one rule with two writers. The script carries the function the C# spells, word for word, with the
-    /// marker and the line it appends.
+    /// <c>jason install</c> writes the block by <see cref="PathEntry.AddToProfile"/>, and <c>install.sh</c> wrote it by its
+    /// <c>add_to_profile</c> until the application's <c>jason install</c> took the lines over: one rule with two writers,
+    /// and <c>jason uninstall</c> takes back what either left. The scripts that wrote the lines carried the function the C#
+    /// spells, word for word, with the marker and the line it appended.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_add_to_profile_rule_word_for_word()
     {
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
-
-        Assert.Contains(PathEntry.AddToProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
-        Assert.Contains($"MARKER=\"{PathEntry.Marker}\"", script, StringComparison.Ordinal);
-        Assert.Contains("LINE=\"export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"\"", script, StringComparison.Ordinal);
-        Assert.Contains("INSTALL_DIR=\"$HOME/.local/bin\"", script, StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(script.Contains(PathEntry.AddToProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal), $"{tag}'s install.sh carried another add_to_profile");
+            Assert.True(script.Contains($"MARKER=\"{PathEntry.Marker}\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another marker");
+            Assert.True(script.Contains("LINE=\"export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"\"", StringComparison.Ordinal), $"{tag}'s install.sh wrote another line");
+            Assert.True(script.Contains("INSTALL_DIR=\"$HOME/.local/bin\"", StringComparison.Ordinal), $"{tag}'s install.sh installed into another folder");
+        }
     }
 
     /// <summary>
-    /// <c>install.sh</c> writes no profile where the PATH it runs with names the folder already, and <c>jason install</c>
-    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the script carries the test the C# spells, word for word, its
-    /// indentation aside.
+    /// <c>install.sh</c> wrote no profile where the PATH it ran with named the folder already, and <c>jason install</c>
+    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the scripts that wrote the lines carried the test the C#
+    /// spells, word for word, its indentation aside.
     /// </summary>
     [Fact]
     public void The_installer_carries_the_on_path_test_word_for_word()
     {
         static string Unindented(string text) => System.Text.RegularExpressions.Regex.Replace(text.Replace("\r\n", "\n", StringComparison.Ordinal), @"(?m)^[ \t]+", string.Empty);
 
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
-
-        Assert.Contains(Unindented(PathEntry.OnPathTest) + "\n", Unindented(script), StringComparison.Ordinal);
+        foreach (var (tag, script) in ScriptsThatWroteTheLines())
+        {
+            Assert.True(Unindented(script).Contains(Unindented(PathEntry.OnPathTest) + "\n", StringComparison.Ordinal), $"{tag}'s install.sh tested the PATH another way");
+        }
     }
 
     /// <summary>
@@ -986,6 +999,69 @@ public class UninstallPathEntryTests
                 @"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;%USERPROFILE%\.local\bin;C:\Users\a\AppData\Local\Programs\jason",
                 @"C:\Users\a\AppData\Local\Programs\jason",
                 Expand));
+    }
+
+    /// <summary>
+    /// The releases whose <c>install.sh</c> wrote the PATH lines last: 0.48.7's on macOS, where from 0.49.0 the script
+    /// installs Jason Desktop and the <c>jason install</c> it carries writes them, and 0.49.0's on Linux, where 0.49.1 does
+    /// the same. Every release's script from 0.21.0 to these carried the same rule word for word.
+    /// </summary>
+    /// <remarks>
+    /// No <c>install.sh</c> writes a profile any more, and <c>jason uninstall</c> still takes back the lines those scripts
+    /// left on every machine they ran on, so the rule it takes them back by is held to theirs, read where they cannot
+    /// change: at their tags.
+    /// </remarks>
+    private static readonly string[] LastWriters = ["v0.48.7", "v0.49.0"];
+
+    private static string CurrentScript() =>
+        File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>install/install.sh</c> as each of <see cref="LastWriters"/> published it. A checkout without those tags skips the
+    /// row outside CI, where a shallow clone is a person's choice; under CI the checkout is the workflow's, and a row that
+    /// skipped there would never run at all, so it fails and names the checkout.
+    /// </summary>
+    private static List<(string Tag, string Script)> ScriptsThatWroteTheLines()
+    {
+        var scripts = new List<(string Tag, string Script)>();
+        foreach (var tag in LastWriters)
+        {
+            if (Git("show", $"{tag}:install/install.sh") is { } script)
+            {
+                scripts.Add((tag, script.Replace("\r\n", "\n", StringComparison.Ordinal)));
+                continue;
+            }
+
+            Assert.False(
+                Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true",
+                $"{tag} is not in this checkout under CI, so nothing holds the uninstall to the PATH lines its install.sh wrote: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite must keep fetch-depth: 0, which brings the tags.");
+            Assert.Skip($"{tag} is not in this checkout, so the install.sh it published cannot be read.");
+        }
+
+        return scripts;
+    }
+
+    private static string? Git(params string[] args)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            WorkingDirectory = RepositoryRoot(),
+        };
+        foreach (var argument in args)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var git = System.Diagnostics.Process.Start(start)!;
+        var stdout = git.StandardOutput.ReadToEndAsync();
+        _ = git.StandardError.ReadToEndAsync();
+        git.WaitForExit();
+        return git.ExitCode == 0 ? stdout.Result : null;
     }
 
     private static string RepositoryRoot()
