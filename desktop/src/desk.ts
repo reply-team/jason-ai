@@ -34,7 +34,7 @@ export interface DeskDeps {
     autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
-    /** Where the previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
+    /** Which previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
     place?(): string | null;
@@ -197,7 +197,7 @@ export class Desk {
     }
 
     /**
-     * The update item, and under it, unclickable, where the previous version is kept while it is. A press in the tray's
+     * The update item, and under it, unclickable, which previous version is kept while it is. A press in the tray's
      * menu is always a click: the tray has no key, and on Linux its menu reports a click with no mouse button, which
      * Electron counts as a key's (`triggeredByAccelerator`).
      */

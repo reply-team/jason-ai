@@ -126,15 +126,15 @@ describe('a code block in an answer', () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(button().textContent).toBe('Copied');
+        expect(button().getAttribute('aria-label')).toBe('Copied');
         await flush(async () => {
             vi.advanceTimersByTime(1900);
         });
-        expect(button().textContent).toBe('Copied');
+        expect(button().getAttribute('aria-label')).toBe('Copied');
         await flush(async () => {
             vi.advanceTimersByTime(200);
         });
-        expect(button().textContent).toBe('Copy code');
+        expect(button().getAttribute('aria-label')).toBe('Copy code');
     });
 
     it('says Not copied for about two seconds when the write is refused, and nothing else happens', async () => {
@@ -152,11 +152,11 @@ describe('a code block in an answer', () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(buttons().map((each) => each.textContent)).toEqual(['Not copied', 'Copy code']);
+        expect(buttons().map((each) => each.getAttribute('aria-label'))).toEqual(['Not copied', 'Copy code']);
         await flush(async () => {
             vi.advanceTimersByTime(2100);
         });
-        expect(buttons().map((each) => each.textContent)).toEqual(['Copy code', 'Copy code']);
+        expect(buttons().map((each) => each.getAttribute('aria-label'))).toEqual(['Copy code', 'Copy code']);
     });
 
     it('says Not copied when the page has no clipboard to write to', async () => {
@@ -169,7 +169,7 @@ describe('a code block in an answer', () => {
             fireEvent.click(first());
             await Promise.resolve();
         });
-        expect(first().textContent).toBe('Not copied');
+        expect(first().getAttribute('aria-label')).toBe('Not copied');
     });
 
     it('says Copied only on the block that was pressed when two blocks are equal', async () => {
@@ -182,6 +182,6 @@ describe('a code block in an answer', () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(buttons().map((each) => each.textContent)).toEqual(['Copy code', 'Copied']);
+        expect(buttons().map((each) => each.getAttribute('aria-label'))).toEqual(['Copy code', 'Copied']);
     });
 });
