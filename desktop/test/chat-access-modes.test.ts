@@ -708,7 +708,7 @@ test('in an Auto-edit turn a file command in the chat folder runs with no card, 
     await ended;
 });
 
-test('Auto-edit is refused on Codex before anything changes, is the Feed\'s to choose as any chat\'s, and a Codex send takes it back to Ask first', async (t) => {
+test('Auto-edit is refused on Codex before anything changes, is the Feed\'s to choose as any chat\'s, and a Codex send from it runs that turn alone in Ask first, says why once, and leaves the record in Auto-edit', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await assert.rejects(r.chat.setMode(id, 'auto_edit', 'codex'), { message: codexAutoEdit });
@@ -720,10 +720,18 @@ test('Auto-edit is refused on Codex before anything changes, is the Feed\'s to c
     assert.equal(r.chat.open(feed.id).mode, 'auto_edit');
 
     await r.chat.setMode(id, 'auto_edit', 'claude');
-    const said = await r.turn(id, 'hello', { host: 'codex' });
-    assert.deepEqual(modes(said), ['ask_first']);
+    const first = await r.turn(id, 'hello', { host: 'codex' });
+    const second = await r.turn(id, 'hello again', { host: 'codex' });
+    assert.deepEqual(modes([...first, ...second]), [], 'the chat stays in Auto-edit');
     assert.equal(flag(r.hosts()[0]?.args ?? [], '--sandbox'), 'read-only');
-    assert.equal(r.chat.open(id).mode, 'ask_first');
+    assert.deepEqual(r.started, ['ask_first', 'ask_first'], 'each Codex turn runs in Ask first');
+    const said = notices([...first, ...second]);
+    assert.equal(said.length, 1, `said once: ${JSON.stringify(said)}`);
+    assert.ok(said[0]?.includes(codexAutoEdit), `it says why: ${said[0]}`);
+    assert.equal(r.chat.open(id).mode, 'auto_edit');
+    assert.equal(JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8')).mode, 'auto_edit', 'the record is not changed');
+    await r.turn(id, 'and now on Claude Code', claude);
+    assert.equal(r.started.at(-1), 'auto_edit');
 });
 
 test('Auto-edit is kept on the record as every mode chosen from the menu is: a restart opens the chat in Auto-edit, and neither Start fresh nor closing the window takes it away', async (t) => {
