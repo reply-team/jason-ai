@@ -660,8 +660,9 @@ given as a path is looked up in its own directory and reads no PATH, so the answ
 exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
 says whose PATH that was.
 
-Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CHAT_TURN` set, and in Plan only
-with `JASON_CONFINED` too, so the program is named by name and found on the search path, and a name with a directory in
+Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CHAT_TURN` set, which a Claude
+Code turn cannot clear and a Codex turn in Full access can ([desktop](desktop.md)), and on a turn that can only read and
+propose with `JASON_CONFINED` too, so the program is named by name and found on the search path, and a name with a directory in
 it is neither looked up nor started. Run a
 path from a terminal.
 
@@ -738,6 +739,12 @@ skills it recorded in agent hosts' folders — and an older command-line install
 [release-and-update.md](release-and-update.md) §9 adds for the application. It is also reached from Installed apps in
 Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS (*Jason Desktop*, below). Run from a
 terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.
+On macOS, while Jason Desktop's updater installs an update, it refuses with `update_in_progress` before anything is
+removed: wait for the update to end, then run it again. If the update never ends,
+`launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
+`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out. An account with no login session,
+reached over ssh or run by a management tool while it is not signed in at the screen, has no login domain and so no
+such job.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no

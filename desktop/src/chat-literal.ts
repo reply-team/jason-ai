@@ -662,9 +662,8 @@ const runners = new Set(
  * a remote control, a window that is typed into): what they start runs outside this process's environment, so outside
  * the fence the chat's host is given, the data directory it names included. Windows', macOS' and Linux's. This is a
  * list, not a rule: a program it does not name is not recognised as one. A literal reading holds them as runners
- * (`heldByWhatRuns`), the permission model never lets "always" cover one (`runsAnotherProgram`), and a script the chat
- * writes that starts one is refused (`writtenRefusal`). A few programs do it only with an option and are held by it in
- * `handsToRunning`.
+ * (`heldByWhatRuns`), and the permission model never lets "always" cover one (`runsAnotherProgram`). A few programs do it
+ * only with an option and are held by it in `handsToRunning`.
  */
 export const systemLaunchers: ReadonlySet<string> = new Set(
     ('start start-process saps invoke-item ii explorer pcalua scriptrunner msiexec cmstp control hh infdefaultinstall wt '

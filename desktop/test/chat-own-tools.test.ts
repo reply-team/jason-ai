@@ -117,12 +117,11 @@ test('a tool of any server whose name begins with the fixed prefix is the chat\'
     assert.deepEqual(fullAccessJudgement('mcp__jason_desktopx__run', { text: 'hi' }, scope), runs);
 });
 
-test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it but in the shared chat folder', () => {
+test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it, a turn reading no server file of its folder', () => {
     const top = { file_path: posix.join(chat, '.mcp.json'), content: '{"mcpServers":{}}' };
     const judged = judge('Write', top, scope);
     assert.equal(judged.verdict, 'deny');
-    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'a conversation\'s own folder is its own');
-    assert.equal(fullAccessJudgement('Write', top, { ...scope, shared: true }).outcome, 'refused', 'the shared chat folder\'s top');
+    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'the folder the turn runs in');
     assert.equal(judge('Bash', { command: 'echo {} > .mcp.json' }, scope).verdict, 'deny', 'a command too');
     for (const path of [posix.join(campaign, '.mcp.json'), posix.join(chat, 'sub', '.mcp.json'), posix.join(home, 'elsewhere', '.mcp.json')]) {
         const input = { file_path: path, content: '{}' };
@@ -229,19 +228,22 @@ test('every turn\'s prompt tool is on a server named for that turn alone, the fi
     }
 });
 
-test('every Codex turn leaves the person\'s config.toml unread, a resumed one too', () => {
+test('every Codex turn outside Full access leaves the person\'s config.toml unread, a resumed one too; a Full access turn reads it, as Codex in a terminal does', () => {
     for (const shape of [{}, { model: 'gpt-6.1-sol' }, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
-            const args = codexArguments({ ...shape, platform });
-            assert.ok(args.includes('--ignore-user-config'), JSON.stringify(shape));
-            const resume = args.indexOf('resume');
-            if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            for (const mode of [undefined, 'ask_first', 'plan_only', 'auto_edit'] as const) {
+                const args = codexArguments({ ...shape, platform, mode });
+                assert.ok(args.includes('--ignore-user-config'), `${mode} ${JSON.stringify(shape)}`);
+                const resume = args.indexOf('resume');
+                if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            }
+            assert.ok(!codexArguments({ ...shape, platform, mode: 'full_access' }).includes('--ignore-user-config'), JSON.stringify(shape));
         }
     }
 });
 
-test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too', () => {
-    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
+test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too, in Full access as well', () => {
+    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }, { mode: 'full_access' as const }, { mode: 'full_access' as const, resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
             const args = codexArguments({ ...shape, platform });
             const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));

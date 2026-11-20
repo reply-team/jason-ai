@@ -6,7 +6,8 @@
  * how many were read at the start and how many files were not records, each record that could not be written by the
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
  * fresh session; how each naming run of a set-up chat ended, as one closed word; each change of a conversation's mode, by
- * the two modes, and the mode of each turn started and of each request settled; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
+ * the two modes, and the mode of each turn started and of each request settled; that a Full access turn was stopped for a
+ * tool its hook never saw, and the mode of a turn of Ask first or Auto-edit that ran on after one; each Windows check of Codex's sandbox, by its answer and whether the desktop's settings file opened
  * inside, a closed word each; each card the AI asked for that the page did not draw, by its kind (one of six, or unknown)
  * and why (one of four), never what it held. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
@@ -20,7 +21,7 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'fullFolderFailed' | 'sandboxChecked' | 'cardRefused';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'hookFiltered' | 'fullFolderFailed' | 'sandboxChecked' | 'cardRefused';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -38,6 +39,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         named: (outcome) => log.info('chat_named', { Outcome: outcome }),
         modeChanged: (from, to) => log.info('chat_mode_changed', { From: from, To: to }),
         unchecked: () => log.warn('chat_turn_stopped', { Cause: 'unchecked_tool' }),
+        hookFiltered: (mode) => log.warn('chat_hook_filtered', { Mode: mode }),
         fullFolderFailed: (step, code) => log.warn('chat_full_folder_failed', { Step: step, Code: code }),
         sandboxChecked: (answer, settings) => log.info('chat_sandbox_checked', { Answer: answer, Settings: settings }),
         cardRefused: (kind, failure) => log.info('chat_card_refused', { Kind: kind, Failure: failure }),

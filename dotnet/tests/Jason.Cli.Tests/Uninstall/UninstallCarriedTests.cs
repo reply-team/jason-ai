@@ -786,6 +786,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.False(Directory.Exists(updater), "the updater's cache is still there");
         Assert.True(Directory.Exists(application), "the folder is the uninstaller's to remove, after this ends");
         Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
+        // launchd is macOS's: Windows asks it nothing.
+        Assert.Empty(remover.LaunchdReads);
         // The waiter is handed this data directory's log folder, for the one line it writes where the uninstaller refused.
         Assert.Equal(env.Paths.LogsDirectory, remover.WaiterLogs);
         // The report names the waiter's process and gives what follows its moment, in the help's and the page's wording.

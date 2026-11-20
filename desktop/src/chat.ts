@@ -31,7 +31,7 @@
  */
 
 import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, statSync, unlinkSync, writeSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
@@ -83,7 +83,9 @@ import {
     askFirstThisTurn,
     bypassSentences,
     codexAutoEdit,
-    codexFullAccess,
+    codexFullAccessRefused,
+    followsCodexRefusal,
+    codexFullAccessNarrowed,
     earlierDesktopAskFirst,
     feedDefaultMode,
     fullAccessCurrent,
@@ -237,6 +239,13 @@ export interface ChatOptions {
     dataNamed: boolean;
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
+    /**
+     * This account's name as the operating system gives it, which the main process reads (`os.userInfo().username`) and
+     * the carried `jason` writes a person's acts under (`Environment.UserName`): every turn's header names the person by it,
+     * and asks the chat to ask where it is null, not read. Absent, as in a row about something else, the header says
+     * nothing of the person.
+     */
+    account?: string | null;
     cli: Cli;
     /** The program runner, which reads Claude Code's version before each turn on it. */
     programs: Pick<Programs, 'run'>;
@@ -250,6 +259,11 @@ export interface ChatOptions {
     modeChanged?(from: ChatMode, to: ChatMode): void;
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw, or such a tool ran after a stop. */
     unchecked?(): void;
+    /**
+     * Said once in a turn of Ask first or Auto-edit, by its mode, when a tool ran or was refused that its hook never saw:
+     * the turn runs on under its cards and the host's own rules.
+     */
+    hookFiltered?(mode: ChatMode): void;
     /**
      * Whether the desktop runs as root, as which Claude Code does not run in its bypass mode on macOS and Linux; absent,
      * the system's answer. A row gives its own.
@@ -459,6 +473,10 @@ interface Attempted {
     ours?: boolean;
     /** Whether Claude Code refused its bypass mode before it started (`BypassWhy`). */
     bypassRefused?: boolean;
+    /** Whether Claude Code started in another mode than its bypass, and this start was stopped at its first line. */
+    bypassOff?: boolean;
+    /** Whether the host said any line on its standard output before it exited. */
+    heard?: boolean;
 }
 
 /** Whether this process runs as root on macOS or Linux, as which Claude Code does not run in its bypass mode. */
@@ -608,6 +626,8 @@ export class Chat {
     #choices = new Map<string, number>();
     /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
+    /** The conversations already told that Codex ran a Full access turn in a narrower sandbox (`codexFullAccessNarrowed`). */
+    #toldNarrowed = new Set<string>();
     /** The conversations told that a turn runs in Full access since Claude Code is current, where a listing drew Ask first. */
     #toldCurrent = new Set<string>();
     /** The conversations told that the check before each tool did not run in a turn of Ask first or Auto-edit. */
@@ -951,9 +971,9 @@ export class Chat {
         if (mode === 'full_access') {
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
-            if (program === 'codex') throw new ChatRefused(codexFullAccess);
-            if (program !== 'claude') throw new ChatRefused(notAHost);
-            const below = fullAccessSentence(await this.#claudeVersion());
+            if (program !== 'claude' && program !== 'codex') throw new ChatRefused(notAHost);
+            // Codex takes Full access with no floor of it; Claude Code from its floor.
+            const below = program === 'claude' ? fullAccessSentence(await this.#claudeVersion()) : null;
             if (below !== null) throw new ChatRefused(below);
             // A conversation removed or a window closed meanwhile is given nothing, and a choice made meanwhile stands, even
             // one that left the chat in the mode it was in, as does a step down the desktop took.
@@ -1080,6 +1100,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#toldAskFirst.delete(conversation.id);
+        this.#toldNarrowed.delete(conversation.id);
         this.#toldCurrent.delete(conversation.id);
         this.#toldFiltered.delete(conversation.id);
         this.#choices.delete(conversation.id);
@@ -1354,9 +1375,10 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
         // A turn its conversation's mode cannot apply to runs in Ask first, and the record keeps the mode for the turns that
-        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab, on Codex or while this
-        // version does not offer it, where Claude Code's bypass is not available, and Auto-edit on Codex. Full access on a
-        // Claude Code below its floor is found once the version is read, below.
+        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab or while this version
+        // does not offer it, Full access on Claude Code where its bypass is not available, and Auto-edit on Codex. Full
+        // access on a Claude Code below its floor is found once the version is read, below; on Codex Full access runs as
+        // itself.
         const recorded = this.#modeOf(conversation);
         const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered(), bypass: this.#bypass };
         const first = turnMode(recorded, resolved.program, { ...place, claudeVersion: undefined });
@@ -1511,9 +1533,10 @@ export class Chat {
      * Returns when Codex's sandbox on Windows has been seen to hold for this Codex, or the turn was stopped meanwhile;
      * throws `SandboxUnproven` with the sentence the person reads otherwise (`codex-sandbox.ts`). The check runs at the
      * first send to a Codex in this run of the desktop, never at the Connect card, since naming the elevated sandbox may
-     * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the chat folder.
+     * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the turn's own
+     * folder (`cwd`).
      */
-    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean): Promise<void> {
+    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean, cwd: string): Promise<void> {
         const named = (wanted: string) => Object.entries(env).find(([name]) => name.toUpperCase() === wanted)?.[1] ?? '';
         const key = sandboxKey(launch, version, named('CODEX_HOME'));
         // A keyed turn runs under a Codex home of the desktop's own, which the setup command may not reach.
@@ -1534,7 +1557,7 @@ export class Chat {
         let answer: 'holds' | 'reads' | 'unproven';
         let opened: readonly boolean[] | null;
         try {
-            const runs = checkRuns(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
+            const runs = checkRuns(launch, check, { env, cwd, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
             const outside = this.#options.sandboxOutside;
             ({ answer, opened } = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal));
         } finally {
@@ -1822,7 +1845,7 @@ export class Chat {
         const held = digestsOf(memory);
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
         const headFor = (resumed: string | undefined): string =>
-            [header(about), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
+            [header(about, this.#options.account), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
         // Every turn of a conversation runs in its folder, in every mode and on every host: its own, or the shared chat
         // folder for one an earlier desktop made.
         const own = conversation.folder === 'own';
@@ -1843,6 +1866,8 @@ export class Chat {
         let endpoint: Endpoint | null = null;
         let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
+        /** Whether the log was told that a tool of this turn ran or was refused unseen by its hook (`hookFiltered`). */
+        let filteredLogged = false;
         // Closes what the turn opened. The file's removal runs whatever came before it, and a removal that fails (a scanner
         // holding the file on Windows) leaves the file for the next start to remove.
         const finishFiles = async () => {
@@ -1884,12 +1909,14 @@ export class Chat {
                     shellHome: turnHome,
                     // Every layout's settings files and the run file, whatever the stamp says, by every route a path can take.
                     protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-                    // A conversation an earlier desktop made runs in the shared chat folder, whose agent folders every such
-                    // conversation loads: none of its turns writes them.
-                    shared: !own,
+                    // The names a network path may give this computer by, beside localhost and the loopback addresses.
+                    machine: [hostname()],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     help: helpNouns(fence.allowed, fence.reads),
+                    // The host's allow rules of Ask first and Auto-edit, whose plain forms the model runs with no card where
+                    // the host is given no rule for them (`withoutRequestFiles`).
+                    ...(running.mode === 'ask_first' || running.mode === 'auto_edit' ? { allowed: fence.allowed } : {}),
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,
@@ -1920,13 +1947,16 @@ export class Chat {
                 // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
                 // chats but mine".
                 const data = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), own ? { id: conversation.id, present: entriesOf(paths.chats) } : undefined);
-                // A conversation's own folder is its own in Full access, its agent folders included; the shared chat folder's
-                // are refused in every mode (`ChatScope.shared`), and every other mode keeps the rules over them.
-                const rulesNow = () => [...data, ...(running.mode === 'full_access' && own ? [] : chatRules(this.#platform, folder))];
+                // In Full access the turn's folder is its own, its instructions and agent folders included, the shared chat
+                // folder's as a conversation's own: before the next turn the desktop writes its instructions there afresh and
+                // leaves its agent folders holding only what it placed (`ownAgentFolder`). Every other mode keeps the rules
+                // over them, and so does a turn narrowed to Ask first.
+                const rulesNow = () => [...data, ...(running.mode === 'full_access' ? [] : chatRules(this.#platform, folder))];
                 argsFor = (resumed) =>
                     claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
-                argsFor = (resumed) => codexArguments({ platform: this.#platform, model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) =>
+                    codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: env });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -1954,9 +1984,10 @@ export class Chat {
             mode: running.mode,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
-        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.
-        if (resolved.program === 'codex' && this.#platform === 'win32') {
-            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
+        // On Windows a read-only Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run
+        // file; a Full access turn runs with no sandbox, so there is nothing to check.
+        if (resolved.program === 'codex' && this.#platform === 'win32' && running.mode !== 'full_access') {
+            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed, folder);
             if (running.stopped) {
                 this.#setupTurns.delete(conversation.id);
                 this.#running.delete(conversation.id);
@@ -2011,7 +2042,11 @@ export class Chat {
             let pending: string | null = null;
             // Whether the host said any line at all: one that refused its bypass mode says none.
             let spoke = false;
+            // Whether this start ran in another mode than the bypass it asked for, and was stopped at its first line.
+            let bypassOff = false;
             const seen = new Set<string>();
+            // Whether the host said anything on its standard output: a Codex that refuses to start says no event.
+            let heard = false;
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
             let host: HostProcess | null = null;
@@ -2029,16 +2064,18 @@ export class Chat {
             };
             const said = (line: HostLine) => {
                 spoke = true;
-                if (other || stoppedFor !== null) return;
+                if (other || stoppedFor !== null || bypassOff) return;
                 if (line.kind === 'permission_mode') {
                     // A turn that asked for Claude Code's bypass runs in another mode: its settings turned the bypass off
-                    // (`disableBypassPermissionsMode`), and this line is the one word of it. The turn goes on in Ask first,
-                    // what it asks from now on judged and carded as Ask first's, and the record keeps Full access.
+                    // (`disableBypassPermissionsMode`), and this line, read first from the init line, is the one word of it.
+                    // This start is stopped there, what it still asks judged and carded as Ask first's and nothing more it
+                    // says read, and the turn is started again in Ask first, as one whose bypass was refused is: with Ask
+                    // first's own tools, settings and rules. The record keeps Full access.
                     if (running.mode !== 'full_access' || line.mode === 'bypassPermissions') return;
+                    bypassOff = true;
                     running.mode = 'ask_first';
                     if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
-                    this.#bypassGone('bypass_off');
-                    this.#tellAskFirst(conversation.id, replyTo, 'bypass_off', bypassSentences.bypass_off);
+                    host?.stop();
                     return;
                 }
                 if (line.kind === 'key_source') {
@@ -2056,6 +2093,14 @@ export class Chat {
                     uses.set(line.id, line.name);
                     return;
                 }
+                if (line.kind === 'sandbox_narrowed') {
+                    // An administrator's requirements kept a Full access turn in a sandbox: the turn goes on there, the chat
+                    // keeps its mode, and the conversation is told once.
+                    if (running.mode !== 'full_access' || this.#toldNarrowed.has(conversation.id)) return;
+                    this.#toldNarrowed.add(conversation.id);
+                    this.#options.emit(replyTo, { kind: 'notice', text: codexFullAccessNarrowed });
+                    return;
+                }
                 if (line.kind === 'tool_result') {
                     // Every tool use of a turn the hook rides passes it first. One whose result comes back unseen by it ran,
                     // or was refused, without the hook, which a policy can filter out; EndConversation is the one tool
@@ -2063,7 +2108,7 @@ export class Chat {
                     // desktop, and the records keep their modes. A Full access turn ends there, said in its own sentence;
                     // one already stopped, by Stop or by a change of mode, ends as its stop ends it, its next turn saying
                     // why it runs in Ask first. A turn of Ask first or Auto-edit runs on, its cards and Claude Code's own
-                    // rules deciding as before, and the conversation is told once.
+                    // rules deciding as before; the log is told once in the turn, and the conversation once.
                     if (!hooked || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#bypassGone('unguarded');
@@ -2075,6 +2120,10 @@ export class Chat {
                         this.#toldAskFirst.set(conversation.id, told);
                         stopFor(unguardedSentence);
                         return;
+                    }
+                    if (!filteredLogged) {
+                        filteredLogged = true;
+                        this.#options.hookFiltered?.(running.mode);
                     }
                     if (this.#toldFiltered.has(conversation.id)) return;
                     this.#toldFiltered.add(conversation.id);
@@ -2122,6 +2171,7 @@ export class Chat {
                     env,
                     stdin: turnInput(headFor(resumed), recapped ? earlier : null, text),
                     onLine: (line) => {
+                        heard = true;
                         for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
                     },
                 });
@@ -2135,7 +2185,7 @@ export class Chat {
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
             for (const { read, how } of giving(resumed)) this.#options.memoryGiven?.(read.level, how);
-            if (running.stopped || stoppedFor !== null) started.stop();
+            if (running.stopped || stoppedFor !== null || bypassOff) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.
             if (exit.startError === null && given !== null) markGiven(conversation.entries, given.waiting);
@@ -2145,9 +2195,10 @@ export class Chat {
             const refusedKey = stoppedFor !== null || keyRefused;
             // Claude Code refused its bypass mode before it started, in its restricted mode or under a policy: it said no
             // line, failed, and its standard error names the mode.
-            const bypassRefused = running.mode === 'full_access' && !spoke && !running.stopped && exit.startError === null && exit.code !== 0 && /\bbypassPermissions\b/.test(started.stderrTail());
-            const again = resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
-            return { exit, result, host: started, again, ours: refusedKey, bypassRefused };
+            const bypassRefused =
+                resolved.program === 'claude' && running.mode === 'full_access' && !spoke && !running.stopped && exit.startError === null && exit.code !== 0 && /\bbypassPermissions\b/.test(started.stderrTail());
+            const again = !bypassOff && resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
+            return { exit, result, host: started, again, ours: refusedKey, heard, bypassRefused, bypassOff };
         };
 
         void (async () => {
@@ -2155,13 +2206,15 @@ export class Chat {
             let handed: HandOver | null = null;
             try {
                 last = await attempt(resume, hostChanged, false);
-                if (last.bypassRefused === true && narrowSettings !== null) {
-                    // Started again at once in Ask first, its settings written for it, and the conversation told once why.
+                const narrowed = last.bypassOff === true ? 'bypass_off' : last.bypassRefused === true ? 'bypass_refused' : null;
+                if (narrowed !== null && narrowSettings !== null) {
+                    // A start whose bypass was refused, or was off, is started again at once in Ask first, its settings
+                    // written for it and its command line Ask first's own, and the conversation told once why.
                     running.mode = 'ask_first';
                     if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
                     narrowSettings();
-                    this.#bypassGone('bypass_refused');
-                    this.#tellAskFirst(conversation.id, replyTo, 'bypass_refused', bypassSentences.bypass_refused);
+                    this.#bypassGone(narrowed);
+                    this.#tellAskFirst(conversation.id, replyTo, narrowed, bypassSentences[narrowed]);
                     if (!running.stopped) last = await attempt(resume, hostChanged, false);
                 }
                 if (last.again) {
@@ -2181,7 +2234,23 @@ export class Chat {
                 // On a keyed turn the host's own words pass `withoutKey` before the page or the record has them.
                 const key = resolved.key;
                 const scrub = key === null || last.ours ? (text: string) => text : (text: string) => withoutKey(text, key);
-                const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
+                const ended = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
+                // A Full access turn on Codex that ended before Codex said any event, with a failing exit: Codex refused to
+                // start. At openai/codex 9f2b87495b, read and not seen, `codex exec` forces `approval_policy = "never"`
+                // (exec/src/lib.rs), so an administrator's requirements that forbid `danger-full-access` make building its
+                // configuration fail (core/src/config/mod.rs) with Codex's words on standard error. Those words are not
+                // read: one sentence of ours follows them, every time, and nothing is remembered.
+                const refusedAtStart = followsCodexRefusal({
+                    program: resolved.program,
+                    mode: running.mode,
+                    ended,
+                    stopped: running.stopped,
+                    heard: last.heard,
+                    startError: last.exit.startError,
+                    code: last.exit.code,
+                    ours: last.ours,
+                });
+                const error = refusedAtStart ? `${ended}\n\n${codexFullAccessRefused}` : ended;
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
                 this.#markPlan(conversation, running, error === null && handed === null);

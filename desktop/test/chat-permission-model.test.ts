@@ -1300,6 +1300,9 @@ test('a command that changes where the shell finds a program is refused: PATH, P
 // ---- Names that act on what runs next ---------------------------------------------------------------------------------
 
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
+/** A command's refusal of the chat's own names: the write's sentence, and that the file tools read them. */
+const byCommand = (refusal: string) =>
+    refusal.replace(/ Nothing was done\.$/, ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools, Read, Grep and Glob. Nothing was run.');
 const winChat = 'C:\\Users\\someone\\.jason\\desktop\\chat';
 const winCampaign = 'C:\\Users\\someone\\Jason\\Northwind\\campaigns\\spring';
 const winProject = 'C:\\Users\\someone\\Jason\\Northwind';
@@ -1374,9 +1377,14 @@ test('a command naming a guarded file in a working folder takes the guard\'s tit
         [windows(), 'cp notes.md claude.md', instructionsRefusal],
         [mac(), 'mkdir -p .agents/skills/x', configurationRefusal],
         [mac(), 'jason campaign update cmp_A --description AGENTS.md', instructionsRefusal],
+        [mac(), 'cat CLAUDE.md', instructionsRefusal],
+        [mac(), 'ls .claude/skills', configurationRefusal],
     ] as const) {
-        assert.deepEqual(run(scope, command), { verdict: 'deny', message }, `${scope.platform} ${command}`);
+        assert.deepEqual(run(scope, command), { verdict: 'deny', message: byCommand(message) }, `${scope.platform} ${command}`);
     }
+    // The refusal says how to read them, and the file tools do.
+    assert.deepEqual(judge('Read', { file_path: `${macChat}/CLAUDE.md` }, mac()), { verdict: 'allow' });
+    assert.equal(judge('Grep', { pattern: 'skill', path: `${macChat}/.claude` }, mac()).verdict, 'allow');
 });
 
 // ---- A command longer than its card shows -----------------------------------------------------------------------------
@@ -1438,7 +1446,7 @@ test('a name the volume folds to a guarded name is that name: compatibility form
     }
     // Linux compares names exactly.
     assert.deepEqual(write(linux, `${macChat}/.agent\u017f/skills/x/SKILL.md`), { verdict: 'allow' });
-    assert.deepEqual(run(mac(), 'cp notes.md AGENT\u017f.md'), { verdict: 'deny', message: instructionsRefusal });
+    assert.deepEqual(run(mac(), 'cp notes.md AGENT\u017f.md'), { verdict: 'deny', message: byCommand(instructionsRefusal) });
 });
 
 test('on Windows a guarded name with a trailing dot or space or a stream suffix is the guarded name, and the chat\'s own is refused so', () => {
@@ -1450,7 +1458,7 @@ test('on Windows a guarded name with a trailing dot or space or a stream suffix 
     assert.deepEqual(write(windows(), `${winCampaign}\\AGENTS.md:stream`), guardCard(instructionsTitle, `${winCampaign}\\AGENTS.md`));
     // Any other name so spelled keeps the spelling's card.
     assert.equal((write(windows(), `${winChat}\\notes.md.`) as { title?: string }).title, 'Use a path Windows reads as another name');
-    assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), { verdict: 'deny', message: instructionsRefusal });
+    assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), { verdict: 'deny', message: byCommand(instructionsRefusal) });
     // macOS and Linux read a trailing dot as part of the name.
     assert.deepEqual(write(mac(), `${macChat}/CLAUDE.md.`), { verdict: 'allow' });
 });
@@ -1543,7 +1551,7 @@ test('in the chat folder itself a write under .claude, .agents or .codex is refu
     // A shell word naming them in the chat folder is refused as the file tools refuse them; in a person's folder it takes
     // the guard's title and is never remembered.
     for (const [scope, command] of [[mac(), 'cp x.json .claude/settings.json'], [windows(), 'copy x.md .claude\\skills\\x\\SKILL.md'], [mac(), 'mkdir -p .codex']] as const) {
-        assert.deepEqual(run(scope, command), { verdict: 'deny', message: configurationRefusal }, command);
+        assert.deepEqual(run(scope, command), { verdict: 'deny', message: byCommand(configurationRefusal) }, command);
     }
     assert.deepEqual(run(mac(), `cp x.json ${macProject}/.claude/settings.json`), guardCard(settingsTitle, `cp x.json ${macProject}/.claude/settings.json`));
 });

@@ -164,13 +164,14 @@ describe('a composer’s menus, as a select was', () => {
         key(access(), 'ArrowDown');
         const menu = await waitFor(() => screen.getByRole('menu'));
         key(menu, 'End');
-        const full = focused();
-        expect(full.getAttribute('aria-label')).toBe('Full access');
-        expect(full.getAttribute('aria-disabled')).toBe('true');
-        expect(document.getElementById(full.getAttribute('aria-describedby')!)?.textContent).toBe(
-            'Full access runs on Claude Code only.',
+        key(menu, 'ArrowUp');
+        const edit = focused();
+        expect(edit.getAttribute('aria-label')).toBe('Auto-edit');
+        expect(edit.getAttribute('aria-disabled')).toBe('true');
+        expect(document.getElementById(edit.getAttribute('aria-describedby')!)?.textContent).toBe(
+            'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
         );
-        press(full);
+        press(edit);
         expect(open()).not.toBeNull();
         expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         expect(access().getAttribute('aria-label')).toBe('Access mode: Ask first');
@@ -347,7 +348,7 @@ describe('the line under a composer', () => {
         const form = screen.getByRole('form', { name: 'Message' });
         const line = () => form.querySelector(':scope > .under .accline');
         expect(line()?.textContent).toBe(
-            "Full access · the AI runs commands without asking, except those that reach Jason's own settings, data or variables",
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
         expect(form.querySelector('.composer .under')).toBeNull();
         chooseIn('Access mode', 'mode', 'ask_first');

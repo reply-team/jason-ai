@@ -5,7 +5,7 @@
 import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
 import { isEffort, type Effort } from './chat-models.ts';
-import { allowRules, denyRules, helpNouns, helpRules } from './chat-deny.ts';
+import { allowRules, denyRules, helpNouns, helpRules, withoutRequestFiles } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { isTurnServerName, promptToolName } from './chat-permission-endpoint.ts';
 import { attemptVariable, chatTurnVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
@@ -240,7 +240,10 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
  * nouns' help runs too, exactly as written (`helpRules`). Full access: the host's own bypass, with the turn's settings
  * file and its hook, and the PowerShell tool kept (`fullAccessRemovedTools`); what the host asks about in that mode
- * itself reaches the prompt tool. Every deny rule is passed in every mode; Anthropic,
+ * itself reaches the prompt tool. Below the floor, where no hook rides an Ask first or Auto-edit turn to read where a
+ * request's content comes from, the host is given no allow rule for a form of a verb that reads one from a file or from
+ * standard input (`withoutRequestFiles`), so each reaches the prompt tool, which refuses a redirect from the
+ * installation's own data and runs a plain form with no card, as the rule would. Every deny rule is passed in every mode; Anthropic,
  * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
  * `--bare`, which drops the subscription sign-in and the skills.
  *
@@ -250,8 +253,9 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20: `--permission-mode`
  * "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole: Plan only, Ask
  * first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
- * browser tab, or once the hook was found filtered out: which line a turn gets follows the mode it runs in (`turnMode`),
- * never the one the chat shows. The sealed line is `--setting-sources project`, `--strict-mcp-config`, and from
+ * browser tab, as root, started again after Claude Code refused or turned off its bypass, or once the hook was found
+ * filtered out: which line a turn gets follows the mode it runs in (`turnMode`, and `running.mode` once a start is
+ * narrowed), never the one the chat shows. The sealed line is `--setting-sources project`, `--strict-mcp-config`, and from
  * `noChromeFrom` on `--no-chrome`, so none of the person's settings, servers, connectors or browser reaches the turn (its
  * settings' `serverDefences` hold below that version). In every mode the turn's own `--mcp-config` names the prompt
  * tool's server, under the turn's own name for it (`ownServer`), beside the person's servers in Full access, so a
@@ -264,7 +268,8 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const sealed = mode !== 'full_access';
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
+    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : turn.settingsFile ? turn.allowed : withoutRequestFiles(turn.allowed);
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
     args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     if (sealed) args.push('--setting-sources', 'project');
@@ -320,20 +325,55 @@ export function codexTurnSettings(platform: Platform): string[] {
 export const codexConnectorsOff = 'features.apps=false';
 
 /**
- * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
- * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
+ * The settings a Full access Codex turn sets for the run by `-c`: the search and the connectors as every turn has them
+ * (`codexTurnSettings`), and no sandbox's kind: with `danger-full-access` no sandbox runs, so there is none to choose.
+ */
+export const codexFullAccessSettings: readonly string[] = [...codexSearchSettings, codexConnectorsOff];
+
+/**
+ * The variables a Codex turn that reads the person's config.toml pins for the commands it runs, so that a
+ * `shell_environment_policy` there (`inherit = "core"` or `"none"`, or an exclude) cannot keep from a command the data
+ * directory the desktop runs on or the turn's mark, and the `jason` it runs act on another installation or read a file
+ * an option names. PATH is never pinned: `set` would replace the person's whole PATH. openai/codex 9f2b87495b, read and
+ * not seen: session flags are merged over config.toml table by table (config/src/merge.rs,
+ * `merge_toml_values_at_path`), so `-c shell_environment_policy.set.<NAME>=<value>` adds a name to the person's `set`;
+ * `populate_env` (protocol/src/shell_environment.rs) applies `set` after `inherit`, the default excludes and `exclude`,
+ * and before `include_only`, so a policy that keeps only listed names, by `include_only` or an include filter, still
+ * removes them, as it removes the bundle's folder from PATH.
+ */
+export const codexPinnedVariables: readonly string[] = ['JASON_DATA_DIR', 'JASON_CHAT_TURN'];
+
+/** The `-c` settings that pin `codexPinnedVariables` the environment holds, each value a TOML basic string. */
+function codexPinned(environment: Readonly<Record<string, string>>): string[] {
+    return codexPinnedVariables.flatMap((name) => {
+        const value = environment[name];
+        return value === undefined ? [] : [`shell_environment_policy.set.${name}=${JSON.stringify(value)}`];
+    });
+}
+
+/**
+ * The command line of one Codex turn: `codex exec` emitting JSON events, the prompt read from standard input (`-`),
+ * resumed as `codex exec resume <thread>` from the chat's second turn on. In Full access it runs with no sandbox
+ * (`--sandbox danger-full-access`) and reads the person's own `config.toml`, as a terminal's Codex does; in every other
+ * mode it runs in its read-only sandbox, as below. Codex in `exec` never asks a person, so it has no Ask first: a turn
+ * either only reads or acts unasked, and nothing of the desktop's fence or refusals holds on it.
  *
- * Codex is this release's reading host. A Codex turn runs `exec --json --sandbox read-only` and asks no permission, so no
- * card and no fence of the desktop's applies to it: it reads the chat folder, the folders added to it and its skills in
- * `.agents/skills`, and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback
- * address, so a Codex turn reads and advises and acts through nothing.
+ * A Full access turn runs `exec --json --sandbox danger-full-access` and asks no permission: no card, no fence and no
+ * refusal of the desktop's applies to it, the runtime's run file and the turn settings included, and it acts with the
+ * person's own rights and network. It reads the person's `config.toml`, its MCP servers, providers and profiles with
+ * it, as Codex in a terminal does; the search and the connectors are still set for the run (`codexFullAccessSettings`).
  *
- * Every turn, in every mode, leaves the person's `config.toml` unread (`--ignore-user-config`), so none of the MCP
- * servers it names, and none of its providers or profiles, reach the chat: Codex asks no one before a tool of a server
- * runs. Its sign-in is still read from `CODEX_HOME`. The flag is Codex's from `codexFloor` on, and the chat runs no turn
- * on an older one (`codexFloorSentence`).
+ * A turn in any other mode runs `exec --json --sandbox read-only` and asks no permission, so no card and no fence of the
+ * desktop's applies to it either: it reads the chat folder, the folders added to it and its skills in `.agents/skills`,
+ * and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback address, so such a
+ * turn reads and proposes and acts through nothing.
  *
- * On Windows every turn names its sandbox's kind for the run, `elevated` (`codexWindowsSandbox`), never the default and
+ * Such a turn leaves the person's `config.toml` unread (`--ignore-user-config`), so none of the MCP servers it names,
+ * and none of its providers or profiles, reach the chat: Codex asks no one before a tool of a server runs. Its sign-in
+ * is still read from `CODEX_HOME`. The flag is Codex's from `codexFloor` on, and the chat runs no turn on an older one
+ * (`codexFloorSentence`).
+ *
+ * On Windows such a turn names its sandbox's kind for the run, `elevated` (`codexWindowsSandbox`), never the default and
  * never `unelevated`: the person's own choice is in the file the turn leaves unread, and a command in the unelevated
  * sandbox can read the installation's data directory. OpenAI, https://learn.chatgpt.com/docs/windows/windows-sandbox:
  * "`elevated`: ... Requires administrator-approved setup." and "`unelevated`: ... doesn't support denied read paths."
@@ -359,8 +399,26 @@ export const codexConnectorsOff = 'features.apps=false';
  * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
  * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
-export function codexArguments(turn: { platform: Platform; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
+export function codexArguments(turn: {
+    platform: Platform;
+    mode?: ChatMode | undefined;
+    model?: string | undefined;
+    effort?: Effort | undefined;
+    resume?: string | undefined;
+    /** The turn's environment, whose `codexPinnedVariables` a turn that reads the person's config.toml pins. */
+    environment?: Readonly<Record<string, string>> | undefined;
+}): string[] {
+    const args =
+        turn.mode === 'full_access'
+            ? [
+                  'exec',
+                  '--json',
+                  '--sandbox',
+                  'danger-full-access',
+                  '--skip-git-repo-check',
+                  ...[...codexFullAccessSettings, ...codexPinned(turn.environment ?? {})].flatMap((setting) => ['-c', setting]),
+              ]
+            : ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));
@@ -401,8 +459,9 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, `chats` every
  * conversation's own folder, `full-access.json` and `full-access-taken-back` what an earlier desktop kept of a standing
  * choice of Full access, removed at each start, and `mode` the record of which installation the desktop runs on, which
- * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own
- * read-only sandbox, which the desktop does not narrow, holds it (`codexArguments`).
+ * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: outside Full
+ * access only its own read-only sandbox, which the desktop does not narrow, holds it, and in Full access nothing does
+ * (`codexArguments`).
  */
 export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
 
@@ -414,12 +473,15 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
 /**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
  * `desktop` but the turn's chat folder (the turns' configurations among them), the known ones whether they exist or not,
- * refused to its file tools. The host's reference says it checks a redirection's target, and a file command it
+ * refused to its file tools. The host's maker documents that it checks a redirection's target, and a file command it
  * recognizes in Bash (`cat`, `head`), against these rules as if its own file tools read or wrote that file (Anthropic,
- * https://code.claude.com/docs/en/permissions, read 2026-11-20); no test of the real host has seen it, and a command an
- * allow rule matches is never put to the permission model. The turn's `PreToolUse` hook holds it (`hookedSettings`): in
- * Full access, and in Ask first and Auto-edit from Claude Code's floor of Full access on, it refuses such a command
- * before the host's allow rules let it run. The permission model refuses the same paths when it is asked. In a demo run
+ * https://code.claude.com/docs/en/permissions, read 2026-11-20). Where no hook rides the turn, in Plan only and, below
+ * Claude Code's floor of Full access, for a command an allow rule lets run with no card (the allow list's verbs and the
+ * forms of the person's word), the rules' hold of a redirect rests on that documentation: it is documented by the host's
+ * maker and not observed by us, since no test of the real host has seen it. A command an allow rule matches is never put to the permission model. The turn's `PreToolUse` hook
+ * holds it (`hookedSettings`): in Full access, and in Ask first and Auto-edit from Claude Code's floor of Full access on,
+ * it refuses such a command before the host's allow rules let it run. The permission model refuses the same paths when
+ * it is asked. In a demo run
  * the person's own directories (`whole`: the person's data directory and harness root) are refused whole, the folder and
  * everything under it, with no entry left open.
  */
@@ -454,9 +516,9 @@ export function dataRules(
 /**
  * The host's own refusal of an edit of the chat's own names directly in the chat folder: its instructions, and its agent
  * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold in every mode but
- * Full access in a conversation's own folder, which is its own there and is put back as the desktop placed it at the next
- * turn; the shared chat folder's hold in every mode, beside the permission model's refusal of the same places by every
- * route (`ChatScope.shared`).
+ * Full access, where the turn's folder is its own, a conversation's own and the shared chat folder alike, and is put
+ * right again before the next turn: its instructions written afresh and its agent folders holding only what the desktop
+ * placed (`ownAgentFolder`).
  */
 export function chatRules(platform: Platform, chat: string): string[] {
     const paths = platform === 'win32' ? win32 : posix;
@@ -574,9 +636,10 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
  * `JASON_CHAT_TURN=1`, in every mode, whatever the desktop inherited, so the jason it runs reads a request's content from
- * standard input only and runs a provider check's program by a bare name only; a Plan only turn carries `JASON_CONFINED=1`
- * beside it, so its jason also refuses the verbs of a person's word and of the installation, and no other turn carries
- * `JASON_CONFINED`, not even one the desktop inherited. The desktop's own calls of jason carry neither. No host's turn
+ * standard input only and runs a provider check's program by a bare name only; every turn that can only read and propose
+ * carries `JASON_CONFINED=1` beside it, Plan only on any host and every Codex turn outside Full access (Ask first, and
+ * Auto-edit, which runs as it), so its jason also refuses the verbs of a person's word and of the installation, and no
+ * other turn carries `JASON_CONFINED`, not even one the desktop inherited. The desktop's own calls of jason carry neither. No host's turn
  * carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
  * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
@@ -597,7 +660,10 @@ export function hostEnvironment(
         bundleVersion: string | null;
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
-        /** The turn's mode: Plan only alone sets `JASON_CONFINED`. Absent, a run that is no turn of a mode, none. */
+        /**
+         * The turn's mode: a turn that can only read and propose sets `JASON_CONFINED`, Plan only on any host and every Codex
+         * turn outside Full access. Absent, a run that is no turn of a mode, none.
+         */
         mode?: ChatMode;
         /**
          * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
@@ -630,7 +696,8 @@ export function hostEnvironment(
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
     env[chatTurnVariable] = '1';
-    if (options.mode === 'plan_only') env[confinedVariable] = '1';
+    const readsOnly = options.mode === 'plan_only' || (options.program === 'codex' && options.mode !== undefined && options.mode !== 'full_access');
+    if (readsOnly) env[confinedVariable] = '1';
     if (options.program === 'claude') {
         if (options.platform !== 'linux') env[scrub] = '1';
         env[maintainFolder] = '1';
@@ -657,6 +724,8 @@ export type HostLine =
     | { kind: 'refused'; forbidden?: true }
     | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
+    /** Codex said an administrator's requirements put its sandbox below the one the turn asked for (`codexNarrowed`). */
+    | { kind: 'sandbox_narrowed' }
     /**
      * The host said the turn is over: `error` null when it succeeded, else the host's own words; `refused` when it ended
      * on a 401 or 403, and `forbidden` too when on a 403.
@@ -809,8 +878,9 @@ export function claudeLine(line: string): HostLine[] {
     if (event.type === 'system' && event.subtype === 'init') {
         const session: HostLine[] = typeof event.session_id === 'string' && sessionShape.test(event.session_id) ? [{ kind: 'session', id: event.session_id }] : [];
         // The mode the turn runs in: a Full access turn whose host turned its bypass off says so here alone, as seen on 2.1.329.
+        // It comes first, so a start stopped for it names no session.
         const mode: HostLine[] = typeof event.permissionMode === 'string' && /^[A-Za-z]{1,32}$/.test(event.permissionMode) ? [{ kind: 'permission_mode', mode: event.permissionMode }] : [];
-        return [...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }, ...mode];
+        return [...mode, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
     }
     if (event.type === 'system' && event.subtype === 'api_retry') {
         if (event.error === 'authentication_failed' || event.error_status === 401) return [{ kind: 'refused' }];
@@ -866,6 +936,19 @@ function pathsOf(changes: unknown): string | undefined {
 }
 
 /**
+ * Codex's warning that an administrator's requirements (`requirements.toml`) do not allow the sandbox the turn asked for,
+ * so it runs one they allow. openai/codex at 9f2b87495b, read and not seen: core/src/config/mod.rs,
+ * `apply_requirement_constrained_value`, says "Configured value for `{field_name}` is disallowed by requirements; falling
+ * back to required value {fallback_value:?}. Details: {err}", the sandbox's field being `permission_profile` there and
+ * `sandbox_mode` in an earlier Codex; exec/src/event_processor_with_jsonl_output.rs says such a configuration warning as
+ * an `item.completed` whose item is of type `error`, with that `message`. `codex exec` forces `approval_policy = "never"`
+ * (exec/src/lib.rs), so a forbidden `danger-full-access` makes building the configuration fail instead, and Codex
+ * refuses to start (`codexFullAccessRefused`); this narrowing happens only under an automatic reviewer (AutoReview).
+ * Every other warning of Codex's is dropped.
+ */
+const codexNarrowed = /^Configured value for `(?:permission_profile|sandbox_mode)` is disallowed by requirements/;
+
+/**
  * One line of `codex exec --json`: the thread it runs as (`thread.started`), the agent's message and its tool items
  * (`item.started`, `item.completed`), and the end (`turn.completed`, `turn.failed`, `error`). A tool item is one step,
  * said when it starts; `seen` holds the items already said, so the item's completion says nothing again.
@@ -884,6 +967,9 @@ export function codexLine(line: string, seen: Set<string>): HostLine[] {
     if (event.type === 'item.started' || event.type === 'item.completed') {
         const item = event.item as ({ id?: unknown; type?: unknown; text?: unknown } & Record<string, unknown>) | null;
         if (!item || typeof item.type !== 'string') return [];
+        if (item.type === 'error') {
+            return event.type === 'item.completed' && typeof item.message === 'string' && codexNarrowed.test(item.message) ? [{ kind: 'sandbox_narrowed' }] : [];
+        }
         if (item.type === 'agent_message') {
             return event.type === 'item.completed' && typeof item.text === 'string' && item.text.trim() !== '' ? [{ kind: 'text', text: item.text }] : [];
         }

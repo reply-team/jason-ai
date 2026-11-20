@@ -45,7 +45,7 @@
           },
           "operation": { "type": "string", "minLength": 1, "maxLength": 200, "description": "The operation the send performs." },
           "role": { "type": ["null", "string"], "minLength": 1, "maxLength": 64, "description": "The role whose run reviewed it, or null for a person's review." },
-          "confined": { "const": true, "description": "Only where it is so: the review was made under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, or by any other caller that sets the variable. A pass so marked is the chat's, never a person's own, and releases nothing under an automatic mode." }
+          "confined": { "const": true, "description": "Only where it is so: the review was made under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, by a Codex turn of its chat outside Full access since 0.49.2, or by any other caller that sets the variable. A pass so marked is the chat's, never a person's own, and releases nothing under an automatic mode." }
         }
       }
     },

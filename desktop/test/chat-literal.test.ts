@@ -340,16 +340,6 @@ test('the data directory is refused by its resolved path, the home folder\'s ~ r
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, scope), runs, 'a file in the chat folder');
 });
 
-test('the shared chat folder\'s own instructions and agent settings are refused to a literal command that writes them; a conversation\'s own folder\'s are its own', () => {
-    const shared: ChatScope = { ...scope, shared: true };
-    for (const command of ['echo a >> CLAUDE.md', 'echo {} > .claude/settings.json']) {
-        assert.equal(fullAccessJudgement('Bash', { command }, shared).outcome, 'refused', command);
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `own folder: ${command}`);
-    }
-    assert.equal(fullAccessJudgement('Bash', { command: 'cat .claude/settings.json' }, shared).outcome, 'refused', 'a command that names them is refused, whatever it does with them');
-    assert.deepEqual(fullAccessJudgement('Read', { file_path: '.claude/settings.json' }, shared), runs, 'a read of them by the file tool runs');
-});
-
 test('a resolved command that clears the environment around a jason is refused by the sentence for Jason\'s own variables', () => {
     const judged = fullAccessJudgement('Bash', { command: 'env -i jason campaign list' }, scope);
     assert.equal(judged.outcome, 'refused');
