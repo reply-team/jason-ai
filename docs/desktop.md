@@ -900,13 +900,13 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test; outside Plan only, these as well: `approval approve`,
+  every time, held to the real tree by a test; for each noun with a verb on that list, its help, exactly
+  `jason <noun> --help`, which prints and changes nothing; and outside Plan only, these as well: `approval approve`,
   `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
   `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
   the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
-  the command with no card, and the act is recorded under the actor the command names; and, for each noun with a verb
-  on that list, its help, exactly `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
-  itself stays refused, as is every `jason` that starts with an option.
+  the command with no card, and the act is recorded under the actor the command names. The chat's instructions name the
+  nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
@@ -919,9 +919,9 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   above names run with no card, and every other one is a card in Ask first and Auto-edit and runs in Full
   access, as any `jason` command that no allowed verb begins does: an act that would let messages go without your
   approval, a standing approval, another preference, a campaign's send mode, is one of them. Pausing an agent, adding
-  someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person; recording
-  a verdict on a reply can let a drafted answer go under a standing approval, so outside Plan only it is a card in Ask
-  first and Auto-edit and runs in Full access. In every mode, refused: any `reply` command
+  someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
+  a verdict on a reply is a card in Ask first and Auto-edit and runs in Full access: a verdict of yours can lift the lock
+  an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
   names that directory, a command that names `JASON_CONFINED` or `JASON_CHAT_TURN`, Jason's own variables, which Jason

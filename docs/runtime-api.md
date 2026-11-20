@@ -451,9 +451,10 @@ question, and for one whose `inbound_reply` anybody but the runtime changed befo
   stopped here. **Only a person's own later verdict on the same reply in that verdict's campaign lifts the
   lock**: one recorded under a `human` actor that names the person (`human:<Name>`), outside any run, that states a
   `nature` other than `opt_out`, and not under the chat's mark: a verdict recorded under the `Jason-Confined` header the
-  CLI sends with `JASON_CONFINED` set, as in a chat turn in Plan only, says `confined` on its line and is the chat's, not
-  the person's own, so it lifts nothing, and
-  a standing approval takes it for no person's verdict unless it carries a person's answered decision, which is read
+  CLI sends with `JASON_CONFINED` set, as a chat's verdict was before 0.49.2 or any caller that sets the variable records
+  one, says `confined` on its line and is the chat's, not the person's own, so it lifts nothing. A verdict the desktop's
+  chat records in Ask first, Auto-edit or Full access carries no mark: under a `human` actor that names the person, it
+  lifts the lock as the person's own. A standing approval takes a marked verdict for no person's verdict unless it carries a person's answered decision, which is read
   as the decision records it. A role's or an attempt's own verdict never lifts it, nor does a
   `human` actor with no name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a
   run may carry an answer

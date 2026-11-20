@@ -66,7 +66,7 @@
       },
       {
         "properties": {
-          "key": { "const": "confined", "description": "Since 0.42.0: the item's input was edited under the desktop's chat marker, the Jason-Confined header a chat turn in Plan only or any other caller that sets JASON_CONFINED sends, and the item was not marked yet. Once marked it stays marked: a send so marked waits for the person whatever the send mode." },
+          "key": { "const": "confined", "description": "Since 0.42.0: the item's input was edited under the desktop's chat marker, the Jason-Confined header a chat turn sent before 0.49.2 and any other caller that sets JASON_CONFINED sends, and the item was not marked yet. Once marked it stays marked: a send so marked waits for the person whatever the send mode." },
           "old": { "const": false },
           "new": { "const": true }
         }

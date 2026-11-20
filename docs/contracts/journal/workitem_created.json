@@ -29,7 +29,7 @@
           "priority": { "type": "integer" },
           "not_before": { "type": ["string", "null"], "format": "date-time", "description": "The moment before which the work does not start, or null." },
           "due_at": { "type": ["string", "null"], "format": "date-time", "description": "The moment the work expires if it has not finished, or null." },
-          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: the item was created under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop in Plan only, or by any other caller that sets the variable. A send so marked waits for the person whatever the send mode. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a request made around the CLI carries no marker." }
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: the item was created under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set: by a chat turn of Jason Desktop before 0.49.2, or by any other caller that sets the variable. A send so marked waits for the person whatever the send mode. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a request made around the CLI carries no marker." }
         }
       }
     }

@@ -635,8 +635,10 @@ a reply of theirs landed since and waits for a verdict, the row is superseded an
 Whatever the pre-flight refuses is refused before the mode is asked, and work released under it is still held by an
 open block of its account.
 
-**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which the desktop's chat sets on
-a turn in Plan only, and any other caller may set) carries the header `Jason-Confined`. The runtime records it on the work it creates under it, as
+**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which any caller may set, and
+which every turn of the desktop's chat set before 0.49.2) carries the header `Jason-Confined`. A Plan only turn still
+sets the variable, and writes nothing, so a marked line is one a chat wrote before 0.49.2 or one any other confined
+caller wrote. The runtime records it on the work it creates under it, as
 `confined: true` on the `workitem_created` line, and on the first edit of its input made under it, as a
 `workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
 back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
@@ -657,7 +659,9 @@ there is recorded under the actor the command names, as a line written from a te
 the campaign's send mode. Which commands such a turn runs, and which it shows the person as a card first, is the
 turn's mode's to decide ([desktop](desktop.md)). Like `JASON_CONFINED`, the variable holds the call it is set on and
 nothing that call starts: a runtime the CLI starts, the role work a runtime launches and the terminal `session open`
-opens drop it. A Plan only turn sets both.
+opens drop it. The runtime's one line for it is in
+[`AiRoleCommand`](../dotnet/src/Jason.Runtime/Execution/AiRoleCommand.cs), which takes both variables out of the
+environment of the role work it launches. A Plan only turn sets both.
 
 Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
 operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
