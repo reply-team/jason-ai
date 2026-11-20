@@ -77,9 +77,41 @@ export interface About {
     } | null;
 }
 
-/** The header: one paragraph in the desktop's words, the first of every turn's message. */
-export function header(about: About): string {
-    const lead = 'Jason, not the person, wrote this first paragraph.';
+/** The longest account name the header names the person by, in characters. */
+export const accountLimit = 256;
+
+/** One character that draws nothing or ends a line: `unseen`, without the global flag a test of one name must not carry. */
+const unseenOne = new RegExp(unseen.source, 'u');
+
+/**
+ * The sentence that names the person a turn's words come from by the actor the carried `jason` writes a person's acts
+ * under: this account's name as the operating system gives it (`os.userInfo().username` here, `Environment.UserName`
+ * there), after `human:`. A name of letters of any script, digits, dots, underscores and hyphens stands as it is; any
+ * other is one JSON string with the prefix inside it, so a space a shell would split at or a quote cannot end it. A name
+ * that cannot stand on one line exactly as the system gives it (none, empty, longer than `accountLimit`, white space at
+ * either end, or a character that draws nothing or ends a line) is never given or changed: the sentence says to ask.
+ */
+function personSentence(account: unknown): string {
+    const usable =
+        typeof account === 'string' &&
+        account.length > 0 &&
+        Array.from(account).length <= accountLimit &&
+        account.trim() === account &&
+        !unseenOne.test(account);
+    if (!usable) {
+        return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word.";
+    }
+    const actor = `human:${account}`;
+    return `The person you talk with acts as ${/^[\p{L}\p{N}._-]+$/u.test(account) ? actor : quoted(actor)}.`;
+}
+
+/**
+ * The header: one paragraph in the desktop's words, the first of every turn's message. With `account`, the person is
+ * named right after Jason's own sentence (`personSentence`); a turn always gives it, null where the name could not be
+ * read, and a row about the rest of the header leaves it out, which says nothing of the person.
+ */
+export function header(about: About, account?: string | null): string {
+    const lead = ['Jason, not the person, wrote this first paragraph.', ...(account === undefined ? [] : [personSentence(account)])].join(' ');
     const campaign = about.campaign;
     if (about.main === true) {
         return `${lead} This conversation is the Feed, the person's main chat: it is about no campaign, and a campaign made in it keeps a conversation of its own.`;

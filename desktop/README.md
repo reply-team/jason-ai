@@ -231,7 +231,10 @@ then written again with its mode and its shape. A record with no `folder` whose 
 that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
 does not find it.
 
-- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
+- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: the person, as
+  `human:<account>` by the name the operating system gives this account (`os.userInfo().username`, which the carried
+  `jason`'s `Environment.UserName` reads too), quoted where a letter, digit, dot, underscore or hyphen is not all it
+  holds, and a sentence that says to ask where it gives none that stands on one line as it is; then which campaign the
   conversation is about, its name quoted on one line, with every control, format and separator character dropped and
   cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
   A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the desktop did not

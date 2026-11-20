@@ -713,8 +713,9 @@ own transcript. A set-up chat has the same acts in its own bar, as **Rename**, *
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
 the session each host named for it, and what the page drew, as text, within 2 MB. Every turn begins with a paragraph the
-desktop writes, naming the conversation's campaign and its folder, and a turn that cannot resume its host's session
-starts a fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
+desktop writes, naming you by your account's name, as `human:<name>`, the actor the chat writes what it does on your
+word under, then the conversation's campaign and its folder, and a turn that cannot resume its host's session starts a
+fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
