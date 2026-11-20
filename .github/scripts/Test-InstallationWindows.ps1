@@ -30,6 +30,13 @@ uploads, and they are what a person reads.
                     file, the runtime running from it, the logon registration naming it, the move's record done, the
                     command-line install retired; and whether the build says it is a test build, as JASON_PROOF_BUILD
                     says it must (test on CI's build, release on the release's packages). The uninstall is the next step's
+  FromOneInstallation   the one-installation release (-OneInstallation, the folder its files were fetched to), Jason Desktop
+                    alone, installed by its own install.ps1, a runtime running from the jason it carries and no window open,
+                    updated by that jason's own `jason update apply --version` from the feed served on this machine: its
+                    Jason Desktop's updater installs this version, and the verb then runs this version's carried jason
+                    update apply --finish, which ends complete, as the document it prints says (Get-HandedFinishFault);
+                    Installed apps lists one entry, this version's, the carried jason says this version, a new shell finds
+                    it, and the runtime answers again. The uninstall is the next step's
   Compare           -Name against -Against: every line equal but those of the data directory, which an uninstall keeps
   ModulePath        a reading, never a failure: the module path Windows PowerShell rebuilds from an empty one
   Begin, End        a leg's two ends, so that no leg's failure keeps the legs after it from running. Begin records the
@@ -61,7 +68,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'ServedFeed', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'ServedFeed', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'FromOneInstallation', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
     [string] $Executable,
     [string] $Leg,
     [string[]] $Needs = @(),
@@ -71,6 +78,7 @@ param(
     [string] $Version,
     [string] $Script,
     [string] $Previous,
+    [string] $OneInstallation,
     [string] $Next,
     [string] $Out = (Join-Path $env:RUNNER_TEMP 'installation'),
     [string] $Name,
@@ -400,6 +408,41 @@ function Read-Document([string] $said) {
     $lines = @(@($said -split "`n") | Where-Object { $_.TrimStart().StartsWith('{') })
     if ($lines.Count -eq 0) { return $null }
     try { return ($lines[-1] | ConvertFrom-Json) } catch { return $null }
+}
+
+# What the document the one-installation release's own jason update apply printed lacks to say that the update was handed
+# to its Jason Desktop and finished by this build's jason. That verb's own part ends at the swap (CarriedUpdate.InstallAsync
+# at v0.49.0): Jason Desktop asked to download $toVersion and wait for the go, then the application is $toVersion. It then
+# runs the application's carried jason, $toVersion's own file by then, with update apply --finish, and prints that one's
+# document with its own steps in front (UpdateCommands.HandToFinishAsync at v0.49.0); the finishing jason alone says the
+# runtime healthy at $toVersion and the update complete, in this build's UpdateApplier's words. Empty where the document
+# says all of it, in that order; else the first thing it lacks, in one sentence. The macOS proof's from-one-installation
+# reads the same document by the same rule, in the same words.
+function Get-HandedFinishFault($document, [string] $fromVersion, [string] $toVersion) {
+    if (-not $document) { return 'it printed no document' }
+    $members = @($document.PSObject.Properties.Name)
+    foreach ($member in @('from', 'to', 'step', 'steps')) {
+        if ($members -cnotcontains $member) { return "its document has no $member" }
+    }
+    if ("$($document.from)" -cne $fromVersion -or "$($document.to)" -cne $toVersion) { return "its document says $($document.from) -> $($document.to), not $fromVersion -> $toVersion" }
+    if ("$($document.step)" -cne 'complete') { return "its document ends at the step $($document.step), not complete" }
+    $asked = "asked: Jason Desktop asked to download $toVersion and wait for the go, request "
+    $wanted = @(
+        @("$asked<id>", ('^' + [regex]::Escape($asked) + '\S+$')),
+        @("swapped: the application is $toVersion", ('^' + [regex]::Escape("swapped: the application is $toVersion") + '$')),
+        @("healthy: $toVersion, <n> migrations applied", ('^' + [regex]::Escape("healthy: $toVersion") + '(\+[^,]*)?, [0-9]+ migrations applied$')),
+        @("complete: $fromVersion -> $toVersion", ('^' + [regex]::Escape("complete: $fromVersion -> $toVersion") + '$'))
+    )
+    $said = @($document.steps | ForEach-Object { "$_" })
+    $at = 0
+    $after = ''
+    foreach ($pair in $wanted) {
+        while ($at -lt $said.Count -and $said[$at] -cnotmatch $pair[1]) { $at++ }
+        if ($at -ge $said.Count) { return $(if ($after) { 'no step "{0}" follows "{1}"' -f $pair[0], $after } else { 'no step "{0}"' -f $pair[0] }) }
+        $after = $said[$at]
+        $at++
+    }
+    return ''
 }
 
 # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, read whole: each item as the JSON the
@@ -2181,6 +2224,55 @@ switch ($Step) {
             Say 'a test build, and it says so: jason --version on standard error, and test_build: true in the runtime''s report'
         }
         exit 0
+    }
+
+    'FromOneInstallation' {
+        # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.ps1 from its own
+        # assets, which runs its setup silently and starts no window, then a runtime started from the jason it carries.
+        if (-not $OneInstallation -or -not $Feed -or -not $Version) { Fail '-OneInstallation, -Feed and -Version are needed.' }
+        $quiet = @{ JASON_Update__CheckEnabled = 'false' }
+        $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $OneInstallation 'install.ps1')) @{ JASON_INSTALL_FEED = $OneInstallation }
+        if ($old.Exit -ne 0) { Fail "the one-installation release's install.ps1 exited with $($old.Exit)" }
+        $fromVersion = Read-Version $carried
+        if (-not $fromVersion -or $fromVersion -ceq $Version) { Fail "the one-installation release's install.ps1 left '$fromVersion' at $app, not a release before $Version" }
+        if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -ne 0) { Fail "a window of Jason Desktop $fromVersion runs after its install.ps1, which starts none" }
+        # A first start migrates a new database and can outlast the start's own wait, which then says the runtime may still
+        # be starting: jason runtime status is asked until it answers, as for the previous release's runtime.
+        $runtime = Invoke-Program $carried @('runtime', 'start') $quiet
+        if ($runtime.Exit -ne 0) { Wait-Until { (Invoke-Program $carried @('runtime', 'status') $quiet 60).Exit -eq 0 } 180 "a runtime answering $fromVersion's carried jason runtime status" }
+        Say "Jason Desktop $fromVersion installed by its own install.ps1 at $app, no window open, and a runtime answering from its carried jason"
+
+        # Its carried jason update apply, pinned to this version, from the feed served on this machine, with no window open:
+        # it hands the update to its own Jason Desktop, whose updater checks this version's setup and runs it, then runs this
+        # version's carried jason update apply --finish, and prints that one's document with its own steps in front.
+        $server = Start-FeedServer $Feed 8099 (Join-Path $Out 'feed-server-from-one-installation.log')
+        try {
+            $update = Invoke-Program $carried @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
+            Set-Content -LiteralPath (Join-Path $Out 'update-from-one-installation.json') -Value $update.Said
+            if ($update.Exit -ne 0) { Fail "$fromVersion's carried jason update apply --version $Version exited with $($update.Exit)" }
+        } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+        }
+        $fault = Get-HandedFinishFault (Read-Document $update.Said) $fromVersion $Version
+        if ($fault) { Fail "$fromVersion's carried jason update apply --version $Version does not say it handed the update to its Jason Desktop and this version's carried jason finished it: $fault" }
+        Say "$fromVersion's own carried jason update apply --version $Version, with no window open, handed the update to its Jason Desktop, whose updater installed $Version, then ran this version's carried jason update apply --finish, which ended complete, $fromVersion -> $Version"
+
+        # This version's Jason Desktop, by the one entry Installed apps lists, and its carried jason say this version.
+        $entries = @(Get-JasonUninstallEntries)
+        if ($entries.Count -ne 1) { Fail "Installed apps lists $($entries.Count) Jason entries after the update, not one" }
+        $listed = if ($entries[0].PSObject.Properties['DisplayVersion']) { [string]$entries[0].DisplayVersion } else { 'no version' }
+        if ($listed -cne $Version) { Fail "Installed apps' Jason entry says $listed after the update, not $Version" }
+        if ((Read-Version $carried) -cne $Version) { Fail "$carried is $(Read-Version $carried) after the update, not $Version" }
+        $said = "$((Invoke-Program $carried @('--version') $quiet 120).Said)".Trim()
+        if ((($said -split '\+')[0]) -cne $Version) { Fail "the carried jason says '$said' after the update, not $Version" }
+        Say "Installed apps lists one Jason entry, Jason Desktop $Version, and the carried jason at $carried says $Version"
+
+        # A terminal opened from now on finds that jason, and the runtime the finish started answers.
+        $found = @(Find-InNewShell 'jason')
+        if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
+        if ($found[0] -ine $carried -or (($found[1] -split '\+')[0]) -cne $Version) { Fail "after the update a new shell finds '$($found -join ' ')', not $carried saying $Version" }
+        if ((Invoke-Program $carried @('runtime', 'status') $quiet 60).Exit -ne 0) { Fail 'no runtime answers after the update' }
+        Say "a new shell finds jason at $carried and it says $Version, and the runtime answers again"
     }
 
     'WayBack' {

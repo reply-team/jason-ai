@@ -46,6 +46,16 @@
 #                                  the move's record done, the command-line install retired; and whether the build says it
 #                                  is a test build, as JASON_PROOF_BUILD says it must (test on CI's build, release on the
 #                                  release's packages). The uninstall is the next step's
+#   from-one-installation <release> <feed> <version>
+#                                  the one-installation release (<release>, the folder its files were fetched to), Jason
+#                                  Desktop alone, installed by its own install.sh, a runtime running from the jason it carries
+#                                  and no window open, updated by that jason's own jason update apply --version from a served
+#                                  feed: its Jason Desktop's updater installs this version, and the verb then runs this
+#                                  version's carried jason update apply --finish, which ends complete, as the document it
+#                                  prints says (handed_read, by Test-InstallationWindows.ps1's rule and words); the
+#                                  application and its carried jason say this version, a new login shell finds that jason
+#                                  through the wrapper, and the runtime answers again. Gatekeeper's word and the uninstall
+#                                  are the next steps'
 #   requirement <zip>              install.sh's APP_REQUIREMENT against a published application: admitted, and refused for another team
 #   held                           the machine now compared with the machine before, whole, through no leg's begin; and
 #                                  fails when any compare found the machine after an uninstall not the one before
@@ -1313,6 +1323,94 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
         [ "$test_build" = true ] || fail "CI's test build's runtime report does not carry test_build: true"
         say "a test build, and it says so: jason --version on standard error, and test_build: true in the runtime's report"
     fi
+    ;;
+
+from-one-installation)
+    one="$1"; feed="$2"; version="$3"
+    # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.sh from its own
+    # assets, which opens nothing, then a runtime started from the jason it carries. A first start migrates a new database
+    # and can outlast the start's own wait, which then says the runtime may still be starting: jason runtime status is
+    # asked until it answers.
+    within 300 "the one-installation release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$one" sh "$one/install.sh" || fail "the one-installation release's install.sh failed"
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications after the one-installation release's install.sh"
+    carried="$placed/Contents/Resources/bundle/jason"
+    old="$(version_of "$placed")"
+    { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the one-installation release's install.sh left '$old' at $placed, not a release before $version"
+    [ -z "$(pgrep -f "$placed/Contents/MacOS/" || true)" ] || fail "a process of Jason Desktop $old runs after its install.sh, which opens nothing"
+    if ! within 120 "$old's jason runtime start" "$carried" runtime start > "$OUT/one-installation-runtime-start.txt" 2>&1; then
+        cat "$OUT/one-installation-runtime-start.txt"
+        wait_until 180 "a runtime answering $old's carried jason runtime status" sh -c '"$0" runtime status > /dev/null 2>&1' "$carried"
+    fi
+    say "Jason Desktop $old installed by its own install.sh at $placed, no window open, and a runtime answering from its carried jason"
+
+    # Its carried jason update apply, pinned to this version, from the feed served on this machine, with no window open:
+    # it hands the update to its own Jason Desktop, whose updater (Squirrel, then ShipIt once the application has quit)
+    # installs this version, then runs this version's carried jason update apply --finish, and prints that one's document
+    # with its own steps in front. Read by the rule, and in the words, of Test-InstallationWindows.ps1's
+    # Get-HandedFinishFault, which says where each step is said.
+    server=""
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true' EXIT
+    serve_feed "$feed" "$OUT/feed-server-one-installation.log"
+    status=0
+    within 900 "$old's jason update apply --version $version" "$carried" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/update-from-one-installation.json" 2> "$OUT/update-from-one-installation.err" || status=$?
+    cat "$OUT/update-from-one-installation.err"
+    cat "$OUT/update-from-one-installation.json"
+    [ "$status" -eq 0 ] || fail "$old's carried jason update apply --version $version exited with $status"
+    handed_read="$(python3 -c 'import json, re, sys
+path, old, new = sys.argv[1:4]
+lines = [line for line in open(path, encoding="utf-8").read().splitlines() if line.lstrip().startswith("{")]
+def fault():
+    try:
+        doc = json.loads(lines[-1]) if lines else None
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        return "it printed no document"
+    for key in ("from", "to", "step", "steps"):
+        if key not in doc:
+            return "its document has no " + key
+    if doc["from"] != old or doc["to"] != new:
+        return "its document says %s -> %s, not %s -> %s" % (doc["from"], doc["to"], old, new)
+    if doc["step"] != "complete":
+        return "its document ends at the step %s, not complete" % doc["step"]
+    asked = "asked: Jason Desktop asked to download %s and wait for the go, request " % new
+    wanted = [
+        (asked + "<id>", "^" + re.escape(asked) + r"\S+$"),
+        ("swapped: the application is " + new, "^" + re.escape("swapped: the application is " + new) + "$"),
+        ("healthy: %s, <n> migrations applied" % new, "^" + re.escape("healthy: " + new) + r"(\+[^,]*)?, [0-9]+ migrations applied$"),
+        ("complete: %s -> %s" % (old, new), "^" + re.escape("complete: %s -> %s" % (old, new)) + "$"),
+    ]
+    steps = [str(step) for step in doc["steps"]]
+    at, after = 0, ""
+    for named, pattern in wanted:
+        while at < len(steps) and not re.search(pattern, steps[at]):
+            at += 1
+        if at >= len(steps):
+            return "no step \"%s\" follows \"%s\"" % (named, after) if after else "no step \"%s\"" % named
+        after = steps[at]
+        at += 1
+    return ""
+print(fault())' "$OUT/update-from-one-installation.json" "$old" "$version")" || fail "the document $old's jason update apply printed could not be read"
+    [ -z "$handed_read" ] || fail "$old's carried jason update apply --version $version does not say it handed the update to its Jason Desktop and this version's carried jason finished it: $handed_read"
+    say "$old's own carried jason update apply --version $version, with no window open, handed the update to its Jason Desktop, whose updater installed $version, then ran this version's carried jason update apply --finish, which ended complete, $old -> $version"
+
+    # This version's application and its carried jason say this version.
+    [ "$(app)" = "$placed" ] || fail "the application is at '$(app)' after the update, not $placed"
+    desktop="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$placed/Contents/Info.plist" 2>&1 || true)"
+    [ "$desktop" = "$version" ] || fail "Jason Desktop at $placed says $desktop after the update, not $version"
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed carries $(version_of "$placed") after the update, not $version"
+    said="$(within 60 'the carried jason --version' "$carried" --version | cut -d+ -f1)" || fail "the carried jason --version failed after the update"
+    [ "$said" = "$version" ] || fail "the carried jason says $said after the update, not $version"
+    say "Jason Desktop at $placed says $version, and its carried jason says $version"
+
+    # A terminal opened from now on finds that jason, through the wrapper, and the runtime the finish started answers.
+    { [ -f "$WRAPPER" ] && grep -q "$carried" "$WRAPPER"; } || fail "the wrapper at $WRAPPER does not run $carried after the update"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    within 60 'jason runtime status after the update' "$carried" runtime status > /dev/null 2>&1 || fail "no runtime answers after the update"
+    say "a new login shell finds jason at $WRAPPER, running $carried and saying $version, and the runtime answers again"
     ;;
 
 way-back)
