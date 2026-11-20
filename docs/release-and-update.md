@@ -1712,9 +1712,12 @@ touched. While Jason Desktop is open it refuses with `desktop_running` before an
 `--wait-for <pid>` first waits up to two minutes for that process to end, and only then reads what it will take off,
 which is how the menu item starts it before it quits. On macOS it refuses with `update_in_progress` before anything is
 removed, a dry run aside, while ShipIt installs an update of Jason Desktop, its launchd job
-`ai.jasonharness.desktop.ShipIt` running: the swap is never cut off part-way, and nothing else refuses it, since the
-application has quit for the swap and ShipIt runs from Squirrel's framework inside the bundle. Wait for it to end, then
-run it again. On Windows, run from a terminal, it also refuses with
+`ai.jasonharness.desktop.ShipIt` running or set to run: the swap is never cut off part-way, and nothing else refuses it,
+since the application has quit for the swap and ShipIt runs from Squirrel's framework inside the bundle. Run it again
+when the update has ended; from the Jason menu, reopen Jason and choose **Uninstall Jason…** again. If the update never
+ends, `launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
+`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out.
+On Windows, run from a terminal, it also refuses with
 `jason_running` at once, with no wait, naming each, while another process runs the carried `jason` in any session of
 this account — a runtime still starting, a runtime of another data directory, a `jason journal watch`, a call of an agent
 host opened by hand, a task that runs whether the person is signed in or not — because the application's uninstaller, which looks in every session by the image's path,

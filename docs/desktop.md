@@ -1162,7 +1162,9 @@ removal takes them off too.
   Jason quit. Either is the one uninstall, with the Windows uninstall's steps and, just before the application, the
   application's own state under `~/Library` and Squirrel's update state. It takes out the job Squirrel leaves loaded
   in launchd after an update, `ai.jasonharness.desktop.ShipIt`, too, and while that job is still installing an update
-  it refuses with `update_in_progress` and takes nothing off: wait for the update to end, then run it again. The menu
+  it refuses with `update_in_progress` and takes nothing off: wait for the update to end, then run it again. If the
+  update never ends, `launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
+  `launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out. The menu
   item asks first, with a box for deleting the data directory too, quits Jason and runs the same uninstall, which
   deletes Jason.app last and writes what it did to the file the dialog names. A refusal from the menu is in that file
   too, and running it again from the menu is reopening Jason and choosing **Uninstall Jason…** again. When Jason will

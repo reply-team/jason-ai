@@ -21,11 +21,18 @@ public sealed partial class UninstallCarriedTests
     /// <summary>What the refusal says to do, at a terminal and from the Jason menu.</summary>
     private const string RunItAgain = "run it again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason… again.";
 
+    /// <summary>
+    /// What the refusal says of an update that never ends, such as a job launchd keeps starting again: the commands that
+    /// show the job and take it out.
+    /// </summary>
+    private const string NeverEnds = "If the update never ends, `launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and `launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out.";
+
     private static readonly LaunchdJob ShipItInstalling = new(LaunchdJobState.Running, Pid: 6262);
 
     /// <summary>
     /// The look at the verb's start, the first line: a job that reads running, or set to run with no process of its own,
-    /// refuses before anything is removed, with the update's own code.
+    /// refuses before anything is removed, with the update's own code, and says what shows and takes out the job of an update
+    /// that never ends.
     /// </summary>
     [Theory]
     [InlineData(false, 6262)]
@@ -52,7 +59,7 @@ public sealed partial class UninstallCarriedTests
 
         var process = pid is null ? string.Empty : $"process {pid}, ";
         Assert.Contains($"ShipIt is installing an update of Jason Desktop ({process}the launchd job {DesktopRemoval.ShipItLabel})", said, StringComparison.Ordinal);
-        Assert.Contains($"so nothing was removed: {RunItAgain}", said, StringComparison.Ordinal);
+        Assert.Contains($"so nothing was removed: {RunItAgain} {NeverEnds} The data directory is kept", said, StringComparison.Ordinal);
         Assert.DoesNotContain("jason update status", said, StringComparison.Ordinal);
         Assert.Equal([DesktopRemoval.ShipItLabel], remover.LaunchdReads);
         Assert.Empty(remover.Calls);

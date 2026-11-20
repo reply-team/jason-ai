@@ -117,7 +117,11 @@ public static class UninstallCommand
           - on macOS, refused before anything is removed while ShipIt installs an update of Jason Desktop,
             its launchd job ai.jasonharness.desktop.ShipIt running or set to run (update_in_progress): run this
             again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason…
-            again. A job launchctl could not be asked about refuses nothing: its step leaves it, and says so.
+            again. If the update never ends, launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt shows
+            the job and launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt takes it out. A job
+            launchctl could not be asked about refuses nothing: its step reads it again, takes it out if it is
+            loaded then, keeps it, ShipIt's cache, the application and its state if it is running then, and
+            leaves it and says so if it is still unread.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
             jason, in any session (jason_running), at once and with no wait: a runtime still starting, a
             runtime of another data directory, a journal watch, a call of an agent host opened by hand. The
@@ -750,9 +754,11 @@ public static class UninstallCommand
     /// names its process or whose own state is any but <c>not running</c>, <c>spawn scheduled</c> included, so a ShipIt
     /// launchd is about to start again refuses as one running does. The refusal says to run the uninstall again when the
     /// update has ended, from a terminal or the Jason menu, and names no <c>jason update</c> verb, which knows nothing of an
-    /// update the application installs. A job launchctl could not be asked about is no answer either way, and refuses
-    /// nothing here: its step reads it again and leaves one still not read as it was, saying so, and the last look before
-    /// the application goes reads it once more, where a ShipIt found running leaves the application.
+    /// update the application installs; for an update that never ends, as a job launchd keeps starting again would be, it
+    /// names the <c>launchctl</c> commands that show the job and take it out. A job launchctl could not be asked about is no
+    /// answer either way, and refuses nothing here: its step reads it again and leaves one still not read as it was, saying
+    /// so, and the last look before the application goes reads it once more, where a ShipIt found running leaves the
+    /// application.
     /// </remarks>
     private static string? UpdateBeingInstalled(DesktopPlan desktop, SetupPlaces places, UninstallOptions options)
     {
@@ -764,7 +770,10 @@ public static class UninstallCommand
         var process = desktop.ShipIt.Pid is { } pid ? string.Create(CultureInfo.InvariantCulture, $"process {pid}, ") : string.Empty;
         return $"ShipIt is installing an update of Jason Desktop ({process}the launchd job {DesktopRemoval.ShipItLabel}), and this would remove the "
             + "application from under it, so nothing was removed: run it again when the update has ended; from the Jason menu, reopen Jason and "
-            + "choose Uninstall Jason… again. The data directory is kept either way unless --purge-data says otherwise.";
+            + "choose Uninstall Jason… again. If the update never ends, "
+            + $"`launchctl print gui/$(id -u)/{DesktopRemoval.ShipItLabel}` shows the job and "
+            + $"`launchctl bootout gui/$(id -u)/{DesktopRemoval.ShipItLabel}` takes it out. "
+            + "The data directory is kept either way unless --purge-data says otherwise.";
     }
 
     /// <summary>

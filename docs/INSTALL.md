@@ -738,7 +738,9 @@ skills it recorded in agent hosts' folders — and an older command-line install
 Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS (*Jason Desktop*, below). Run from a
 terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.
 On macOS, while Jason Desktop's updater installs an update, it refuses with `update_in_progress` before anything is
-removed: wait for the update to end, then run it again.
+removed: wait for the update to end, then run it again. If the update never ends,
+`launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
+`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no
