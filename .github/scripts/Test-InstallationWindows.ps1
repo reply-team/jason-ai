@@ -373,12 +373,13 @@ function Save-JasonLogs([string] $leg) {
 
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included. Given a
 # file to keep it in, each line is written there as it is said, so a run the bound ends leaves what it said before it. At
-# the bound every process this PowerShell started is ended with every process under it, then the step fails.
+# the bound the program's own process is ended with every process under it, then the step fails.
 function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600, [string] $keep = '') {
     $saved = @{}
     foreach ($variable in $environment.Keys) { $saved[$variable] = [Environment]::GetEnvironmentVariable($variable); [Environment]::SetEnvironmentVariable($variable, $environment[$variable]) }
     try {
         if ($keep) { [IO.File]::WriteAllText($keep, '') }
+        $began = Get-Date
         $job = Start-ThreadJob -ArgumentList $file, $arguments, $keep -ScriptBlock {
             param($program, $words, $kept)
             $lines = (& $program @words 2>&1 | ForEach-Object { $line = "$_"; if ($kept) { Add-Content -LiteralPath $kept -Value $line }; $line }) -join "`n"
@@ -388,13 +389,29 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
             $what = "$(Split-Path -Leaf $file) $($arguments -join ' ')"
             Write-Host "$what had not ended after $seconds s"
             Write-JasonProcesses
-            # Each process this PowerShell started, the program among them, and every one under it, by its parent's id: a
-            # program that started others leaves none running past its bound. Each id taken once.
+            # The program's own process - the one this PowerShell started for it, running its file, created once its run
+            # began, never a helper the step started before it - and every process under it, so that a program that started
+            # others leaves none running past its bound. A process is under another only where it was created at or after
+            # that one, so that one whose dead parent's id was given again to a process of ours is not taken; and this
+            # PowerShell's ancestors and the runner's own processes are never taken, whatever the table says of them.
             $all = @(Get-CimInstance -ClassName Win32_Process)
+            $byId = @{}
+            foreach ($process in $all) { $byId[[int] $process.ProcessId] = $process }
+            $ancestors = [System.Collections.Generic.HashSet[int]]::new()
+            $at = [int] $PID
+            while ($byId.ContainsKey($at) -and $ancestors.Add([int] $byId[$at].ParentProcessId)) { $at = [int] $byId[$at].ParentProcessId }
+            $image = "$((Get-Command -Name $file -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
+            $leaf = Split-Path -Leaf $(if ($image) { $image } else { $file })
+            if (-not [IO.Path]::HasExtension($leaf)) { $leaf += '.exe' }
             $ids = [System.Collections.Generic.List[int]]::new()
-            foreach ($started in @($all | Where-Object { $_.ParentProcessId -eq $PID -and $_.Name -ne 'conhost.exe' })) { if (-not $ids.Contains([int] $started.ProcessId)) { $ids.Add([int] $started.ProcessId) } }
-            for ($at = 0; $at -lt $ids.Count; $at++) {
-                foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) { if (-not $ids.Contains([int] $child.ProcessId)) { $ids.Add([int] $child.ProcessId) } }
+            foreach ($own in @($all | Where-Object { [int] $_.ParentProcessId -eq $PID -and $_.CreationDate -ge $began -and "$($_.Name)" -ieq $leaf })) { $ids.Add([int] $own.ProcessId) }
+            for ($index = 0; $index -lt $ids.Count; $index++) {
+                $parent = $byId[$ids[$index]]
+                foreach ($child in @($all | Where-Object { [int] $_.ParentProcessId -eq $ids[$index] -and $_.CreationDate -ge $parent.CreationDate })) {
+                    $id = [int] $child.ProcessId
+                    if ($ids.Contains($id) -or $ancestors.Contains($id) -or $id -eq $PID -or "$($child.Name)" -like 'Runner.*') { continue }
+                    $ids.Add($id)
+                }
             }
             foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
             Fail "$what did not end within $seconds s"
@@ -2337,10 +2354,14 @@ switch ($Step) {
         if ($listed -cne $Version) { Fail "Installed apps' Jason entry says $listed after the update, not $Version" }
 
         # Nothing of the update is left running: an update asked for from a terminal with no window open opens none, and its
-        # setup and whatever else ran from the updater's folder have ended. Each one left is named: the uninstall after this
-        # step opens a window and waits for it, and would take one left here for its own.
-        $stillRunning = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater)
-        if ($stillRunning.Count -ne 0) { Fail "the update, asked for from a terminal with no window open, left these running: $(($stillRunning | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
+        # setup and whatever else ran from the updater's folder have ended, given 30 s to, as the setup can still be ending
+        # when Installed apps' entry first says this version. Each one left is named: the uninstall after this step opens a
+        # window and waits for it, and would take one left here for its own.
+        $leftOf = { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater) }
+        $graceUntil = [DateTime]::UtcNow.AddSeconds(30)
+        $stillRunning = @(& $leftOf)
+        while ($stillRunning.Count -ne 0 -and [DateTime]::UtcNow -lt $graceUntil) { Start-Sleep -Seconds 1; $stillRunning = @(& $leftOf) }
+        if ($stillRunning.Count -ne 0) { Fail "the update, asked for from a terminal with no window open, left these running 30 s after Installed apps said this version: $(($stillRunning | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
 
         # Its carried jason says this version.
         if ((Read-Version $carried) -cne $Version) { Fail "$carried is $(Read-Version $carried) after the update, not $Version" }

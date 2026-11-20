@@ -1141,9 +1141,10 @@ jobs:
           ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
           # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
-          # a leg its begin does not run ends its step green too, and never reaches its end.
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
           $ended = Join-Path $env:OUT 'legs-ended.txt'
-          $handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } else { 'is not proven here: its leg was not run' }
+          $handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'cancelled') { 'is not proven here: its leg was cancelled' } else { 'is not proven here: its leg was not run' }
           @(
             '### What this job does not prove',
             "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.",
@@ -1417,9 +1418,11 @@ jobs:
           ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
           # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
-          # a leg its begin does not run ends its step green too, and never reaches its end.
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
           if [ "$ONE_INSTALLATION_LEG" = success ] && grep -qxF -- "$ONE_INSTALLATION_LEG_NAME" "$OUT/legs-ended.txt" 2>/dev/null; then handed="is proven here, by its leg"
           elif [ "$ONE_INSTALLATION_LEG" = failure ]; then handed="is not proven here: its leg failed"
+          elif [ "$ONE_INSTALLATION_LEG" = cancelled ]; then handed="is not proven here: its leg was cancelled"
           else handed="is not proven here: its leg was not run"; fi
           {
             echo '### What this job does not prove'

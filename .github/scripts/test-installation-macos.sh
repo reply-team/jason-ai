@@ -93,6 +93,13 @@ fail_held() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT
 # Every process of Jason's, of its installer and of its uninstaller: what a wait that reached its bound was waiting on.
 jason_processes() { ps -axo pid,ppid,etime,command | grep -iE 'jason|install\.sh|uninstall' | grep -v grep || true; }
 
+# What of Jason Desktop at the application given is running: its own processes, and its ShipIt - launchd's job of Jason
+# Desktop's, or the one in the application's own Squirrel.framework - never another application's ShipIt. One line, each
+# process apart by a semicolon; empty where none is.
+left_running() {
+    { pgrep -lf "$1/Contents/MacOS/" || true; pgrep -lf "ai\.jasonharness\.desktop\.ShipIt|$1/Contents/Frameworks/Squirrel\.framework/" || true; } | sort -u | tr '\n' ';'
+}
+
 # A command run to its end, or to its bound: at the bound what it waited for is named on stderr, with every process of
 # Jason's, and the command is ended and the step fails. Its exit otherwise.
 within() {
@@ -1367,11 +1374,12 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
 
 from-one-installation)
     one="$1"; feed="$2"; version="$3"
-    # One trap for the way out of this step, however it ends: the feed server it starts is ended, and the desktop's log and
-    # ShipIt's logs are kept in $OUT, as bundle-swap keeps the desktop's log, before the uninstall the leg runs next takes
-    # them with the data directory and the caches.
+    # One trap for the way out of this step, however it ends: the feed server it starts is ended; what of Jason Desktop and
+    # its ShipIt is still running is printed and kept in $OUT, so that an update that failed or reached its bound says what
+    # it left; and the desktop's log and ShipIt's logs are kept in $OUT, as bundle-swap keeps the desktop's log, before the
+    # uninstall the leg runs next takes them with the data directory and the caches.
     server=""
-    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
+    trap '[ -z "$server" ] || kill "$server" 2>/dev/null || true; [ -z "${placed:-}" ] || { left="$(left_running "$placed")"; echo "${left:-none}" > "$OUT/one-installation-left-running.txt"; echo "left running as this step ends: ${left:-none}"; }; keep_desktop_log one-installation-desktop.jsonl; for log in "$HOME"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f "$log" ] || cp "$log" "$OUT/one-installation-$(basename "$log")" 2>/dev/null || true; done' EXIT
 
     # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.sh from its own
     # assets, which opens nothing, then a runtime started from the jason it carries. It is held to be the release its
@@ -1462,15 +1470,15 @@ print(fault())' "$OUT/update-from-one-installation.json" "$old" "$version" "$sta
     say "$old's own carried jason update apply --version $version, with no window open, handed the update to its Jason Desktop, whose updater installed $version, then ran this version's carried jason update apply --finish, which ended complete, $old -> $version"
 
     # Nothing of Jason Desktop's or of its updater is left running by an update asked for with no window open: the
-    # processes of the application and of ShipIt are printed and given 30 s to end, ShipIt ending once the update is in
-    # place, and launchd's ShipIt job is printed whole, held or not. Then one still running fails the leg, by name.
+    # processes of the application and of its own ShipIt are printed and given 30 s to end, ShipIt ending once the update
+    # is in place, and launchd's ShipIt job is printed whole, held or not. Then one still running fails the leg, by name.
     deadline=$(( $(date +%s) + 30 ))
     while :; do
-        still_running="$( { pgrep -lf "$placed/Contents/MacOS/" || true; pgrep -lf ShipIt || true; } | tr '\n' ';')"
+        still_running="$(left_running "$placed")"
         if [ -z "$still_running" ] || [ "$(date +%s)" -ge "$deadline" ]; then break; fi
         sleep 1
     done
-    say "the processes of Jason Desktop at $placed and of ShipIt after the update: ${still_running:-none}"
+    say "the processes of Jason Desktop at $placed and of its ShipIt after the update: ${still_running:-none}"
     if launchctl print "gui/$(id -u)/ai.jasonharness.desktop.ShipIt" > "$OUT/one-installation-shipit-job.txt" 2>&1; then
         say "launchd still holds the job ai.jasonharness.desktop.ShipIt after the update, as printed below and kept in one-installation-shipit-job.txt"
     else
