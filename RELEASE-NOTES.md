@@ -39,7 +39,18 @@ message go without your approval.
   says the mode the next turn runs in.
   [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
   mode lets the AI do.
-- **GAP (M2): what a Full access turn passes to Claude Code.** Written when that change lands.
+- **Full access is Claude Code's own bypass.** A turn in Full access runs Claude Code in its bypass mode, as a terminal
+  started that way would, with PowerShell among its tools. Jason's check before each tool use refuses three kinds
+  alone, each by a sentence that names the `jason` command that does what was asked: the installation's settings and
+  run files; its data directory outside the conversation's own folder; and what Jason itself sets for the turn, its
+  variables and its permission tool. On Windows a share named by `localhost`, a `127.x.x.x` address, `::1` or this
+  computer's own host name is read as the drive it shares. Everything else runs, and what Claude Code still asks about
+  in its bypass mode is a card, "Full access asks about this one". Where the bypass is not available (a setting of
+  yours or an administrator's turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or
+  under sudo, or a policy filtered Jason's check out), the chat says "Full access is not available here" once, with the
+  cause, and runs in Ask first until Jason Desktop starts again; the conversation keeps Full access. From Claude Code
+  2.1.322 on, Ask first and Auto-edit carry the same check; below it, a plain `jason` command that ran with no card still
+  does, and one fed the settings or the run file is refused.
 - **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
   `config.toml`, as Codex does in a terminal: Codex acts with no questions and outside any sandbox. In its other modes a
   Codex chat stays in Codex's read-only sandbox and reads and proposes, since Codex cannot ask before it acts; the menu
