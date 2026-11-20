@@ -295,10 +295,9 @@ with `EACCES`, npm's global prefix is a directory this account does not own: ins
 account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime
 sees.
 
-`install`, `list`, `reload`, `grant` and `revoke` are the whole plugin vocabulary, and **there is no `jason plugin get`**.
-One plugin by name is
-that listing read down to its row — `--human` for a person, or the default JSON for a session that is going to
-pick the row out itself.
+`install`, `list`, `reload`, `grant` and `revoke` are the whole plugin vocabulary, and **there is no
+`jason plugin get`**. One plugin by name is that listing read down to its row — `--human` for a person, or the default
+JSON for a session that is going to pick the row out itself.
 
 ```
 jason route list --human

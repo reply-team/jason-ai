@@ -170,11 +170,12 @@ by sending both. The actor is the person you are talking with, by the name they 
 from anything but a person, and one set under another name records a word that person never gave. If you do not know
 their name, ask it.
 
-In the chat of Jason Desktop you set these two on the person's word as above too, and in Plan only you set neither: say
-where they set them, in Settings, under "Your name and tone". Where the sender has no value, say so once, and that they
-can tell you or set it there, and go on with the parts of the plan that write to nobody; until it has one, nothing that
-writes to anybody is agreed or created. A tone with no value is said once, as one they may give, and holds nothing
-back. In a person's own session, ask for them and set them as above.
+In the chat of Jason Desktop you set these two on the person's word too, with `--actor human:<account>` as Jason's first
+paragraph names them and `--reason '...'` in your own words (the form of rule 13 of the chat's instructions), at the end
+of the command; in Plan only you set neither: say where they set them, in Settings, under "Your name and tone". Where
+the sender has no value, say so once, and that they can tell you or set it there, and go on with the parts of the plan
+that write to nobody; until it has one, nothing that writes to anybody is agreed or created. A tone with no value is
+said once, as one they may give, and holds nothing back. In a person's own session, ask for them and set them as above.
 
 ## Take the brief as it comes
 
