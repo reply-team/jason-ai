@@ -105,7 +105,6 @@ skills:
 
 ```sh
 jason skills install --roles-only
-jason ui install
 jason runtime start
 jason status --human
 ```
@@ -154,7 +153,7 @@ to.
 | Area | What is true today | Read more |
 |---|---|---|
 | **Architecture** | A durable runtime on your machine holds campaigns, per-person plans, approvals, questions and an append-only history. Work items are claimed under a lease, with one live attempt at a time, and survive crashes and restarts. Nine specialist roles. A documented local API. The runtime is C#. | [Architecture](https://github.com/reply-team/jason-ai/blob/main/docs/architecture.md) · [Runtime API](https://github.com/reply-team/jason-ai/blob/main/docs/runtime-api.md) |
-| **Languages** | **Plugins are plain JavaScript**, run by the engine the runtime embeds: no Node, no build step, one package for every platform. The runtime is C#, fully open, so you, Claude Code and other agents can read exactly how the plugin system works. The browser UI is TypeScript. | [Which language to use](#plugins-are-javascript) · [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) |
+| **Languages** | **Plugins are plain JavaScript**, run by the engine the runtime embeds: no Node, no build step, one package for every platform. The runtime is C#, fully open, so you, Claude Code and other agents can read exactly how the plugin system works. Jason Desktop is TypeScript. | [Which language to use](#plugins-are-javascript) · [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) |
 | **Channels** | Every provider is a plugin, and you can add your own; a plugin reaches any channel a person has an address on. Connect Reply once and email and LinkedIn work right away (messages, InMail, voice messages, connection requests), with SMS and call steps inside Reply sequences. Gmail, Microsoft 365 and SMTP mailboxes connect through Reply with no code. Any other provider or channel connects through a plugin you or your agent writes: Reply's is the one that ships ready today. | [Channels](#channels) · [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) |
 | **AI / LLM** | Runs on your subscription, with no API key and nothing to connect. Any agent with a shell can run your session through Jason's CLI and skills. Six hosts can run the nine background roles: Claude Code, measured on real runs; Codex, measured on Windows but not yet run on an account (its sandbox there needs an administrator once); Cursor CLI, GitHub Copilot CLI, Gemini CLI and Antigravity CLI, built from each host's documentation and not yet run on an account. Jason ships no model and holds no model credentials. | [Which agent does what](#runs-on-the-plan-you-already-pay-for) · [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md) |
 | **Search and personalization** | Find leads through Reply's Live Data API (1B+ B2B contacts, with a preview of the audience size before you spend credits), or through your own tools: anything your agent can reach, a CSV, your CRM. A Researcher and a Personalizer role work per person. Jason has no contact database of its own. | [Finding leads](#finding-leads) |
@@ -627,8 +626,8 @@ For the technical reader, in one screen.
                     Reply · your own provider · ntfy  →  email · LinkedIn · SMS · your channels · inbox
 ```
 
-- **One executable, three modes.** The runtime, which owns all state; the CLI, a client of its local API like the
-  browser UI and your agent; and the plugin host, where plugin code runs. The source is public under MIT.
+- **One executable, three modes.** The runtime, which owns all state; the CLI, a client of its local API like
+  Jason Desktop and your agent; and the plugin host, where plugin code runs. The source is public under MIT.
 - **You choose the host.** A short execution profile names which agent runs the work, and different work can run on
   different profiles. You sign in to the host yourself, and the profile has nowhere to put a secret. The
   [host matrix](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md#12-the-hosts) says what was
@@ -686,7 +685,7 @@ skills · release notes on every release.
 | Connect a provider or add a channel | [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md) · [Contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md) · [Routing](https://github.com/reply-team/jason-ai/blob/main/docs/routing.md) · [Reply plugin](https://github.com/reply-team/jason-ai/blob/main/plugins/reply/README.md) |
 | Choose which agent runs the work | [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md) |
 | Build on the runtime | [Runtime API](https://github.com/reply-team/jason-ai/blob/main/docs/runtime-api.md) · [Events](https://github.com/reply-team/jason-ai/blob/main/docs/events.md) · [Inbound sync](https://github.com/reply-team/jason-ai/blob/main/docs/inbound-sync.md) · [Reports](https://github.com/reply-team/jason-ai/blob/main/docs/reports.md) |
-| Get told when something waits, and decide it | [Notifications](https://github.com/reply-team/jason-ai/blob/main/docs/notifications.md) · [Browser UI](https://github.com/reply-team/jason-ai/blob/main/docs/ui.md) |
+| Get told when something waits, and decide it | [Notifications](https://github.com/reply-team/jason-ai/blob/main/docs/notifications.md) · [Jason Desktop's screens](https://github.com/reply-team/jason-ai/blob/main/docs/ui.md) |
 | Read or change how the work is done | [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) · [Business skills](https://github.com/reply-team/jason-ai/blob/main/skills/business/README.md) · [Runtime skills and roles](https://github.com/reply-team/jason-ai/blob/main/skills/runtime/README.md) · [Changing Jason](https://github.com/reply-team/jason-ai/blob/main/docs/customising.md) |
 | Know what leaves your machine, and what stays your job | [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) · [Security policy](https://github.com/reply-team/jason-ai/blob/main/SECURITY.md) |
 | Fix something | [When something is wrong](https://github.com/reply-team/jason-ai/blob/main/docs/handbook.md#when-something-is-wrong) · [Troubleshooting skill](https://github.com/reply-team/jason-ai/blob/main/skills/runtime/troubleshooting-jason/SKILL.md) · [Open an issue](https://github.com/reply-team/jason-ai/issues/new?template=problem.yml) |
