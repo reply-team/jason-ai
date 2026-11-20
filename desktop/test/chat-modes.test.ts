@@ -8,7 +8,9 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
+import { Chat } from '../src/chat.ts';
 import { helpNouns, readFence } from '../src/chat-deny.ts';
+import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
 import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
@@ -393,10 +395,11 @@ test('in Ask first the broker answers as it always did, and a hook call refuses 
     await card;
 });
 
-test('the main process asks the person itself, with the confirmation\'s own box, and reads its answer by its buttons alone', () => {
+test('the main process asks the person nothing before Full access: no box of its own, no answer to read, and no standing choice to keep or take back', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /const \{ response, checkboxChecked \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return fullAccessAnswer\(response, checkboxChecked\);/);
-    assert.equal(fullAccessDialog().buttons[0], 'Give full access this time');
+    assert.deepEqual(['fullAccessDialog', 'fullAccessAnswer', 'confirmFullAccess'].filter((name) => main.includes(name)), [], 'main.ts shows no box before Full access');
+    for (const gone of ['fullAccessDialog', 'fullAccessAnswer', 'fullAccessConsent']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
+    for (const gone of ['fullAccessStanding', 'takeBackFullAccess']) assert.equal(gone in Chat.prototype, false, `the chat has no ${gone}`);
 });
 
 // Attempts at getting past Full access's refusals, each through the hook as Claude Code calls it, and the same refusals in Ask first.

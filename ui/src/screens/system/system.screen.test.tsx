@@ -270,6 +270,26 @@ describe('System, the standing choice of Full access', () => {
     });
 });
 
+describe('System, Full access with no standing choice', () => {
+    afterEach(() => {
+        delete window.jasonDesktop;
+    });
+
+    it('in the desktop shows no Always and no take-back, even from a desktop that still says Always stands', async () => {
+        const desktop = stubDesktop();
+        // A desktop of an earlier version kept Always on this computer, new chats included, and says so when asked.
+        Object.assign(desktop, { standing: { givenAt: '2026-11-11T09:00:00.000Z', newChats: true } });
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        await act(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        expect(screen.queryByRole('button', { name: 'Ask each time again' })).toBeNull();
+        expect(screen.queryByText(/enter Full access without asking/)).toBeNull();
+        expect(screen.queryByText('New chats start in Full access.')).toBeNull();
+        expect(screen.queryByText('Full access asks you each time a chat enters it.')).toBeNull();
+    });
+});
+
 describe('System: the send modes in force', () => {
     it('says the mode each kind of person goes under for the installation, and where it comes from', async () => {
         systemFake();

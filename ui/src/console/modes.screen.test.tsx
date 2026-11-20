@@ -511,6 +511,24 @@ describe('Full access answered once for good', () => {
     });
 });
 
+describe('Full access, with no standing choice to offer or take back', () => {
+    it('offers the four modes and nothing after them, even from a desktop that still says Always stands', async () => {
+        const desktop = chatDesktop();
+        // A desktop of an earlier version kept Always on this computer and says so when asked: nothing of it is offered.
+        Object.assign(desktop, { standing: { givenAt: '2026-11-11T09:00:00.000Z', newChats: false } });
+        renderConsole(desktop);
+        await waitFor(() => menu());
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        expect(options()).toEqual([
+            ['ask_first', 'Ask first', false],
+            ['plan_only', 'Plan only', false],
+            ['auto_edit', 'Auto-edit', false],
+            ['full_access', 'Full access', false],
+        ]);
+        expect(screen.queryByText('Full access: ask each time again')).toBeNull();
+    });
+});
+
 describe('Plan only’s plan card', () => {
     const hostile =
         '**Bold** <script>window.hit=1</script> <a href="https://example.test/x">here</a> [link](https://example.test/y)';

@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { endedName, keptMs, newGrantId } from '../src/chat-full-folder.ts';
+import * as chatModes from '../src/chat-modes.ts';
 import { feedFullAccess } from '../src/chat-modes.ts';
 import { startHost, type HostProcess } from '../src/chat-process.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
@@ -561,7 +562,7 @@ test('Full access is refused for the Feed, in its own sentence, before any box o
     assert.equal(feedFullAccess, 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
     assert.equal(box.opened(), 0, 'no box');
     assert.ok(!existsSync(r.b.paths.chatFull) || readdirSync(r.b.paths.chatFull).length === 0, 'no grant');
-    assert.equal(r.chat.open(feed.id).mode, 'ask_first');
+    assert.equal(r.chat.open(feed.id).mode, chatModes.feedDefaultMode, 'the Feed stays in its own default mode');
     await r.chat.setMode(feed.id, 'plan_only');
     assert.equal(r.chat.open(feed.id).mode, 'plan_only', 'the other modes are the Feed\'s to choose');
 });
