@@ -427,7 +427,7 @@ describe('where each kind goes', () => {
         await waitFor(() => expect(inFront()).toBe('Connect'));
     });
 
-    it('opens the actions as the button and the caret do: Start, and a new chat', async () => {
+    it('opens the actions as the two buttons do: Start, and a new chat', async () => {
         const { desktop } = renderConsole();
         await opened();
         flush(() => here().dock.show('campaigns'));
