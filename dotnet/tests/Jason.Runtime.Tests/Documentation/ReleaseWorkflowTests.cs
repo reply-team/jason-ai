@@ -1310,6 +1310,42 @@ public partial class ReleaseWorkflowTests
             }
         }
 
+        // The apt repository's signing subkey, once, in the environment of the step that writes and signs the index, in a
+        // job that may not write, runs no test and packages nothing: the key every machine with the repository trusts
+        // shares a runner with neither the publishing token nor test code.
+        if (Node(jobs, AptJob) is not YamlMappingNode apt)
+        {
+            problems.Add($"there is no {AptJob} job to hold secrets.{AptSecret}");
+        }
+        else
+        {
+            if (MayWrite(release, apt))
+            {
+                problems.Add($"the {AptJob} job, which holds secrets.{AptSecret}, may write");
+            }
+
+            if (JobSteps(apt).Any(step => Scalar(step, "run") is { } run && RunsTests().IsMatch(run)))
+            {
+                problems.Add($"the {AptJob} job, which holds secrets.{AptSecret}, runs tests");
+            }
+
+            if (JobSteps(apt).Any(step => Scalar(step, "uses") == "./.github/actions/package"))
+            {
+                problems.Add($"the {AptJob} job, which holds secrets.{AptSecret}, packages");
+            }
+
+            var writers = JobSteps(apt).Where(step => Scalar(step, "name") == AptWriteStep).ToList();
+            if (writers.Count == 1 && Node(writers[0], "env") is YamlMappingNode env && Node(env, AptSecret) is YamlScalarNode key
+                && key.Value == $"${{{{ secrets.{AptSecret} }}}}")
+            {
+                placed.Add(key);
+            }
+            else
+            {
+                problems.Add($"the {AptJob} job's '{AptWriteStep}' does not hold secrets.{AptSecret} under {AptSecret}");
+            }
+        }
+
         // Every other mention of a secret, anywhere in the workflow, is the tap's token, once, in one job. A mention is
         // the secrets context named inside an expression, however it is read: by a name after a dot, by index, or whole.
         // A placed node is its place once: the parser hands an alias back as the node it names, so a second sight of
@@ -4165,7 +4201,7 @@ public partial class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
-        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])
+        foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex])
         {
             File.WriteAllText(Path.Combine(directory, carried), $"not really {carried}");
         }
@@ -4333,7 +4369,7 @@ public partial class ReleaseWorkflowTests
             Assert.Equal(SemanticVersion.Parse("0.19.0"), manifest.MinUpgradeFrom);
 
             var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
-            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])
+            foreach (var carried in (string[])[.. ReleasedPackages().Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex])
             {
                 var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, carried))));
                 Assert.True(
@@ -4385,7 +4421,7 @@ public partial class ReleaseWorkflowTests
         var packages = ReleasedPackages();
 
         Assert.Contains($"-PluginDigests {string.Join(',', packages.Select(package => Digests(package.Id)))} ", line + " ", StringComparison.Ordinal);
-        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop])} ", line, StringComparison.Ordinal);
+        Assert.Contains($"-Plugins {string.Join(',', [.. packages.Select(package => package.Asset), ReleaseAssets.Ui, ReleaseAssets.Skills, .. ReleaseAssets.Desktop, .. ReleaseAssets.AptIndex])} ", line, StringComparison.Ordinal);
         Assert.All(packages, package => Assert.True(File.Exists(Path.Combine(RepositoryRoot(), Digests(package.Id))), $"{Digests(package.Id)} is not in the repository."));
     }
 

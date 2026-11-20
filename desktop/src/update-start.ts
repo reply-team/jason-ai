@@ -22,11 +22,10 @@ import { cliAt } from './cli.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { loggedCli } from './installation.ts';
 import { runtimeDoor, startAgain } from './machine-setup.ts';
-import { keptAsideOf } from './linux-package.ts';
+import { childEnvironment, keptAsideOf, packageFormOf, type LinuxPackage } from './linux-package.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
-import { pathOf, withPath } from './programs.ts';
 import { settleByRequest } from './rollback.ts';
 import { applyExit, applyExits, busyRecord, createRequestFile, headlessLimitOf, requestFile, requestSupport, systemShell, takeRequest, usageRecord, windowOpenUpdate, type UpdateRequest, type UpdateRequests } from './update-request.ts';
 import { Updater, type UpdateState } from './updates.ts';
@@ -57,10 +56,24 @@ export interface RequestUpdaterDeps {
  */
 export function carriedRuntimeStart(data: string, log: Logger): () => Promise<'started' | 'answering' | 'not_started'> {
     return async () => {
-        const executable = join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
-        const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
+        const executable = carriedJason(data);
+        const cli = loggedCli(cliAt(executable, childEnvironment(thisForm(), process.env)), log);
         return (await startAgain(runtimeDoor(cli, desktopPaths(data).runFile))).act;
     };
+}
+
+/** Which Linux package this application runs as (`linux-package.ts`); null off Linux. */
+function thisForm(): LinuxPackage | null {
+    return packageFormOf(process.platform, process.resourcesPath, process.env);
+}
+
+/**
+ * The jason the application carries: in its resources, and for an AppImage the copy its starts make under the data
+ * directory, `<data>/desktop/bundle/<version>/` (`bundle-copy.ts`), which is the one a runtime runs from.
+ */
+function carriedJason(data: string): string {
+    if (thisForm()?.form === 'appimage') return join(desktopPaths(data).bundle, app.getVersion(), 'jason');
+    return join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
 }
 
 /**
@@ -72,13 +85,13 @@ export function carriedRuntimeStart(data: string, log: Logger): () => Promise<'s
 export function requestUpdater(deps: RequestUpdaterDeps): Updater {
     const platform = process.platform;
     const paths = desktopPaths(deps.data);
-    const executable = join(process.resourcesPath, 'bundle', platform === 'win32' ? 'jason.exe' : 'jason');
-    const env = withPath(process.env, pathOf(process.env));
+    const executable = carriedJason(deps.data);
+    const env = childEnvironment(thisForm(), process.env);
     const cli = loggedCli(cliAt(executable, env), deps.log);
     const updater = new Updater({
         updater: autoUpdater,
         version: app.getVersion(),
-        application: keptAsideOf(platform, null, process.execPath),
+        application: keptAsideOf(platform, thisForm(), process.execPath),
         rollback: paths.rollback,
         log: deps.log,
         stopRuntime: () =>
@@ -127,7 +140,7 @@ export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests)
                 data,
                 from: app.getVersion(),
                 where: 'headless',
-                unsupported: requestSupport(app.isPackaged, process.platform),
+                unsupported: requestSupport(app.isPackaged, process.platform, thisForm()),
                 updater: () => requestUpdater({ data, log }),
                 windowOpen: windowOpenUpdate,
                 log,

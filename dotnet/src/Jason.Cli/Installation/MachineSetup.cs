@@ -185,7 +185,12 @@ public static class MachineSetup
 
         await run.Step("Placing the terminal command", () =>
         {
-            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand(old, holding) : run.MacCommand(old, holding);
+            command = places.Platform switch
+            {
+                SetupSystem.Windows => run.WindowsCommand(old, holding),
+                SetupSystem.Linux when SetupPlaces.CarriedByDeb(carried.Executable) => run.PackageCommand(),
+                _ => run.MacCommand(old, holding),
+            };
             return Task.CompletedTask;
         }).ConfigureAwait(false);
 
@@ -195,6 +200,17 @@ public static class MachineSetup
             {
                 // Only once a new terminal finds this jason, as read back: otherwise the old one is what still answers.
                 retired = run.CommandPlaced ? run.Retire(old) : run.NotRetired(old);
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        // An AppImage's copy is per version: a logon start registered from another version's copy moves to this one, as the
+        // application's own start moves it, since a terminal's update finishes here before the application starts again.
+        if (places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            await run.Step("Taking the logon start over from another version's copy", () =>
+            {
+                run.RepointCopy();
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
@@ -255,6 +271,9 @@ public static class MachineSetup
         /// wrapper on macOS, with the profile lines in place or the folder on a terminal's PATH already.
         /// </summary>
         public bool CommandPlaced { get; private set; }
+
+        /// <summary>Whether the terminal command is the wrapper this run wrote at <c>~/.local/bin/jason</c>: on macOS, and from an AppImage's copy.</summary>
+        private bool WroteWrapper { get; set; }
 
         /// <summary>
         /// One step, any failure it did not expect said as a problem rather than thrown past the report: an argument, a JSON
@@ -501,7 +520,8 @@ public static class MachineSetup
         // --- the terminal command ----------------------------------------------------------------------------
 
         /// <summary>
-        /// macOS: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape, then, where the PATH a terminal has
+        /// macOS, and an AppImage's copy on Linux: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape,
+        /// then, where the PATH a terminal has
         /// does not name <c>~/.local/bin</c> (<see cref="TerminalPath"/>, judged by <c>install.sh</c>'s own test), its two lines
         /// in each profile it writes them into, where that profile does not hold the line already. The wrapper goes over an
         /// older wrapper of the application's, an older command-line install's executable, or a link to an application's jason;
@@ -615,6 +635,7 @@ public static class MachineSetup
             }
 
             CommandPlaced = wrapperPlaced && linesPlaced;
+            WroteWrapper = true;
 
             // 0.48's application placed a jason-desktop wrapper beside a command-line jason; taken back as the Windows command
             // files are, once this jason answers, and only where it is the application's shape.
@@ -635,6 +656,54 @@ public static class MachineSetup
             }
 
             return new InstallCommandOutcome(target, CommandPlaced, target, changed, added, takenBack);
+        }
+
+        /// <summary>
+        /// Linux, the deb: the terminal command is the package's own, <see cref="SetupPlaces.SystemCommand"/>
+        /// (<c>/usr/bin/jason</c>), a link to the jason it carries for every account, so nothing is written here and no
+        /// profile line: it is read back as running this jason. Where it does, what the application wrote into
+        /// <c>~/.local/bin</c> before 0.49.1, the wrapper at <c>jason</c> or at <c>jason-desktop</c>, is taken back, only
+        /// where it is the application's shape: Ubuntu's profile puts that folder first on the PATH, so the old wrapper
+        /// would answer before the package's command.
+        /// </summary>
+        public InstallCommandOutcome PackageCommand()
+        {
+            var system = places.SystemCommand;
+            CommandPlaced = NewTerminal.Runs(system, carried.Executable);
+            if (CommandPlaced)
+            {
+                Done.Add($"{system}, the package's, runs {carried.Executable}.");
+            }
+            else
+            {
+                Problems.Add($"{system}, which Jason Desktop's package links to the jason it carries, is not there or runs another file, so a new terminal may not find this jason. Installing the package again puts it back: sudo apt install --reinstall jason-desktop.");
+            }
+
+            var takenBack = new List<string>();
+            foreach (var file in CommandPlaced ? new[] { Path.Combine(places.LocalBin, "jason"), Path.Combine(places.LocalBin, "jason-desktop") } : [])
+            {
+                if (!IsWrapper(file))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    places.Delete(file);
+                    takenBack.Add(file);
+                }
+                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                {
+                    Problems.Add($"{file}, which Jason Desktop placed, could not be removed: {refused.Message}");
+                }
+            }
+
+            if (takenBack.Count > 0)
+            {
+                Done.Add($"Took back the command files Jason Desktop placed before its package put jason in the terminal: {string.Join(", ", takenBack)}.");
+            }
+
+            return new InstallCommandOutcome(system, CommandPlaced, system, false, [], takenBack);
         }
 
         /// <summary>
@@ -721,7 +790,7 @@ public static class MachineSetup
         {
             var finds = Windows
                 ? NewTerminal.FindsOnWindows(places)
-                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: !PathEntry.OnPath(TerminalPath(), places.LocalBin));
+                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: WroteWrapper && !PathEntry.OnPath(TerminalPath(), places.LocalBin));
             if (NewTerminal.Runs(finds, carried.Executable))
             {
                 return (finds, true);
@@ -744,12 +813,48 @@ public static class MachineSetup
         public InstallRetired Retire(string old)
         {
             var reregistered = Reregister(old);
-            var replacedByWrapper = !Windows && string.Equals(old, Path.GetFullPath(Path.Combine(places.LocalBin, "jason")), StringComparison.Ordinal);
+            var replacedByWrapper = WroteWrapper && string.Equals(old, Path.GetFullPath(Path.Combine(places.LocalBin, "jason")), StringComparison.Ordinal);
             var (aside, removed) = new CommandLineRemoval(places, Left, Problems).Remove(old, replacedByWrapper);
             Done.Add(removed.Count > 0 || replacedByWrapper
                 ? $"Retired the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}."
                 : $"Retired the command-line install at {old}.");
             return new InstallRetired(old, aside, removed, reregistered);
+        }
+
+        /// <summary>
+        /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
+        /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
+        /// </summary>
+        public void RepointCopy()
+        {
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            var bundles = Update.AppImageCopy.BundlesOf(carried.Executable);
+            if (!string.Equals(named, carried.Executable, StringComparison.Ordinal)
+                && string.Equals(Path.GetDirectoryName(Path.GetDirectoryName(named)), bundles, StringComparison.Ordinal))
+            {
+                Reregister(named);
+            }
         }
 
         /// <summary>
@@ -987,11 +1092,11 @@ public static class MachineSetup
         {
             try
             {
-                CreatedProfiles.Add(places.Home, profile);
+                CreatedProfiles.Add(places, profile);
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
             {
-                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places.Home)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
+                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
             }
         }
 

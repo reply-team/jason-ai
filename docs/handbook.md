@@ -57,10 +57,9 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
 responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).
 
-On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
 line your terminal and your agents use. It is installed once, updated once and removed once, and a one-liner installs
-it. On Linux a one-liner installs the executable. Either way it ends by teaching it its role skills, without which
-every role it launches runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
+it. It ends by teaching it its role skills, without which every role it launches runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
 said it could not, asking whether it can work, and starting it — for a person or an agent.
 
 ### Ask an agent to do it
@@ -178,13 +177,14 @@ every platform, built from this tree at the release's version.
 
 ## The installation
 
-Each install script works out your platform and verifies the download's SHA-256 before it places anything. On macOS
-and Windows it installs Jason Desktop, its signature checked too, with no administrator rights — on a Mac in
-`/Applications` where your account may write there, else `~/Applications` — opens nothing, and has the `jason` the
-application carries put `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is found;
-another host gets them with `jason skills install --host <host>`. On Linux it installs the executable under your own account, in `~/.local/bin`, with its licence and the
-third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH
-unless you pass `--no-modify-path`. Nothing needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
+Each install script works out your platform and verifies the download's SHA-256 before it places anything. It installs
+Jason Desktop, opens nothing, and has the `jason` the application carries put `jason` in your terminal and Jason's skills
+for Claude Code and Codex, where each is found; another host gets them with `jason skills install --host <host>`. On
+macOS and Windows its signature is checked too, and it needs no administrator rights — on a Mac it goes in
+`/Applications` where your account may write there, else `~/Applications`. On Linux it is the deb where there is apt,
+installed by apt with an administrator's password asked once, and its updates then come with the system's; elsewhere the
+AppImage, for your account alone and with no password. A command-line install made by hand on Linux places the
+executable with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. Both one-liners install the **latest release**. If either answers 404, the release
 could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
 as it stands rather than run the line again, and build nothing instead.
 
@@ -206,12 +206,13 @@ recorded at the new release's tag and placing the release's UI; an update applie
 `jason skills update` after it, and one applied by a build older than the UI step needs one `jason ui install`. `status` says where one stands, and reads the ledger without needing a runtime.
 On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: `apply` hands the update to the
 application's own updater, with no window, and the new version's `jason` finishes it — the plugin packages, the
-runtime's start, the skills, the terminal command and the UI ([release-and-update.md](release-and-update.md) §7). Where
+runtime's start, the skills, the terminal command and the UI ([release-and-update.md](release-and-update.md) §7). On
+Linux an AppImage's does the same; the deb's refuses and names apt, since the system updates the package. Where
 another update or a `jason install` is under way, it is refused with `update_in_progress` or `install_in_progress`, which
 mean later: let that one end, then run it again. On macOS and Windows a command-line install of an earlier version
-moves into Jason Desktop through that same `apply`: once it is updated, the application is installed and the command line
-moved into it. The update never fails because of the move, `jason status` says where the move stands, and Linux has no
-move ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop").
+moves into Jason Desktop through that same `apply`, and on Linux too: once it is updated, the application is installed and the command line
+moved into it. The update never fails because of the move, and `jason status` says where the move stands
+([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop").
 
 ### Can this installation start work?
 
@@ -357,12 +358,14 @@ jason uninstall --purge-data --yes
 
 On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed and an older
 command-line install, and it is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu
-on macOS.
+on macOS. On Linux it is the one uninstall too, reached from Uninstall Jason… in the Jason menu as well; for the deb it
+asks for an administrator's password first, to take the package off.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else — a skill you copied into a harness by hand has no
 receipt, so it is removed by nobody, including this. The rest goes by rule, in a fixed order: the logon
-registration first, so a logon part-way through cannot start what is going; then the runtime, and if it will
+registration first, so a logon part-way through cannot start what is going (on macOS just after the runtime, and for the
+deb just after its package, so a password not given leaves it in place); then the runtime, and if it will
 not stop, nothing after that is removed; then the recorded skills; then the PATH entry, only where the
 installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an
 upgrade left beside it; then the executable, its notice files, its install directory and the native libraries it
