@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using Jason.Runtime.Notifications.Desktop;
 using Jason.Runtime.Tests.Plugins;
 
@@ -14,6 +15,9 @@ namespace Jason.Runtime.Tests.Notifications;
 public sealed class ProcessToastLauncherTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>How long a row waits for a program it closed to end before it fails rather than hangs: a guard, never a measure.</summary>
+    private static readonly TimeSpan Hang = TimeSpan.FromSeconds(30);
 
     private static Dictionary<string, string> Environment()
     {
@@ -101,5 +105,98 @@ public sealed class ProcessToastLauncherTests
         Assert.False(result.Started);
         Assert.NotNull(result.StartError);
         Assert.Equal(ToastOutcomes.LaunchFailed, ToastOutcomes.Read(result).Code);
+    }
+    /// <summary>
+    /// A program that stays — notify-send waiting on the bus — is answered as soon as it says the line asked for, never
+    /// killed at the bound, and handed back with its end to come, which closing it brings, with all it said. Breaks if the
+    /// launcher kills a waiting toast at five seconds, which ends the click with it, or loses what it said.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_said_its_line_is_handed_back_waiting_and_ends_when_closed()
+    {
+        var launch = new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "say-and-hold", "42", "600000"], null, Environment());
+
+        var waiting = await new ProcessToastLauncher().LaunchWaitingAsync(launch, TimeSpan.FromSeconds(60), line => line == "42", Ct);
+
+        Assert.Equal((true, false, (int?)null), (waiting.Said.Started, waiting.Said.TimedOut, waiting.Said.ExitCode));
+        Assert.Equal("42\n", waiting.Said.Stdout);
+        var end = Assert.IsType<Task<LaunchResult>>(waiting.End, exactMatch: false);
+        Assert.False(end.IsCompleted, "the program still waits");
+        waiting.Close();
+        var ended = await end.WaitAsync(Hang, Ct);
+        Assert.NotEqual(0, ended.ExitCode);
+        Assert.Equal("42\n", ended.Stdout);
+    }
+
+    /// <summary>
+    /// A program that ends within the bound is answered by its end, with no end to come; one that says nothing it is asked
+    /// for is answered at the bound as still there, and not killed. Breaks if notify-send 0.8.3, which keeps its id until it
+    /// ends, is killed at the bound, or one that ended is held as if it waited.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_ended_is_its_end_and_one_silent_past_the_bound_still_waits()
+    {
+        var ended = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "echo-args", "7"], null, Environment()), TimeSpan.FromSeconds(60), line => line == "never", Ct);
+        Assert.Null(ended.End);
+        Assert.Equal((0, "7\n"), (ended.Said.ExitCode, ended.Said.Stdout.Replace("\r", string.Empty, StringComparison.Ordinal)));
+
+        var silent = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "hold", "600000"], null, Environment()), TimeSpan.FromMilliseconds(200), _ => true, Ct);
+        var end = Assert.IsType<Task<LaunchResult>>(silent.End, exactMatch: false);
+        Assert.False(end.IsCompleted, "the program was not killed at the bound");
+        silent.Close();
+        Assert.NotEqual(0, (await end.WaitAsync(Hang, Ct)).ExitCode);
+    }
+    /// <summary>
+    /// A launch that keeps its children — a click's handler, under which xdg-open may run Jason Desktop — ends only its own
+    /// process at the bound; every other launch ends its whole tree. Breaks if a runtime that stops, or a handler that
+    /// outlives its bound, takes the Jason Desktop the click just started with it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task A_launch_that_keeps_its_children_ends_only_its_own_process_at_the_bound(bool killsTree)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row: the click's handler is Linux's.");
+        var pidFile = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N") + ".pid");
+        Directory.CreateDirectory(Path.GetDirectoryName(pidFile)!);
+        var launch = new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "hold-with-child", pidFile, "600000"], null, Environment()) { KillsTree = killsTree };
+
+        var result = await new ProcessToastLauncher().LaunchAsync(launch, TimeSpan.FromSeconds(5), Ct);
+
+        Assert.True(result.TimedOut);
+        using var child = Process.GetProcessById(int.Parse(File.ReadAllText(pidFile), CultureInfo.InvariantCulture));
+        try
+        {
+            var ended = child.WaitForExit(TimeSpan.FromSeconds(3));
+            Assert.Equal(killsTree, ended);
+        }
+        finally
+        {
+            if (!child.HasExited)
+            {
+                child.Kill();
+            }
+
+            File.Delete(pidFile);
+        }
+    }
+
+    /// <summary>
+    /// A program that stays and says nothing it is asked for within the bound is handed back with what it said on stderr
+    /// by then: libnotify 0.8.3 says there, and only there, why it showed nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_stays_is_handed_back_with_what_it_said_on_stderr()
+    {
+        var waiting = await new ProcessToastLauncher().LaunchWaitingAsync(
+            new ToastLaunch([Jason.Runtime.Tests.Plugins.FakeProviderCli.ExecutablePath, "complain-and-hold", "Failed to show notification: no", "600000"], null, Environment()), TimeSpan.FromSeconds(3), _ => false, Ct);
+
+        var end = Assert.IsType<Task<LaunchResult>>(waiting.End, exactMatch: false);
+        Assert.Equal("Failed to show notification: no", waiting.Said.LastStderrLine);
+        waiting.Close();
+        await end.WaitAsync(Hang, Ct);
     }
 }

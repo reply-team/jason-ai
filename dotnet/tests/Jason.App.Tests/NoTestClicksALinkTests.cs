@@ -72,6 +72,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("process start of its own with the session verb in one string", "using var started = Process.Start(exe, \"session open --approval apr_1\");")]
     [InlineData("start info with the session verb in one string", "var start = new ProcessStartInfo(exe, \"session open --approval apr_1\");")]
     [InlineData("process of its own with a link", "using var started = new Process { StartInfo = { FileName = exe, ArgumentList = { \"jason://attention\" } } };")]
+    [InlineData("process of its own with a link beside the path locator", "var self = new ProcessPathLocator().Command; using var started = new Process { StartInfo = { FileName = self[0], ArgumentList = { \"jason://attention\" } } };")]
     public void The_rule_finds_each_form(string form, string text) =>
         Assert.True(Offence("Mutant.cs", text) is not null, $"{form} passes the rule: {text}");
 
@@ -83,6 +84,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("await _run.Cli(\"session\", \"open\", \"--approval\", \"apr_1\");")]
     [InlineData("var session = Read(body); var env = CliEnvironment.Default();")]
     [InlineData("await GoldenPath.JasonAsync(it, \"--version\");")]
+    [InlineData("var self = new ProcessPathLocator().Command; Assert.Equal([.. self, \"jason://attention\"], Click(self, link));")]
     public void What_acts_on_nothing_is_no_offence(string text) => Assert.Null(Offence("Fine.cs", text));
 
     private static string? Offence(string file, string source)
@@ -137,7 +139,8 @@ public sealed partial class NoTestClicksALinkTests
             return $"{file} runs the router beside a jason: link";
         }
 
-        if (ProcessStarts.FirstOrDefault(start => text.Contains(start, StringComparison.Ordinal)) is { } how)
+        var starting = text.Replace(PathLocator, string.Empty, StringComparison.Ordinal);
+        if (ProcessStarts.FirstOrDefault(start => starting.Contains(start, StringComparison.Ordinal)) is { } how)
         {
             if (LinkLiteral().IsMatch(text) || text.Contains("AttentionLinks", StringComparison.Ordinal))
             {
@@ -159,6 +162,12 @@ public sealed partial class NoTestClicksALinkTests
     /// </summary>
     private static readonly string[] ProcessStarts =
         ["ProcessStartInfo", "ChildProcess", "JasonAsync(", "LauncherAsync(", "Process.Start(", "new Process"];
+
+    /// <summary>
+    /// The one type whose name <c>new Process</c> would take that starts nothing: it reads this executable's own path. Every
+    /// other type whose name begins so, the toast's own launcher among them, still counts as a start.
+    /// </summary>
+    private const string PathLocator = "new ProcessPathLocator(";
 
     private static string Joined(string text) => Concatenation().Replace(Uncommented(text), string.Empty);
 

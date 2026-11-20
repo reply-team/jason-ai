@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import type { Cli, CliResult } from '../src/cli.ts';
-import { AttentionWatcher, attentionCadenceMs, notice, readAttention, trayView, type Attention } from '../src/attention.ts';
+import { AttentionWatcher, attentionCadenceMs, notice, notifiesItself, readAttention, trayView, type Attention } from '../src/attention.ts';
 import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
 import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, itemKeys, keyWords, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
@@ -150,6 +150,26 @@ test('a rise in what waits is notified with its counts; the first reading, a fal
     assert.ok(attentionCadenceMs >= 30_000);
     watcher.stop();
     assert.equal(timers.pending.length, 0);
+});
+
+test('on Windows and Linux the runtime\'s notification is the one per item, so a rise is counted on the tray and notified only on macOS', async () => {
+    assert.equal(notifiesItself('darwin'), true);
+    assert.equal(notifiesItself('win32'), false, 'the runtime\'s toast opens the desktop on the item there');
+    assert.equal(notifiesItself('linux'), false, 'the runtime\'s notification opens the desktop on the item there');
+
+    let approvals: string[] = ['a'];
+    const cli = fakeCli((args) => page(args[0] === 'approval' ? approvals : []));
+    const timers = handTimers();
+    const shown: Attention[] = [];
+    const log = memoryLog();
+    const watcher = new AttentionWatcher({ cli, log, timers, show: (attention) => shown.push(attention), notify: null });
+    watcher.start();
+    await timers.fire();
+    approvals = ['a', 'b'];
+    await timers.fire();
+    watcher.stop();
+    assert.deepEqual(shown.at(-1), { state: 'up', approvals: 2, questions: 0 }, 'the tray still counts');
+    assert.equal(log.lines.some((line) => line.name === 'attention_notified'), false, 'nothing said it notified');
 });
 
 test('the count is shown again only when it changed, and a stopped watcher reads nothing more', async () => {

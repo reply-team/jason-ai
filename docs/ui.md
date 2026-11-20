@@ -13,10 +13,13 @@ jason ui open
 opens Jason Desktop on what waits, by the desktop's own `jason-desktop:` link; `--approval <id>` and `--question <id>`
 open it at one item, and `--no-open` prints the address instead, for an agent to hand to you. It asks the runtime
 nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
-command-line install still waiting to move into the desktop, or an AppImage, whose menu entry declares no link), it
-opens nothing and refuses with `desktop_not_installed`. Outside GNOME and KDE, xdg-open runs the desktop it starts until
-that window closes, so a `jason ui open` that starts it says after ten seconds that it handed the address on
-(`opener_timed_out`) and ends 0: the desktop opens all the same.
+command-line install still waiting to move into the desktop), it opens nothing and refuses with `desktop_not_installed`.
+On Linux it opens the desktop only where xdg-open would start it for the scheme: where your account's own default for
+`jason-desktop:` links names another program, a menu cache names an entry that is gone, or Jason Desktop's entry starts an
+AppImage by a quoted path (its folder's path holds a space or a quote), it opens nothing and refuses with
+`desktop_links_elsewhere`, saying which and what gives the links back. Outside GNOME
+and KDE, xdg-open runs the desktop it starts until that window closes, so a `jason ui open` that starts it says after ten
+seconds that it handed the address on (`opener_timed_out`) and ends 0: the desktop opens all the same.
 
 A page of the UI is paired with `jason ui pair`, which prints a link that pairs one page, once, within 60 seconds, and
 opens nothing; Jason Desktop pairs its own window with it. `jason ui pair --approval <id>` and `--question <id>` pair at
@@ -28,7 +31,7 @@ Jason Desktop alone; in any other tab it draws one sentence, that this is the pl
 to ask your agent how to build one ([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom`
 draws whatever it draws.
 
-On Windows a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
+On Windows and Linux a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item, each on the desktop's
 Needs you ([desktop.md](desktop.md), Links), as `jason ui open` opens it. Where no Jason Desktop that takes its links is
 installed for your account the click opens nothing, and a link Jason does not know opens nothing either

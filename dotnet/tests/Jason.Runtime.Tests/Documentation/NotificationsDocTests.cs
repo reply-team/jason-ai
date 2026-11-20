@@ -34,7 +34,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("A block is said while it is open, whatever it holds, because it is still the person's to fix and the next item parks on it.")]
     [InlineData("The work items it holds are the work items parked on it, as `block.get`'s `held_count` counts them, so a pointer's count, `jason block get` and `jason workitem list --block` agree.")]
     [InlineData("**a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out, pausing a campaign, taking back a send or stopping a search, that ended failed or expired, in a campaign of any status.")]
-    [InlineData("**What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read, nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign. Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the Windows toast alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on (§7). That id is never in the words, never in a plugin channel's input, and never in a toast on macOS or Linux.")]
+    [InlineData("**What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read, nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign. Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the toast on Windows and Linux alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on: on Windows in the toast's `jason:` link (§7), on Linux kept by the runtime beside the notification it showed, which reaches only the command its click starts (§4). That id is never in the words, never in a plugin channel's input, never sent to Linux's notification server, and never in a toast on macOS.")]
     [InlineData("A first start walks no history: a protective failure journaled before the first start that ever wrote a line is not counted by a pointer — the work-item list is where it shows.")]
     [InlineData("A notification that reached nobody carries `delivered_through` forward unchanged, as it carries `last_delivered_at`, so the next one counts those failures again with any new ones. Neither key is sent to a channel: `delivered_through` is a position in the journal, and the count reaches a channel only as words in the message.")]
     [InlineData("Everything here is computed at a dispatcher scan from what the journal records, never from a timer inside the runtime, which ends at every sign-out.")]
@@ -149,7 +149,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/INSTALL.md", "takes the registrations and the harness skills the first one made as well. The `jason:` link goes only where its command names this executable.")]
     [InlineData("docs/INSTALL.md", "the two entries Windows made for it at the first toast, and the `jason:` link where its command names this executable — after the runtime")]
     [InlineData("docs/release-and-update.md", "and the `jason:` link where its command names this executable — one whose command is other than this installation's is kept, since it may be another installation's or a spelling of this one, and another program's never touched.")]
-    [InlineData("docs/ui.md", "On Windows a toast's click opens Jason Desktop through a `jason:` link")]
+    [InlineData("docs/ui.md", "On Windows and Linux a toast's click opens Jason Desktop through a `jason:` link")]
     [InlineData("docs/release-and-update.md", "A toast comes only from a runtime in the person's own session")]
     [InlineData("docs/release-and-update.md", "a runtime that 0.1.0's logon task started in session 0 shows none")]
     [InlineData("docs/release-and-update.md", "| on Windows, the notification registration | after the runtime, so its next toast cannot write it back")]
@@ -201,9 +201,15 @@ public sealed partial class NotificationsDocTests
     [InlineData("plugins/ntfy/plugin.yaml", "canonical operation: the `operations` list names versions of the delivery contract.")]
     [InlineData("docs/notifications.md", "At every toast the toast host ensures the key")]
     [InlineData("docs/notifications.md", "with `DisplayName` `Jason` — written the first time, only read after that — from an ordinary prompt.")]
-    [InlineData("docs/notifications.md", "opens Jason on Windows: on the one approval or question when exactly one waits, on the list of what waits otherwise.")]
+    [InlineData("docs/notifications.md", "opens Jason on Windows and Linux: on the one approval or question when exactly one waits, on the list of what waits otherwise.")]
     [InlineData("docs/notifications.md", "With no desktop registered, or its program gone, the click opens nothing; a hand-on that fails is said on stderr by its code")]
-    [InlineData("docs/notifications.md", "and nothing else opens, never a browser. On macOS and Linux a click opens nothing of Jason's; `jason ui open` opens Jason Desktop on the same list or item.")]
+    [InlineData("docs/notifications.md", "and nothing else opens, never a browser. On macOS a click opens nothing of Jason's; `jason ui open` opens Jason Desktop on the same list or item.")]
+    [InlineData("docs/notifications.md", "**On Linux** the toast is shown by notify-send, which stays on the session bus with its notification until it is clicked or dismissed, since GNOME and KDE hand a click only to a sender still there")]
+    [InlineData("docs/notifications.md", "With no Jason Desktop that takes its links, or with its links going elsewhere, nothing opens, never a browser, and a notification says why, in the words `jason ui open` would print.")]
+    [InlineData("docs/notifications.md", "The handler runs in the runtime's environment with the session's laid over it, as the user manager holds it at the click (`systemctl --user show-environment`), and without what systemd sets for the processes of the runtime's own unit, as a launcher starts an application; so a runtime the logon unit started before the desktop said its display still hands the handler one.")]
+    [InlineData("docs/notifications.md", "(`systemd-run --user --scope`, described in fixed words, so the item's id reaches no journal)")]
+    [InlineData("docs/notifications.md", "A stop, or the handler's own bound, ends the handler alone, never a Jason Desktop it started.")]
+    [InlineData("docs/notifications.md", "A toast the notification server would not show is ended at once and recorded `failed`, `toast_failed`, with what notify-send said last.")]
     [InlineData("docs/notifications.md", "said on stderr by its code (`opener_not_started`, `opener_failed`, `opener_timed_out`), and nothing else opens")]
     [InlineData("docs/notifications.md", "after your browser's own confirmation, and it can do nothing a click cannot")]
     [InlineData("docs/notifications.md", "or Jason's own prompt for such an item replaces what was on your clipboard")]
@@ -248,7 +254,15 @@ public sealed partial class NotificationsDocTests
     {
         Assert.Equal(TimeSpan.FromSeconds(5), ToastChannel.Bound);
         var page = Page();
-        Assert.Contains("A probe that cannot answer — it fails, or outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, each bounded at five seconds, fifteen in all, none of them on the scan.", page, StringComparison.Ordinal);
+        Assert.Contains("A probe that cannot answer — it fails, or outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, and the first of a runtime's run four, notify-send's help among them, each answered within five seconds, twenty in all, none of them on the scan.", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>How many Linux toasts wait for their click at once, as the page states it, from the channel's own number.</summary>
+    [Fact]
+    public void The_page_states_how_many_linux_toasts_wait_for_their_click()
+    {
+        Assert.Equal(10, ToastChannel.MaxWaiting);
+        Assert.Contains("At most ten toasts wait for their click at once; another that waits ends the oldest one's wait first.", Page(), StringComparison.Ordinal);
     }
 
     /// <summary>Every plugin in the marketplace's index is a row of one table: a blank line ends a Markdown table.</summary>

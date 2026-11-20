@@ -183,9 +183,11 @@ reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item, and Uninstall
 Jason… on macOS and Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
-`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
-notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
-them on.
+`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers. On macOS a
+system notification of the desktop's own says when the count rises, with the counts alone, never a name or the words of
+a question; on Windows and Linux the runtime's own notification of each waiting item is the one, its click opening the
+desktop on that item ([notifications.md](notifications.md)), and the desktop adds none. Both login items are off until
+you turn them on.
 
 ## Its own files
 
@@ -955,12 +957,17 @@ command line handling the `jason://attention` link reads the desktop's registrat
 it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
 starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
 its program gone, or the hand-on failing, nothing opens, and the failure is said by its code
-([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing. Where the desktop takes
-its links (on Linux the deb, not the AppImage), `jason ui open` opens it at the same addresses from a terminal or an
+([notifications.md](notifications.md)). On Linux the runtime's notification hands its click to the same link handler,
+which opens the desktop the same way; on macOS a notification's click opens nothing. Where the desktop takes
+its links, `jason ui open` opens it at the same addresses from a terminal or an
 agent's session; on macOS that is built so and not yet seen on a Mac.
 
 On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
-deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a
+deb's menu entry declares it, and so does an AppImage's: the entry the install line writes in your account's
+applications folder, which `jason install` brings up to date at a new version's first start, with the folder's menu
+cache written again (`update-desktop-database`). On Linux the desktop takes a link only where xdg-open would start it
+for the scheme: where your account's own default for `jason-desktop:` links names another program, or a menu cache
+names an entry that is gone, `jason ui open` opens nothing and says so (`desktop_links_elsewhere`). Built so, and not yet seen on a real machine: a link from a
 browser on Linux. A start that carries anything beside the address opens nothing, and the Windows uninstall takes the
 registration off. [desktop/README.md](../desktop/README.md) has the table and the rules for the builder.
 
@@ -1124,7 +1131,8 @@ version's demo made (see [the demo](#the-demo)) are not your data: the removal t
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
   6. Remove the application: `sudo apt purge jason-desktop` for the deb, which takes `/usr/bin/jason` and Jason's apt
      source with it; for an AppImage delete the file, its menu entry `~/.local/share/applications/jason-desktop.desktop`
-     and its icons `~/.local/share/icons/hicolor/*/apps/jason-desktop-app.png` (under `$XDG_DATA_HOME` when that is set).
+     and its icons `~/.local/share/icons/hicolor/*/apps/jason-desktop-app.png` (under `$XDG_DATA_HOME` when that is set),
+     then run `update-desktop-database ~/.local/share/applications` so the menu cache no longer names the entry.
 
 ## What is not here
 

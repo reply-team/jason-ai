@@ -167,6 +167,12 @@ public static class CliErrors
     /// <summary><c>ui open</c>: no Jason Desktop that takes its links is installed for this account, so nothing was opened.</summary>
     public const string DesktopNotInstalled = "desktop_not_installed";
 
+    /// <summary>
+    /// <c>ui open</c> and a click: Jason Desktop is installed for this account, and the system would hand its link to
+    /// another program or an entry that is gone, or could not start Jason Desktop's entry, so nothing was opened.
+    /// </summary>
+    public const string DesktopLinksElsewhere = "desktop_links_elsewhere";
+
     /// <summary><c>ui open --web</c>: no build of one's own is in the custom UI directory, so nothing was asked or opened.</summary>
     public const string CustomUiNotInstalled = "custom_ui_not_installed";
 

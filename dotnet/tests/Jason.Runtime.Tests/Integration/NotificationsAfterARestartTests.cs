@@ -29,6 +29,9 @@ public sealed class NotificationsAfterARestartTests
     {
         public Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Nothing waits in this test, so nothing may be launched.");
+
+        public Task<WaitingLaunch> LaunchWaitingAsync(ToastLaunch launch, TimeSpan bound, Func<string, bool> shown, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Nothing waits in this test, so nothing may be launched.");
     }
 
     [Fact]

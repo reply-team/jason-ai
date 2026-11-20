@@ -704,8 +704,10 @@ when Windows did not take the registration.
 - **macOS.** The bundle declares the scheme in `Info.plist`, and the system hands a link to the application by its
   `open-url` event, running or not; a link in a start's arguments is refused there.
 - **Linux.** The deb's menu entry declares `MimeType=x-scheme-handler/jason-desktop;` and starts the program with `--`
-  before the address (`Exec=/opt/Jason/jason-desktop-app -- %U`). The AppImage declares no scheme and takes no link,
-  and neither does a development build.
+  before the address (`Exec=/opt/Jason/jason-desktop-app -- %U`). An AppImage's entry, which the install line, the move
+  from a command-line install and `jason install` write under the account's own `applications` folder, does the same
+  for its file, its path bare wherever nothing in it needs quoting; the folder's cache is written again after it. A
+  development build takes no link.
 
 A link that comes before the page is loaded waits for it, the newest replacing an older one; the window comes forward,
 also when the link is refused.

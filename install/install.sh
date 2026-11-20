@@ -616,13 +616,16 @@ install_appimage() {
     fi
 
     # The menu entry and the icons, in the account's own data folder, where desktops and launchers read them. The entry
-    # starts the file where it is, and is hidden once that file is gone (TryExec). The path is spelled as the Desktop Entry
-    # Specification reads it: quoted in Exec, where a double quote, a backtick, a dollar sign and a backslash take a
-    # backslash and a per-cent is doubled; then, in both lines, every backslash doubled as a string's own escape. awk reads
-    # the path from its environment, since -v would take its backslashes as escapes.
+    # starts the file where it is with -- before the address, is hidden once that file is gone (TryExec), and takes the
+    # desktop's links (MimeType), in the form the jason it carries writes too (AppImageMenuEntry). The path is bare in Exec
+    # wherever nothing in it needs quoting: xdg-open outside GNOME and KDE takes Exec's first word, quotes and all, as the
+    # program. Else it is spelled as the Desktop Entry Specification reads it: quoted in Exec, where a double quote, a
+    # backtick, a dollar sign and a backslash take a backslash and a per-cent is doubled; then, in both lines, every
+    # backslash doubled as a string's own escape. awk reads the path from its environment, since -v would take its
+    # backslashes as escapes, and byte by byte (LC_ALL=C), as the jason it carries judges the path, whatever the locale.
     SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$SHARE/applications"
-    PLACED="$DEST" awk '
+    LC_ALL=C PLACED="$DEST" awk '
         function spelled(path, quoted,    out, i, c) {
             out = ""
             for (i = 1; i <= length(path); i++) {
@@ -634,11 +637,36 @@ install_appimage() {
             }
             return out
         }
-        /^Exec=/ { print "Exec=\"" spelled(ENVIRON["PLACED"], 1) "\" %U"; next }
-        /^TryExec=/ { next }
+        function bare(path,    i, c) {
+            if (path == "") return 0
+            for (i = 1; i <= length(path); i++) {
+                c = substr(path, i, 1)
+                if (c ~ /[[:space:][:cntrl:]]/ || index("\"'\''\\><~|&;$*?#()`%", c) > 0) return 0
+            }
+            return 1
+        }
+        /^\[/ {
+            entry = ($0 == "[Desktop Entry]")
+            print
+            if (entry) {
+                print "TryExec=" spelled(ENVIRON["PLACED"], 0)
+                print "MimeType=x-scheme-handler/jason-desktop;"
+            }
+            next
+        }
+        entry && /^(TryExec|MimeType)=/ { next }
+        entry && /^Exec=/ {
+            if (bare(ENVIRON["PLACED"])) print "Exec=" ENVIRON["PLACED"] " -- %U"
+            else print "Exec=\"" spelled(ENVIRON["PLACED"], 1) "\" -- %U"
+            next
+        }
         { print }
-        /^\[Desktop Entry\]$/ { print "TryExec=" spelled(ENVIRON["PLACED"], 0) }
     ' "$ROOT/jason-desktop-app.desktop" > "$SHARE/applications/jason-desktop.desktop" || fail "the menu entry could not be written to $SHARE/applications. Jason Desktop is installed at $DEST"
+    # The folder's cache, without which GIO finds no program for the desktop's link scheme there. A system without the tool
+    # still starts the entry from its menu, and xdg-open outside GNOME finds it by its own scan.
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$SHARE/applications" >/dev/null 2>&1 || true
+    fi
     for ICON in "$ROOT"/usr/share/icons/hicolor/*/apps/jason-desktop-app.png; do
         [ -f "$ICON" ] || continue
         SIZE="$(basename "$(dirname "$(dirname "$ICON")")")"
