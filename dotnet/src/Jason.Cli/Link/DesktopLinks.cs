@@ -1,6 +1,7 @@
 using System.Security;
 using Jason.Cli.Process;
 using Jason.Contracts.Notifications;
+using Jason.Contracts.Programs;
 
 namespace Jason.Cli.Link;
 
@@ -14,6 +15,12 @@ public interface IDesktopRegistration
 {
     /// <summary>The registered program, or null where the desktop registered none in its own form or it cannot be read.</summary>
     string? Program();
+
+    /// <summary>
+    /// Where Jason Desktop is installed and the system would still hand a <c>jason-desktop:</c> address to something else:
+    /// why, in words a person can act on. Null where it would not, and where no desktop is installed at all.
+    /// </summary>
+    DesktopRefusal? Elsewhere() => null;
 }
 
 /// <summary>
@@ -47,105 +54,286 @@ public sealed class WindowsDesktopRegistration : IDesktopRegistration
     }
 }
 
-/// <summary>
-/// On Linux, the menu entry that declares the scheme, <c>MimeType=x-scheme-handler/jason-desktop;</c>, in the deb's form:
-/// <c>Exec=&lt;program&gt; -- %U</c>, the program by a bare full path. That is the form xdg-open starts in every mode: outside
-/// GNOME and KDE it takes the first word of <c>Exec</c>, quotes and all, as the program, and when that is no program it hands
-/// the address to a list of browsers. An AppImage's entry declares no scheme, so it takes no link.
-/// </summary>
-/// <param name="applicationFolders">The <c>applications</c> folders searched, in order.</param>
-public sealed class LinuxDesktopRegistration(IReadOnlyList<string> applicationFolders) : IDesktopRegistration
+/// <summary>The XDG places xdg-utils reads an account's links by, each list in its order of precedence.</summary>
+/// <param name="CurrentDesktop">The names in <c>XDG_CURRENT_DESKTOP</c>, each giving a <c>&lt;name&gt;-mimeapps.list</c> read first.</param>
+/// <param name="MenuPrefix"><c>XDG_MENU_PREFIX</c>, giving a <c>&lt;prefix&gt;defaults.list</c> and cache read first; empty for none.</param>
+public sealed record XdgPlaces(string ConfigHome, IReadOnlyList<string> ConfigDirs, string DataHome, IReadOnlyList<string> DataDirs, IReadOnlyList<string> CurrentDesktop, string MenuPrefix)
 {
-    private const string Declared = "x-scheme-handler/" + DesktopLinks.Scheme;
+    /// <summary>This account's, from its environment, with the specification's defaults; a relative entry is left out as it says.</summary>
+    public static XdgPlaces ForThisAccount()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        static string? Set(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
+        static IReadOnlyList<string> Dirs(string? value, string fallback) =>
+            [.. (value ?? fallback).Split(':', StringSplitOptions.RemoveEmptyEntries).Where(Path.IsPathFullyQualified)];
+        static string Home(string? value, string fallback) => value is not null && Path.IsPathFullyQualified(value) ? value : fallback;
+        return new(
+            Home(Set("XDG_CONFIG_HOME"), Path.Combine(home, ".config")),
+            Dirs(Set("XDG_CONFIG_DIRS"), "/etc/xdg"),
+            Home(Set("XDG_DATA_HOME"), Path.Combine(home, ".local", "share")),
+            Dirs(Set("XDG_DATA_DIRS"), "/usr/local/share:/usr/share"),
+            [.. (Set("XDG_CURRENT_DESKTOP") ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries)],
+            Set("XDG_MENU_PREFIX") ?? string.Empty);
+    }
+
+    /// <summary>The data home, then the data dirs.</summary>
+    public IEnumerable<string> Data => new[] { DataHome }.Concat(DataDirs);
+}
+
+/// <summary>
+/// On Linux, Jason Desktop takes its links where xdg-open would run it for a <c>jason-desktop:</c> address in its generic
+/// mode, the mode outside GNOME and KDE and the strictest: the entry <c>xdg-mime query default
+/// x-scheme-handler/jason-desktop</c> names, found and started as xdg-open finds and starts it, and that entry in the
+/// desktop's own form, <c>MimeType</c> declaring the scheme and <c>Exec=&lt;program&gt; -- %U</c> with the program by a
+/// bare full path that is there. Read as xdg-utils 1.2.1 reads it (<c>defapp_generic</c>, <c>check_mimeapps_list</c>,
+/// <c>defapp_fallback</c>, <c>open_generic_xdg_mime</c>, <c>search_desktop_file</c>), and never written.
+/// </summary>
+/// <remarks>
+/// xdg-mime's default is (1) the first <c>[Default Applications]</c> entry for the type in a <c>mimeapps.list</c>, each
+/// <c>&lt;desktop&gt;-mimeapps.list</c> before it, under the config home, the config dirs, then <c>applications/</c> of the
+/// data home and dirs, taken only where its program is there; else (2) the first line for the type in a
+/// <c>defaults.list</c> or <c>mimeinfo.cache</c> of the data home and dirs, taken unchecked; else (3) the entry declaring the
+/// type with the highest <c>InitialPreference</c>. xdg-open runs the first entry of that name whose program it finds, and
+/// where it runs none it hands the address to a browser. So a scan of the entries alone is wrong where the account's own
+/// default names another program, or a stale cache line names an entry that is gone: both are refused in their own words
+/// (<see cref="Elsewhere"/>). xdg-open takes the first word of <c>Exec</c> as the program, quotes and all: a quoted path is
+/// never started.
+/// </remarks>
+/// <param name="search">The search path a bare program name in another entry's <c>Exec</c> is looked for on.</param>
+public sealed class LinuxDesktopRegistration(XdgPlaces places, ProgramSearchPath search) : IDesktopRegistration
+{
+    private const string Type = "x-scheme-handler/" + DesktopLinks.Scheme;
 
     private const string Tail = " -- %U";
 
-    /// <summary>
-    /// This account's folders: <c>applications</c> under <c>XDG_DATA_HOME</c> (<c>~/.local/share</c>), then under each of
-    /// <c>XDG_DATA_DIRS</c> (<c>/usr/local/share:/usr/share</c>), a relative entry left out as the specification says.
-    /// </summary>
-    public static LinuxDesktopRegistration ForThisAccount()
+    /// <summary>This account's places and search path.</summary>
+    public static LinuxDesktopRegistration ForThisAccount() =>
+        new(XdgPlaces.ForThisAccount(), new ProgramSearchPath(Environment.GetEnvironmentVariable("PATH"), null));
+
+    public string? Program() => Resolve() is { Runs: { } entry } ? Ours(entry) : null;
+
+    public DesktopRefusal? Elsewhere()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { } set && Path.IsPathFullyQualified(set) ? set : Path.Combine(home, ".local", "share");
-        var dataDirs = (Environment.GetEnvironmentVariable("XDG_DATA_DIRS") is { Length: > 0 } dirs ? dirs : "/usr/local/share:/usr/share")
-            .Split(':', StringSplitOptions.RemoveEmptyEntries)
-            .Where(Path.IsPathFullyQualified);
-        return new([.. new[] { dataHome }.Concat(dataDirs).Select(folder => Path.Combine(folder, "applications"))]);
+        var resolved = Resolve();
+        if (resolved.Id is not { } id || (resolved.Runs is { } runs && Ours(runs) is not null) || Declared() is not { } jason)
+        {
+            return null;
+        }
+
+        return resolved.Runs is not null
+            ? new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: this account opens jason-desktop: links with {id} ({resolved.Source}), not with Jason Desktop; xdg-mime default {jason} {Type} gives them back to it.")
+            : new(CliErrors.DesktopLinksElsewhere, $"Nothing was opened: {resolved.Source} names {id} for jason-desktop: links, and no menu entry of that name starts a program here; " + (Path.GetFileName(resolved.Source) is "mimeinfo.cache" ? $"update-desktop-database {Path.GetDirectoryName(resolved.Source)} writes it again." : $"xdg-mime default {jason} {Type} gives them to Jason Desktop."));
     }
 
-    public string? Program()
-    {
-        foreach (var folder in applicationFolders)
-        {
-            IEnumerable<string> entries;
-            try
-            {
-                entries = Directory.Exists(folder) ? [.. Directory.EnumerateFiles(folder, "*.desktop").Order(StringComparer.Ordinal)] : [];
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
+    /// <summary>What xdg-mime names for the type and where it read it, and the entry xdg-open then runs, or null where it runs none.</summary>
+    private sealed record Resolution(string? Id, string? Source, string? Runs);
 
-            foreach (var entry in entries)
+    private Resolution Resolve()
+    {
+        var (id, source) = Default();
+        return new(id, source, id is null ? null : Started(id));
+    }
+
+    /// <summary><c>xdg-mime query default</c> in its generic mode: the entry's name, and the file it was read from.</summary>
+    private (string? Id, string? Source) Default()
+    {
+        var prefixes = places.CurrentDesktop.Select(desktop => desktop.ToLowerInvariant() + "-").Append(string.Empty).ToList();
+        foreach (var folder in new[] { places.ConfigHome }.Concat(places.ConfigDirs).Concat(places.Data.Select(data => Path.Combine(data, "applications"))))
+        {
+            foreach (var prefix in prefixes)
             {
-                if (ProgramOf(entry) is { } program)
+                var list = Path.Combine(folder, prefix + "mimeapps.list");
+                foreach (var app in DefaultsIn(list))
                 {
-                    return program;
+                    if (ProgramOf(EntryNamed(app)) is not null)
+                    {
+                        return (app, list);
+                    }
                 }
+            }
+        }
+
+        foreach (var data in places.Data)
+        {
+            foreach (var prefix in new[] { places.MenuPrefix, string.Empty })
+            {
+                foreach (var file in new[] { "defaults.list", "mimeinfo.cache" }.Select(name => Path.Combine(data, "applications", prefix + name)))
+                {
+                    var line = Lines(file).FirstOrDefault(line => line.Contains(Type + "=", StringComparison.Ordinal));
+                    if (line is not null && line[(line.IndexOf('=', StringComparison.Ordinal) + 1)..].Split(';')[0] is { Length: > 0 } app)
+                    {
+                        return (app, file);
+                    }
+                }
+            }
+        }
+
+        string? best = null;
+        var preference = -1;
+        foreach (var data in places.Data)
+        {
+            foreach (var entry in Entries(Path.Combine(data, "applications")).Where(entry => (Text(entry) ?? string.Empty).Contains(Type + ";", StringComparison.Ordinal)))
+            {
+                var initial = Lines(entry).Select(line => line.Split('=')).FirstOrDefault(parts => parts.Length > 1 && parts[0].EndsWith("InitialPreference", StringComparison.Ordinal)) is { } parts
+                    && int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
+                if (initial > preference)
+                {
+                    preference = initial;
+                    best = entry;
+                }
+            }
+        }
+
+        return best is null ? (null, null) : (Path.GetFileName(best), Path.GetDirectoryName(best));
+    }
+
+    /// <summary>The <c>[Default Applications]</c> entries for the type in one list, in their order; none where it is not there.</summary>
+    private static IEnumerable<string> DefaultsIn(string list)
+    {
+        var inDefaults = false;
+        foreach (var line in Lines(list))
+        {
+            if (line.StartsWith('['))
+            {
+                inDefaults = line.StartsWith("[Default Applications]", StringComparison.Ordinal);
+            }
+            else if (inDefaults && line.StartsWith(Type + "=", StringComparison.Ordinal))
+            {
+                return line[(Type.Length + 1)..].Split(';', StringSplitOptions.RemoveEmptyEntries);
+            }
+        }
+
+        return [];
+    }
+
+    /// <summary>The entry xdg-open runs for a name: the first found under the data home and dirs whose program is there.</summary>
+    private string? Started(string id) => places.Data.SelectMany(data => Named(Path.Combine(data, "applications"), id)).FirstOrDefault(entry => ProgramOf(entry) is not null);
+
+    /// <summary>The first entry of a name under the data home and dirs, as xdg-mime looks one up to ask whether its program is there.</summary>
+    private string? EntryNamed(string id) => places.Data.SelectMany(data => Named(Path.Combine(data, "applications"), id)).FirstOrDefault();
+
+    /// <summary>A name in one <c>applications</c> folder: the file itself, its vendor folder's form, then each folder below, in order.</summary>
+    private static IEnumerable<string> Named(string folder, string id)
+    {
+        if (id.Contains('/', StringComparison.Ordinal) || !Directory.Exists(folder))
+        {
+            yield break;
+        }
+
+        var direct = Path.Combine(folder, id);
+        if (File.Exists(direct))
+        {
+            yield return direct;
+        }
+        else if (id.IndexOf('-', StringComparison.Ordinal) is > 0 and var dash && File.Exists(Path.Combine(folder, id[..dash], id[(dash + 1)..])))
+        {
+            yield return Path.Combine(folder, id[..dash], id[(dash + 1)..]);
+        }
+
+        foreach (var below in Folders(folder))
+        {
+            foreach (var found in Named(below, id))
+            {
+                yield return found;
+            }
+        }
+    }
+
+    /// <summary>The program xdg-open starts for an entry: <c>Exec</c>'s first word, quotes and all, by its path or on the search path; null where none is there.</summary>
+    private string? ProgramOf(string? entry)
+    {
+        if (entry is null || Value(entry, "Exec") is not { Length: > 0 } exec)
+        {
+            return null;
+        }
+
+        var word = exec.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+        return ProgramLookup.IsPath(word)
+            ? (Path.IsPathFullyQualified(word) && File.Exists(word) ? word : null)
+            : ProgramLookup.FullPathOf(word, search);
+    }
+
+    /// <summary>The program an entry starts in the desktop's own form, or null: it declares the scheme, and its <c>Exec</c> is a bare full path and <c>-- %U</c>.</summary>
+    private static string? Ours(string entry)
+    {
+        if (Value(entry, "MimeType") is not { } types || !types.Split(';').Contains(Type, StringComparer.Ordinal)
+            || Value(entry, "Exec") is not { } exec || !exec.EndsWith(Tail, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var program = exec[..^Tail.Length];
+        return program.Length > 0 && !program.Contains(' ', StringComparison.Ordinal) && !program.Contains('"', StringComparison.Ordinal) && Path.IsPathFullyQualified(program) && File.Exists(program) ? program : null;
+    }
+
+    /// <summary>Jason Desktop's entry by name, where one in its own form is in an <c>applications</c> folder at all; null where none is.</summary>
+    private string? Declared() =>
+        places.Data.SelectMany(data => Entries(Path.Combine(data, "applications"))).Where(entry => Ours(entry) is not null).Select(Path.GetFileName).FirstOrDefault();
+
+    /// <summary>A key's value in an entry's <c>[Desktop Entry]</c> group, as written; null where the group has none.</summary>
+    private static string? Value(string entry, string key)
+    {
+        var inEntry = false;
+        foreach (var line in Lines(entry))
+        {
+            if (line.StartsWith('['))
+            {
+                inEntry = line == "[Desktop Entry]";
+            }
+            else if (inEntry && line.StartsWith(key + "=", StringComparison.Ordinal))
+            {
+                return line[(key.Length + 1)..];
             }
         }
 
         return null;
     }
 
-    /// <summary>The program an entry starts for the scheme, read from its <c>[Desktop Entry]</c> group alone, or null.</summary>
-    private static string? ProgramOf(string entry)
+    /// <summary>The <c>.desktop</c> files of a folder, then of each folder below, in order.</summary>
+    private static IEnumerable<string> Entries(string folder)
     {
-        string[] lines;
+        if (!Directory.Exists(folder))
+        {
+            return [];
+        }
+
+        string[] here;
         try
         {
-            lines = File.ReadAllLines(entry);
+            here = [.. Directory.EnumerateFiles(folder, "*.desktop").Order(StringComparer.Ordinal)];
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            here = [];
+        }
+
+        return here.Concat(Folders(folder).SelectMany(Entries));
+    }
+
+    private static string[] Folders(string folder)
+    {
+        try
+        {
+            return [.. Directory.EnumerateDirectories(folder).Order(StringComparer.Ordinal)];
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    private static string[] Lines(string file) => Text(file)?.Split('\n').Select(line => line.TrimEnd('\r')).ToArray() ?? [];
+
+    private static string? Text(string file)
+    {
+        try
+        {
+            return File.Exists(file) ? File.ReadAllText(file) : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
         {
             return null;
         }
-
-        string? exec = null;
-        var declares = false;
-        var inEntry = false;
-        foreach (var line in lines)
-        {
-            if (line.StartsWith('['))
-            {
-                inEntry = line == "[Desktop Entry]";
-                continue;
-            }
-
-            if (!inEntry)
-            {
-                continue;
-            }
-
-            if (line.StartsWith("Exec=", StringComparison.Ordinal))
-            {
-                exec = line["Exec=".Length..];
-            }
-            else if (line.StartsWith("MimeType=", StringComparison.Ordinal))
-            {
-                declares = line["MimeType=".Length..].Split(';').Contains(Declared, StringComparer.Ordinal);
-            }
-        }
-
-        if (!declares || exec is null || !exec.EndsWith(Tail, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        var program = exec[..^Tail.Length];
-        return program.Length > 0 && !program.Contains(' ', StringComparison.Ordinal) && !program.Contains('"', StringComparison.Ordinal) ? program : null;
     }
 }
 
@@ -229,6 +417,13 @@ public static class DesktopLinks
         registration?.Program() is { Length: > 0 } program && Path.IsPathFullyQualified(program) && File.Exists(program);
 
     /// <summary>
+    /// Why Jason Desktop would not be opened for this account, or null where it takes links: the registration's own words
+    /// where the system would hand the address to something else, else <see cref="CliErrors.DesktopNotInstalled"/>.
+    /// </summary>
+    public static DesktopRefusal? Absent(IDesktopRegistration? registration) =>
+        Present(registration) ? null : registration?.Elsewhere() ?? new(CliErrors.DesktopNotInstalled, NotInstalled);
+
+    /// <summary>
     /// The program a Windows registration's command names in the desktop's form — the path, quoted where it needs it, then
     /// <c>--</c> and the quoted address — or null for any other form.
     /// </summary>
@@ -269,7 +464,7 @@ public static class DesktopLinks
 
     /// <summary>
     /// Opens Jason Desktop at <paramref name="address"/>, or with <paramref name="handOn"/> false only checks that it would:
-    /// refused with <see cref="CliErrors.DesktopNotInstalled"/> where no desktop takes links; else handed to the system's
+    /// refused where no desktop takes links (<see cref="Absent"/>); else handed to the system's
     /// opener, and refused by the opener's code where it did not start or failed. Nothing else is ever opened. A hand-on
     /// still running when the wait ends may yet open the desktop, so it is said on stderr and not refused, as a hand-on that
     /// completed is. The caller says a refusal in its own place.
@@ -278,9 +473,9 @@ public static class DesktopLinks
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentException.ThrowIfNullOrEmpty(address);
-        if (!Present(env.Desktop))
+        if (Absent(env.Desktop) is { } absent)
         {
-            return new(CliErrors.DesktopNotInstalled, NotInstalled);
+            return absent;
         }
 
         if (!handOn)
