@@ -1931,6 +1931,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
     [InlineData("no password given", true, 126, "Error executing command as another user: Request dismissed")]
     [InlineData("no session to ask in", false, 127, "")]
     [InlineData("apt not ended", true, PackageRun.TimedOut, "")]
+    [InlineData("no new privileges", true, 127, "pkexec must be setuid root\n")]
     public async Task From_the_deb_a_purge_refused_removes_nothing_of_this_accounts_and_starts_the_runtime_again_unless_apt_may_still_run(string row, bool asked, int code, string said)
     {
         var places = LinuxPlaces();
@@ -1987,6 +1988,14 @@ public sealed partial class UninstallCarriedTests : IDisposable
         {
             Assert.Equal([_dir.Paths.Root], processes.Launches);
             Assert.Equal([carried], processes.Executables.Single());
+        }
+
+        // A window its update restarted cannot gain an administrator's rights, nor can anything it started: the way on is a
+        // window opened anew, never dpkg. Catches pkexec's refusal under no_new_privs said as apt's failure.
+        if (row == "no new privileges")
+        {
+            Assert.Contains("open it again from your applications menu", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("dpkg --configure", report.GetProperty("refusal").GetString(), StringComparison.Ordinal);
         }
     }
 

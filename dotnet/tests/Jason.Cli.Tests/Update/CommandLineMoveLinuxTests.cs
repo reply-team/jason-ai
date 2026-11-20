@@ -156,6 +156,7 @@ public sealed class CommandLineMoveLinuxTests
     [InlineData("no_password", "needs an administrator's password once, and none was given", true)]
     [InlineData("no_session", "this session cannot ask for it", true)]
     [InlineData("apt_unended", "apt had not ended after 20 minutes", true)]
+    [InlineData("no_new_privileges", "open it again from your applications menu", true)]
     [InlineData("user_namespaces", "user namespaces are refused", false)]
     [InlineData("no_fuse", "needs FUSE 3 here", true)]
     [InlineData("running", "is running", true)]
@@ -176,6 +177,9 @@ public sealed class CommandLineMoveLinuxTests
                 break;
             case "apt_unended":
                 rig.System.OnPackage = _ => new PackageRun(true, PackageRun.TimedOut, string.Empty);
+                break;
+            case "no_new_privileges":
+                rig.System.OnPackage = _ => new PackageRun(true, 127, "pkexec must be setuid root\n");
                 break;
             case "user_namespaces":
                 rig.System.Apt = false;
@@ -212,7 +216,7 @@ public sealed class CommandLineMoveLinuxTests
         Assert.Equal(why is "older_appimage" or "not_jason_appimage", File.Exists(rig.AppImage));
         Assert.False(Directory.Exists(rig.Bundles) && Directory.EnumerateFileSystemEntries(rig.Bundles).Any());
         Assert.False(Directory.Exists(rig.Update.MoveDownloads) && Directory.EnumerateFileSystemEntries(rig.Update.MoveDownloads).Any());
-        if (why is not ("no_password" or "no_session" or "apt_unended"))
+        if (why is not ("no_password" or "no_session" or "apt_unended" or "no_new_privileges"))
         {
             Assert.DoesNotContain(rig.Installation.Release.Requested, path => path.EndsWith("/" + CommandLineMove.DebAsset, StringComparison.Ordinal) || path.EndsWith("/" + CommandLineMove.AppImageAsset, StringComparison.Ordinal));
         }
@@ -240,8 +244,44 @@ public sealed class CommandLineMoveLinuxTests
     [InlineData(true, 127, "GDBus.Error: No session for cookie", AptRefusal.DialogFailed)]
     [InlineData(true, 100, "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)", AptRefusal.LockHeld)]
     [InlineData(true, 100, "E: Sub-process /usr/bin/dpkg returned an error code (1)", AptRefusal.Apt)]
-    public void On_linux_apt_s_run_is_read_from_the_tools_own_words(bool asked, int exit, string said, AptRefusal refusal) =>
-        Assert.Equal(refusal, new PackageRun(asked, exit, said).Refusal);
+    [InlineData(true, 127, "pkexec must be setuid root", AptRefusal.NoNewPrivileges)]
+    [InlineData(true, 1, "sudo: The \"no new privileges\" flag is set, which prevents sudo from running as root.", AptRefusal.NoNewPrivileges)]
+    [InlineData(false, 127, "", AptRefusal.NoNewPrivileges, true)]
+    [InlineData(true, 1, "Failed to connect to bus: No medium found", AptRefusal.NoNewPrivileges, true)]
+    [InlineData(true, 127, "Error executing command as another user: No authentication agent found.", AptRefusal.NoNewPrivileges, true)]
+    [InlineData(true, 126, "Error executing command as another user: Request dismissed", AptRefusal.NoPassword, true)]
+    public void On_linux_apt_s_run_is_read_from_the_tools_own_words(bool asked, int exit, string said, AptRefusal refusal, bool flagged = false) =>
+        Assert.Equal(refusal, new PackageRun(asked, exit, said) { Flagged = flagged }.Refusal);
+
+    /// <summary>
+    /// Who asks for the one password. Where this process cannot gain privileges (<c>no_new_privs</c>, which a Jason Desktop
+    /// Electron's relaunch started hands on to all it starts), pkexec started by the user manager, terminal or not, and nobody
+    /// where systemd-run or pkexec is missing; otherwise sudo in a terminal, else pkexec, as before. Catches such a window
+    /// running pkexec itself, which refuses as not setuid root, and the mark misread from a process's status.
+    /// </summary>
+    [Fact]
+    public void On_linux_a_process_that_cannot_gain_privileges_is_asked_its_password_through_the_user_manager()
+    {
+        static Func<string, bool> Having(params string[] tools) => tool => tools.Contains(tool, StringComparer.Ordinal);
+        var all = Having(MoveSystem.Sudo, MoveSystem.Pkexec, MoveSystem.SystemdRun);
+
+        var flagged = MoveSystem.Asker(flagged: true, terminal: true, all);
+        Assert.Equal(MoveSystem.SystemdRun, flagged?.Program);
+        Assert.Equal(["--user", "--wait", "--pipe", "--quiet", "--collect", "--", MoveSystem.Pkexec], flagged?.Before);
+        Assert.Contains("its own window", flagged?.Asks, StringComparison.Ordinal);
+        Assert.Null(MoveSystem.Asker(true, false, Having(MoveSystem.Pkexec, MoveSystem.Sudo)));
+        Assert.Null(MoveSystem.Asker(true, false, Having(MoveSystem.SystemdRun, MoveSystem.Sudo)));
+
+        Assert.Equal(MoveSystem.Sudo, MoveSystem.Asker(false, true, all)?.Program);
+        var dialog = MoveSystem.Asker(false, false, all);
+        Assert.Equal(MoveSystem.Pkexec, dialog?.Program);
+        Assert.Empty(dialog!.Value.Before);
+        Assert.Null(MoveSystem.Asker(false, false, Having(MoveSystem.Sudo)));
+
+        Assert.True(MoveSystem.NoNewPrivileges("Name:\tjason\nNoNewPrivs:\t1\nSeccomp:\t0\n"));
+        Assert.False(MoveSystem.NoNewPrivileges("Name:\tjason\nNoNewPrivs:\t0\nSeccomp:\t0\n"));
+        Assert.False(MoveSystem.NoNewPrivileges(null));
+    }
 
     /// <summary>How long apt is told to wait for the package lock, in the arguments it is given.</summary>
     internal static TimeSpan LockWait(IEnumerable<string> arguments) =>

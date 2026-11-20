@@ -123,9 +123,11 @@ public static class UninstallCommand
             process it started (its plugin hosts, its agents' calls), are not counted.
           - on Linux from the deb, just after the runtime and before anything of this account's is removed: the package
             jason-desktop, purged with apt-get, which asks for an administrator's password once, through sudo where
-            there is a terminal, else through the desktop's own dialog (pkexec); its scripts take back what it placed
-            for every account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask
-            in, the package system held, apt failing - nothing of this account's is removed, the runtime's start at
+            there is a terminal, else through the desktop's own dialog (pkexec), and through that dialog started by
+            the user manager (systemd-run --user) where this process cannot gain privileges, as under a Jason
+            Desktop its update or a switch of mode started again; its scripts take back what it placed for every
+            account, /usr/bin/jason among them. Where it does not go - no password given, no session to ask in, the
+            package system held, apt failing - nothing of this account's is removed, the runtime's start at
             logon included, the runtime this stopped is started again, and the verb exits 1 naming sudo apt purge
             jason-desktop as the way by hand.
           - just after the runtime, so a runtime that will not stop leaves it in place: Open Jason at Login,
