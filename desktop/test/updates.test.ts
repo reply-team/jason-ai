@@ -27,7 +27,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, packageMovedTo, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, restartOnce, restartQuestion, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -611,7 +611,7 @@ test('a start that failed says where the replaced version is only after an updat
     const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
     for (const platform of ['win32', 'darwin', 'linux'] as const) {
         assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
-        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
 });
@@ -705,6 +705,96 @@ test('the menu offers one step at a time, and in a build that is not installed n
     assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
     assert.deepEqual(menuItemOf({ step: 'installing', version: '0.35.0' }, true, true), { label: 'Installing Jason 0.35.0…', enabled: false, act: null });
     assert.deepEqual(menuItemOf({ step: 'idle' }, false, true), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
+});
+
+test('where the package updates itself, the item says so, and once the system installed a new version under the running window it offers the restart', () => {
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false), { label: 'Updates Come Through the Package', enabled: false, act: null });
+    // Pressable: an item that names the restart and does nothing leaves the person to find Quit and the menu themselves. It
+    // names the runtime, which it stops, as the install's item does.
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false, '0.49.2'), { label: 'Restart Jason and Its Runtime to Finish the Update to 0.49.2', enabled: true, act: 'restart' });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, true, '0.49.2'), { label: 'Check for Updates…', enabled: true, act: 'check' }, 'electron-updater’s own steps stand where it installs');
+});
+
+test('the deb’s restart stops the runtime the old build runs before Jason starts again, and leaves Jason as it is when that runtime does not stop', async () => {
+    // Without the stop the new start finds the old build's runtime up and uses it, and the installation stays a version
+    // behind its own package until a person restarts the runtime by hand.
+    const run = async (outcome: StopOutcome) => {
+        const calls: string[] = [];
+        await restartForPackage({
+            stopRuntime: async () => {
+                calls.push('stop');
+                return outcome;
+            },
+            relaunch: () => calls.push('relaunch'),
+            refused: (why) => calls.push(`refused: ${why}`),
+        });
+        return calls;
+    };
+    assert.deepEqual(await run({ kind: 'stopped' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'none' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'another' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'failed', exit: 1 }), [
+        'stop',
+        'refused: Jason was not restarted, because the runtime this application carries did not stop (jason runtime stop exited 1). Jason was left as it was. Stop the runtime with jason runtime stop. Then choose Restart Jason and Its Runtime to Finish the Update again.',
+    ]);
+    const unanswered = await run({ kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' });
+    assert.equal(unanswered.length, 2);
+    assert.match(unanswered[1]!, /^refused: Jason was not restarted, because .+\. Jason was left as it was\. .+ Then choose Restart Jason and Its Runtime to Finish the Update again\.$/);
+});
+
+test('the deb has moved when its version.json names another version than the window runs, and nothing else has', () => {
+    // The one comparison the window's watch makes once a minute: wrong, the notice and the item never come, or come for
+    // the version already running.
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.2'), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.1'), null, 'the version running');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', null), null, 'a version.json that could not be read');
+    assert.equal(packageMovedTo({ form: 'deb' }, null, '0.49.2'), null, 'a window that knows no version of its own');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.1', '0.49.2'), null, 'an AppImage updates itself');
+    assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
+});
+
+test('the deb has moved too when the system updated it while no window was open and the runtime this application started still runs the older build', () => {
+    // The start that finds it offers the same restart as a window open at the update: without it the window says nothing
+    // the deb can do, and the runtime runs the older build until a person restarts it by hand.
+    const older = { version: '0.49.1', ours: true };
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', older), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2-rc.1', ours: true }), '0.49.2', 'a candidate before its release');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.3', older), '0.49.3', 'the package moved again under the window: its version');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.1', ours: false }), null, "another installation's runtime, which a restart of this one does not bring up");
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2+14315ba2', ours: true }), null, 'the same build');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.3', ours: true }), null, 'a newer runtime, which a restart from this build would start older');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: null, ours: true }), null, 'no runtime answered');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.2', '0.49.2', older), null, 'an AppImage updates itself');
+});
+
+test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
+    // A click on the notice and then the item, or two clicks, would stop the runtime twice and relaunch twice, the second
+    // stop racing the first into a refusal while Jason in fact restarts.
+    const calls: string[] = [];
+    let outcome: StopOutcome = { kind: 'failed', exit: 1 };
+    let release: () => void = () => undefined;
+    const press = restartOnce({
+        stopRuntime: () => new Promise<StopOutcome>((resolve) => {
+            calls.push('stop');
+            release = () => resolve(outcome);
+        }),
+        relaunch: () => calls.push('relaunch'),
+        refused: () => calls.push('refused'),
+    });
+    const first = press();
+    await press();
+    release();
+    await first;
+    assert.deepEqual(calls, ['stop', 'refused']);
+    outcome = { kind: 'stopped' };
+    const again = press();
+    release();
+    await again;
+    await press();
+    assert.deepEqual(calls, ['stop', 'refused', 'stop', 'relaunch'], 'refused, the next press goes; relaunched, none does');
+    // The key's question names what the restart ends, as the install's does.
+    assert.equal(restartQuestion('0.49.2').message, 'Restart Jason and its runtime to finish the update to Jason 0.49.2?');
+    assert.equal(restartQuestion('0.49.2').cancelId, 1);
 });
 
 test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {
@@ -860,15 +950,25 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
             ruled,
         ].join(' '),
     );
+    // A release before 0.49.1 carries no key for Jason's apt source, which its install keeps: the source goes first, or every
+    // apt update reports it. Catches a way back that leaves the system's updates failing.
     assert.equal(
-        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
             'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
-            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo rm /etc/apt/sources.list.d/jason-desktop.sources, since that release carries no key for Jason\'s apt source, then sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
+    for (const version of ['0.49.1', '0.49.2-rc.1', '0.50.0']) {
+        assert.ok(
+            keptNotice('The runtime did not start.', { release: previousRelease(version), file: debFile, version }, '/opt/Jason', 'linux').includes(
+                'and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ),
+            version,
+        );
+    }
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {

@@ -311,6 +311,16 @@ export function configuration({ version, sign = null, testBuild = false, linuxWa
             mimeTypes: ['x-scheme-handler/jason-desktop'],
             executableArgs: ['--'],
             recommends: ['libappindicator3-1', 'libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70'],
+            // The deb's own maintainer scripts in place of electron-builder's templates, which they keep whole: they also
+            // link /usr/bin/jason and write Jason's apt source, and take both back on a removal (installer/deb). The
+            // package carries the key that source is signed by, and no rule for the system's automatic updates: Jason's
+            // updates are offered by the system's updater and installed when the person says so. fpm takes each extra file
+            // as <source>=<path in the package>.
+            afterInstall: 'installer/deb/after-install.sh',
+            afterRemove: 'installer/deb/after-remove.sh',
+            fpm: [
+                `${join(desktop, '..', 'install', 'jason-desktop-archive-keyring.gpg')}=/usr/share/keyrings/jason-desktop.gpg`,
+            ],
         },
         // The AppImage's runtime: 1.0.3 is the static runtime, which needs no libfuse2, where the default, 0.0.0, is the
         // legacy FUSE 2 one (app-builder-lib 26.18.0, out/configuration.d.ts, ToolsetConfig.appimage, which lists 1.0.3

@@ -4,6 +4,7 @@ using Jason.Cli.Commands;
 using Jason.Cli.Installation;
 using Jason.Cli.Moving;
 using Jason.Cli.Process;
+using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Microsoft.Win32;
 
@@ -18,8 +19,11 @@ public static class ApplicationFates
     /// <summary>Windows: handed to the application's own uninstaller, which removes the folder once this process has ended.</summary>
     public const string AfterExit = "after_exit";
 
-    /// <summary>macOS: the bundle deleted, as the last act.</summary>
+    /// <summary>macOS: the bundle deleted, as the last act; Linux: the AppImage file deleted, as the last act.</summary>
     public const string Deleted = "deleted";
+
+    /// <summary>Linux, the deb: the package purged by apt, once the runtime has stopped and before anything of this account's goes.</summary>
+    public const string Purged = "purged";
 
     /// <summary>The carried jason is not inside a folder shaped as the application's, so no application is planned.</summary>
     public const string NotFound = "not_found";
@@ -29,11 +33,14 @@ public static class ApplicationFates
 /// What an uninstall run by the jason Jason Desktop carries takes off besides what any installation's does: the
 /// application's own placements, read before anything is removed.
 /// </summary>
-/// <param name="Application">The application's folder (<c>Jason.app</c>, or the installed folder on Windows), or null where the carried jason is not inside one.</param>
+/// <param name="Application">
+/// The application's folder (<c>Jason.app</c>, the installed folder on Windows, the deb's <c>/opt/Jason</c>) or an AppImage's
+/// file, or null where the carried jason is not inside one.
+/// </param>
 /// <param name="ApplicationFate">What becomes of it (<see cref="ApplicationFates"/>).</param>
 /// <param name="OpenAtLogin">
 /// "Open Jason at Login" where it starts this application: the LaunchAgent file on macOS, the values of this account's
-/// <c>Run</c> key on Windows.
+/// <c>Run</c> key on Windows, the XDG autostart entry on Linux.
 /// </param>
 /// <param name="DesktopLink">The <c>jason-desktop</c> link registration on Windows, where its command starts this application.</param>
 /// <param name="CommandFiles">
@@ -64,7 +71,8 @@ public sealed record DesktopPlan(
     /// macOS: what the application of this bundle identifier leaves under <c>~/Library</c> as its own state, found there,
     /// each going with the application, just before it: its preferences, saved window state, caches, HTTP and WebKit
     /// storage and its support folder. Never where the application stays, nor where the home is <c>/</c> or not the
-    /// account's own.
+    /// account's own. Linux, an AppImage: its files of this account's, likewise: its menu entry and icons, the copies of its
+    /// jason and the one an update kept, the record of where the file is, and its support folder.
     /// </summary>
     public IReadOnlyList<string> ApplicationState { get; init; } = [];
 
@@ -131,11 +139,31 @@ public static partial class DesktopRemoval
     /// </summary>
     public const string ShipItLabel = Identifier + ".ShipIt";
 
+    /// <summary>Linux: the name dpkg knows the deb by, which electron-builder gives it.</summary>
+    public const string DebPackage = "jason-desktop";
+
+    /// <summary>Linux: the application's own executable, at the top of the deb's folder and of an AppImage.</summary>
+    public const string LinuxLauncher = "jason-desktop-app";
+
+    /// <summary>Linux: an AppImage's menu entry under the account's <c>applications</c> folder, as the install line writes it.</summary>
+    public const string MenuEntryName = "jason-desktop.desktop";
+
+    /// <summary>Linux: an AppImage's icon, at each size under the account's <c>icons/hicolor</c>.</summary>
+    public const string IconName = LinuxLauncher + ".png";
+
+    /// <summary>How long the package's purge is given, the password asked included: the move's own bound for its install.</summary>
+    public static readonly TimeSpan PurgeWait = MoveSystem.AptWait;
+
     /// <summary>The application's folder that carries <paramref name="carried"/>, or null where it is not inside one.</summary>
     public static string? ApplicationOf(CarriedExecutable carried, SetupPlaces places)
     {
         ArgumentNullException.ThrowIfNull(carried);
         ArgumentNullException.ThrowIfNull(places);
+
+        if (places.Platform is SetupSystem.Linux)
+        {
+            return LinuxApplicationOf(carried, places);
+        }
 
         var bundle = Path.GetDirectoryName(carried.Executable);
         var resources = bundle is null ? null : Path.GetDirectoryName(bundle);
@@ -188,6 +216,46 @@ public static partial class DesktopRemoval
     private static partial Regex BundleIdentifier();
 
     /// <summary>
+    /// Linux: the deb's folder, where this jason is the package's (<see cref="SetupPlaces.CarriedByDeb"/>) at
+    /// <c>resources/bundle/jason</c> in the folder the package installs to, and only there: a deb unpacked elsewhere is
+    /// nobody's package. Else the AppImage file whose copy this jason is, a copy under <c>&lt;data&gt;/desktop/bundle/&lt;version&gt;/</c>
+    /// (<see cref="AppImageCopy.FileOf"/>).
+    /// </summary>
+    private static string? LinuxApplicationOf(CarriedExecutable carried, SetupPlaces places)
+    {
+        var folder = Path.GetDirectoryName(carried.Executable);
+        var above = folder is null ? null : Path.GetDirectoryName(folder);
+        if (folder is null || above is null)
+        {
+            return null;
+        }
+
+        if (SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            var application = Path.GetDirectoryName(above);
+            return application is not null && Named(folder, "bundle") && Named(above, "resources") && SamePath(application, places.DebApplication)
+                ? application
+                : null;
+        }
+
+        return Named(above, "bundle") && Path.GetDirectoryName(above) is { } desktop && Named(desktop, "desktop")
+            ? AppImageCopy.FileOf(carried.Executable, places.Home)
+            : null;
+    }
+
+    private static bool SamePath(string one, string other)
+    {
+        try
+        {
+            return string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(one)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(other)), StringComparison.Ordinal);
+        }
+        catch (Exception unreadable) when (unreadable is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Windows, the terminal door: the processes running the carried jason, in any session, besides this one, the runtime
     /// this uninstall stops, an earlier demo's runtime it stops, and every process any of those started, at any depth: a
     /// runtime's plugin hosts and an agent's <c>jason</c> calls for its work, which that stop ends. The application's
@@ -204,9 +272,13 @@ public static partial class DesktopRemoval
         return StartInFlight.Others(env, carried.Executable, plan.Demo);
     }
 
-    /// <summary>The application's own executable inside its folder.</summary>
-    public static string ApplicationExecutable(string application, SetupSystem platform) =>
-        platform is SetupSystem.Windows ? Path.Combine(application, "Jason.exe") : Path.Combine(application, "Contents", "MacOS", "Jason");
+    /// <summary>The application's own executable inside its folder; on Linux the deb's launcher, or the AppImage file itself.</summary>
+    public static string ApplicationExecutable(string application, SetupSystem platform) => platform switch
+    {
+        SetupSystem.Windows => Path.Combine(application, "Jason.exe"),
+        SetupSystem.Linux => Directory.Exists(application) ? Path.Combine(application, LinuxLauncher) : application,
+        _ => Path.Combine(application, "Contents", "MacOS", "Jason"),
+    };
 
     private static bool Named(string folder, string name) => string.Equals(Path.GetFileName(folder), name, StringComparison.OrdinalIgnoreCase);
 
@@ -231,8 +303,12 @@ public static partial class DesktopRemoval
 
         var fate = application is null ? ApplicationFates.NotFound
             : keepApplication ? ApplicationFates.Kept
-            : places.Platform is SetupSystem.Windows ? ApplicationFates.AfterExit
-            : ApplicationFates.Deleted;
+            : places.Platform switch
+            {
+                SetupSystem.Windows => ApplicationFates.AfterExit,
+                SetupSystem.Linux when SetupPlaces.CarriedByDeb(carried.Executable) => ApplicationFates.Purged,
+                _ => ApplicationFates.Deleted,
+            };
         var windows = places.Platform is SetupSystem.Windows;
         var bundle = Path.GetDirectoryName(carried.Executable)!;
         var shipIt = places.Platform is SetupSystem.MacOs ? env.Removes!.ReadLaunchdJob(ShipItLabel) : Autostart.LaunchdJob.Absent;
@@ -249,7 +325,9 @@ public static partial class DesktopRemoval
             Caches(places),
             left)
         {
-            ApplicationState = fate == ApplicationFates.Deleted ? ApplicationStateOf(places, left) : [],
+            ApplicationState = fate != ApplicationFates.Deleted ? []
+                : places.Platform is SetupSystem.Linux ? AppImageFiles(places, carried, application!, left)
+                : ApplicationStateOf(places, left),
             UpdaterJob = shipIt.State is Autostart.LaunchdJobState.Loaded or Autostart.LaunchdJobState.Running ? ShipItLabel : null,
             ShipIt = shipIt,
         };
@@ -370,6 +448,24 @@ public static partial class DesktopRemoval
             return [];
         }
 
+        if (places.Platform is SetupSystem.Linux)
+        {
+            var entry = AutostartEntryFile(places);
+            if (!Present(entry))
+            {
+                return [];
+            }
+
+            var starts = Installation.CommandFiles.ReadSmall(entry) is { } text ? DesktopEntryProgram(text) : null;
+            if (starts is not null && SamePath(starts, executable))
+            {
+                return [entry];
+            }
+
+            left.Add($"{entry}, under Jason's name, starts {starts ?? "nothing it names"}, not this application, so it was left: deleting it takes it off.");
+            return [];
+        }
+
         if (!OperatingSystem.IsWindows())
         {
             return [];
@@ -457,8 +553,9 @@ public static partial class DesktopRemoval
                 continue;
             }
 
-            // A wrapper that runs this jason, or one whose jason is gone; one that runs another application's is that one's.
-            if (carried.Is(target.Executable) || !File.Exists(target.Executable))
+            // A wrapper that runs this jason, or one whose jason is gone, or on Linux another version's copy beside this AppImage's;
+            // one that runs another application's is that one's.
+            if (carried.Is(target.Executable) || !File.Exists(target.Executable) || AnotherCopy(places, carried, target.Executable))
             {
                 found.Add(file);
             }
@@ -470,6 +567,12 @@ public static partial class DesktopRemoval
 
         return found;
     }
+
+    /// <summary>Linux, an AppImage: whether <paramref name="executable"/> is another version's copy in this jason's copies folder.</summary>
+    private static bool AnotherCopy(SetupPlaces places, CarriedExecutable carried, string executable) =>
+        places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable)
+        && Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(executable))) is { } copies
+        && SamePath(copies, AppImageCopy.BundlesOf(carried.Executable));
 
     /// <summary>
     /// The data directories an earlier version's demo made, each only where it carries the demo's mark: where a runtime it
@@ -520,10 +623,166 @@ public static partial class DesktopRemoval
 
     private static IReadOnlyList<string> Caches(SetupPlaces places)
     {
-        var caches = places.Platform is SetupSystem.Windows
-            ? [Path.Combine(places.LocalApplicationData ?? places.Home, UpdaterCacheName)]
-            : new[] { Path.Combine(places.Home, "Library", "Caches", UpdaterCacheName), Path.Combine(places.Home, "Library", "Caches", ShipItCacheName) };
+        var caches = places.Platform switch
+        {
+            SetupSystem.Windows => [Path.Combine(places.LocalApplicationData ?? places.Home, UpdaterCacheName)],
+            SetupSystem.Linux => [Path.Combine(places.CacheHome ?? Path.Combine(places.Home, ".cache"), UpdaterCacheName)],
+            _ => new[] { Path.Combine(places.Home, "Library", "Caches", UpdaterCacheName), Path.Combine(places.Home, "Library", "Caches", ShipItCacheName) },
+        };
         return [.. caches.Where(Directory.Exists)];
+    }
+
+    /// <summary>
+    /// Linux, an AppImage, going with the file just before it: the menu entry where it starts that file, the icons, the
+    /// copies of its jason under <c>&lt;data&gt;/desktop/bundle/</c>, the one an update kept under
+    /// <c>&lt;data&gt;/desktop/rollback/</c>, <c>&lt;data&gt;/desktop/appimage.json</c>, and the support folder; each found as
+    /// itself, never through a link.
+    /// </summary>
+    private static IReadOnlyList<string> AppImageFiles(SetupPlaces places, CarriedExecutable carried, string file, List<string> left)
+    {
+        var found = new List<string>();
+        var menu = Path.Combine(places.Share, "applications", MenuEntryName);
+        if (Present(menu))
+        {
+            var text = Installation.CommandFiles.ReadSmall(menu);
+            if (text is not null && ((DesktopEntryValue(text, "TryExec") is { } tried && SamePath(tried, file)) || (DesktopEntryProgram(text) is { } starts && SamePath(starts, file))))
+            {
+                found.Add(menu);
+            }
+            else
+            {
+                left.Add($"{menu}, under Jason Desktop's name, does not start {file}, so it was left: deleting it takes it off the menu.");
+            }
+        }
+
+        var hicolor = Path.Combine(places.Share, "icons", "hicolor");
+        try
+        {
+            if (Directory.Exists(hicolor))
+            {
+                found.AddRange(Directory.EnumerateDirectories(hicolor).Order(StringComparer.Ordinal).Select(size => Path.Combine(size, "apps", IconName)).Where(Present));
+            }
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            left.Add($"{hicolor} could not be read ({unread.Message}), so Jason Desktop's icons there were left.");
+        }
+
+        var desktop = Path.GetDirectoryName(AppImageCopy.BundlesOf(carried.Executable))!;
+        found.AddRange(new[] { Path.Combine(desktop, "bundle"), Path.Combine(desktop, "rollback"), Path.Combine(desktop, "appimage.json"), places.SupportFolder }.Where(Present));
+        return found;
+    }
+
+    /// <summary>
+    /// <c>&lt;data&gt;/desktop/machine-setup.json</c> under <paramref name="dataRoot"/>: the version and the place Jason Desktop's
+    /// start last set the machine up for, which a start of that version from that place reads as done
+    /// (<c>desktop/src/machine-setup.ts</c>). A file of the desktop's own folder, as <see cref="AppImageCopy.BundlesUnder"/> is.
+    /// </summary>
+    public static string SetupRecordUnder(string dataRoot) => Path.Combine(dataRoot, "desktop", "machine-setup.json");
+
+    /// <summary>Linux: Open Jason at Login's XDG autostart entry, under <c>XDG_CONFIG_HOME</c>, <c>~/.config</c> by default (<c>desktop/src/login-item.ts</c>).</summary>
+    public static string AutostartEntryFile(SetupPlaces places)
+    {
+        ArgumentNullException.ThrowIfNull(places);
+        return Path.Combine(places.ConfigHome ?? Path.Combine(places.Home, ".config"), "autostart", Identifier + ".desktop");
+    }
+
+    /// <summary>A desktop entry's value for <paramref name="key"/>, the string value's own escapes undone; null where it has none.</summary>
+    private static string? DesktopEntryValue(string text, string key)
+    {
+        if (text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith(key + "=", StringComparison.Ordinal))?[(key.Length + 1)..] is not { } written)
+        {
+            return null;
+        }
+
+        var value = new System.Text.StringBuilder();
+        for (var at = 0; at < written.Length; at++)
+        {
+            if (written[at] == '\\' && at + 1 < written.Length && written[at + 1] is '\\' or 's' or 'n' or 't' or 'r')
+            {
+                value.Append(written[++at] switch { 's' => ' ', 'n' => '\n', 't' => '\t', 'r' => '\r', var other => other });
+            }
+            else
+            {
+                value.Append(written[at]);
+            }
+        }
+
+        return value.ToString();
+    }
+
+    /// <summary>
+    /// A value as a desktop entry's string spells it, which <see cref="DesktopEntryValue"/> reads back: a backslash, a newline,
+    /// a tab and a carriage return each as its escape (the Desktop Entry Specification, "Possible value types").
+    /// </summary>
+    internal static string DesktopEntryString(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal).Replace("\t", "\\t", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path as the first, quoted argument of an entry's <c>Exec</c>, which <see cref="DesktopEntryProgram"/> reads back (the
+    /// specification, "The Exec key"): a double quote, a backtick, a dollar sign and a backslash each take a backslash, and a
+    /// per-cent is doubled, since a launcher reads field codes before it reads quotes; then the string's own escapes
+    /// (<see cref="DesktopEntryString"/>).
+    /// </summary>
+    internal static string DesktopEntryArgument(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var quoted = new System.Text.StringBuilder("\"");
+        foreach (var character in path)
+        {
+            _ = character switch
+            {
+                '"' or '`' or '$' or '\\' => quoted.Append('\\').Append(character),
+                '%' => quoted.Append("%%"),
+                _ => quoted.Append(character),
+            };
+        }
+
+        return DesktopEntryString(quoted.Append('"').ToString());
+    }
+
+    /// <summary>
+    /// The program a desktop entry's <c>Exec</c> starts, its first argument: the string value's own escapes undone, then a
+    /// quoted argument read with each backslash taking the character after it and a doubled per-cent read as one, as the
+    /// Desktop Entry Specification reads it and <see cref="DesktopEntryArgument"/> and <c>autostartExec</c> write it; an
+    /// unquoted one up to the first space.
+    /// </summary>
+    internal static string? DesktopEntryProgram(string text)
+    {
+        if (DesktopEntryValue(text, "Exec") is not { Length: > 0 } line)
+        {
+            return null;
+        }
+
+        if (!line.StartsWith('"'))
+        {
+            var end = line.IndexOf(' ', StringComparison.Ordinal);
+            return end < 0 ? line : line[..end];
+        }
+
+        var program = new System.Text.StringBuilder();
+        for (var at = 1; at < line.Length; at++)
+        {
+            switch (line[at])
+            {
+                case '\\' when at + 1 < line.Length:
+                    program.Append(line[++at]);
+                    break;
+                case '%' when at + 1 < line.Length && line[at + 1] == '%':
+                    program.Append(line[++at]);
+                    break;
+                case '"':
+                    return program.ToString();
+                default:
+                    program.Append(line[at]);
+                    break;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The harness root as the runtime reads it: the variable, else the settings, else <c>Jason</c> in the home.</summary>
@@ -650,6 +909,10 @@ public static partial class DesktopRemoval
                         env.Removes!.RemoveFile(item);
                         done.Add($"Open Jason at Login's job, {Identifier}, stays loaded until the next login: its file is gone, and the application kept here may be that job's own window, which an unload would end.");
                     }
+                }
+                else if (places.Platform is SetupSystem.Linux)
+                {
+                    env.Removes!.RemoveFile(item);
                 }
                 else if (OperatingSystem.IsWindows())
                 {
@@ -841,7 +1104,7 @@ public static partial class DesktopRemoval
                 var without = PathEntry.WithoutEntry(bytes, folder);
                 if (!ReferenceEquals(without, bytes))
                 {
-                    done.Add(Installation.CreatedProfiles.WriteBackOrRemove(places.Home, profile, without)
+                    done.Add(Installation.CreatedProfiles.WriteBackOrRemove(places, profile, without)
                         ? $"Took the lines that put {folder} on the PATH out of {profile}, which jason install created, and removed it: nothing else was in it."
                         : $"Took the lines that put {folder} on the PATH out of {profile}.");
                 }
@@ -1004,22 +1267,22 @@ public static partial class DesktopRemoval
     }
 
     /// <summary>
-    /// The last look, just before the application is deleted: ShipIt installing an update of it, begun since the job's own
-    /// step, which is never ended part-way; the window opened again, or a jason of this installation started since the
-    /// runtime stopped, both of which run from what goes next. Any of them keeps the application, and its state under
-    /// ~/Library, and is the problem this returns; null where none runs. A job launchd could not be asked about keeps
-    /// nothing here: its step said so.
+    /// The last look, just before the application is deleted: on macOS, ShipIt installing an update of it, begun since the
+    /// job's own step, which is never ended part-way; the window opened again, or a jason of this installation started since
+    /// the runtime stopped, both of which run from what goes next. Any of them keeps the application, and its state under
+    /// ~/Library or an AppImage's files, and is the problem this returns, with <paramref name="byHand"/> the way to remove it
+    /// then; null where none runs. A job launchd could not be asked about keeps nothing here: its step said so.
     /// </summary>
-    private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application)
+    private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application, SetupSystem platform, string byHand)
     {
-        if (env.Removes!.ReadLaunchdJob(ShipItLabel) is { State: Autostart.LaunchdJobState.Running } installing)
+        if (platform is SetupSystem.MacOs && env.Removes!.ReadLaunchdJob(ShipItLabel) is { State: Autostart.LaunchdJobState.Running } installing)
         {
             var state = plan.ApplicationState.Count > 0 ? " and its own state under ~/Library" : string.Empty;
             return $"{BeingInstalled(installing)} when the application was to go, and an update is never ended part-way, so these were left: "
                 + $"the application at {application}{state}. {UninstallAgain(env)}";
         }
 
-        var window = env.Removes!.RunningFrom(ApplicationExecutable(application, SetupSystem.MacOs));
+        var window = env.Removes!.RunningFrom(ApplicationExecutable(application, platform));
         if (StartInFlight.Image(env) is not { } image)
         {
             return null;
@@ -1034,7 +1297,7 @@ public static partial class DesktopRemoval
                 window,
                 $"The application at {application} was not deleted",
                 image,
-                $"move {application} to the Trash in the Finder");
+                byHand);
     }
 
     /// <summary>
@@ -1074,6 +1337,9 @@ public static partial class DesktopRemoval
                 }
 
                 return;
+            case ApplicationFates.Deleted when env.Setup?.Platform is SetupSystem.Linux:
+                RemoveAppImage(env, plan, application, done, problems);
+                return;
             case ApplicationFates.Deleted:
                 if (shipItInstalling)
                 {
@@ -1088,7 +1354,7 @@ public static partial class DesktopRemoval
                     return;
                 }
 
-                if (StartedSinceTheStop(env, plan, application) is { } started)
+                if (StartedSinceTheStop(env, plan, application, SetupSystem.MacOs, $"move {application} to the Trash in the Finder") is { } started)
                 {
                     problems.Add(started);
                     return;
@@ -1111,5 +1377,188 @@ public static partial class DesktopRemoval
 
                 return;
         }
+    }
+
+    // --- Linux ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Linux, an AppImage, the last act: once nothing runs from it, its files of this account's (<see cref="DesktopPlan.ApplicationState"/>),
+    /// then the file itself. The copy of the jason this process runs as goes with the copies, which Linux allows; what this
+    /// process still needs was loaded before the executable's step.
+    /// </summary>
+    private static void RemoveAppImage(CliEnvironment env, DesktopPlan plan, string file, List<string> done, List<string> problems)
+    {
+        if (StartedSinceTheStop(env, plan, file, SetupSystem.Linux, $"delete {file}") is { } started)
+        {
+            problems.Add(started);
+            return;
+        }
+
+        foreach (var place in plan.ApplicationState.Where(Path.Exists))
+        {
+            try
+            {
+                if (Directory.Exists(place))
+                {
+                    env.Removes!.RemoveTree(place);
+                }
+                else
+                {
+                    env.Removes!.RemoveFile(place);
+                }
+
+                done.Add($"Removed {place}, the AppImage's own.");
+            }
+            catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"{place}, the AppImage's own, could not be removed: {refused.Message} Deleting it takes it off.");
+            }
+        }
+
+        if (!File.Exists(file))
+        {
+            return;
+        }
+
+        try
+        {
+            env.Removes!.RemoveFile(file);
+            done.Add($"Removed the application, {file}.");
+
+            // The folder the install line made for it, ~/Applications, goes too once it holds nothing else; a folder of the
+            // person's own choosing is never touched.
+            var linePlace = env.Setup is { } places ? Path.Combine(places.Home, "Applications") : null;
+            if (linePlace is not null
+                && string.Equals(Path.GetDirectoryName(Path.GetFullPath(file)), Path.GetFullPath(linePlace), StringComparison.Ordinal)
+                && env.Removes.RemoveDirectoryIfEmpty(linePlace))
+            {
+                done.Add($"Removed {linePlace}, which held nothing else.");
+            }
+        }
+        catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"The application could not be deleted: {refused.Message} Deleting {file} removes it.");
+        }
+    }
+
+    /// <summary>
+    /// Linux, the deb: the package purged (<see cref="IInstallationRemover.PurgePackageAsync"/>), once the runtime has stopped and
+    /// before anything of this account's is removed, the runtime's start at logon included, so a password not given removes
+    /// nothing. Null where it went; else the refusal, which ends the uninstall: why, in the words of sudo, pkexec and apt, and
+    /// the way by hand; and the runtime it stopped started again (<see cref="StartOwedAgainAsync"/>), except after a run still
+    /// going at its bound, which may yet be taking off the files that runtime would run from.
+    /// </summary>
+    public static async Task<RemovalRefused?> PurgePackageAsync(CliEnvironment env, DesktopPlan plan, UninstallOptions options, List<string> done, List<string> problems, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var refused = await PurgeAsync(env, plan, done, cancellationToken).ConfigureAwait(false);
+        if (refused is { Unended: false })
+        {
+            await StartOwedAgainAsync(env, options, done, problems, cancellationToken).ConfigureAwait(false);
+        }
+
+        return refused?.Refusal;
+    }
+
+    private static async Task<(RemovalRefused Refusal, bool Unended)?> PurgeAsync(CliEnvironment env, DesktopPlan plan, List<string> done, CancellationToken cancellationToken)
+    {
+        PackageRun run;
+        try
+        {
+            run = await env.Removes!.PurgePackageAsync(DebPackage, PurgeWait, line => env.Error.WriteLine($"uninstall: {line}"), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception unstarted) when (unstarted is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            return (PackageStays($"apt could not be started to take Jason Desktop's package off ({unstarted.Message}).", "Take it off with `sudo apt purge jason-desktop`, then delete what this account keeps by hand, or run `jason uninstall` again once apt runs."), false);
+        }
+
+        if (run.ExitCode == 0)
+        {
+            done.Add($"Took Jason Desktop's package, {DebPackage}, off with apt: {plan.Application}, the jason in every terminal and what the package placed for every account went with it.");
+            return null;
+        }
+
+        if (run.Said.Trim() is { Length: > 0 } said)
+        {
+            env.Error.WriteLine(said);
+        }
+
+        const string ByHand = "or an administrator takes the package off with `sudo apt purge jason-desktop`, which leaves this account's own files, as the system's removal of any application does.";
+        if (run.Refusal is AptRefusal.Unended)
+        {
+            return (PackageStays(
+                string.Create(CultureInfo.InvariantCulture, $"apt had not ended after {PurgeWait.TotalMinutes:F0} minutes: the password was not given in that time, or apt was still waiting for another installation or still at work, and it may yet take Jason Desktop's package off, so the runtime this uninstall stopped was not started again from the files apt may be taking away."),
+                "Once apt has ended: where the package stayed, run `jason uninstall` again, or an administrator takes it off with `sudo apt purge jason-desktop`, and Jason Desktop's next start or `jason runtime start` starts the runtime meanwhile; where apt took it off, `jason` went with it, and what this account keeps, which the plan above lists, is deleted by hand, or by installing Jason again and running `jason uninstall`."), true);
+        }
+
+        return (run.Refusal switch
+        {
+            AptRefusal.NoPassword => PackageStays("Jason Desktop is a system package here, and taking it off needs an administrator's password, which was not given.", "Run `jason uninstall` again to be asked again; where this account is not an administrator, an administrator of this computer can type theirs, " + ByHand),
+            AptRefusal.NoSession => PackageStays("Jason Desktop is a system package here, which needs an administrator's password to take off, and this session cannot ask for one.", "Run `jason uninstall` in a terminal of your desktop, " + ByHand),
+            AptRefusal.DialogFailed => PackageStays("The system's password dialog failed, so Jason Desktop's package was not taken off.", "Sign out and back in, or restart, then run `jason uninstall` again, " + ByHand),
+            AptRefusal.NoNewPrivileges => PackageStays("Jason Desktop is a system package here, and this uninstall cannot ask for the password that takes it off: it runs under a Jason Desktop its own update or a switch of mode started again, which the system marks, with everything it starts, as unable to gain an administrator's rights.", "Quit Jason Desktop, open it again from your applications menu and uninstall from it, or run `jason uninstall` in a terminal you open from the menu, " + ByHand),
+            AptRefusal.LockHeld => PackageStays("Another installation, the system's own updates likely, held the package system for ten minutes, so Jason Desktop's package was not taken off.", "Run `jason uninstall` again in a few minutes, " + ByHand),
+            _ => PackageStays(string.Create(CultureInfo.InvariantCulture, $"apt did not take Jason Desktop's package off: it exited with {run.ExitCode}{(run.LastLine is { } last ? $" and said: {last}" : string.Empty)}."), "`sudo dpkg --configure -a` finishes a package left half configured, and `sudo apt purge jason-desktop` takes it off; then run `jason uninstall` again where it is still there."),
+        }, false);
+    }
+
+    private static RemovalRefused PackageStays(string why, string what) =>
+        new(CliErrors.UninstallRefused, $"{why} Nothing of this account's was removed, the runtime's start at logon included. {what}");
+
+    /// <summary>How long a runtime started again is given to answer: <c>jason runtime start</c>'s own wait.</summary>
+    private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Linux, the deb, where the package stays: the runtime this uninstall stopped, started again from the application's
+    /// jason by the rule a start owed is kept by, where the stop's note stands and no runtime answers. Said in
+    /// <paramref name="done"/>; one that does not answer is a problem, and the note stands for Jason Desktop's next start.
+    /// </summary>
+    public static async Task StartOwedAgainAsync(CliEnvironment env, UninstallOptions options, List<string> done, List<string> problems, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        if (!StartOwed.Read(env.Paths).Stands || DescriptorProcess.Live(env.Paths, processes) is not null)
+        {
+            return;
+        }
+
+        if (CarriedExecutable.Of(env) is not { } carried)
+        {
+            problems.Add("The runtime this stopped was not started again: the application's jason is not in place. `jason runtime start` starts it.");
+            return;
+        }
+
+        IProcessHandle child;
+        try
+        {
+            child = processes.Launch(env.Paths, [carried.Executable], null);
+        }
+        catch (Exception unstarted) when (unstarted is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            problems.Add($"The runtime this stopped could not be started again from {carried.Executable} ({unstarted.Message}); `jason runtime start` starts it.");
+            return;
+        }
+
+        using (child)
+        {
+            var clock = env.Clock ?? TimeProvider.System;
+            var until = clock.GetUtcNow() + (options.StopTimeout ?? StartWait);
+            while (DescriptorProcess.Live(env.Paths, processes) is null)
+            {
+                if (child.HasExited || clock.GetUtcNow() >= until)
+                {
+                    problems.Add($"The runtime this stopped was started again from {carried.Executable} and did not answer; `jason runtime start` starts it, and so does Jason Desktop when it opens.");
+                    return;
+                }
+
+                await Task.Delay(options.StopPoll ?? TimeSpan.FromMilliseconds(200), clock, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        done.Add($"Started the runtime this stopped again, from {carried.Executable}: the package stays, and this installation with it.");
     }
 }

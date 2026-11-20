@@ -126,7 +126,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
-  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own. `jason
+  uninstall` that keeps the data removes it, since it takes off what the set-up placed.
 - `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder (`folder: 'own'` on its record), where
   every turn of it runs, in every mode. It is made at the conversation's first turn. Removing the conversation moves it,
   one rename, to `chat-full-ended/<conversation id>-<moment>/`, where the sweep removes it seven days later; so does a
@@ -854,7 +855,7 @@ runtime, and an update goes on without a look. Once the files are in place, at e
 or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
 waited for (`customInstall`): `jason` on this account's Path, the skills for Claude Code and Codex where each is found, and an older
 command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
-done never fails the install. On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+done never fails the install. On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which
 carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
 carried `jason uninstall` (`docs/release-and-update.md` §9), which takes off what Jason and Jason Desktop placed and
 leaves the data directory unless told otherwise and the harness root always. A person's uninstall from Installed apps
@@ -885,23 +886,31 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
   Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
   desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
-  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the
+  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Uninstall Jason…. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, and where a new terminal's PATH lacks that folder
-  it writes the installer's PATH lines into the shell profiles by the installer's own rule (`src/path-command.ts`,
-  `src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)). On macOS and Windows the
-  item is the machine set-up's report instead (`src/machine-setup.ts`), and `jason install` places the command.
+- The Command Line item is the machine set-up's report, as on macOS and Windows (`commandIsSetup` in
+  `src/machine-setup.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)): a start of a new version
+  runs the carried `jason install` with the login shell's PATH as `--terminal-path`, from the `jason` the deb carries or
+  from an AppImage's copy under `<data>/desktop/bundle/<version>/`, never from the mount, and runs none where there is no
+  copy. From the deb the terminal's `jason` is the package's own `/usr/bin/jason`, which the package's scripts write;
+  from an AppImage it is `jason install`'s wrapper in `~/.local/bin`, with the installer's PATH lines where a new
+  terminal's PATH lacks that folder. The login shell is asked from the PATH the start was handed less what an earlier
+  start added to its own (`handedPath` in `src/shell-path.ts`): a desktop an update or the mode switch starts inherits that
+  start's PATH, its usual places at the end and its AppImage mount in front, and a profile that keeps the PATH it is
+  given, as Arch's does, would otherwise print them back as a terminal's. `src/path-command.ts` remains only for a system
+  the set-up does not cover.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
   at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
-  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon or a PATH command the person
-  set up from another version's copy is set up again from this one at each start, the same act as turning it on; one
+  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon the person set up from
+  another version's copy is set up again from this one at each start, the same act as turning it on, and the copy's own
+  `jason install` writes the wrapper anew; one
   never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
   the one an update kept to go back to, one something set up still names, and one the running runtime was started
   from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
@@ -912,25 +921,36 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu
   24.04 and later, as shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the
   program make the user namespaces its sandbox uses; neither package has yet been seen on such a machine.
-- Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
-  `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
-  the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
-  updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
-  open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
-  machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
-- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which, once confirmed, takes
-  the steps `src/uninstall.ts` lists (its dialogs are `src/remove-placed.ts`), stopping the runtime first and going no
-  further when it does not stop, says what came of each and what to do by hand for one that failed, and offers to quit
-  Jason. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
-  the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders,
-  `~/.jason-demo` and `~/Jason-demo` (the data directory's and the harness root's own names with `-demo` after them),
-  only where each carries the mark the desktop wrote into it, `.jason-demo-folder`, once the demo's runtime is stopped. It then says what removes the
-  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
-  that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-  `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
-  off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
-  `<data>/desktop/bundle/<version>/jason` for an AppImage:
+- Updates come to the AppImage through electron-updater, which replaces the file where it is and keeps the AppImage
+  file itself under `<data>/desktop/rollback/<version>/`. Each start of an AppImage records its file in
+  `<data>/desktop/appimage.json` (`recordAppImage` in `src/linux-package.ts`), and so does an update that installs it
+  under a new name, so that the command line's update hands over to that file; a terminal's `--update-apply` request is
+  taken by an AppImage alone (`requestSupport` in `src/update-request.ts`). The deb's electron-updater is turned off
+  (`updaterOf`): the system updates the package from Jason's apt repository, so the update item says "Updates Come
+  Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
+  running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
+  (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
+  it, then a relaunch, whose machine set-up finishes that update. A start that finds the runtime this application's own
+  `jason` started still running an older build, the system having updated the package while no window was open, offers
+  the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
+  the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
+  or the system's update where the runtime is newer. If a version the deb's updater recorded does
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
+  replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
+  update apply`. The updater's cache is
+  `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+- Uninstall Jason… in the Jason menu (and the tray's; `src/uninstall-door.ts`) is the one uninstall, as on macOS: it asks
+  first, with a box for the data directory, Cancel the default, and on the person's word starts the carried `jason
+  uninstall` on its own with `--wait-for` this process's id, and quits. For the deb the verb takes the package
+  `jason-desktop` off first, once the runtime has stopped, purged by apt through the system's own password dialog, and
+  removes nothing of the account's when that is refused; for an AppImage it removes its menu entry, its icons, the copies
+  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system.
+  The system's own removal leaves the account's files, and what they start is made harmless: the autostart entry and
+  the AppImage's menu entry name the file they start as `TryExec=` (`autostartEntry` in `src/login-item.ts`), and the
+  runtime's systemd user unit carries `ConditionPathExists=`. When Jason will not start, take off by hand what it placed.
+  Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each `<data>/desktop/bundle/<version>/jason` for an
+  AppImage:
 
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
      application's: stop it with `<that jason> runtime stop`. A runtime of any other `jason` stays.
@@ -944,6 +964,8 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
      `export PATH="…/.local/bin:$PATH"` line under it out of `~/.profile`, `~/.bash_profile`, `~/.bash_login`,
      `~/.bashrc`, `~/.zprofile` and `~/.zshrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
+  6. Remove the application: `sudo apt purge jason-desktop` for the deb; for an AppImage the file, its menu entry
+     `~/.local/share/applications/jason-desktop.desktop` and its icons under `~/.local/share/icons/hicolor/`.
 
 ## Building and testing
 
@@ -982,8 +1004,9 @@ node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version 0.35.0-r
 JASON_VERSION=0.35.0-rc.1 npm run package -- --linux --x64   # dist/: the deb, the AppImage, latest-linux.yml
 ```
 
-The program is `jason-desktop-app`, so the deb's `/usr/bin` link never takes `jason-desktop`, the name the PATH command
-falls back to. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
+The program is `jason-desktop-app`, so the deb's `/usr/bin` link to it never takes `jason-desktop`, the name an earlier
+version's PATH command fell back to; the deb's own scripts (`installer/deb/`) add `/usr/bin/jason` and Jason's apt
+source, signed by the key the package carries, and take them back. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
 forms are packed at once from one folder, and the deb writes `resources/package-type` into it, which makes
 electron-updater update a package as a deb, so the configuration starts the deb only once the AppImage is built.
 

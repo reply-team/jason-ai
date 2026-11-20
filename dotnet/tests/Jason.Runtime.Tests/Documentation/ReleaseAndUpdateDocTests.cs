@@ -175,9 +175,9 @@ public class ReleaseAndUpdateDocTests
         var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
 
         Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds nothing newer.", package, StringComparison.Ordinal);
-        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
+        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
         Assert.Contains("jason uninstall brew uninstall jason curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh", package, StringComparison.Ordinal);
-        Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.", package, StringComparison.Ordinal);
+        Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason Desktop, which opens the same data directory as it is.", package, StringComparison.Ordinal);
         Assert.DoesNotContain("follows the latest release", package, StringComparison.Ordinal);
         Assert.DoesNotContain("asks the tap to bump it at once", package, StringComparison.Ordinal);
 
@@ -187,8 +187,8 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// Homebrew installs Jason on macOS and Linux, so the way from its install covers both: on a Mac the one line installs
-    /// Jason Desktop, on Linux the command line, and the three lines are the way from Homebrew's install on either system.
+    /// Homebrew installs Jason on macOS and Linux, so the way from its install covers both: the one line installs Jason
+    /// Desktop on either system, and the three lines are the way from Homebrew's install on either system.
     /// </summary>
     [Fact]
     public void The_way_from_homebrew_s_install_covers_a_mac_and_linux()
@@ -200,8 +200,8 @@ public class ReleaseAndUpdateDocTests
         var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
 
         Assert.Contains("Homebrew on macOS and Linux", package, StringComparison.Ordinal);
-        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
-        Assert.Contains("the one line installs Jason Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.", package, StringComparison.Ordinal);
+        Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
+        Assert.Contains("the one line installs Jason Desktop, which opens the same data directory as it is.", package, StringComparison.Ordinal);
         Assert.DoesNotContain("On a Mac, the one line at the top of this section is the way", package, StringComparison.Ordinal);
     }
 

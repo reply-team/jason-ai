@@ -236,8 +236,9 @@ export interface SetupState {
     /**
      * When the runtime is another version than the one the desktop carries, the sentence that says so and names the way
      * to one version: Check for Updates when the runtime runs from the jason the desktop carries, which `jason update`
-     * refuses to change, and `jason update` when it is another installation's; null when they are one version or no
-     * runtime answers.
+     * refuses to change, and `jason update` when it is another installation's; on the deb the restart item or `jason
+     * runtime restart`, or the system's update where this desktop is behind; null when they are one version or no runtime
+     * answers.
      */
     versionsDiffer: string | null;
     plugins: PluginState[];
@@ -260,6 +261,8 @@ export interface SetupDeps {
     runtimeIsOurs?(): boolean;
     /** The update item's key as a person reads it where the item can act, null where not (`updateKeyWords`); absent, null. */
     updateKey?(): string | null;
+    /** Whether this is the deb, which the system updates and which has no update item of its own; absent, it is not. */
+    deb?: boolean;
     settings(): DesktopSettings;
     /**
      * Writes the desktop's own settings whole, and holds them as `settings()` answers from then on: the mark of a profile
@@ -393,18 +396,23 @@ export function settingsUnreadable(stdout: string): string | null {
  * the desktop carries is brought to one version by the desktop's own update, since `jason update` refuses to change a
  * carried file; another installation's runtime older than this desktop by `jason update`; and one newer than this desktop
  * by the desktop's own update too, since it is this desktop that is behind, and updating the other installation brings
- * nothing.
+ * nothing. The deb (`deb`) has no such update of its own: the system updates it, and this application's own runtime of an
+ * older build is brought up by the restart the start offers (`packageMovedTo`), or the CLI's.
  */
-export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean, key: string | null): string | null {
+export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean, key: string | null, deb = false): string | null {
     // A build after a plus names the commit, not another version.
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
     const desktopBehind = compareVersions(bare(runtimeVersion) ?? runtimeVersion, bare(bundleVersion) ?? bundleVersion) > 0;
+    const said = `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is.`;
     // A Windows or Linux window shows no menu bar, so the tray's menu is named too, and the item's key, which a desktop
     // that shows no tray leaves as the one way in; the key only where the item can act (`updateKeyWords`).
-    const menu = "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray";
+    const menus = "in the desktop's Jason menu, or in the menu of its icon in the tray";
+    if (deb && desktopBehind) return `${said} Update Jason Desktop through your system, with Software Updater or \`sudo apt update && sudo apt upgrade\` in a terminal, to bring them to one version.`;
+    if (deb && ours) return `${said} Choose Restart Jason and Its Runtime to Finish the Update to ${bundleVersion} ${menus}, or run \`jason runtime restart\`, to bring them to one version.`;
+    const menu = `Choose Check for Updates… ${menus}`;
     const way = ours || desktopBehind ? (key === null ? menu : `${menu}, or press ${key},`) : 'Run `jason update`';
-    return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
+    return `${said} ${way} to bring them to one version.`;
 }
 
 /** The line a host whose models were never read shows instead of its list. */
@@ -626,7 +634,7 @@ export class Setup {
             reply: await this.#reply(answered.get('reply')?.valid ?? false),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
-            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null),
+            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null, this.#deps.deb ?? false),
             plugins: bundledPlugins.map((plugin) => ({
                 id: plugin.id,
                 label: plugin.label,

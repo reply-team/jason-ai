@@ -3,7 +3,8 @@
 # published, the Linux one first running the critical tier at the tag and then building the desktop's Linux packages,
 # the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the Windows one, in a
 # job of its own that runs no test either, signing its executable through Artifact Signing, and one job that archives
-# the plugins' packages from the tag's tree; three proof jobs that install, update and uninstall the signed packages on
+# the plugins' packages from the tag's tree; one job that writes the apt repository's index from the Linux deb, signs it
+# and reads it back as a machine's apt does; three proof jobs that install, update and uninstall the signed packages on
 # Windows, an Apple silicon Mac and an Intel Mac; then the release job — the only one that may write to this repository — assembles the manifest and the
 # checksums and publishes the release at once, with its notes and its assets. The job after it, which asked the Homebrew
 # tap to bump its formula, is switched off. The release pull request into main, and its run on every platform, come
@@ -18,10 +19,10 @@
 # publishes nothing there. Either way the tap is asked nothing.
 #
 # Every job that holds a secret or may write runs in the environment `signing`, which admits only release tags and
-# release branches: the macOS and Windows jobs, which sign, the release job, which publishes, and the tap's job, which
-# holds the tap's token. Every job declares the least permissions it needs, and the workflow's default stays read:
-# contents: read for every job that checks the tree out, an OIDC token for the Windows job alone, contents: write for
-# the release job alone, and nothing at all for the tap's job.
+# release branches: the macOS and Windows jobs, which sign, the apt index's job, which signs, the release job, which
+# publishes, and the tap's job, which holds the tap's token. Every job declares the least permissions it needs, and the
+# workflow's default stays read: contents: read for every job that checks the tree out, an OIDC token for the Windows job
+# alone, contents: write for the release job alone, and nothing at all for the tap's job.
 #
 # The button (workflow_dispatch) makes a draft of the release in reply-team/jason-ai and stops there: nothing is
 # tagged, nothing is published and the tap is not asked. The draft is for reading and is deleted afterwards, so the
@@ -812,6 +813,60 @@ jobs:
           path: artifacts/release/jason-skills.zip
           if-no-files-found: error
 
+  # The apt repository's index. On a system with apt, the desktop's deb adds Jason's own apt repository, and that
+  # repository is a release's own files: the deb and, beside it, Packages, Release, InRelease and Release.gpg, which a
+  # machine reads through the address's /apt/ path, leading to the latest release's downloads. So every release carries
+  # all four, written here from the deb the Linux leg built and signed with the repository's signing subkey, then read
+  # back as a machine's apt reads them, against the repository's own public key, install/jason-desktop-archive-keyring.gpg:
+  # gpgv's verdict on both signatures, the deb's size and hashes against Packages, Packages' against Release, apt-get
+  # update from a copy of the files with no complaint. The scripts say each check. Before the writer signs, in the same
+  # step, the key and its signing subkey are held to their expiry: each unrevoked and more than 90 days from it, or the
+  # index is not signed, since an index signed by a key that expires leaves every machine that reads it without updates
+  # from that day on. This job is the one place that check runs: it blocks the assets that are signed, and nothing else. The release
+  # job needs this job, so a release whose deb has no index, or one a machine's apt would refuse, publishes nothing, as a
+  # missing platform publishes nothing: from the first release whose deb adds the repository, a release without its index
+  # leaves every such machine's apt update with an error.
+  #
+  # The subkey is APT_SIGNING_KEY, in the signing environment, which only release tags and release branches may run in,
+  # and only the writer's step is handed it. The key that certifies it is kept offline. The job may write nothing: its
+  # token reads the repository for the checkout alone, it builds and tests nothing, and the four files go on as an
+  # artifact named so that the release job's download of jason-* brings them beside the deb. A pull request has no
+  # signing environment, so ci.yml's desktop job writes and reads back the same files with a key of its run's own.
+  apt-index:
+    name: The apt repository's index
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-desktop-linux-x64
+          path: artifacts/apt
+
+      - name: Write the apt repository's index, signed with the release's key
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          bash .github/scripts/check-apt-key.sh install/jason-desktop-archive-keyring.gpg
+          bash .github/scripts/write-apt-index.sh artifacts/apt
+
+      - name: Read the index back as a machine's apt does
+        run: bash .github/scripts/check-apt-index.sh artifacts/apt install/jason-desktop-archive-keyring.gpg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-apt-index
+          path: |
+            artifacts/apt/Packages
+            artifacts/apt/Release
+            artifacts/apt/InRelease
+            artifacts/apt/Release.gpg
+          if-no-files-found: error
+
   # Jason as one installation, proven on what this release publishes before the release job may publish it, as ci.yml's
   # union jobs prove it on a test build: the signed packages the platform's job uploaded, installed by the install scripts
   # as this release publishes them, unchanged; uninstalled by each door, every leg compared with a listing taken before
@@ -1513,16 +1568,17 @@ jobs:
 
   release:
     name: Assemble and publish
-    needs: [version, build, macos, windows, plugin, ui, skills, proof-windows, proof-macos, proof-macos-intel]
+    needs: [version, build, macos, windows, plugin, ui, skills, apt-index, proof-windows, proof-macos, proof-macos-intel]
     runs-on: ubuntu-latest
     # The only job that may write to this repository, and what it writes is the release. It builds and runs nothing
     # that was built, so a test on a matrix runner cannot publish anything, and nothing is published when a platform's
-    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures, and the three
-    # proof jobs installed, updated and uninstalled the packages, before this job starts. It writes with this run's own
-    # token, handed to the one step that publishes, and only outside a dry run in reply-team/jason-ai; anywhere else it assembles the release and says that it publishes nothing there. No action
-    # runs here but the checkout and the artifacts' download and upload: an action is handed the token whatever it is
-    # for, so any other would publish as surely as that step does, and would hold to the same two conditions. It runs in
-    # the signing environment, which only release tags and release branches may run in.
+    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures, the apt index's job
+    # read the index back as a machine's apt does, and the three proof jobs installed, updated and uninstalled the
+    # packages, before this job starts. It writes with this run's own token, handed to the one step that publishes, and
+    # only outside a dry run in reply-team/jason-ai; anywhere else it assembles the release and says that it publishes
+    # nothing there. No action runs here but the checkout and the artifacts' download and upload: an action is handed
+    # the token whatever it is for, so any other would publish as surely as that step does, and would hold to the same
+    # two conditions. It runs in the signing environment, which only release tags and release branches may run in.
     environment: signing
     permissions:
       contents: write
@@ -1552,7 +1608,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
-          # and checksums.txt, which lists the plugins', the UI's, the skills' and the desktop's files after the archives;
+          # and checksums.txt, which lists the plugins', the UI's, the skills' and the desktop's files after the archives,
+          # and then the apt repository's index;
           # the manifest names the plugins' under its plugins and none of the desktop's, which update themselves from
           # their own feeds, latest.yml, latest-mac.yml and latest-linux.yml. A platform or a package missing from the
           # download, or an archive that no longer hashes to what its fragment says, stops the release here. The notes are
@@ -1561,7 +1618,7 @@ jobs:
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
           # when an applier change raises it. Each plugin's entry is the tag's digest list of that package, whose last
           # line is the package this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip,jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml,jason-desktop-macos-arm64.dmg,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,jason-desktop-macos-x64.dmg,jason-desktop-macos-x64.zip,jason-desktop-macos-x64.zip.blockmap,latest-mac.yml,jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage,latest-linux.yml -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip,jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml,jason-desktop-macos-arm64.dmg,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,jason-desktop-macos-x64.dmg,jason-desktop-macos-x64.zip,jason-desktop-macos-x64.zip.blockmap,latest-mac.yml,jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage,latest-linux.yml,Packages,Release,InRelease,Release.gpg -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -1673,10 +1730,10 @@ jobs:
           }
 
           # gh names an asset by its file name. The archives, the feed, the packages of reply, journal-forwarder, ntfy,
-          # slack and telegram, the UI's and the skills', and the desktop's installer, Mac and Linux packages, blockmaps and
-          # update feeds were assembled under artifacts/release; the install scripts are the tag's own, so a one-liner pinned to
-          # this release runs the script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip', 'artifacts/release/jason-skills.zip') + @('artifacts/release/jason-desktop-windows-x64-setup.exe', 'artifacts/release/jason-desktop-windows-x64-setup.exe.blockmap', 'artifacts/release/latest.yml', 'artifacts/release/jason-desktop-macos-arm64.dmg', 'artifacts/release/jason-desktop-macos-arm64.zip', 'artifacts/release/jason-desktop-macos-arm64.zip.blockmap', 'artifacts/release/jason-desktop-macos-x64.dmg', 'artifacts/release/jason-desktop-macos-x64.zip', 'artifacts/release/jason-desktop-macos-x64.zip.blockmap', 'artifacts/release/latest-mac.yml', 'artifacts/release/jason-desktop-linux-x64.deb', 'artifacts/release/jason-desktop-linux-x64.AppImage', 'artifacts/release/latest-linux.yml')
+          # slack and telegram, the UI's and the skills', the desktop's installer, Mac and Linux packages, blockmaps and
+          # update feeds, and the apt repository's index were assembled under artifacts/release; the install scripts are
+          # the tag's own, so a one-liner pinned to this release runs the script it was published with.
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip', 'artifacts/release/jason-skills.zip') + @('artifacts/release/jason-desktop-windows-x64-setup.exe', 'artifacts/release/jason-desktop-windows-x64-setup.exe.blockmap', 'artifacts/release/latest.yml', 'artifacts/release/jason-desktop-macos-arm64.dmg', 'artifacts/release/jason-desktop-macos-arm64.zip', 'artifacts/release/jason-desktop-macos-arm64.zip.blockmap', 'artifacts/release/jason-desktop-macos-x64.dmg', 'artifacts/release/jason-desktop-macos-x64.zip', 'artifacts/release/jason-desktop-macos-x64.zip.blockmap', 'artifacts/release/latest-mac.yml', 'artifacts/release/jason-desktop-linux-x64.deb', 'artifacts/release/jason-desktop-linux-x64.AppImage', 'artifacts/release/latest-linux.yml') + @('artifacts/release/Packages', 'artifacts/release/Release', 'artifacts/release/InRelease', 'artifacts/release/Release.gpg')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
