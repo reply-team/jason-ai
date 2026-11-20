@@ -374,6 +374,7 @@ function Save-JasonLogs([string] $leg) {
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included. Given a
 # file to keep it in, each line is written there as it is said, so a run the bound ends leaves what it said before it. At
 # the bound the program's own process is ended with every process under it, then the step fails.
+# The bound finds that process by $file's image name, so a script wrapper (.cmd, .ps1) handed as $file ends nothing at it.
 function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600, [string] $keep = '') {
     $saved = @{}
     foreach ($variable in $environment.Keys) { $saved[$variable] = [Environment]::GetEnvironmentVariable($variable); [Environment]::SetEnvironmentVariable($variable, $environment[$variable]) }

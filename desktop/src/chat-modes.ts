@@ -3,13 +3,14 @@
 // given with no confirmation. Full access runs Claude Code in its own bypass mode, with Jason's hook in front of every
 // tool use refusing three kinds alone: the installation's settings files and run file, its data directory outside the
 // chat's folder, and what Jason itself sets for the turn: its variables and its permission tool. What Claude Code asks
-// about in that mode itself is a card. Ask first asks before anything that changes outside the allow list's verbs and the
-// acts of the person's word (`modeFence`). Plan only reads and proposes and changes nothing. Auto-edit is Ask first,
-// except that the six file commands run with no card on paths in the chat's own folder, read by Jason's literal reader
-// and never by the host's accept-edits mode; it is chosen on Claude Code only. A turn the conversation's mode cannot apply to (Full
-// access on Codex, on a Claude Code below its floor, sent from a browser tab, while it is not offered, or where Claude
-// Code's bypass is not available; Auto-edit on Codex) runs in Ask first, the chat says why once, and the record keeps the
-// mode. Nothing here starts a process or reads a file.
+// about in that mode itself is a card. On Codex, Full access runs Codex with no sandbox, as a terminal's Codex runs, and
+// none of the desktop's refusals holds on it (`codexArguments`). Ask first asks before anything that changes outside the
+// allow list's verbs and the acts of the person's word (`modeFence`). Plan only reads and proposes and changes nothing.
+// Auto-edit is Ask first, except that the six file commands run with no card on paths in the chat's own folder, read by
+// Jason's literal reader and never by the host's accept-edits mode; it is chosen on Claude Code only. A turn the
+// conversation's mode cannot apply to (Full access on a Claude Code below its floor, sent from a browser tab, while it is
+// not offered, or where Claude Code's bypass is not available; Auto-edit on Codex) runs in Ask first, the chat says why
+// once, and the record keeps the mode. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
@@ -54,8 +55,48 @@ export function fullAccessSentence(version: string | null): string | null {
     return `Full access needs Claude Code ${fullAccessFloor} or newer; this one is ${version}. Update Claude Code, for example by running \`claude update\` in a terminal.`;
 }
 
-/** Why Full access cannot apply on Codex: its own sandbox and hooks hold none of the chat's refusals. */
-export const codexFullAccess = 'Full access runs on Claude Code only.';
+/**
+ * What the chat says, once in a conversation, when Codex ran a Full access turn in a narrower sandbox because an
+ * administrator's requirements do not allow it to run with none (`codexLine`, `sandbox_narrowed`).
+ */
+export const codexFullAccessNarrowed =
+    'Codex could not act in Full access here: an administrator does not allow it to run with no sandbox on this computer, so it ran in the sandbox they allow.';
+
+/**
+ * What the chat says after Codex's own words, every time, when a Full access turn on Codex ends before Codex said any
+ * event, with a failing exit: Codex refused to start, and an administrator's requirements that forbid running with no
+ * sandbox are one reason it does. The desktop does not read Codex's words to tell which; the sentence leaves that to the
+ * person, and nothing of it is remembered.
+ */
+export const codexFullAccessRefused =
+    'If these words say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.';
+
+/**
+ * Whether `codexFullAccessRefused` follows a turn's end: a Full access turn on Codex that ended in words, not stopped,
+ * with no line on standard output, a failing exit and no start error, and whose words are not the desktop's own sentence
+ * for a refused key (`ours`), which no sentence of Codex's precedes.
+ */
+export function followsCodexRefusal(turn: {
+    program: string;
+    mode: ChatMode;
+    ended: string | null;
+    stopped: boolean;
+    heard: boolean | undefined;
+    startError: string | null;
+    code: number | null;
+    ours: boolean | undefined;
+}): boolean {
+    return (
+        turn.program === 'codex' &&
+        turn.mode === 'full_access' &&
+        turn.ended !== null &&
+        !turn.stopped &&
+        turn.heard === false &&
+        turn.startError === null &&
+        turn.code !== 0 &&
+        turn.ours !== true
+    );
+}
 
 /** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
@@ -104,7 +145,7 @@ export const hookFilteredSentence =
     "Jason's check before each tool did not run in this turn, which a policy can filter out: the cards and Claude Code's own rules still decide what runs, without Jason's refusals in front of them.";
 
 /** Why a turn runs in Ask first while its conversation keeps another mode, by its cause. */
-export type AskFirstWhy = 'codex' | 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit' | BypassWhy;
+export type AskFirstWhy = 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit' | BypassWhy;
 
 /** Where a turn is sent from and what is known of the host, which `turnMode` reads beside the mode and the program. */
 export interface TurnPlace {
@@ -122,19 +163,21 @@ export interface TurnPlace {
  * The mode a turn of a conversation in `recorded` runs in on a host of `program`, sent from `place`, and why when that is
  * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
  * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
- * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab, on
- * Codex, while this version does not offer it, where Claude Code's bypass is not available (`bypass`), and on a Claude
- * Code below its floor of Full access or whose version could not be read, the first of these that holds being the one
- * said; Auto-edit runs in Ask first on Codex. Every other mode runs as itself.
+ * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab,
+ * while this version does not offer it, where Claude Code's bypass is not available (`bypass`), and on a Claude Code
+ * below its floor of Full access or whose version could not be read, the first of these that holds being the one said;
+ * on Codex it runs as itself, with no sandbox, held to neither Claude Code's bypass nor its floor. Auto-edit runs in Ask
+ * first on Codex. Every other mode runs as itself.
  */
 export function turnMode(recorded: ChatMode, program: string, place: TurnPlace): { mode: ChatMode; why: { kind: AskFirstWhy; text: string } | null } {
     const askFirst = (kind: AskFirstWhy, text: string) => ({ mode: 'ask_first' as const, why: { kind, text } });
     if (recorded === 'full_access') {
         if (place.fromTab) return askFirst('tab', tabFullAccess);
-        if (program === 'codex') return askFirst('codex', codexFullAccess);
         if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
-        if (place.bypass !== undefined && place.bypass !== null) return askFirst(place.bypass, bypassSentences[place.bypass]);
-        const below = place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
+        // Codex runs Full access with no sandbox and is held to neither Claude Code's bypass nor its floor; every other
+        // program is held to both.
+        if (program !== 'codex' && place.bypass !== undefined && place.bypass !== null) return askFirst(place.bypass, bypassSentences[place.bypass]);
+        const below = program === 'codex' || place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
         if (below !== null) return askFirst('floor', below);
     } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
     return { mode: recorded, why: null };

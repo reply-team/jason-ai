@@ -11,13 +11,15 @@ import {
     type RefObject,
 } from 'react';
 import { can, cannotHere } from '../platform/places';
-import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
+import type { DesktopChatMode, DesktopEffort, DesktopHost } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { hostOf, heldHostOf } from './chat';
 import { setVariable } from './html';
 import { accessMarks } from './icons';
 import {
     anotherModel,
+    codexHosts,
+    codexModeSays,
     drawnMode,
     effortChosen,
     hostChosen,
@@ -56,6 +58,12 @@ export const modeSays: Readonly<Record<DesktopChatMode, string>> = {
     full_access:
         "Runs commands on this computer without asking, except those that reach Jason's own settings, data or variables.",
 };
+
+/** What a mode does on the host the next turn runs on: Codex's own words where they differ (`codexModeSays`). */
+export function modeSaysOn(host: DesktopHost | null, mode: DesktopChatMode): string | undefined {
+    const codex = host !== null && codexHosts.has(host.id) ? codexModeSays[mode] : undefined;
+    return codex ?? (modeSays as Partial<Record<string, string>>)[mode];
+}
 
 type Mark = keyof typeof accessMarks;
 
@@ -378,7 +386,7 @@ export function AccessButton({
                                 disabled={each.disabled !== null || elsewhere}
                                 small={
                                     each.disabled?.replaceAll('`', '') ??
-                                    (elsewhere ? cannotHere() : modeSays[each.mode])
+                                    (elsewhere ? cannotHere() : modeSaysOn(host, each.mode))
                                 }
                                 onChoose={() => {
                                     close();

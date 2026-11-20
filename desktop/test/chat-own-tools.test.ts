@@ -194,19 +194,22 @@ test('Claude Code 2.1.284 gets the settings keys alone, 2.1.285 the keys and --n
     }
 });
 
-test('every Codex turn leaves the person\'s config.toml unread, a resumed one too', () => {
+test('every Codex turn outside Full access leaves the person\'s config.toml unread, a resumed one too; a Full access turn reads it, as Codex in a terminal does', () => {
     for (const shape of [{}, { model: 'gpt-6.1-sol' }, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
-            const args = codexArguments({ ...shape, platform });
-            assert.ok(args.includes('--ignore-user-config'), JSON.stringify(shape));
-            const resume = args.indexOf('resume');
-            if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            for (const mode of [undefined, 'ask_first', 'plan_only', 'auto_edit'] as const) {
+                const args = codexArguments({ ...shape, platform, mode });
+                assert.ok(args.includes('--ignore-user-config'), `${mode} ${JSON.stringify(shape)}`);
+                const resume = args.indexOf('resume');
+                if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            }
+            assert.ok(!codexArguments({ ...shape, platform, mode: 'full_access' }).includes('--ignore-user-config'), JSON.stringify(shape));
         }
     }
 });
 
-test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too', () => {
-    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
+test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too, in Full access as well', () => {
+    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }, { mode: 'full_access' as const }, { mode: 'full_access' as const, resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
             const args = codexArguments({ ...shape, platform });
             const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));

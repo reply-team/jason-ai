@@ -255,9 +255,9 @@ export const planGo = 'Go ahead with the plan in your last answer.';
 export const planLine =
     'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.';
 
-/** The plan card's line on Codex, in place of `planLine`: Ask first runs Codex read-only too. */
+/** The plan card's line on Codex, in place of `planLine`: Codex runs Ask first read-only, and only Full access acts. */
 export const codexPlanLine =
-    'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+    'On Codex the approved plan still only reads: Codex runs Ask first read-only. To have it carried out, choose Full access or Claude Code for this chat.';
 
 /** The plan card's line once it was approved in this page. */
 export const planApproved = 'Approved: the chat is in Ask first.';
@@ -339,13 +339,29 @@ export const removedFolder =
 export const fullAccessLine =
     "Full access · the AI runs commands without asking, except those that reach Jason's own settings, data or variables";
 
+/**
+ * What the line under the composer says while a chat's turn runs in Full access on Codex: in `exec` Codex never asks,
+ * and with no sandbox nothing of Jason's holds it, the commands it cannot read included.
+ */
+export const codexFullAccessLine = 'Full access · Codex runs commands on this computer without asking, with no sandbox';
+
+/**
+ * What the menu says of a mode on Codex where it says other than on Claude Code: Codex in `exec` cannot ask, so its Ask
+ * first reads and proposes, in its read-only sandbox and with the jason it runs confined, and its Full access runs with no
+ * sandbox. The words claim no more than that holds. The other modes say what they say anywhere.
+ */
+export const codexModeSays: Readonly<Partial<Record<DesktopChatMode, string>>> = {
+    ask_first: 'Reads and proposes. Codex cannot ask before it acts.',
+    full_access: 'Runs commands on this computer without asking, with no sandbox.',
+};
+
 /** What the line under the composer says while the desktop holds the chat in Auto-edit. */
 export const autoEditLine =
     "Auto-edit · the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first";
 
 /**
- * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
- * the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
+ * What the line under the composer says while the chat's host is Codex on the person's sign-in, outside Full access: such
+ * a Codex turn leaves the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
  * named there.
  */
 export const codexConfigLine =
@@ -353,7 +369,7 @@ export const codexConfigLine =
 
 /**
  * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key,
- * system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
+ * outside Full access, system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
  * file from a command; on macOS and Linux nobody has looked, and a read-only command reads what the person can, so the
  * line there names the run token among what it can read. Neither says anything of the network or of acting for the
  * person, which nobody has seen; "read-only" is the mode the desktop runs Codex in.
@@ -391,14 +407,14 @@ const codexAutoEdit =
 
 /**
  * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
- * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
- * it; with no host, as on Codex. Auto-edit is disabled the same way, on Codex; it has no version floor. The Feed is
- * offered the same as any chat.
+ * chosen there, or null. Full access is disabled with the desktop's own reason: on a Claude Code too old for it, or while
+ * the desktop does not offer it; Codex and no host say nothing against it. Auto-edit is disabled the same way, on Codex
+ * and with no host; it has no version floor. The Feed is offered the same as any chat.
  */
 export function modeChoices(
     host: DesktopHost | null,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    const full = host === null ? null : host.fullAccess;
     const edit = host === null ? codexAutoEdit : host.autoEdit;
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
@@ -420,6 +436,24 @@ export function drawnMode(
 ): { mode: DesktopChatMode; why: string | null } {
     const step = host?.runs[place][chat.mode];
     return step === undefined ? { mode: chat.mode, why: null } : { mode: step.mode, why: step.why };
+}
+
+/** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
+const breadth: Readonly<Record<DesktopChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
+
+/**
+ * Whether a choice of mode stops the chat's running turn, as the desktop stops it: a choice narrower than the mode that
+ * turn runs in (`drawnMode`), never the mode the chat keeps, so the checked mode stops nothing, Ask first on Codex in
+ * Auto-edit among them. A mode word this page does not know is taken as Full access, the widest.
+ */
+export function choiceStops(
+    chat: Pick<Chat, 'mode' | 'running'>,
+    mode: DesktopChatMode,
+    host: DesktopHost | null,
+    place: 'window' | 'tab',
+): boolean {
+    const runsIn = drawnMode(chat, host, place).mode;
+    return chat.running && (breadth[mode] ?? 3) < (breadth[runsIn] ?? 3);
 }
 
 /**
