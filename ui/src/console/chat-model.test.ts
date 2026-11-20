@@ -488,6 +488,22 @@ describe('an /export typed in the chat, which the desktop answers without a turn
         expect(refused.title).toBe('New chat');
         expect(said(typed(refused, ''), 'Find leads in Austin').title).toBe('Find leads in Austin');
     });
+
+    it('is an export after any space the desktop takes as one, a line break of Unicode’s included', () => {
+        for (const space of [' ', '\t', '\u00a0', '\u0085', '\u2028']) {
+            expect(said(newChat('c1', 'claude'), `/export${space}x.md`).exporting).toBe(`/export${space}x.md`);
+        }
+        expect(said(newChat('c1', 'claude'), '/exportx.md').exporting).toBeNull();
+    });
+
+    it('when the desktop refuses the send itself, says why beside the thread, gives the words back, and a plan stays live', () => {
+        const over = failed(said(planned(), '/export x.md'), 'The desktop is closing.');
+        expect(over.entries.at(-1)).toEqual({ kind: 'aside', text: 'The desktop is closing.' });
+        expect(over).toMatchObject({ running: false, exporting: null, outbox: null, draft: '/export x.md' });
+        expect(livePlan(over, 'claude')).toBe(true);
+        // Once, when it was a waiting message.
+        expect(failed(said(planned(), '/export x.md', true), 'No.').draft).toBe('/export x.md');
+    });
 });
 
 describe('the model and the effort a chat is sent with', () => {

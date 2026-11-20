@@ -532,7 +532,7 @@ export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat =
  * Whether a message is an export, which the desktop answers by writing the conversation to a file and starts no turn
  * for: its first word is `/export` alone, as the desktop reads it (`exportName`, desktop/src/chat-export.ts).
  */
-export const isExport = (text: string): boolean => /^\/export(?=\s|$)/.test(text.trim());
+export const isExport = (text: string): boolean => /^\/export(?=[\s\u0085]|$)/.test(text.trim());
 
 /**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
@@ -622,11 +622,9 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             // An export ended: no turn did, so no plan ends; a refusal is said beside the conversation, and its words go
             // back to the box, once, above what is typed there.
             if (chat.exporting !== null) {
+                if (event.error !== null) return exportRefused(chat, chat.exporting, event.error);
                 const over = ended(chat);
-                if (event.error === null)
-                    return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
-                const aside: Entry = { kind: 'aside', text: event.error };
-                return givenBack(released({ ...over, entries: [...over.entries, aside] }), chat.exporting);
+                return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
             }
             // A turn ended: every earlier plan is a plan of the past, and this turn's last words are its plan when the
             // desktop says so. The Feed has none.
@@ -761,12 +759,25 @@ export const lost = (chat: Chat, request: string): Chat => ({
  * the person again, with what waited given back as a failed turn gives it back.
  */
 export function failed(chat: Chat, error: string): Chat {
+    if (chat.exporting !== null) return exportRefused(chat, chat.exporting, error);
     const over = ended(chat);
     return givenBackAfterFailure(chat, {
         ...over,
         outbox: null,
         entries: [...over.entries, { kind: 'error', text: error }],
     });
+}
+
+/**
+ * An export refused, by the desktop's answer or by the send itself: said beside the conversation, where it ends no card
+ * and no plan, and its words given back to the box, once, above what is typed there.
+ */
+function exportRefused(chat: Chat, words: string, error: string): Chat {
+    const over = ended(chat);
+    return givenBack(
+        released({ ...over, outbox: null, entries: [...over.entries, { kind: 'aside', text: error }] }),
+        words,
+    );
 }
 
 /** Something the desktop refused, said in the chat in its words; a turn that runs goes on. */

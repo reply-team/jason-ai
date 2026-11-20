@@ -27,15 +27,17 @@ export class ExportRefused extends Error {
     }
 }
 
-const word = /^\/export(?=\s|$)/;
+/** The line breaks a name may not hold: the ASCII two and the three Unicode adds. */
+const lineBreak = /[\r\n\u0085\u2028\u2029]/;
+const word = /^\/export(?=[\s\u0085]|$)/;
 
 /**
  * The words after a message's first word when that word is `/export` alone, '' when none is given; null otherwise.
- * Only the spaces before the name are taken off: a line break stays, and `nameRefusal` refuses it.
+ * The spaces before the name are taken off, of every kind but a line break, which stays for `nameRefusal` to refuse.
  */
 export function exportName(text: string): string | null {
     const trimmed = text.trim();
-    return word.test(trimmed) ? trimmed.slice('/export'.length).replace(/^[ \t]+/, '') : null;
+    return word.test(trimmed) ? trimmed.slice('/export'.length).replace(/^[^\S\r\n\u2028\u2029]+/, '') : null;
 }
 
 const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in the campaign’s folder, or the harness root for a chat about no campaign.';
@@ -47,13 +49,18 @@ const deviceStem = /^(?:con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9�
  * writes beside it (`AgentHosts.ImportFiles`, held to the runtime's table by a test), and the marker's folder.
  */
 const harnessNames: ReadonlySet<string> = new Set([memoryFileName, 'CLAUDE.md', 'GEMINI.md', '.jason'].map((name) => name.toLowerCase()));
+/** The names the runtime makes in the harness root: the projects' folder, `projects/` (docs/projects.md). */
+const rootNames: ReadonlySet<string> = new Set(['projects']);
 /** The longest name the file systems the desktop runs on take, in UTF-8 bytes. */
 const nameLimit = 255;
 
-/** Why a name is refused, in the desktop's sentence; null for a bare file name. */
-export function nameRefusal(name: string): string | null {
+/**
+ * Why a name is refused in the folder of `place`, the harness root or a campaign's, in the desktop's sentence; null for
+ * a bare file name.
+ */
+export function nameRefusal(name: string, place: 'root' | 'campaign' = 'campaign'): string | null {
     if (name === '') return 'Name the file to write, such as /export notes.md.';
-    if (/[\r\n]/.test(name)) return 'Give the file name on one line after /export.';
+    if (lineBreak.test(name)) return 'Give the file name on one line after /export.';
     if (/[\\/]/.test(name) || name === '.' || name === '..' || isAbsolute(name) || /^[A-Za-z]:/.test(name)) return withFolder;
     if (
         /[\u0000-\u001f\u007f<>:"|?*]/.test(name) ||
@@ -63,7 +70,7 @@ export function nameRefusal(name: string): string | null {
     ) {
         return notAName;
     }
-    if (harnessNames.has(name.toLowerCase())) return 'That name is one the harness keeps for its own files. Choose another.';
+    if (harnessNames.has(name.toLowerCase()) || (place === 'root' && rootNames.has(name.toLowerCase()))) return 'That name is one the harness keeps for its own files. Choose another.';
     return null;
 }
 
@@ -82,8 +89,8 @@ export function exportText(conversation: Pick<Conversation, 'title' | 'entries' 
  * The first half of an export, before anything is asked of the runtime: the name checked, and the conversation's words
  * taken as they are now, so a turn that begins meanwhile adds nothing to the file. Answers the text to write.
  */
-export function exportStart(conversation: Pick<Conversation, 'title' | 'entries' | 'dropped'>, name: string, at: Date): string {
-    const refusal = nameRefusal(name);
+export function exportStart(conversation: Pick<Conversation, 'title' | 'entries' | 'dropped' | 'campaign_id'>, name: string, at: Date): string {
+    const refusal = nameRefusal(name, conversation.campaign_id === null ? 'root' : 'campaign');
     if (refusal !== null) throw new ExportRefused(refusal);
     if (!conversation.entries.some((entry) => entry.kind === 'user' || entry.kind === 'text')) throw new ExportRefused('This conversation has nothing to write yet.');
     return exportText(conversation, at);
@@ -162,7 +169,7 @@ function cleanedUp(handle: number | null, path: string, sentence: string): strin
         rmSync(path, { force: true });
         return sentence;
     } catch {
-        return `${sentence.slice(0, -1)}, and what was written of it is left at ${path}`;
+        return `${sentence.slice(0, -1)}, and what was written of it is left at ${path}.`;
     }
 }
 

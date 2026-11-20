@@ -180,9 +180,13 @@ test('a name is taken only as a bare file name: no folder, no parent, no drive, 
     assert.equal(nameRefusal('é'.repeat(128)), notAName);
     assert.equal(nameRefusal(''), 'Name the file to write, such as /export notes.md.');
     // The name is the rest of the first line: more after it is refused, saying so, a queued join of two messages too.
-    for (const text of ['/export a.md\nmore', '/export a.md\n\nAnd then the next message', '/export\nnotes.md', '/export a.md\r\nb']) {
+    // A line break of any kind ends the line: the ones Unicode adds to the ASCII two too.
+    const breaks = ['/export a.md\u0085b', '/export a.md\u2028b', '/export a.md\u2029b', '/export\u0085notes.md', '/export\u2028notes.md'];
+    for (const text of ['/export a.md\nmore', '/export a.md\n\nAnd then the next message', '/export\nnotes.md', '/export a.md\r\nb', ...breaks]) {
         assert.equal(nameRefusal(exportName(text) ?? ''), oneLine, JSON.stringify(text));
     }
+    // Any other space before the name is not part of it.
+    for (const space of ['\u00a0', '\u3000', '\u2003', '\f', '\v', '\ufeff']) assert.equal(exportName(`/export${space}notes.md`), 'notes.md', JSON.stringify(space));
 });
 
 test('the harness’s own names are refused, whatever their case: the memory file, every import file the runtime writes, and .jason', () => {
@@ -192,11 +196,22 @@ test('the harness’s own names are refused, whatever their case: the memory fil
     const imports = [...table.matchAll(/new\("([^"]+)", "@" \+ MemoryFile\)/g)].map((found) => found[1] ?? '');
     assert.equal(memory, 'AGENTS.md');
     assert.deepEqual(imports, ['CLAUDE.md', 'GEMINI.md']);
+    // Every host row names its instruction file in that shape or names none, so a row written in another shape is red here.
+    const rows = table.match(/new\(AgentHostKind\./g)?.length ?? 0;
+    const none = table.match(/new\(AgentHostKind\.\w+, "[^"]*", "[^"]*", "[^"]*", "[^"]*", null,/g)?.length ?? 0;
+    assert.ok(rows > 0);
+    assert.equal(imports.length + none, rows);
     for (const name of [memory, ...imports, '.jason']) {
         for (const spelled of [name, name.toLowerCase(), name.toUpperCase()]) assert.equal(nameRefusal(spelled), theHarnessOwn, spelled);
     }
     assert.equal(nameRefusal('AGENTS.md.md'), null);
     assert.equal(nameRefusal('my-CLAUDE.md'), null);
+    // The root keeps projects/ for the projects' folders the runtime makes there; a campaign's folder keeps no such name.
+    for (const spelled of ['projects', 'Projects', 'PROJECTS']) {
+        assert.equal(nameRefusal(spelled, 'root'), theHarnessOwn, spelled);
+        assert.equal(nameRefusal(spelled, 'campaign'), null, spelled);
+    }
+    assert.equal(nameRefusal('projects.md', 'root'), null);
 });
 
 test('the text is the title, the moment, and the person’s and the AI’s words in order: no step, card, error or path', () => {
@@ -333,8 +348,17 @@ test('a message with more after the /export line, or a name of the harness, is r
     const before = readdirSync(root).sort();
     assert.deepEqual(await r.send(setupChat, '/export a.md\n\nAnd what next?'), [{ kind: 'done', error: oneLine }]);
     assert.deepEqual(await r.send(setupChat, '/export AGENTS.md'), [{ kind: 'done', error: theHarnessOwn }]);
+    assert.deepEqual(await r.send(setupChat, '/export Projects'), [{ kind: 'done', error: theHarnessOwn }]);
     assert.deepEqual(readdirSync(root).sort(), before);
     assert.equal(r.hosts(), 0);
+});
+
+test('a campaign’s chat may name its file projects: only the root keeps that name', async (t) => {
+    const r = rig(t);
+    const { campaign } = places(r);
+    const path = join(campaign, 'projects');
+    assert.deepEqual(await r.send(campaignChat, '/export projects'), [{ kind: 'notice', text: `Written: ${path}` }, { kind: 'done', error: null }]);
+    assert.ok(existsSync(path));
 });
 
 test('an export the window closes on says nothing afterwards and writes nothing', async (t) => {
