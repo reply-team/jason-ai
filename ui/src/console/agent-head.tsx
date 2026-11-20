@@ -8,11 +8,14 @@ import { agentKind, firstTabName, kindWord } from '../screens/campaigns/kind';
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { agentChatRoute } from './agent-place';
 import { agentFacts, peopleOf, readAgent } from './agent-facts';
-import { isUnmade, openConversation, restartChat } from './chat';
+import { isUnmade, restartChat } from './chat';
 import type { Chat } from './chat-model';
 import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
-import { changeChat, chats, conversations, inTab } from './state';
+import { begin, placeGates } from './conversation-acts';
+import { conversationItems, type MenuItem } from './conversation-items';
+import { MenuEntries, menuItems, menuKeys } from './menu-entries';
+import { chats, conversations } from './state';
 
 // The agent's header: one for every place the agent has in the console, its chat and its page's tabs, drawn by the area
 // above them and kept while the person moves between that agent's tabs. Its name, its state and its type are the
@@ -43,14 +46,6 @@ function conversationOf(id: string): { chat: Chat | undefined; kept: string | un
     return { chat, kept };
 }
 
-/** Shows the agent's conversation with one of its acts begun: the box to rename it, or the question before removing it. */
-async function begin(agent: string, conversation: string, act: 'renaming' | 'removing'): Promise<void> {
-    const held = await openConversation(conversation);
-    if (held === null) return;
-    changeChat(held, (each) => (act === 'renaming' ? { ...each, renaming: each.title } : { ...each, removing: true }));
-    navigate(agentChatRoute(agent));
-}
-
 /** "…": the acts of the agent's conversation, as its chat's bar held them, each word naming the conversation. */
 function ConversationMenu({ agent }: { agent: string }) {
     const [open, setOpen] = useState(false);
@@ -58,13 +53,13 @@ function ConversationMenu({ agent }: { agent: string }) {
     const menu = useRef<HTMLDivElement>(null);
     const { chat, kept } = conversationOf(agent);
     const id = kept ?? chat?.id;
-    const busy = chat?.running === true || chat?.removing === true;
-    const items = () => [
-        ...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []),
-    ];
+    const items = conversationItems(
+        { kept, id, running: chat?.running === true, removing: chat?.removing === true },
+        placeGates(),
+    );
     useEffect(() => {
         if (!open) return;
-        items()[0]?.focus();
+        menuItems(menu.current)[0]?.focus();
         const away = (event: MouseEvent) => {
             if (!menu.current?.contains(event.target as Node) && !button.current?.contains(event.target as Node))
                 setOpen(false);
@@ -79,27 +74,14 @@ function ConversationMenu({ agent }: { agent: string }) {
     // The menu's keys are taken on the wrap around the button and the menu, so a menu whose acts are all held, which
     // takes no focus, still closes on Escape and on Tab.
     const keys = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (!open) return;
-        const all = items();
-        const at = all.indexOf(document.activeElement as HTMLButtonElement);
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation();
-            close(true);
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            const step = event.key === 'ArrowDown' ? 1 : -1;
-            all[(at + step + all.length) % all.length]?.focus();
-        } else if (event.key === 'Home' || event.key === 'End') {
-            event.preventDefault();
-            all[event.key === 'Home' ? 0 : all.length - 1]?.focus();
-        } else if (event.key === 'Tab') close(false);
+        if (open) menuKeys(event, menu.current, close);
     };
-    const choose = (act: () => void) => {
+    const show = () => navigate(agentChatRoute(agent));
+    const choose = (item: MenuItem) => {
         close(false);
-        act();
+        if (item.kind === 'rename' || item.kind === 'remove') void begin(kept!, item.kind, show);
+        else if (item.kind === 'fresh') restartChat(id!);
     };
-    const keptTitle = 'Send a message first; then the chat can be renamed';
     return (
         <div className="agent-more-wrap" onKeyDown={keys}>
             <button
@@ -122,38 +104,7 @@ function ConversationMenu({ agent }: { agent: string }) {
             </button>
             {open && (
                 <div ref={menu} className="agent-menu" role="menu" aria-label="This agent's conversation">
-                    {can('chat.rename') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={kept === undefined || chat?.removing === true}
-                            title={kept === undefined ? keptTitle : 'Give this conversation a name of your own'}
-                            onClick={() => choose(() => void begin(agent, kept!, 'renaming'))}
-                        >
-                            Rename conversation
-                        </button>
-                    )}
-                    {!inTab() && can('chat.restart') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={id === undefined || kept === undefined || busy}
-                            title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                            onClick={() => choose(() => restartChat(id!))}
-                        >
-                            Start conversation fresh
-                        </button>
-                    )}
-                    {!inTab() && can('chat.remove') && (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled={kept === undefined || busy}
-                            onClick={() => choose(() => void begin(agent, kept!, 'removing'))}
-                        >
-                            Remove conversation
-                        </button>
-                    )}
+                    <MenuEntries items={items} onChoose={choose} />
                 </div>
             )}
         </div>

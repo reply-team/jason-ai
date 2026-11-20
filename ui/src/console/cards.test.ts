@@ -597,7 +597,7 @@ describe('a choice’s members', () => {
             ...buttonWords(source('card-places.ts')),
             ...buttonWords(source('card-own-list.ts')),
             ...modeNames(source('chat-model.ts')),
-            ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
+            ...moveVerbs(source('../screens/campaigns/moves-model.ts')),
             // The chips' words, drawn from the tables of chips.ts.
             ...chipWords,
             ...byHand,

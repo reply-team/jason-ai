@@ -2,8 +2,10 @@ import { html, type Html } from './html';
 
 // The runtime's CSP allows no inline handler, so the console's markup names what a control does instead:
 // `data-action` for a click, `data-submit` on a form, `data-change` and `data-input` on a field, and `data-enter` on a
-// text box that sends with Enter, and `data-escape` on a text box that Escape closes. Each names an entry of one closed table of the console's own functions, and its
-// arguments travel in `data-args` as a JSON literal, parsed and never evaluated.
+// text box that sends with Enter, `data-escape` on a text box that Escape closes, and `data-menu` on a control whose own
+// menu opens on a right-click, Shift+F10 or the menu key, which there alone the page takes from the system. Each names an
+// entry of one closed table of the console's own functions, and its arguments travel in `data-args` as a JSON literal,
+// parsed and never evaluated.
 
 /** A value an action takes: JSON, so that it survives the attribute it travels in. */
 export type Argument = string | number | boolean | null;
@@ -70,8 +72,17 @@ export function listen(root: HTMLElement): () => void {
         const element = closest(event, 'data-input', root);
         if (element) run(element.dataset['input'], element, event);
     };
+    const contextmenu = (event: Event) => {
+        const element = closest(event, 'data-menu', root);
+        if (element && run(element.dataset['menu'], element, event)) event.preventDefault();
+    };
     const keydown = (event: Event) => {
         if (!(event instanceof KeyboardEvent) || event.isComposing) return;
+        if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+            const element = closest(event, 'data-menu', root);
+            if (element && run(element.dataset['menu'], element, event)) event.preventDefault();
+            return;
+        }
         if (event.key === 'Escape') {
             const element = closest(event, 'data-escape', root);
             if (element && run(element.dataset['escape'], element, event)) event.preventDefault();
@@ -87,6 +98,7 @@ export function listen(root: HTMLElement): () => void {
         ['change', change],
         ['input', input],
         ['keydown', keydown],
+        ['contextmenu', contextmenu],
     ];
     for (const [kind, listener] of listeners) root.addEventListener(kind, listener);
     return () => {

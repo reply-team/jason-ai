@@ -12,7 +12,7 @@ import { openConversation } from './chat';
 import { needsInput } from './needs';
 import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
-import { closeFilterMenu, recentView } from './recent';
+import { closeFilterMenu, closeRowMenu, recentView, rowMenu } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent and the one under it that makes a chat
@@ -30,6 +30,7 @@ const open = signal<'more' | null>(null);
 export function closeMenus(): void {
     open.value = null;
     closeFilterMenu();
+    closeRowMenu();
 }
 
 /** The address of a screen the browser shell registers, or null when this build has none. */
@@ -120,11 +121,34 @@ define('side.feed', () => {
         here().dock.showChat(held);
     });
 });
-define('side.chat', ([id]) => {
-    if (typeof id !== 'string') return;
+/** Shows a conversation of Recent, as a click on its row does. */
+export function openRow(id: string): void {
     void openConversation(id).then((held) => {
         if (held !== null) here().dock.showChat(held);
     });
+}
+
+define('side.chat', ([id]) => {
+    if (typeof id === 'string') openRow(id);
+});
+
+/**
+ * Opens the menu on a row of Recent, and nothing else: the row is neither opened nor shown. A right-click places it at
+ * the pointer; the keyboard, Shift+F10 or the menu key, under the row. A menu the keyboard opened on a row already is not
+ * opened again by the system's own event that follows the key.
+ */
+define('side.rowmenu', ([id], element, event) => {
+    if (typeof id !== 'string') return;
+    const pointer = event instanceof MouseEvent && event.type === 'contextmenu' && event.button === 2;
+    if (!pointer && event.type === 'contextmenu' && rowMenu.value?.id === id) return;
+    const box = element.getBoundingClientRect();
+    closeMenus();
+    rowMenu.value = {
+        id,
+        title: element.getAttribute('aria-label') ?? '',
+        x: pointer ? (event as MouseEvent).clientX : box.left + 12,
+        y: pointer ? (event as MouseEvent).clientY : box.bottom,
+    };
 });
 define('side.show', ([panel]) => {
     closeMenus();

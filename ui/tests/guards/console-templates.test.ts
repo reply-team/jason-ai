@@ -95,3 +95,31 @@ describe('the guard over it', () => {
         );
     });
 });
+
+/** Where a source listens for the right-click: an `addEventListener`, an entry of a table of listeners, or a JSX prop. */
+export function contextMenuListeners(text: string): string[] {
+    return [
+        ...text.matchAll(
+            /addEventListener\(\s*['"`]contextmenu['"`]|\[\s*['"`]contextmenu['"`]\s*,|\bonContextMenu\b/g,
+        ),
+    ].map((match) => match[0]);
+}
+
+describe('the right-click', () => {
+    it('is taken from the system only by the console’s one listener, on a control that names its menu', () => {
+        const every = readdirSync(sourceDir, { recursive: true, encoding: 'utf8' })
+            .map((name) => name.split(sep).join('/'))
+            .filter((name) => /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name));
+        const listening = every.filter(
+            (name) => contextMenuListeners(readFileSync(join(sourceDir, name), 'utf8')).length > 0,
+        );
+        expect(listening).toEqual(['console/actions.ts']);
+    });
+
+    it('is found in each form', () => {
+        expect(contextMenuListeners("root.addEventListener('contextmenu', on);")).toHaveLength(1);
+        expect(contextMenuListeners("const all = [['contextmenu', on]];")).toHaveLength(1);
+        expect(contextMenuListeners('<div onContextMenu={on} />')).toHaveLength(1);
+        expect(contextMenuListeners("if (event.type === 'contextmenu') go();")).toEqual([]);
+    });
+});
