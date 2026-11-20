@@ -397,7 +397,8 @@ public static class AutostartArtifacts
     /// plist has no <c>KeepAlive</c>: nothing here supervises anything. Given a search path, it carries it as the
     /// runtime's <c>PATH</c> (<see cref="SystemdPath"/>); given none, it has no environment line. It starts only where the
     /// program it runs is there (<c>ConditionPathExists</c>), so once a removal Jason did not make has taken that file, a
-    /// package purged or an AppImage deleted, the unit is skipped at login rather than failed.
+    /// package purged, the unit is skipped at login rather than failed. An AppImage's program is the copy under the data
+    /// directory, which deleting the AppImage leaves: that unit goes on starting the runtime until <c>jason uninstall</c>.
     /// </summary>
     private static AutostartRegistration Linux(IReadOnlyList<string> line, string home, string? searchPath)
     {

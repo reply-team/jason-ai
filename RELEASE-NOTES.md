@@ -89,8 +89,10 @@ Windows, Jason is installed, updated and removed as in 0.49.0.
   is removed, and where that is refused nothing of yours goes; an AppImage goes with no password, with its menu entry,
   its icons and its copies of `jason`. It keeps the data directory unless you add `--purge-data`, and the harness root
   always. Removed the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage),
-  the application goes and your account's own files stay: the start at logon is skipped once its `jason` is gone, and
-  the login and menu entries are hidden. `jason uninstall` is the whole removal.
+  the application goes and your account's own files stay. For the deb, the runtime's start at logon is skipped once its
+  `jason` is gone; an AppImage's copy of `jason` under `~/.jason` stays, so `jason` still answers and the runtime still
+  starts at sign-in until `jason uninstall`. The login and menu entries are hidden either way. `jason uninstall` is the
+  whole removal.
   [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#taking-it-off) says what each
   takes off.
 - **A command-line install moves into Jason Desktop on Linux too.** `jason update apply` in a command-line install of an

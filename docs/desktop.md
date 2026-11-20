@@ -1156,9 +1156,10 @@ version's demo made (see [the demo](#the-demo)) are not your data: the removal t
   skills Jason put in your agents' folders and, for an AppImage, its menu entry, its icons and the copies of its `jason`
   go, the AppImage file last. The data directory stays unless you choose to delete it; the harness root always stays.
   Removing it the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage) takes
-  the application and leaves your account's own files, as it does for any application; what they would start is made
-  harmless: the start at logon is skipped once its `jason` is gone, and the login and menu entries are hidden. `jason
-  uninstall` is the full clean.
+  the application and leaves your account's own files, as it does for any application. For the deb, the runtime's start
+  at logon is skipped once its `jason` is gone. For an AppImage it is not: the copy of its `jason` under the data
+  directory stays, so `jason` still answers in a terminal and the runtime still starts at sign-in until `jason
+  uninstall`. Either way the login and menu entries are hidden. `jason uninstall` is the full clean.
 - **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is
   `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason` for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

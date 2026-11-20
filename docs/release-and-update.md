@@ -177,7 +177,9 @@ Jason… in the Jason menu on macOS and Linux: what Jason placed, then the appli
 says otherwise, and the harness root always. On Linux the deb's package goes first, purged by apt with an administrator's
 password asked once, and nothing of the account's goes when it is refused; an AppImage's file goes last. The system's own
 removal (`sudo apt purge jason-desktop`, App Center, deleting the AppImage) takes the application and leaves the
-account's own files, as it does for any application, and what they would start is skipped once its file is gone.
+account's own files, as it does for any application. For the deb, the runtime's start at logon is skipped once its
+`jason` is gone; an AppImage's copy of `jason` under the data directory stays, so `jason` still answers and the runtime
+still starts at sign-in until `jason uninstall`; the login and menu entries are hidden either way.
 [desktop.md](desktop.md) lists what to take off by hand for a Jason that will not start.
 
 **The apt repository's index is published beside the deb, from 0.49.1 on:** `Packages`, `Release`, `InRelease` and
