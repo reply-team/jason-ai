@@ -1,5 +1,4 @@
 import { signal } from '@preact/signals-react';
-import { can } from './places';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -49,8 +48,6 @@ let seam: DesktopThemeSeam | undefined;
 
 /** Tells the desktop a choice; never throws, since a desktop that cannot be told is no reason for a page not to open. */
 function tell(choice: ThemeChoice): void {
-    // A tab keeps the page's own choice and leaves the desktop's alone.
-    if (!can('theme.set')) return;
     try {
         void seam?.set?.(choice)?.catch(() => undefined);
     } catch {
@@ -68,7 +65,7 @@ export async function bindDesktopTheme(desktopSeam: DesktopThemeSeam | undefined
     seam = desktopSeam;
     let kept: ThemeChoice | null;
     try {
-        const answer = can('theme.get') ? await seam?.get?.() : null;
+        const answer = await seam?.get?.();
         kept = isChoice(answer) ? answer : null;
     } catch {
         kept = null;

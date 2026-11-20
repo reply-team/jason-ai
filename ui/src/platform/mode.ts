@@ -1,14 +1,11 @@
 import { signal } from '@preact/signals-react';
 import { firstCampaignTab, parseRoute, route } from '../router';
 import { t } from './i18n';
-import { can, cannotHere } from './places';
 
 // The mode is what the desktop's window shows: Live, the person's own installation, or Demo, a static page of sample data
 // the desktop shows in a sealed view of its own, with no installation behind it. The page learns it from the desktop
-// alone, once, as it loads, here and nowhere else; a browser shows whatever runtime it is paired with, which is Live to
-// the page, and shows the demo as a view of the tab alone (`platform/demo-frame.tsx`), never through this mode. The rest
-// of the page reads `mode`, and the window switches through `switchMode`, which asks the desktop to keep the other mode
-// and start again on it.
+// alone, once, as it loads, here and nowhere else. The rest of the page reads `mode`, and the window switches through
+// `switchMode`, which asks the desktop to keep the other mode and start again on it.
 
 export type Mode = 'live' | 'demo';
 
@@ -59,7 +56,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     let heard: boolean | null = null;
     try {
         unfollow =
-            (can('mode.onPreparing') ? seam : null)?.onPreparing?.((on) => {
+            seam?.onPreparing?.((on) => {
                 heard = on === true;
                 if (mode.value === 'demo') modePreparing.value = heard;
             }) ?? null;
@@ -68,7 +65,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     }
     let kept: unknown;
     try {
-        kept = can('mode.get') ? await seam?.get?.() : null;
+        kept = await seam?.get?.();
     } catch {
         kept = null;
     }
@@ -77,7 +74,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
             ? (kept as { mode?: unknown; unopened?: unknown; preparing?: unknown })
             : { mode: kept };
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
-    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : can('chat.create') ? 'chat' : 'people';
+    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : 'chat';
     // The address was read when the router loaded, before the first tab was known: an agent's bare address is read again.
     if (typeof location !== 'undefined' && route.value.screen === 'campaigns' && route.value.id !== undefined)
         route.value = parseRoute(location.hash);
@@ -98,10 +95,6 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
 export async function switchMode(to: Mode): Promise<void> {
     if (to === mode.value || seam === null || modePreparing.value) return;
     modeRefusal.value = null;
-    if (!can('mode.set')) {
-        modeRefusal.value = cannotHere();
-        return;
-    }
     if (seam.set === undefined) {
         modeRefusal.value = t('mode.unsupported');
         return;

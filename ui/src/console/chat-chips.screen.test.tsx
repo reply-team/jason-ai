@@ -1,16 +1,13 @@
-import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act as flush, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
-import type { DesktopChatMode, DesktopConversationRecord, DesktopKeptEntry } from '../platform/desktop';
-import { loadMode, mode } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
+import type { DesktopConversationRecord, DesktopKeptEntry } from '../platform/desktop';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
-import { chatDesktop, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
@@ -262,49 +259,5 @@ describe('the opening chips', () => {
         const feed = await openFeed();
         await waitFor(() => within(feed).getByText('Hello.'));
         expect(drawn(feed)).toEqual([]);
-    });
-});
-
-describe('the chips in a browser tab', () => {
-    async function inTab(chatMode: DesktopChatMode): Promise<{ pane: HTMLElement; sent: () => number }> {
-        const desktop = chatDesktop();
-        const stand = standInBridge(desktop);
-        const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
-        setPlace('tab', tab);
-        await loadMode(tab);
-        desktop.keep({ ...spring(), mode: chatMode });
-        const fake = given(
-            new FakeApi()
-                .answer('plugin.list', 'plugin.list/none')
-                .answer('route.list', 'route.list/empty')
-                .answer('ui.tokens', 'ui.tokens/two'),
-        );
-        await session.bootstrap();
-        render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
-        const pane = await openChat('Spring');
-        await waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
-        return { pane, sent: () => stand.asked.filter((each) => each.member === 'chat.send').length };
-    }
-
-    it('stand where the tab may send', async () => {
-        try {
-            const { pane } = await inTab('ask_first');
-            await waitFor(() => expect(chips(pane)).toHaveLength(3));
-        } finally {
-            cleanup();
-            setPlace('window');
-        }
-    });
-
-    it('stand nowhere the tab may not send', async () => {
-        try {
-            const { pane, sent } = await inTab('full_access');
-            await waitFor(() => within(pane).getByText('Hello.'));
-            expect(chips(pane)).toEqual([]);
-            expect(sent()).toBe(0);
-        } finally {
-            cleanup();
-            setPlace('window');
-        }
     });
 });

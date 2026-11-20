@@ -1,16 +1,16 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import type { Jason } from '../harness';
 
-// The seal in the browser, tried from inside: a hostile page stands where the demo page does, the console shows it in its
-// frame, and every way out it can name aims at a witness, a server of this test's own on the loopback that answers
-// anything. In a frame only the sealed set's content policy stands between the page's network and an address that
-// answers, so the witness hearing nothing is the policy at work, and so is the page reaching no file of the runtime's
-// own. The page's own word decides only what stays inside it: its origin, its storage and the page above it. The probe
-// runs in the pull request's CI alone, in each engine its workflow installs (playwright.config.ts).
+// The seal in the browser, tried from inside: a hostile page stands under sealed/ of a build of one's own, opened by
+// itself, and every way out it can name aims at a witness, a server of this test's own on the loopback that answers
+// anything. Only the sealed set's content policy stands between the page's network and an address that answers, so the
+// witness hearing nothing is the policy at work, and so is the page reaching no file of the runtime's own. The page's
+// own word decides only what stays inside it: its origin and its storage. The probe runs in the pull request's CI alone,
+// in each engine its workflow installs (playwright.config.ts).
 
 const probe = join(import.meta.dirname, 'sealed-probe.html');
 
@@ -69,16 +69,21 @@ async function startWitness(): Promise<{ origin: string; heard: string[]; close:
     };
 }
 
-/** The probe placed where the build's demo page stands, aiming at the witness: a custom build, served over the default. */
+/** Where the probe stands: under sealed/ of a custom build, served over the default. */
+const probePath = '/ui/sealed/probe.html';
+
+/** The probe placed under the custom build's sealed directory, aiming at the witness. */
 function placeProbe(jason: Jason, witness: string): void {
     jason.placeBuild('custom', 'probe');
     const page = readFileSync(probe, 'utf8').replaceAll('__WITNESS_ORIGIN__', witness);
-    writeFileSync(join(jason.dataDir, 'ui', 'custom', 'sealed', 'demo.html'), page);
+    const sealed = join(jason.dataDir, 'ui', 'custom', 'sealed');
+    mkdirSync(sealed, { recursive: true });
+    writeFileSync(join(sealed, 'probe.html'), page);
 }
 
 /** What the probe wrote: each try with its outcome and its own words. */
-async function outcomes(page: Page, framed: boolean): Promise<[string, string, string][]> {
-    const root = framed ? page.frameLocator('iframe.demo-frame').locator('body') : page.locator('body');
+async function outcomes(page: Page): Promise<[string, string, string][]> {
+    const root = page.locator('body');
     await expect(root).toHaveAttribute('data-done', '1', { timeout: 20_000 });
     return root
         .locator('li')
@@ -91,16 +96,11 @@ async function outcomes(page: Page, framed: boolean): Promise<[string, string, s
         );
 }
 
-/** Every request and WebSocket the page's documents make, from the frame or from a page opened by itself. */
-function watchNetwork(page: Page, framed: boolean) {
+/** Every request and WebSocket the page makes, or a page it opened. */
+function watchNetwork(page: Page) {
     const seen = { asked: [] as string[], finished: [] as string[], sockets: [] as string[], received: [] as string[] };
-    const ours = (frame: ReturnType<Page['mainFrame']>) => (framed ? frame.parentFrame() !== null : true);
-    page.on('request', (request) => {
-        if (ours(request.frame())) seen.asked.push(request.url());
-    });
-    page.on('requestfinished', (request) => {
-        if (ours(request.frame())) seen.finished.push(request.url());
-    });
+    page.on('request', (request) => seen.asked.push(request.url()));
+    page.on('requestfinished', (request) => seen.finished.push(request.url()));
     page.on('websocket', (socket) => {
         seen.sockets.push(socket.url());
         socket.on('framereceived', () => seen.received.push(socket.url()));
@@ -115,58 +115,6 @@ function record(info: TestInfo, seen: ReturnType<typeof watchNetwork>, heard: st
     });
 }
 
-test('a page under sealed/, in the console’s frame, reaches no address and changes nothing above it', async ({
-    page,
-    jason,
-}, info) => {
-    const witness = await startWitness();
-    try {
-        placeProbe(jason, witness.origin);
-        const dialogs: string[] = [];
-        const popups: string[] = [];
-        const downloads: string[] = [];
-        page.on('dialog', (dialog) => {
-            dialogs.push(dialog.message());
-            void dialog.dismiss();
-        });
-        page.on('popup', (popup) => popups.push(popup.url()));
-        page.on('download', (download) => downloads.push(download.suggestedFilename()));
-        const seen = watchNetwork(page, true);
-
-        const { url } = await jason.uiOpen();
-        await page.goto(url);
-        // A plain tab, no desktop and nothing waiting, opens on the Demo by itself, in the frame a tab the desktop opened
-        // draws too (never the desktop's window); nothing is pressed.
-        await expect(page.locator('iframe.demo-frame')).toBeVisible();
-        const token = await page.evaluate(() => localStorage.getItem('jason.ui.session'));
-        expect(token).not.toBeNull();
-        await expect(page.locator('iframe.demo-frame')).toHaveAttribute('sandbox', 'allow-scripts');
-
-        const written = await outcomes(page, true);
-        expect(written.map(([name]) => name).sort()).toEqual([...inside, ...outside].sort());
-        expect(written.filter(([name, outcome]) => inside.includes(name) && outcome !== 'refused')).toEqual([]);
-
-        await leave(page.frames().find((each) => each.parentFrame() !== null)!);
-
-        record(info, seen, witness.heard);
-        expect(witness.heard).toEqual([]);
-        expect(seen.finished.filter((each) => !each.startsWith('data:'))).toEqual([
-            `${jason.origin}/ui/sealed/demo.html`,
-        ]);
-        expect(seen.received).toEqual([]);
-
-        // The page above is the tab's, where it was, holding what it held.
-        expect(page.url()).toMatch(/\/ui\/#\/demo$/);
-        expect(await page.evaluate(() => localStorage.getItem('jason.ui.session'))).toBe(token);
-        await expect(page.locator('.demo-over')).toBeVisible();
-        expect(dialogs).toEqual([]);
-        expect(popups).toEqual([]);
-        expect(downloads).toEqual([]);
-    } finally {
-        await witness.close();
-    }
-});
-
 test('a page under sealed/, opened by itself, has an origin of its own and reaches no address', async ({
     page,
     jason,
@@ -179,10 +127,11 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         page.on('popup', (popup) => popups.push(popup.url()));
         page.on('download', (download) => downloads.push(download.suggestedFilename()));
         page.on('dialog', (dialog) => void dialog.dismiss());
-        const seen = watchNetwork(page, false);
-        await page.goto(`${jason.origin}/ui/sealed/demo.html`);
+        const seen = watchNetwork(page);
+        await page.goto(`${jason.origin}${probePath}`);
 
-        const written = await outcomes(page, false);
+        const written = await outcomes(page);
+        expect(written.map(([name]) => name).sort()).toEqual([...inside, ...outside].sort());
         // Opened by itself the page is its own parent and top, so the tries of the page above are no tries here.
         const own = written.filter(([name]) => inside.includes(name) && !/^parent\./.test(name));
         expect(own.map(([name]) => name)).toContain('origin');
@@ -194,12 +143,12 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         // A tab's icon at the root of the address is the browser's own request, made for any page, not the page's.
         const browsers = `${jason.origin}/favicon.ico`;
         expect(seen.finished.filter((each) => !each.startsWith('data:') && each !== browsers)).toEqual([
-            `${jason.origin}/ui/sealed/demo.html`,
+            `${jason.origin}${probePath}`,
         ]);
         expect(seen.received).toEqual([]);
         expect(popups).toEqual([]);
         expect(downloads).toEqual([]);
-        expect(page.url()).toBe(`${jason.origin}/ui/sealed/demo.html`);
+        expect(page.url()).toBe(`${jason.origin}${probePath}`);
     } finally {
         await witness.close();
     }

@@ -1,7 +1,7 @@
 /**
  * The seam between the page and Jason Desktop: what the desktop's preload puts on `window.jasonDesktop`, and all of
- * it. In a browser it is absent, and the page is the classic shell. The page is served from the runtime's loopback
- * origin in both; the desktop's main process checks every call's sender against that origin, so the page checks
+ * it. In a browser it is absent, and the page draws one sentence (`src/own-place.ts`). The page is served from the
+ * runtime's loopback origin in both; the desktop's main process checks every call's sender against that origin, so the page checks
  * nothing here. Every promise rejects with an Error whose message the page shows as text.
  */
 export {};
@@ -598,21 +598,11 @@ export interface DesktopSetup {
 
 /**
  * A place "Open in" can open the folder in, by the name the desktop knows it by: Claude Code or Codex as a new session in a
- * terminal, a plain terminal, an editor, the file manager, or Copy path; or a browser, which opens the chat in a tab of the
- * system's browser rather than the folder. The page sends one of these names and never a path.
+ * terminal, a plain terminal, an editor, the file manager, or Copy path. The page sends one of these names and never a
+ * path.
  */
 export type DesktopOpenInPlace =
-    | 'claude'
-    | 'codex'
-    | 'terminal'
-    | 'vscode'
-    | 'cursor'
-    | 'antigravity'
-    | 'windsurf'
-    | 'zed'
-    | 'files'
-    | 'browser'
-    | 'copy';
+    'claude' | 'codex' | 'terminal' | 'vscode' | 'cursor' | 'antigravity' | 'windsurf' | 'zed' | 'files' | 'copy';
 
 /**
  * What the split button is drawn from: the places this computer has, in the order to show them, the one the button's main
@@ -852,8 +842,7 @@ export interface JasonDesktop {
         /**
          * A card the AI asked for in the chat did not draw: the desktop writes one line of its log, `chat_card_refused`,
          * with the card's kind (one of the six, or `unknown`) and why (`kind_unknown`, `too_long`, `malformed` or
-         * `schema`), and nothing of what the block held; a value outside those lists writes nothing. A place with no
-         * desktop's log, a tab or none, refuses it in its own words.
+         * `schema`), and nothing of what the block held; a value outside those lists writes nothing.
          */
         cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
     };

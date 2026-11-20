@@ -21,5 +21,5 @@ export const screenPlugins: readonly UiPlugin[] = [
     settingsPlugin,
 ];
 
-/** The browser's shell: the screens, and the Chat row that points to the desktop application. */
+/** The screens, and the Chat row. */
 export const browserPlugins: readonly UiPlugin[] = [chatPlugin, ...screenPlugins];

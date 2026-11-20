@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { can } from '../platform/places';
 import type {
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
@@ -32,11 +31,10 @@ const terminalPlaces: readonly DesktopOpenInPlace[] = ['claude', 'codex', 'termi
 const glyphs = {
     prompt: 'M4 7l5 5-5 5M12 18h8',
     editor: 'M8 6l-6 6 6 6M16 6l6 6-6 6',
-    // The menu's own kinds, on the same 24-unit grid and stroke: a terminal window, a folder, a browser's globe, two
-    // sheets for a copy, a pair of sliders for changing Jason itself and a bent arrow for continuing a chat.
+    // The menu's own kinds, on the same 24-unit grid and stroke: a terminal window, a folder, two sheets for a copy, a
+    // pair of sliders for changing Jason itself and a bent arrow for continuing a chat.
     terminal: 'M3 5h18v14H3zM7 10l3 2-3 2M12 15h4',
     folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-    browser: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
     copy: 'M9 9h10v10H9zM5 15V5h10',
     change: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
     again: 'M4 12h12M11 6l6 6-6 6M20 5v14',
@@ -55,8 +53,6 @@ function kindOf(place: DesktopOpenInPlace): keyof typeof glyphs {
             return 'terminal';
         case 'files':
             return 'folder';
-        case 'browser':
-            return 'browser';
         case 'copy':
             return 'copy';
         default:
@@ -188,9 +184,7 @@ function nameOf(place: { id: DesktopOpenInPlace; label: string }): string {
         ? t('openIn.place.terminal')
         : place.id === 'files'
           ? t('openIn.place.files')
-          : place.id === 'browser'
-            ? t('openIn.place.browser')
-            : t('openIn.copy');
+          : t('openIn.copy');
 }
 
 /**
@@ -230,7 +224,6 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     // Answers the places read, or null where the read was refused, failed or was overtaken by a later one.
     const read = useCallback(async (): Promise<DesktopOpenInAnswer | null> => {
-        if (!can('openIn.targets')) return null;
         const asked = ++reads.current;
         try {
             const kept = await desktop.openIn.targets(campaignId, chatId);
@@ -286,7 +279,6 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const open = async (place: DesktopOpenInPlace) => {
         setMenu(false);
-        if (!can('openIn.open')) return;
         const said = await desktop.openIn.open(place, campaignId).then(
             (result) => (result === null ? null : result.refused),
             (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -301,7 +293,6 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         const chosen = answer?.places.find((each) => each.id === place);
         const folder = answer?.folder ?? '';
         if (place === 'copy') setToast(t('openIn.copied', { folder }));
-        else if (place === 'browser') setToast(t('openIn.browserOpened'));
         else {
             // Jason in a terminal works with this window's data: `jason session open` puts this jason first on its PATH. An
             // editor gets the person's own environment, so what it says is which jason that PATH finds, as the desktop tells
@@ -329,7 +320,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const continueChat = async (offered: DesktopOpenInContinue) => {
         setMenu(false);
-        if (chatId === undefined || !can('openIn.continueChat')) return;
+        if (chatId === undefined) return;
         const said = await desktop.openIn.continueChat(chatId).then(
             (result) => (result === null ? null : result.refused),
             (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -344,7 +335,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const changeJason = async () => {
         setMenu(false);
-        if (changing.current || !can('openIn.changeJason')) return;
+        if (changing.current) return;
         changing.current = true;
         const said = await desktop.openIn
             .changeJason()
@@ -484,11 +475,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     {rest.map((place) =>
                         item(
                             place,
-                            place.id === 'copy'
-                                ? answer?.folder
-                                : place.id === 'browser'
-                                  ? t('openIn.browser')
-                                  : undefined,
+                            place.id === 'copy' ? answer?.folder : undefined,
                             place.id === 'terminal'
                                 ? t('openIn.terminal')
                                 : place.id === 'copy'

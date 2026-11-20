@@ -1,4 +1,3 @@
-import { can, cannotHere } from '../platform/places';
 import { signal } from '@preact/signals-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Contact } from '../api/types';
@@ -82,8 +81,8 @@ interface Built {
 function pages(): Built {
     const entries: Entry[] = [];
     const going: Record<string, () => void> = {};
-    const add = (key: string, kind: Kind, label: string, words: string, go: () => void, off?: string) => {
-        entries.push({ key, kind, label, words, ...(off === undefined ? {} : { off }) });
+    const add = (key: string, kind: Kind, label: string, words: string, go: () => void) => {
+        entries.push({ key, kind, label, words });
         going[key] = go;
     };
     const feed = feedId.value;
@@ -116,10 +115,8 @@ function pages(): Built {
     );
     screen('system', 'page', t('nav.system'), t('palette.words.system'));
     screen('settings', 'settings', t('nav.settings'), '');
-    // A place that cannot make a chat lists the ways to one, off, with the sentence.
-    const off = can('chat.create') ? undefined : cannotHere();
-    add('action:agent', 'action', t('palette.action.agent'), '', () => here().dock.show('start'), off);
-    add('action:chat', 'action', t('palette.action.chat'), '', () => here().dock.chat(), off);
+    add('action:agent', 'action', t('palette.action.agent'), '', () => here().dock.show('start'));
+    add('action:chat', 'action', t('palette.action.chat'), '', () => here().dock.chat());
     return { entries, going };
 }
 
@@ -255,7 +252,6 @@ export function Palette({ system }: { system: string }) {
 
     const chosen = Math.min(at, Math.max(shown.length - 1, 0));
     const go = (entry: Entry) => {
-        if (entry.off !== undefined) return;
         shut(false);
         const contact = people.find((each) => `person:${each.id}` === entry.key);
         if (contact !== undefined) {
@@ -318,13 +314,11 @@ export function Palette({ system }: { system: string }) {
                                 id={`palette-${index}`}
                                 role="option"
                                 aria-selected={index === chosen}
-                                aria-disabled={entry.off === undefined ? undefined : true}
                                 className={index === chosen ? 'on' : undefined}
                                 onMouseMove={() => index !== chosen && setAt(index)}
                                 onClick={() => go(entry)}
                             >
                                 <span className="palette-label">{entry.label}</span>
-                                {entry.off !== undefined && <span className="palette-off">{entry.off}</span>}
                                 <span className="palette-kind">{kindWord(entry.kind)}</span>
                             </li>
                         ))}

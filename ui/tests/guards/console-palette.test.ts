@@ -28,7 +28,7 @@ ${scope} .settings .voice-part textarea`,
         ]);
     });
 
-    it('is loaded by the console mount alone, so the classic shell never receives it', () => {
+    it('is loaded by the console mount alone', () => {
         const users = files(src)
             .filter((file) => /\.(tsx?|css)$/.test(file) && readFileSync(file, 'utf8').includes('harness-palette.css'))
             .map((file) => relative(src, file).split(sep).join('/'));
@@ -36,7 +36,6 @@ ${scope} .settings .voice-part textarea`,
         expect(users.filter((file) => file !== 'console/mount.tsx' && file !== 'console/harness-palette.css')).toEqual(
             [],
         );
-        expect(readFileSync(join(src, 'classic.tsx'), 'utf8')).not.toContain('harness-palette');
     });
 
     it('sets the values the ruling names', () => {

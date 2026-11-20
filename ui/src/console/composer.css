@@ -123,13 +123,6 @@
 .jc-console .cmenu.acc-plan > .cpick {
     color: #2563eb;
 }
-/* In a tab the mode is said, not chosen: no ground under it on a hover. */
-.jc-console span.cpick.mode-label {
-    cursor: default;
-}
-.jc-console span.cpick.mode-label:hover {
-    background: none;
-}
 .jc-console .cpick .mdl-e {
     margin-left: 2px;
     padding: 1px 7px;

@@ -1,16 +1,13 @@
 import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
 import type { DesktopConversationRecord, DesktopKeptEntry } from '../platform/desktop';
-import { loadMode, mode } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
-import { chatDesktop, journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
@@ -327,53 +324,6 @@ describe('a choice the AI asked for', () => {
         );
         expect(option(agent, 'From me').hasAttribute('disabled')).toBe(true);
         expect(reads(fake)).toEqual([]);
-    });
-
-    it('in a tab that may not send is only shown, as the plan card is; in one that may, it sends', async () => {
-        const desktop = chatDesktop();
-        const stand = standInBridge(desktop);
-        const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
-        setPlace('tab', tab);
-        await loadMode(tab);
-        desktop.keep({ ...setUp(opened), mode: 'full_access' });
-        const fake = new FakeApi()
-            .answer('plugin.list', 'plugin.list/none')
-            .answer('route.list', 'route.list/empty')
-            .answer('ui.tokens', 'ui.tokens/two');
-        nothingWaitsInChats(fake)
-            .answer('approval.list', 'approval.list/pending')
-            .answer('decision.list', 'decision.list/pending')
-            .answer('preference.list', 'preference.list/set')
-            .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all')
-            .answer('system.info', 'system.info/with-ui');
-        watch(agentHeads(fake));
-        activatePlugins(browserPlugins);
-        localStorage.clear();
-        location.hash = '';
-        route.value = { screen: 'attention' };
-        session.clear();
-        localStorage.setItem(
-            'jason.ui.session',
-            JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
-        );
-        await session.bootstrap();
-        try {
-            render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
-            const pane = await openChat('Sending');
-            await waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
-            ask(desktop, setupChat);
-            const asked = await waitFor(() => card(pane));
-            await waitFor(() => within(asked).getByText('This is answered in Jason Desktop.'));
-            expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true);
-            fireEvent.click(option(pane, 'From me'));
-            expect(stand.asked.filter((each) => each.member === 'chat.send')).toHaveLength(0);
-            // The desktop's log is not the tab's to write to: no refusal is asked of the bridge.
-            expect(stand.asked.some((each) => each.member === 'chat.cardRefused')).toBe(false);
-        } finally {
-            cleanup();
-            setPlace('window');
-        }
     });
 });
 
