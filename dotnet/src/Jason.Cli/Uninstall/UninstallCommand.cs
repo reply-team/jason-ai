@@ -114,6 +114,17 @@ public static class UninstallCommand
         --purge-data, the harness root never:
           - refused before anything is removed while Jason Desktop is open (desktop_running): quit it
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
+          - on macOS, refused before anything is removed while ShipIt installs an update of Jason Desktop,
+            its launchd job ai.jasonharness.desktop.ShipIt running or set to run (update_in_progress): run this
+            again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason
+            again. If the update never ends, launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt shows
+            the job and launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt takes it out. A job
+            launchctl could not be asked about refuses nothing: its step reads it again, takes it out if it is
+            loaded then, keeps it, ShipIt's cache, the application and its state if it is running then, and
+            leaves it and says so if it is still unread. An account with no login session, reached over ssh or
+            run by a management tool while it is not signed in at the screen, has no login domain and so no
+            such job: where launchctl cannot answer for the job, launchctl print gui/<uid> asks launchd about
+            the domain itself, and one it says is not there reads as no job.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
             jason, in any session (jason_running), at once and with no wait: a runtime still starting, a
             runtime of another data directory, a journal watch, a call of an agent host opened by hand. The
@@ -135,8 +146,13 @@ public static class UninstallCommand
             of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
             profile block and its folder. Then the folders an earlier version's demo made, each only where it
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
-            ai.jasonharness.desktop.ShipIt). Then, on Windows, the jason-retired-<id> folders, as step 6 says,
-            beside the older command-line install's folder too.
+            ai.jasonharness.desktop.ShipIt, after the launchd job of that name Squirrel submits for ShipIt on an
+            update, taken out with /bin/launchctl bootout gui/<uid>/ai.jasonharness.desktop.ShipIt where launchd
+            says it is loaded and not running; one running or set to run keeps ShipIt's cache, the application
+            and its state, one found running just before the application goes keeps the application and its
+            state, and one launchctl could not be asked about, in a login domain launchd says is there, is left;
+            each is said). Then, on Windows, the
+            jason-retired-<id> folders, as step 6 says, beside the older command-line install's folder too.
           - macOS, just before the application and only where it goes: its own state under ~/Library, each
             where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through
             defaults delete, then the file), Saved Application State/ai.jasonharness.desktop.savedState,
@@ -300,6 +316,13 @@ public static class UninstallCommand
             if (DesktopOpen(env, desktop, places, options) is { } open)
             {
                 return Refuse(env, options.Human, CliErrors.DesktopRunning, open);
+            }
+
+            // After the window: ShipIt waits for the application to quit before it swaps, so with the window open the wait
+            // for ShipIt would never end.
+            if (UpdateBeingInstalled(desktop, places, options) is { } installing)
+            {
+                return Refuse(env, options.Human, UnfinishedUpdate.InProgress, installing);
             }
 
             // A refusal that needs no waiting is said first; then the wait for a runtime still starting; then the look the
@@ -602,6 +625,11 @@ public static class UninstallCommand
             env.Out.WriteLine($"  an earlier version's demo folder, {folder}");
         }
 
+        if (desktop.UpdaterJob is { } job)
+        {
+            env.Out.WriteLine($"  the launchd job {job}, which Squirrel submits for ShipIt on an update, where it is not running at its step");
+        }
+
         foreach (var cache in desktop.Caches)
         {
             env.Out.WriteLine($"  the updater's cache, {cache}");
@@ -713,6 +741,43 @@ public static class UninstallCommand
             : $"Jason Desktop is open (process {string.Join(", ", running.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), and this would remove it from under itself. "
               + (places.Platform is SetupSystem.MacOs ? "Quit it from the Jason menu" : "Quit it from its icon in the notification area")
               + ", then run this again. Nothing was removed; the data directory is kept either way unless --purge-data says otherwise.";
+    }
+
+    /// <summary>
+    /// macOS: why the application cannot be removed now, or null: ShipIt installing an update of it, which launchd says by
+    /// the job Squirrel submits for it running (<see cref="DesktopRemoval.ShipItLabel"/>). Nothing else stands before the
+    /// uninstall for it: the application has quit for the swap, ShipIt runs from Squirrel's framework inside the bundle and
+    /// not as the application, the looks for another jason match only this installation's image, and no update's lock or
+    /// ledger is read here. Removing the application, or ShipIt's state, part-way through the swap would leave neither
+    /// version whole, so the uninstall refuses with the code an update refuses with while another is under way. A dry run
+    /// removes nothing and is never refused for it; a job not loaded, not running or not read refuses nothing, and its step
+    /// says what it found.
+    /// </summary>
+    /// <remarks>
+    /// The first line, before anything is removed: the job as the plan read it, one look at launchd. Running is a job that
+    /// names its process or whose own state is any but <c>not running</c>, <c>spawn scheduled</c> included, so a ShipIt
+    /// launchd is about to start again refuses as one running does. The refusal says to run the uninstall again when the
+    /// update has ended, from a terminal or the Jason menu, and names no <c>jason update</c> verb, which knows nothing of an
+    /// update the application installs; for an update that never ends, as a job launchd keeps starting again would be, it
+    /// names the <c>launchctl</c> commands that show the job and take it out. A job launchctl could not be asked about is no
+    /// answer either way, and refuses nothing here: its step reads it again and leaves one still not read as it was, saying
+    /// so, and the last look before the application goes reads it once more, where a ShipIt found running leaves the
+    /// application.
+    /// </remarks>
+    private static string? UpdateBeingInstalled(DesktopPlan desktop, SetupPlaces places, UninstallOptions options)
+    {
+        if (options.DryRun || places.Platform is not SetupSystem.MacOs || desktop.ShipIt.State is not Autostart.LaunchdJobState.Running)
+        {
+            return null;
+        }
+
+        var process = desktop.ShipIt.Pid is { } pid ? string.Create(CultureInfo.InvariantCulture, $"process {pid}, ") : string.Empty;
+        return $"ShipIt is installing an update of Jason Desktop ({process}the launchd job {DesktopRemoval.ShipItLabel}), and this would remove the "
+            + "application from under it, so nothing was removed: run it again when the update has ended; from the Jason menu, reopen Jason and "
+            + "choose Uninstall Jason again. If the update never ends, "
+            + $"`launchctl print gui/$(id -u)/{DesktopRemoval.ShipItLabel}` shows the job and "
+            + $"`launchctl bootout gui/$(id -u)/{DesktopRemoval.ShipItLabel}` takes it out. "
+            + "The data directory is kept either way unless --purge-data says otherwise.";
     }
 
     /// <summary>

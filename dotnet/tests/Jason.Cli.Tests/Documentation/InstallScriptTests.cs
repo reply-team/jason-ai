@@ -1899,7 +1899,8 @@ public partial class InstallScriptTests
     /// <summary>
     /// The macOS leg that updates from the one-installation release keeps, by one trap for its way out however it ends, the
     /// feed server it starts ended, what of Jason Desktop and its ShipIt is still running printed and kept, and the
-    /// desktop's log and ShipIt's logs in the leg's folder before the uninstall after it takes them. It begins from the
+    /// desktop's log and ShipIt's logs in the leg's folder before the uninstall after it takes them, each item ending true
+    /// whatever its own commands end with, so the items after it are run under the prelude's errexit. It begins from the
     /// release its fetched manifest.json names, read by an isolated python3. Its runtime start and its verb each run in a
     /// subshell, so a bound reached ends in a line of the leg's own: the start waits only where it refuses because the
     /// runtime it started is still running. After the update, the processes of Jason Desktop and of its own ShipIt, never
@@ -1922,7 +1923,7 @@ public partial class InstallScriptTests
         foreach (var said in new[]
         {
             "[ -z \"$server\" ] || kill \"$server\" 2>/dev/null || true",
-            "[ -z \"${placed:-}\" ] || { left=\"$(left_running \"$placed\")\"; echo \"${left:-none}\" > \"$OUT/one-installation-left-running.txt\"; echo \"left running as this step ends: ${left:-none}\"; }",
+            "[ -z \"${placed:-}\" ] || { left=\"$(left_running \"$placed\")\"; echo \"${left:-none}\" > \"$OUT/one-installation-left-running.txt\"; echo \"left running as this step ends: ${left:-none}\"; } || true;",
             "keep_desktop_log one-installation-desktop.jsonl",
             "for log in \"$HOME\"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f \"$log\" ] || cp \"$log\" \"$OUT/one-installation-$(basename \"$log\")\" 2>/dev/null || true; done",
         })
@@ -1982,7 +1983,7 @@ public partial class InstallScriptTests
         TestContext.Current.TestOutputHelper?.WriteLine(output);
         Assert.True(exit == 0, output);
         var left = SaidLine(stdout, "left").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(process => process.Split(' ')[0]).ToList();
-        Assert.True(left.SequenceEqual(["4101", "4102"]), $"what is left running of Jason Desktop at its place is not its own process and its own ShipIt alone:{output}");
+        Assert.True(left.SequenceEqual(["4101", "4102", "4105", "4106"]), $"what is left running of Jason Desktop at its place is not its own process and its own ShipIt alone, known by either half of the pattern:{output}");
         Assert.True(SaidLine(stdout, "another's alone") == string.Empty, $"another application's ShipIt and processes were named as left running:{output}");
     }
 
@@ -1990,14 +1991,18 @@ public partial class InstallScriptTests
     /// The bash the row of what is left running runs: the shell options of the proof's own prelude, a stand-in for
     /// <c>pgrep</c> matching its pattern to a table of the row's own as <c>pgrep -lf</c> does, and the proof's own
     /// <c>left_running</c>, asked of Jason Desktop at its place with its own processes running, and then with another
-    /// application's alone. One line per finding, its label and what was seen, apart by a colon.
+    /// application's alone. Its ShipIt is there three times: by both halves of the pattern, by the framework's path alone,
+    /// and by the job's label and cache alone, so each half is held on its own. One line per finding, its label and what
+    /// was seen, apart by a colon.
     /// </summary>
     private const string LeftRunningHarness = """
         @SETTINGS@
         TABLE='4101 /Applications/Jason.app/Contents/MacOS/Jason --update-apply --await-go
         4102 /Applications/Jason.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt ai.jasonharness.desktop.ShipIt /Users/runner/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipItState.plist
         4103 /Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.example.other.ShipIt /Users/runner/Library/Caches/com.example.other.ShipIt/ShipItState.plist
-        4104 /Applications/Other.app/Contents/MacOS/Other'
+        4104 /Applications/Other.app/Contents/MacOS/Other
+        4105 /Applications/Jason.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt
+        4106 ShipIt ai.jasonharness.desktop.ShipIt /Users/runner/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipItState.plist'
         pgrep() { [ "$1" = -lf ] || return 2; printf '%s\n' "$TABLE" | grep -E -- "$2"; }
 
         @FUNCTIONS@
@@ -2076,7 +2081,8 @@ public partial class InstallScriptTests
     /// <summary>
     /// The macOS proof's leg clock, run as the proof runs it, as the Windows one's row runs that: the job counted from the
     /// start of the runner's worker, read as ps writes how long a process has run, days included, or else from the first
-    /// leg's begin, saying why; a later begin keeps the job's start; an end says the leg's time and the job's. <c>pgrep</c>
+    /// leg's begin, saying why; a later begin keeps the job's start; an end says the leg's time and the job's. The worker is
+    /// the one this script descends from, found by walking up its parents, never the first a runner lists. <c>pgrep</c>
     /// and <c>ps</c> are stand-ins here, so the row reads none of the machine's processes. It runs in bash: /bin/bash on
     /// Linux and macOS, Git Bash on a Windows that has it.
     /// </summary>
@@ -2181,17 +2187,32 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// The bash the macOS leg clock's row runs: the shell options of the proof's own prelude, a summary of the row's own,
-    /// stand-ins for <c>pgrep</c> and <c>ps</c> answering the worker the row sets and how long it has run, as ps writes
-    /// it, and the proof's own <c>say</c>, <c>start_leg_clock</c> and <c>leg_clock</c>; the last leg's folder says its
-    /// clock to no summary. One line per finding, its label and what was seen, apart by a colon.
+    /// stand-ins for <c>pgrep</c> and <c>ps</c>, and the proof's own <c>say</c>, <c>start_leg_clock</c> and
+    /// <c>leg_clock</c>; the last leg's folder says its clock to no summary. The <c>pgrep</c> answers only
+    /// <c>pgrep -a -x Runner.Worker</c>: the worker is an ancestor of the step's shell, and macOS's pgrep leaves its own
+    /// ancestors out of what it matches unless <c>-a</c> is given, so without it the job was never counted from the worker
+    /// on a Mac. It lists the workers the row sets, another job's first: a runner may run more than one, and only the one
+    /// this script descends from is its job's. The <c>ps</c> answers a process's parent for each step from the harness's
+    /// own shell up to its worker and on to the first process, and how long each worker has run, as ps writes it; the
+    /// other job's worker has run an hour less a second. One line per finding, its label and what was seen, apart by a
+    /// colon.
     /// </summary>
     private const string MacClockHarness = """
         @SETTINGS@
         GITHUB_STEP_SUMMARY=@SUMMARY@
-        WORKER=""
+        WORKERS=""
         ETIME=""
-        pgrep() { [ -n "$WORKER" ] && printf '%s\n' "$WORKER"; }
-        ps() { printf '   %s\n' "$ETIME"; }
+        pgrep() { [ "$*" = "-a -x Runner.Worker" ] || return 2; [ -n "$WORKERS" ] && printf '%s\n' $WORKERS; }
+        ps() {
+            case "$*" in
+                "-o ppid= -p $$") echo "  500" ;;
+                "-o ppid= -p 500") echo " 4242" ;;
+                "-o ppid= -p 4242") echo "    1" ;;
+                "-o etime= -p 4242") printf '   %s\n' "$ETIME" ;;
+                "-o etime= -p 4343") printf '   %s\n' "59:59" ;;
+                *) return 1 ;;
+            esac
+        }
 
         @FUNCTIONS@
 
@@ -2206,7 +2227,7 @@ public partial class InstallScriptTests
         echo "ended: $(leg_clock)"
 
         OUT=@WORKER@
-        WORKER=4242
+        WORKERS="4343 4242"
         ETIME="01:30"
         start_leg_clock
         echo "worker: $(apart)"
