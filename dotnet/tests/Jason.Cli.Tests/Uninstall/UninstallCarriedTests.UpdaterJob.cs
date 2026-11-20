@@ -19,7 +19,7 @@ namespace Jason.Cli.Tests.Uninstall;
 public sealed partial class UninstallCarriedTests
 {
     /// <summary>What the refusal says to do, at a terminal and from the Jason menu.</summary>
-    private const string RunItAgain = "run it again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason… again.";
+    private const string RunItAgain = "run it again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason again.";
 
     /// <summary>
     /// What the refusal says of an update that never ends, such as a job launchd keeps starting again: the commands that
@@ -164,7 +164,7 @@ public sealed partial class UninstallCarriedTests
         }
 
         var command = $"`launchctl bootout gui/$(id -u)/{label}`";
-        var again = $"Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason… again, or run `\"{executable}\" uninstall`; what is already gone is not an error the second time.";
+        var again = $"Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason again, or run `\"{executable}\" uninstall`; what is already gone is not an error the second time.";
         switch (said)
         {
             case null:

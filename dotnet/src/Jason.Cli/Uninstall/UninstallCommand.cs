@@ -116,7 +116,7 @@ public static class UninstallCommand
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
           - on macOS, refused before anything is removed while ShipIt installs an update of Jason Desktop,
             its launchd job ai.jasonharness.desktop.ShipIt running or set to run (update_in_progress): run this
-            again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason…
+            again when the update has ended; from the Jason menu, reopen Jason and choose Uninstall Jason
             again. If the update never ends, launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt shows
             the job and launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt takes it out. A job
             launchctl could not be asked about refuses nothing: its step reads it again, takes it out if it is
@@ -770,7 +770,7 @@ public static class UninstallCommand
         var process = desktop.ShipIt.Pid is { } pid ? string.Create(CultureInfo.InvariantCulture, $"process {pid}, ") : string.Empty;
         return $"ShipIt is installing an update of Jason Desktop ({process}the launchd job {DesktopRemoval.ShipItLabel}), and this would remove the "
             + "application from under it, so nothing was removed: run it again when the update has ended; from the Jason menu, reopen Jason and "
-            + "choose Uninstall Jason… again. If the update never ends, "
+            + "choose Uninstall Jason again. If the update never ends, "
             + $"`launchctl print gui/$(id -u)/{DesktopRemoval.ShipItLabel}` shows the job and "
             + $"`launchctl bootout gui/$(id -u)/{DesktopRemoval.ShipItLabel}` takes it out. "
             + "The data directory is kept either way unless --purge-data says otherwise.";

@@ -935,7 +935,7 @@ public static partial class DesktopRemoval
 
     /// <summary>What to do once the update ShipIt was installing has ended: the one uninstall again, from either door.</summary>
     private static string UninstallAgain(CliEnvironment env) =>
-        "Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason… again, or run "
+        "Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason again, or run "
         + $"`\"{StartInFlight.Image(env) ?? "jason"}\" uninstall`; what is already gone is not an error the second time.";
 
     /// <summary>
