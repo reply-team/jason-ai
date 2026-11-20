@@ -686,10 +686,12 @@ Claude Code.
   refusal to read the runtime's run file, the desktop's settings or the turn's own settings that a Claude Code turn
   keeps in every mode. The line under the composer says **Full access · Codex runs commands on this computer without
   asking, with no sandbox**. Choose Ask first or Plan only for a Codex chat that should only read. An administrator's
-  `requirements.toml` can forbid Codex to run with no sandbox; Codex documents that it then falls back to a sandbox
-  the requirements allow and notifies. No event of Codex's says which sandbox a turn ran in, so the chat cannot tell
-  such a turn from one in Full access: where Codex warns during a Full access turn, or such a turn fails, the chat says
-  once, beside Codex's own words, **Codex reported a warning or an error in Full access. Where an administrator does
+  `requirements.toml` can forbid Codex to run with no sandbox. Codex's source reads (not seen on a real machine) that
+  Codex then refuses to start the turn: the chat shows Codex's own words and after them, every time, **If these words
+  say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.**
+  Codex documents that it may instead fall back to a sandbox the requirements allow and notify. No event of Codex's
+  says which sandbox a turn ran in, so the chat cannot tell such a turn from one in Full access: where Codex warns
+  during a Full access turn, or such a turn fails after it started, the chat says once, beside Codex's own words, **Codex reported a warning or an error in Full access. Where an administrator does
   not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not
   be acting in Full access here.** and keeps Full access. A fallback Codex does not report goes unseen. This is built
   on Codex's documentation and not seen on a real machine.

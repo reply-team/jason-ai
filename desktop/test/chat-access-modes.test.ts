@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { personsWordForms, readFence } from '../src/chat-deny.ts';
 import { claudeTurnSettings, codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { codexAutoEdit, codexFullAccessUnsure, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccessRefused, codexFullAccessUnsure, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import type { Programs } from '../src/programs.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
@@ -691,6 +691,28 @@ test('a Full access Codex turn on which Codex warns, or which fails, has the cha
     const plain = await failing.chat.create();
     await failing.chat.setMode(plain.id, 'ask_first');
     assert.deepEqual(notices(await failing.turn(plain.id, 'hello', { host: 'codex' })), []);
+});
+
+// Codex's words when an administrator's requirements.toml forbids `danger-full-access`: at openai/codex 9f2b87495b, read
+// and not seen, `codex exec` forces `approval_policy = "never"` (exec/src/lib.rs), so building its configuration fails
+// with these words on stderr before any event (core/src/config/mod.rs).
+const refusedByRequirements =
+    'Error: `approval_policy = "never"` cannot be used because requirements do not allow `sandbox_mode = "danger-full-access"`; Codex would fall back to read-only permissions with approvals disabled.';
+
+test('a Full access Codex turn that Codex refuses before any event ends in Codex\'s own words and then one sentence of ours, every time; a read-only turn refused so ends in Codex\'s words alone', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_CODEX_REFUSE = refusedByRequirements;
+    const { id } = await r.chat.create();
+    const first = await r.turn(id, 'hello', { host: 'codex' });
+    const second = await r.turn(id, 'hello again', { host: 'codex' });
+    for (const said of [first, second]) {
+        assert.deepEqual(done(said), { kind: 'done', error: `${refusedByRequirements}\n\n${codexFullAccessRefused}` });
+    }
+    assert.deepEqual(notices([...first, ...second]), [], 'nothing else is said');
+    assert.deepEqual(r.started, ['full_access', 'full_access'], 'the chat keeps its mode');
+    const asked = await r.chat.create();
+    await r.chat.setMode(asked.id, 'ask_first');
+    assert.deepEqual(done(await r.turn(asked.id, 'hello', { host: 'codex' })), { kind: 'done', error: refusedByRequirements });
 });
 
 test('on Windows the sandbox check runs in the turn\'s own folder for a read-only Codex turn, and a Full access Codex turn runs none', async (t) => {

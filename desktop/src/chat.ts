@@ -82,6 +82,7 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import {
     askFirstThisTurn,
     codexAutoEdit,
+    codexFullAccessRefused,
     codexFullAccessUnsure,
     earlierDesktopAskFirst,
     feedDefaultMode,
@@ -446,6 +447,8 @@ interface Attempted {
     again: boolean;
     /** Whether the result is the desktop's own sentence for a refused key, which no scrub touches. */
     ours?: boolean;
+    /** Whether the host said any line on its standard output before it exited. */
+    heard?: boolean;
 }
 
 /** The campaigns the conversation's last pick named. */
@@ -1964,6 +1967,8 @@ export class Chat {
             // The fallback's session, kept aside until the fallback has done something.
             let pending: string | null = null;
             const seen = new Set<string>();
+            // Whether the host said anything on its standard output: a Codex that refuses to start says no event.
+            let heard = false;
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
             let host: HostProcess | null = null;
@@ -2057,6 +2062,7 @@ export class Chat {
                     env,
                     stdin: turnInput(headFor(resumed), recapped ? earlier : null, text),
                     onLine: (line) => {
+                        heard = true;
                         for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
                     },
                 });
@@ -2079,7 +2085,7 @@ export class Chat {
             // A key that was refused or not taken is the key's, not the session's: a fresh session would fail the same way.
             const refusedKey = stoppedFor !== null || keyRefused;
             const again = resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
-            return { exit, result, host: started, again, ours: refusedKey };
+            return { exit, result, host: started, again, ours: refusedKey, heard };
         };
 
         void (async () => {
@@ -2104,11 +2110,20 @@ export class Chat {
                 // On a keyed turn the host's own words pass `withoutKey` before the page or the record has them.
                 const key = resolved.key;
                 const scrub = key === null || last.ours ? (text: string) => text : (text: string) => withoutKey(text, key);
-                const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
+                const ended = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
+                // A Full access turn on Codex that ended before Codex said any event, with a failing exit: Codex refused to
+                // start. At openai/codex 9f2b87495b, read and not seen, `codex exec` forces `approval_policy = "never"`
+                // (exec/src/lib.rs), so an administrator's requirements that forbid `danger-full-access` make building its
+                // configuration fail (core/src/config/mod.rs) with Codex's words on standard error. Those words are not
+                // read: one sentence of ours follows them, every time, and nothing is remembered.
+                const fullCodex = resolved.program === 'codex' && running.mode === 'full_access';
+                const refusedAtStart =
+                    fullCodex && ended !== null && !running.stopped && last.heard === false && last.exit.startError === null && last.exit.code !== 0;
+                const error = refusedAtStart ? `${ended}\n\n${codexFullAccessRefused}` : ended;
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
-                // A Full access turn on Codex that failed, Codex's refusal to start included, may be one an administrator's
-                // requirements refused: the conversation is told once, beside Codex's own words.
-                if (error !== null && resolved.program === 'codex' && running.mode === 'full_access') this.#tellUnsure(conversation, replyTo);
+                // Any other Full access turn on Codex that failed may be one an administrator's requirements narrowed: the
+                // conversation is told once, beside Codex's own words.
+                if (error !== null && fullCodex && !refusedAtStart) this.#tellUnsure(conversation, replyTo);
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
                 this.#markPlan(conversation, running, error === null && handed === null);
                 this.#keep(conversation);

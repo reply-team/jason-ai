@@ -71,6 +71,15 @@ export function fullAccessSentence(version: string | null): string | null {
 export const codexFullAccessUnsure =
     'Codex reported a warning or an error in Full access. Where an administrator does not allow Codex to run with no sandbox on this computer, it runs in a sandbox they allow instead, so this chat may not be acting in Full access here.';
 
+/**
+ * What the chat says after Codex's own words, every time, when a Full access turn on Codex ends before Codex said any
+ * event, with a failing exit: Codex refused to start, and an administrator's requirements that forbid running with no
+ * sandbox are one reason it does. The desktop does not read Codex's words to tell which; the sentence leaves that to the
+ * person, and nothing of it is remembered.
+ */
+export const codexFullAccessRefused =
+    'If these words say Full access is not allowed on this computer, choose Ask first for this chat, where Codex reads and proposes.';
+
 /** Why Auto-edit cannot apply on Codex: it never asks before it acts, so its turns only read. */
 export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 

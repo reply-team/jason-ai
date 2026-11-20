@@ -383,12 +383,17 @@ applies to the turns a person starts by sending, from the next one on.
   what follows holds it: no hook, no card, no deny rule, no refusal of the permission model, and not the refusal of the
   runtime's run file, the desktop's settings or the turn's own settings that every Claude Code turn keeps. It has no
   version floor of Full access. An administrator's `requirements.toml` that does not allow `danger-full-access` makes
-  Codex, as its managed-configuration documentation says, fall back to a sandbox it allows and notify. `codex exec
+  Codex, at openai/codex 9f2b87495b (read, not seen), refuse to start: `codex exec` forces `approval_policy = "never"`
+  (exec/src/lib.rs), so building its configuration fails (core/src/config/mod.rs) with its words on standard error and
+  no event. A Full access Codex turn that ends so, before any line on standard output and with a failing exit, ends in
+  Codex's own words followed by `codexFullAccessRefused`, every time; the words are not read and nothing is
+  remembered. Codex's managed-configuration documentation says it may instead fall back to a sandbox it allows and
+  notify. `codex exec
   --json` says a non-fatal warning as `{"type":"item.completed","item":{"type":"error","message":...}}`, a fatal error
   as `{"type":"error",...}` and a failed turn as `turn.failed`; no event names the sandbox a turn ran in (`thread.started`
   carries the thread alone), and a warning's words are no contract. So the desktop reads the shape only: a warning in
-  a Full access turn (`codexLine`, `warning`) lets the turn go on, and a Full access turn that ends in an error, Codex's
-  refusal to start included, ends as it would; either has the conversation told once `codexFullAccessUnsure`, which
+  a Full access turn (`codexLine`, `warning`) lets the turn go on, and a Full access turn that ends in an error after
+  Codex said something ends as it would; either has the conversation told once `codexFullAccessUnsure`, which
   says Codex may not be in Full access, and the chat keeps its mode. A fallback Codex does not report goes unseen.
   Built on the documented shape, not seen from a real Codex.
 - **How Full access runs on Claude Code.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
