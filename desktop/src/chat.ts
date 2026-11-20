@@ -53,7 +53,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
-import { ExportRefused, exportConversation, exportName } from './chat-export.ts';
+import { ExportRefused, exportInto, exportName, exportStart } from './chat-export.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
 import { readMemoryFile, readMemoryWithin } from './chat-memory-files.ts';
@@ -1473,14 +1473,22 @@ export class Chat {
      * harness root otherwise, as the runtime reports them. Says where, or why not, and starts no turn.
      */
     async #export(conversation: Conversation, chatId: string, name: string): Promise<void> {
-        const folderOf = async () =>
-            conversation.campaign_id === null ? ((await this.#rootPlace())?.folder ?? null) : ((await this.#readCampaign(conversation.campaign_id, false)).about.campaign?.folder ?? null);
+        // A window that closed meanwhile is told nothing, and nothing is written.
+        const say = (event: ChatEvent) => {
+            if (!this.#closed) this.#options.emit(chatId, event);
+        };
         try {
-            const said = await exportConversation(conversation, name, folderOf, new Date(this.#now()));
-            this.#options.emit(chatId, { kind: 'notice', text: said });
-            this.#options.emit(chatId, { kind: 'done', error: null });
+            const text = exportStart(conversation, name, new Date(this.#now()));
+            const campaign = conversation.campaign_id;
+            const folder = campaign === null ? null : ((await this.#readCampaign(campaign, false)).about.campaign?.folder ?? null);
+            const place: MemoryPlace | null = campaign === null ? await this.#rootPlace() : folder === null ? null : { level: 'campaign', folder, id: campaign };
+            if (this.#closed) return;
+            const said = await exportInto(place, campaign !== null, name, text, () => !this.#closed);
+            if (said === null) return;
+            say({ kind: 'notice', text: said });
+            say({ kind: 'done', error: null });
         } catch (error) {
-            this.#options.emit(chatId, { kind: 'done', error: error instanceof ExportRefused ? error.message : `The file could not be written: ${error instanceof Error ? error.message : String(error)}` });
+            say({ kind: 'done', error: error instanceof ExportRefused ? error.message : `The file could not be written: ${error instanceof Error ? error.message : String(error)}` });
         }
     }
 

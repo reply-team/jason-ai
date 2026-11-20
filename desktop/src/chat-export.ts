@@ -5,15 +5,19 @@
  *
  * What is written is Markdown: the conversation's title as a heading, the moment it was written, and in order the
  * person's words under "You" and the AI's under "AI", as the record keeps them; no step, card, error, line or path, so
- * nothing the chat does not show as words. Where it is written: a bare file name alone, into the campaign's folder for a
- * campaign's chat and the harness root otherwise, as the runtime recorded them and only when they are on this disk. A
- * name with a folder in it, a parent, a drive or a character a system cannot hold is refused. The file is made new or
- * not at all: a name already there, a link included, is refused and never followed, and nothing is written over.
+ * nothing the chat does not show as words. Where it is written: a bare file name alone, given on the message's first line
+ * and nothing after it, into the campaign's folder for a campaign's chat and the harness root otherwise, as the runtime
+ * recorded them and only while each carries the runtime's marker of it. A name with a folder in it, a parent, a drive, a
+ * character or a device name a system cannot hold, or a name the harness keeps for its own files, is refused. The file is
+ * made new or not at all: a name already there, a link included, is refused and never followed, and nothing is written
+ * over.
  */
 
-import { closeSync, constants, fsyncSync, lstatSync, openSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, constants, fsyncSync, lstatSync, openSync, rmSync, writeSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { Conversation } from './chat-conversations.ts';
+import { memoryFileName, type MemoryPlace } from './chat-memory.ts';
+import { markedFolder } from './chat-memory-files.ts';
 
 /** A sentence the export refuses with, for the chat to say as a send's error. */
 export class ExportRefused extends Error {
@@ -23,26 +27,43 @@ export class ExportRefused extends Error {
     }
 }
 
-const word = /^\/export(?:\s+([\s\S]*))?$/;
+const word = /^\/export(?=\s|$)/;
 
-/** The name after a message's first word when that word is `/export` alone, '' when none is given; null otherwise. */
+/**
+ * The words after a message's first word when that word is `/export` alone, '' when none is given; null otherwise.
+ * Only the spaces before the name are taken off: a line break stays, and `nameRefusal` refuses it.
+ */
 export function exportName(text: string): string | null {
-    const found = word.exec(text.trim());
-    return found === null ? null : (found[1] ?? '').trim();
+    const trimmed = text.trim();
+    return word.test(trimmed) ? trimmed.slice('/export'.length).replace(/^[ \t]+/, '') : null;
 }
 
-const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in this chat’s folder.';
+const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in the campaign’s folder, or the harness root for a chat about no campaign.';
 const notAName = 'That is not a file name the desktop writes.';
-/** The names Windows keeps for its devices, with or without an extension. */
-const deviceName = /^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\..*)?$/i;
-/** The longest name the file systems the desktop runs on take. */
+/** The names Windows keeps for its devices, as the stem before the first dot, with the spaces it ignores after it. */
+const deviceStem = /^(?:con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])$/i;
+/**
+ * The names the harness keeps for its own files in a folder: the person's memory file, each import file the runtime
+ * writes beside it (`AgentHosts.ImportFiles`, held to the runtime's table by a test), and the marker's folder.
+ */
+const harnessNames: ReadonlySet<string> = new Set([memoryFileName, 'CLAUDE.md', 'GEMINI.md', '.jason'].map((name) => name.toLowerCase()));
+/** The longest name the file systems the desktop runs on take, in UTF-8 bytes. */
 const nameLimit = 255;
 
 /** Why a name is refused, in the desktop's sentence; null for a bare file name. */
 export function nameRefusal(name: string): string | null {
     if (name === '') return 'Name the file to write, such as /export notes.md.';
+    if (/[\r\n]/.test(name)) return 'Give the file name on one line after /export.';
     if (/[\\/]/.test(name) || name === '.' || name === '..' || isAbsolute(name) || /^[A-Za-z]:/.test(name)) return withFolder;
-    if (/[\u0000-\u001f\u007f<>:"|?*]/.test(name) || /[. ]$/.test(name) || deviceName.test(name) || name.length > nameLimit) return notAName;
+    if (
+        /[\u0000-\u001f\u007f<>:"|?*]/.test(name) ||
+        /[. ]$/.test(name) ||
+        deviceStem.test((name.split('.')[0] ?? '').trimEnd()) ||
+        Buffer.byteLength(name, 'utf8') > nameLimit
+    ) {
+        return notAName;
+    }
+    if (harnessNames.has(name.toLowerCase())) return 'That name is one the harness keeps for its own files. Choose another.';
     return null;
 }
 
@@ -57,19 +78,33 @@ export function exportText(conversation: Pick<Conversation, 'title' | 'entries' 
     return parts.join('\n\n') + '\n';
 }
 
-/** Whether a conversation has words to write. */
-function hasWords(conversation: Pick<Conversation, 'entries'>): boolean {
-    return conversation.entries.some((entry) => entry.kind === 'user' || entry.kind === 'text');
+/**
+ * The first half of an export, before anything is asked of the runtime: the name checked, and the conversation's words
+ * taken as they are now, so a turn that begins meanwhile adds nothing to the file. Answers the text to write.
+ */
+export function exportStart(conversation: Pick<Conversation, 'title' | 'entries' | 'dropped'>, name: string, at: Date): string {
+    const refusal = nameRefusal(name);
+    if (refusal !== null) throw new ExportRefused(refusal);
+    if (!conversation.entries.some((entry) => entry.kind === 'user' || entry.kind === 'text')) throw new ExportRefused('This conversation has nothing to write yet.');
+    return exportText(conversation, at);
 }
 
-/** The folder when it is an absolute path to a folder on this disk; null otherwise. */
-function folderOnDisk(path: string | null): string | null {
-    if (path === null || !isAbsolute(path)) return null;
-    try {
-        return statSync(path).isDirectory() ? path : null;
-    } catch {
-        return null;
+/**
+ * The second half: `text` written as a new file `name` in the place's folder, once the folder is found to carry the
+ * runtime's marker of that place; null, or a place unmarked, has nowhere to go. Answers the sentence the chat says, or
+ * null, with nothing written, when `open` says the window closed meanwhile.
+ */
+export async function exportInto(place: MemoryPlace | null, campaign: boolean, name: string, text: string, open: () => boolean = () => true): Promise<string | null> {
+    const marked = place !== null && (await markedFolder(place));
+    if (!open()) return null;
+    if (place === null || !marked) {
+        throw new ExportRefused(
+            campaign
+                ? 'The folder of this chat’s campaign is not known, or not on this disk, so the file has nowhere to go.'
+                : 'The harness root is not known, or not on this disk, so the file has nowhere to go.',
+        );
     }
+    return `Written: ${writeExport(place.folder, name, text)}`;
 }
 
 /**
@@ -80,7 +115,7 @@ export function writeExport(folder: string, name: string, text: string): string 
     const refusal = nameRefusal(name);
     if (refusal !== null) throw new ExportRefused(refusal);
     const path = join(folder, name);
-    const there = `A file of that name is already there, and the desktop never writes over a file: ${path}`;
+    const there = `A file or folder of that name is already there, and the desktop never writes over it: ${path}`;
     let found = true;
     try {
         lstatSync(path);
@@ -101,42 +136,37 @@ export function writeExport(folder: string, name: string, text: string): string 
         while (at < bytes.length) at += writeSync(handle, bytes, at, bytes.length - at);
         fsyncSync(handle);
     } catch (error) {
-        closeSync(handle);
-        // The file this export made is taken away again, rather than left half written.
-        rmSync(path, { force: true });
-        throw new ExportRefused(unwritten(error));
+        throw new ExportRefused(cleanedUp(handle, path, unwritten(error)));
     }
-    closeSync(handle);
+    try {
+        closeSync(handle);
+    } catch (error) {
+        throw new ExportRefused(cleanedUp(null, path, unwritten(error)));
+    }
     return path;
+}
+
+/**
+ * The file this export made and could not finish is closed and taken away again, rather than left half written; the
+ * sentence says where it was left when it could not be.
+ */
+function cleanedUp(handle: number | null, path: string, sentence: string): string {
+    if (handle !== null) {
+        try {
+            closeSync(handle);
+        } catch {
+            // Closed or not, the remove below is tried.
+        }
+    }
+    try {
+        rmSync(path, { force: true });
+        return sentence;
+    } catch {
+        return `${sentence.slice(0, -1)}, and what was written of it is left at ${path}`;
+    }
 }
 
 function unwritten(error: unknown): string {
     const code = (error as NodeJS.ErrnoException | null)?.code;
     return `The file could not be written (${typeof code === 'string' ? code : 'unknown'}).`;
-}
-
-/**
- * The export of a conversation: its words, taken as they are now, written as a new file into the folder `folderOf`
- * answers, null when there is none. Answers the sentence the chat says; a refusal throws `ExportRefused`.
- */
-export async function exportConversation(
-    conversation: Pick<Conversation, 'title' | 'entries' | 'dropped' | 'campaign_id'>,
-    name: string,
-    folderOf: () => Promise<string | null>,
-    at: Date,
-): Promise<string> {
-    const refusal = nameRefusal(name);
-    if (refusal !== null) throw new ExportRefused(refusal);
-    if (!hasWords(conversation)) throw new ExportRefused('This conversation has nothing to write yet.');
-    // The words are taken before the folder is asked for, so a turn that begins meanwhile adds nothing to this file.
-    const text = exportText(conversation, at);
-    const folder = folderOnDisk(await folderOf());
-    if (folder === null) {
-        throw new ExportRefused(
-            conversation.campaign_id === null
-                ? 'The harness root is not known, so the file has nowhere to go.'
-                : 'The folder of this chat’s campaign is not known, so the file has nowhere to go.',
-        );
-    }
-    return `Written: ${writeExport(folder, name, text)}`;
 }

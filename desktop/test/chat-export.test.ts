@@ -110,11 +110,25 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
 function places(r: Rig): { campaign: string; root: string } {
     const campaign = join(r.b.root, 'harness', 'campaigns', 'spring');
     const root = join(r.b.root, 'harness');
-    mkdirSync(campaign, { recursive: true });
+    mark(campaign, 'campaign', 'cmp_01ABC');
+    mark(root, 'root', null);
     r.b.env.STUB_CAMPAIGN_FOLDER = campaign;
     r.b.env.STUB_HARNESS_ROOT = root;
     return { campaign, root };
 }
+
+/** Writes the runtime's marker of that kind and id into a folder, as the runtime marks one. */
+function mark(folder: string, kind: string, id: string | null): void {
+    mkdirSync(join(folder, '.jason'), { recursive: true });
+    writeFileSync(join(folder, '.jason', 'marker.json'), JSON.stringify(id === null ? { marker_version: 1, kind } : { marker_version: 1, kind, id }));
+}
+
+const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in the campaign’s folder, or the harness root for a chat about no campaign.';
+const oneLine = 'Give the file name on one line after /export.';
+const theHarnessOwn = 'That name is one the harness keeps for its own files. Choose another.';
+const rootUnknown = 'The harness root is not known, or not on this disk, so the file has nowhere to go.';
+const campaignUnknown = 'The folder of this chat’s campaign is not known, or not on this disk, so the file has nowhere to go.';
+const already = (path: string) => `A file or folder of that name is already there, and the desktop never writes over it: ${path}`;
 
 const expected = [
     '# Planning the spring list',
@@ -153,15 +167,36 @@ test('a message is an export only when its first word is /export alone', () => {
 
 test('a name is taken only as a bare file name: no folder, no parent, no drive, nothing a system cannot hold', () => {
     for (const bare of ['notes.md', 'my notes.md', 'Spring – week 1.md', 'notes', '.notes.md', 'a..b.md']) assert.equal(nameRefusal(bare), null, bare);
-    const withFolder = 'Give a file name alone, such as notes.md, with no folder in it: the file is written in this chat’s folder.';
     for (const path of ['../notes.md', 'sub/notes.md', 'sub\\notes.md', '/tmp/notes.md', 'C:\\notes.md', 'C:notes.md', '..', '.', '\\\\server\\share\\x.md']) {
         assert.equal(nameRefusal(path), withFolder, path);
     }
     const notAName = 'That is not a file name the desktop writes.';
-    for (const bad of ['no<te>s.md', 'a|b.md', 'what?.md', 'star*.md', 'quote".md', 'line\nbreak.md', 'nul\u0000.md', 'trailing.', 'trailing ', 'CON', 'con.md', 'NUL.txt', 'com1.md', 'LPT9', 'x'.repeat(256)]) {
+    const devices = ['CON', 'con.md', 'NUL.txt', 'com1.md', 'LPT9', 'CONIN$', 'conout$.md', 'nul .md', 'con  .txt', 'Aux .x.md'];
+    for (const bad of ['no<te>s.md', 'a|b.md', 'what?.md', 'star*.md', 'quote".md', 'nul\u0000.md', 'trailing.', 'trailing ', ...devices, 'x'.repeat(256)]) {
         assert.equal(nameRefusal(bad), notAName, JSON.stringify(bad));
     }
+    // The limit is the file systems' own, in UTF-8 bytes: 255 of them, not 255 characters.
+    assert.equal(nameRefusal('é'.repeat(127) + 'a'), null);
+    assert.equal(nameRefusal('é'.repeat(128)), notAName);
     assert.equal(nameRefusal(''), 'Name the file to write, such as /export notes.md.');
+    // The name is the rest of the first line: more after it is refused, saying so, a queued join of two messages too.
+    for (const text of ['/export a.md\nmore', '/export a.md\n\nAnd then the next message', '/export\nnotes.md', '/export a.md\r\nb']) {
+        assert.equal(nameRefusal(exportName(text) ?? ''), oneLine, JSON.stringify(text));
+    }
+});
+
+test('the harness’s own names are refused, whatever their case: the memory file, every import file the runtime writes, and .jason', () => {
+    // The import files are the ones the runtime's table of hosts names beside the memory file, read from its source.
+    const table = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Contracts', 'Hosts', 'AgentHosts.cs'), 'utf8');
+    const memory = /const string MemoryFile = "([^"]+)"/.exec(table)?.[1] ?? '';
+    const imports = [...table.matchAll(/new\("([^"]+)", "@" \+ MemoryFile\)/g)].map((found) => found[1] ?? '');
+    assert.equal(memory, 'AGENTS.md');
+    assert.deepEqual(imports, ['CLAUDE.md', 'GEMINI.md']);
+    for (const name of [memory, ...imports, '.jason']) {
+        for (const spelled of [name, name.toLowerCase(), name.toUpperCase()]) assert.equal(nameRefusal(spelled), theHarnessOwn, spelled);
+    }
+    assert.equal(nameRefusal('AGENTS.md.md'), null);
+    assert.equal(nameRefusal('my-CLAUDE.md'), null);
 });
 
 test('the text is the title, the moment, and the person’s and the AI’s words in order: no step, card, error or path', () => {
@@ -209,7 +244,7 @@ test('a file already there is never written over, and nothing is written', async
     const path = join(root, 'notes.md');
     writeFileSync(path, 'the person’s own');
     const said = await r.send(setupChat, '/export notes.md');
-    assert.deepEqual(said, [{ kind: 'done', error: `A file of that name is already there, and the desktop never writes over a file: ${path}` }]);
+    assert.deepEqual(said, [{ kind: 'done', error: already(path) }]);
     assert.equal(readFileSync(path, 'utf8'), 'the person’s own');
     assert.equal(r.hosts(), 0);
 });
@@ -231,7 +266,7 @@ test('a link at the name is not followed: it is refused as a file already there,
         }
     }
     const said = await r.send(setupChat, '/export linked.md');
-    assert.deepEqual(said, [{ kind: 'done', error: `A file of that name is already there, and the desktop never writes over a file: ${link}` }]);
+    assert.deepEqual(said, [{ kind: 'done', error: already(link) }]);
     assert.equal(existsSync(outside), false, 'the link was not followed');
 });
 
@@ -241,7 +276,7 @@ test('a name with a folder in it is refused and nothing is written anywhere', as
     const before = readdirSync(root);
     for (const name of ['../escape.md', 'campaigns/spring/x.md', join(r.b.root, 'abs.md')]) {
         const said = await r.send(setupChat, `/export ${name}`);
-        assert.deepEqual(said, [{ kind: 'done', error: 'Give a file name alone, such as notes.md, with no folder in it: the file is written in this chat’s folder.' }], name);
+        assert.deepEqual(said, [{ kind: 'done', error: withFolder }], name);
     }
     assert.deepEqual(readdirSync(root), before);
     assert.equal(existsSync(join(r.b.root, 'escape.md')), false);
@@ -266,11 +301,50 @@ test('an export is refused while a turn of the chat runs, and writes nothing', a
 test('a folder the runtime does not name, or that is not on this disk, is said and nothing is written', async (t) => {
     const r = rig(t);
     // No harness root reported, and a campaign with no folder.
-    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: 'The harness root is not known, so the file has nowhere to go.' }]);
-    assert.deepEqual(await r.send(campaignChat, '/export x.md'), [{ kind: 'done', error: 'The folder of this chat’s campaign is not known, so the file has nowhere to go.' }]);
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: rootUnknown }]);
+    assert.deepEqual(await r.send(campaignChat, '/export x.md'), [{ kind: 'done', error: campaignUnknown }]);
     r.b.env.STUB_HARNESS_ROOT = join(r.b.root, 'not-there');
-    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: 'The harness root is not known, so the file has nowhere to go.' }]);
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: rootUnknown }]);
     assert.equal(existsSync(join(r.b.root, 'not-there')), false);
+});
+
+test('a folder is written into only while it carries the runtime’s marker of its campaign, or of the root', async (t) => {
+    const r = rig(t);
+    // Folders on the disk, as the runtime names them, with no marker in them.
+    const root = join(r.b.root, 'unmarked');
+    const campaign = join(root, 'spring');
+    mkdirSync(campaign, { recursive: true });
+    r.b.env.STUB_CAMPAIGN_FOLDER = campaign;
+    r.b.env.STUB_HARNESS_ROOT = root;
+    assert.deepEqual(await r.send(campaignChat, '/export x.md'), [{ kind: 'done', error: campaignUnknown }]);
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: rootUnknown }]);
+    // A marker of another campaign, or of another kind, is no marker of this one.
+    mark(campaign, 'campaign', 'cmp_02OTHER');
+    mark(root, 'project', 'prj_01STUB');
+    assert.deepEqual(await r.send(campaignChat, '/export x.md'), [{ kind: 'done', error: campaignUnknown }]);
+    assert.deepEqual(await r.send(setupChat, '/export x.md'), [{ kind: 'done', error: rootUnknown }]);
+    assert.deepEqual(readdirSync(campaign), ['.jason']);
+    assert.deepEqual(readdirSync(root).sort(), ['.jason', 'spring']);
+});
+
+test('a message with more after the /export line, or a name of the harness, is refused saying why, and nothing is written', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const before = readdirSync(root).sort();
+    assert.deepEqual(await r.send(setupChat, '/export a.md\n\nAnd what next?'), [{ kind: 'done', error: oneLine }]);
+    assert.deepEqual(await r.send(setupChat, '/export AGENTS.md'), [{ kind: 'done', error: theHarnessOwn }]);
+    assert.deepEqual(readdirSync(root).sort(), before);
+    assert.equal(r.hosts(), 0);
+});
+
+test('an export the window closes on says nothing afterwards and writes nothing', async (t) => {
+    const r = rig(t);
+    const { root } = places(r);
+    const sending = r.chat.send(setupChat, '/export late.md', { host: 'claude' });
+    r.chat.closeAll();
+    await sending;
+    assert.deepEqual(r.events.get(setupChat) ?? [], []);
+    assert.equal(existsSync(join(root, 'late.md')), false);
 });
 
 test('an export of a chat with nothing said yet, or with no name, is refused', async (t) => {
