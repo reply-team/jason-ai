@@ -458,6 +458,12 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(0, report.GetProperty("command").GetProperty("profiles").GetArrayLength());
         Assert.True(report.GetProperty("command").GetProperty("placed").GetBoolean(), "a second run that finds the command in place reports it not placed");
         Assert.All(report.GetProperty("skills").EnumerateArray(), root => Assert.Equal(0, root.GetProperty("written").GetInt32()));
+
+        // The first run may have been the setup's own, moments ago, which the person never saw: nothing found in place is
+        // said to have been there "already", which is true of neither case alone.
+        var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.All(report.GetProperty("skills").EnumerateArray(), root => Assert.Contains($"The skills in {root.GetProperty("root").GetString()} are current.", done));
+        Assert.DoesNotContain(done, line => line.Contains("were current", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1159,6 +1165,9 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(again, new InstallOptions(false, false, null), Ct));
         Assert.Equal((@"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;" + bundle, RegistryValueKind.ExpandString), key.ReadPath());
         Assert.False(Report(second).GetProperty("command").GetProperty("changed").GetBoolean());
+        var done = Report(second).GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.Contains($"{bundle} is on this account's Path.", done);
+        Assert.DoesNotContain(done, line => line.Contains("already", StringComparison.Ordinal));
         Assert.False(Directory.Exists(_data.Paths.Root));
     }
 

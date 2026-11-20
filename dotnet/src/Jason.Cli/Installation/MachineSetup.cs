@@ -664,7 +664,9 @@ public static class MachineSetup
             try
             {
                 changed = places.AccountPathValue.Append(Bundle);
-                Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} was on this account's Path already.");
+                // Never "already": the installer's own run placed it moments before the install line's, and an earlier
+                // install may have; nothing on the Path says which, so the line says only that it is there.
+                Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} is on this account's Path.");
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
@@ -913,8 +915,9 @@ public static class MachineSetup
             Left.AddRange(SkillsDeployer.LeftAloneSentences(report.LeftAlone));
             var leftAlone = report.LeftAlone.Select(skill => skill.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
+            // "are current", never "were": the installer's own run may have deployed them moments before this one.
             Done.Add(report.Written == 0
-                ? $"The skills in {root} were current."
+                ? $"The skills in {root} are current."
                 : string.Create(CultureInfo.InvariantCulture, $"Deployed the skills into {root}: {report.Written} file(s) written, {report.Unchanged} already in place."));
             return new InstallSkillsOutcome(root, hosts, report.Written, report.Unchanged, leftAlone);
         }
