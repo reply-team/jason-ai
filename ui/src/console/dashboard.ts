@@ -1,6 +1,5 @@
 import { signal } from '@preact/signals-react';
 import type { CampaignActivityResponse } from '../api/types';
-import { can } from '../platform/places';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { archivedLeftOut } from '../screens/campaigns/store';
@@ -32,7 +31,6 @@ import {
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
-import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
 import * as needs from './needs';
@@ -115,10 +113,8 @@ async function reloadTrends(): Promise<void> {
     };
 }
 
-/** What the desktop kept of the switch: off only when it was told off; a tab with no such member shows them, unremembered. */
+/** What the desktop kept of the switch: off only when it was told off; a desktop with no such member shows them, unkept. */
 async function keptTrendsChoice(): Promise<boolean> {
-    // Where the desktop is not asked, as in a tab, the trends are shown and the switch is not remembered.
-    if (!can('dailyTrends.get')) return true;
     try {
         return (await here().desktop.dailyTrends.get()) !== false;
     } catch {
@@ -234,10 +230,9 @@ define('dash.trends', (_args, element) => {
     switched = true;
     trendsOn.value = element.checked;
     try {
-        if (can('dailyTrends.set'))
-            void here()
-                .desktop.dailyTrends.set(element.checked)
-                .catch(() => undefined);
+        void here()
+            .desktop.dailyTrends.set(element.checked)
+            .catch(() => undefined);
     } catch {
         // A desktop that cannot be told: the switch holds for this page alone.
     }
@@ -351,12 +346,7 @@ function header(waiting: Count): Html {
                       </button>`
                     : null
             }
-            <button
-                class="btn ${waiting.n > 0 ? '' : 'p'}"
-                type="button"
-                ${act('dash.new')}
-                ${offUnless('chat.create')}
-            >
+            <button class="btn ${waiting.n > 0 ? '' : 'p'}" type="button" ${act('dash.new')}>
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
         </div>
@@ -621,9 +611,7 @@ export function dashboardView(): Html {
                 <div class="hd"><h3>${t('dash.empty.title')}</h3></div>
                 <div class="bd">
                     <p>${t('dash.empty.body')}</p>
-                    <button class="btn p" type="button" ${act('dash.new')} ${offUnless('chat.create')}>
-                        ${svg('plus', 14)}${t('dash.new')}
-                    </button>
+                    <button class="btn p" type="button" ${act('dash.new')}>${svg('plus', 14)}${t('dash.new')}</button>
                 </div>
             </div>
         </div>`;

@@ -10,7 +10,6 @@ import {
     type ReactNode,
     type RefObject,
 } from 'react';
-import { can, cannotHere } from '../platform/places';
 import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
 import { fullAccessStanding, readStandingAgain, takeBackWords } from '../platform/full-access';
 import { t } from '../platform/i18n';
@@ -67,7 +66,7 @@ const markOf: Readonly<Record<DesktopChatMode, Mark>> = {
 };
 
 /** The mark of a chat's access mode, drawn where the mode is named: the plain shield for a mode this page does not know. */
-export function ModeMark({ mode }: { mode: DesktopChatMode }) {
+function ModeMark({ mode }: { mode: DesktopChatMode }) {
     return <Glyph name={(markOf as Partial<Record<string, Mark>>)[mode] ?? 'shield'} size={15} />;
 }
 
@@ -361,7 +360,6 @@ export function AccessButton({
                         {header}
                     </div>
                     {choices.map((each) => {
-                        const elsewhere = each.mode !== chat.mode && !can('chat.setMode');
                         return (
                             <Item
                                 key={each.mode}
@@ -371,11 +369,8 @@ export function AccessButton({
                                 label={each.label}
                                 value={each.mode}
                                 checked={each.mode === chat.mode}
-                                disabled={each.disabled !== null || elsewhere}
-                                small={
-                                    each.disabled?.replaceAll('`', '') ??
-                                    (elsewhere ? cannotHere() : modeSays[each.mode])
-                                }
+                                disabled={each.disabled !== null}
+                                small={each.disabled?.replaceAll('`', '') ?? modeSays[each.mode]}
                                 onChoose={() => {
                                     close();
                                     if (each.mode !== chat.mode) choose(each.mode);
@@ -393,8 +388,6 @@ export function AccessButton({
                                 value="take_back"
                                 checked={false}
                                 command
-                                disabled={!can('fullAccess.takeBack')}
-                                small={can('fullAccess.takeBack') ? undefined : cannotHere()}
                                 onChoose={() => {
                                     close();
                                     takeBack();

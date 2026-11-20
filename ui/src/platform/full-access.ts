@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import { can, earlier } from './places';
+import { earlier } from './window-desktop';
 import type { DesktopFullAccessStanding, DesktopRefusal, JasonDesktop } from './desktop';
 
 // The standing choice of Full access as the desktop last said it: the mode menu offers its take-back while it stands,
@@ -17,7 +17,7 @@ let known: Promise<void> = Promise.resolve();
 /** Reads the standing choice and follows its changes; the function it returns stops that. */
 export function followStanding(desktop: JasonDesktop): () => void {
     // A desktop of an earlier version has no standing choice to read or take back.
-    if (!can('fullAccess.standing') || !earlier(desktop).fullAccess) {
+    if (!earlier(desktop).fullAccess) {
         fullAccessStanding.value = null;
         return () => undefined;
     }
@@ -39,7 +39,7 @@ export function followStanding(desktop: JasonDesktop): () => void {
  * changed by anything but the desktop's own acts is said to no one. A read that fails changes nothing.
  */
 export function readStandingAgain(desktop: JasonDesktop): void {
-    if (!can('fullAccess.standing') || !earlier(desktop).fullAccess) return;
+    if (!earlier(desktop).fullAccess) return;
     void desktop.fullAccess
         .standing()
         .then((standing) => {
@@ -53,7 +53,7 @@ export const standingKnown = (): Promise<void> => known;
 
 /** Takes the standing choice back: null once done, or the desktop's sentence when it could not. */
 export async function takeBackStanding(desktop: JasonDesktop): Promise<string | null> {
-    if (!can('fullAccess.takeBack') || !earlier(desktop).fullAccess) return null;
+    if (!earlier(desktop).fullAccess) return null;
     const answer: DesktopRefusal | null = await desktop.fullAccess.takeBack();
     if (answer !== null) return answer.refused;
     fullAccessStanding.value = null;

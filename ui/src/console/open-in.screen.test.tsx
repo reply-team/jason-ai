@@ -6,7 +6,7 @@ import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import type { DesktopOpenInJason } from '../platform/desktop';
+import type { DesktopOpenInAnswer, DesktopOpenInJason } from '../platform/desktop';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { styleOf } from '../test/stylesheet';
@@ -421,6 +421,20 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         const before = targets(desktop).length;
         fireEvent.focus(window);
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+    });
+});
+
+describe('Open in from a desktop of an earlier version', () => {
+    it('leaves out a place this page does not know, the Browser such a desktop still offers', async () => {
+        const desktop = chatDesktop();
+        const browser = { id: 'browser', label: '' } as unknown as DesktopOpenInAnswer['places'][number];
+        desktop.openInKept = { ...desktop.openInKept, places: [...desktop.openInKept.places, browser] };
+        await renderConsole('live', desktop);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        expect(items().filter((each) => each === 'Copy path')).toHaveLength(1);
+        expect(items()).not.toContain('Browser');
+        expect(items()).toHaveLength(desktop.openInKept.places.length - 1);
     });
 });
 

@@ -5,8 +5,7 @@ import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
 import { Notice } from '../layout/notice';
-import { DemoView } from '../platform/demo-frame';
-import { can, earlier, placeKind, showsConsole } from '../platform/places';
+import { earlier } from '../platform/window-desktop';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { consoleShell } from '../platform/console-shell';
@@ -16,7 +15,6 @@ import { href, navigate, parseRoute, replace, route, type Route } from '../route
 import { AgentHeaded, CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
-import { NoDesktopPage } from './no-desktop';
 import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
@@ -110,7 +108,7 @@ function ChatUnopened({ agent, why }: { agent: string; why: string }) {
 function PagePanel() {
     // An agent's Chat is the console's own pane: while the address names it, the page draws nothing behind it but the
     // word that its conversation could not be opened, or that the agent is archived and has none.
-    const chatOf = can('chat.create') ? agentChatOf(route.value) : null;
+    const chatOf = agentChatOf(route.value);
     const note = chatNote.value;
     return (
         <div className="harness">
@@ -396,8 +394,7 @@ function followHistory(to: Route): void {
     moves++;
     if (!namesPlace(to)) return restore();
     const agent = agentChatOf(to);
-    // Where no chat can be made the page draws the agent and gives its Chat's address up for its first tab.
-    if (agent !== null && can('chat.create')) return showAgentChat(agent);
+    if (agent !== null) return showAgentChat(agent);
     if (to.screen === 'attention' && to.kind && to.id) {
         reveal('needs');
         void needs.attention.open(here().api, to.kind, to.id);
@@ -413,14 +410,12 @@ function addressPlace(
     if (hash === '' || hash === '#') return null;
     const to = parseRoute(hash);
     if (to.screen === 'chat') return null;
-    // The demo's address names nothing of the console: where it is drawn at all, it is drawn instead of the console.
-    if (to.screen === 'demo') return null;
     // The bare attention address is the default one (the window opens at it, and pairing leaves it): no address.
     if (to.screen === 'attention')
         return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : null;
     if (to.screen === 'campaigns' && to.id === undefined) return { panel: 'campaigns' };
     const agent = agentChatOf(to);
-    if (agent !== null && can('chat.create')) return { agent };
+    if (agent !== null) return { agent };
     return { panel: 'page' };
 }
 
@@ -442,8 +437,6 @@ function makeDock(): Dock {
         show,
         showChat,
         chat: (campaign) => {
-            // A place that cannot make a chat shows where the chat is, in the place the window opens on.
-            if (!can('chat.create')) return show('start');
             if (campaign) return showAgentChat(campaign.id);
             const mine = ++moves;
             void startChat().then((id) => {
@@ -464,7 +457,7 @@ function makeDock(): Dock {
         },
         page: (to) => {
             const agent = agentChatOf(to);
-            if (agent !== null && can('chat.create')) return showAgentChat(agent);
+            if (agent !== null) return showAgentChat(agent);
             moves++;
             // The bar names what is shown: an agent's chat by its own address, anything else by the chat's. A panel a
             // start's address named gives that address up for the chat's, so Back from the page shows the panel.
@@ -603,7 +596,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const stops = [
             // The standing choice of Full access, for the mode menu's take-back and the System screen.
             followStanding(desktop),
-            can('links.onOpen') ? desktop.links.onOpen(opened) : () => undefined,
+            desktop.links.onOpen(opened),
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
                 // A line the Feed took while it is not in front marks it in the sidebar; nothing else happens.
@@ -623,14 +616,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 }
             }),
             desktop.setup.onChanged(() => void connect.reload()),
-            can('onCommand')
-                ? desktop.onCommand((command) => {
-                      if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
-                      const to = commandTarget(command);
-                      if (typeof to === 'string') dock.show(to);
-                      else if (to) dock.page(to);
-                  })
-                : () => undefined,
+            desktop.onCommand((command) => {
+                if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
+                const to = commandTarget(command);
+                if (typeof to === 'string') dock.show(to);
+                else if (to) dock.page(to);
+            }),
             journal.onState((state) => {
                 // A resume the runtime refused starts the stream afresh: what was written meanwhile is read back for the
                 // Feed, and a person's acts on an agent since its chat's open choice are read again.
@@ -662,13 +653,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             }),
         ];
         journal.start();
-        if (can('links.take'))
-            void desktop.links
-                .take()
-                .then((link) => {
-                    if (link !== null) opened(link);
-                })
-                .catch(() => undefined);
+        void desktop.links
+            .take()
+            .then((link) => {
+                if (link !== null) opened(link);
+            })
+            .catch(() => undefined);
         const tick = setInterval(() => {
             clock.value = Date.now();
         }, 30_000);
@@ -687,9 +677,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     // The Mac desktop's own window has no title bar: its buttons sit over the sidebar's top, and the window is dragged by
     // a band there and by the strip. The Windows and Linux desktop's window has none either: the caption buttons are an
-    // overlay over the strip's right end, which leaves them free. A browser tab keeps its own frame.
-    const mac = desktop.platform === 'darwin' && placeKind() === 'window';
-    const overlay = (desktop.platform === 'win32' || desktop.platform === 'linux') && placeKind() === 'window';
+    // overlay over the strip's right end, which leaves them free.
+    const mac = desktop.platform === 'darwin';
+    const overlay = desktop.platform === 'win32' || desktop.platform === 'linux';
     return (
         <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${overlay ? ' desktop-overlay' : ''}`}>
             {mac && <div className="title-drag" aria-hidden="true" />}
@@ -720,9 +710,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                             <ModeStrip
                                 nav={{ open: sideOpen, toggle: () => setSideOpen((was) => !was) }}
                                 openIn={
-                                    can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
-                                        <OpenIn desktop={desktop} />
-                                    ) : undefined
+                                    earlier(desktop).openIn !== undefined ? <OpenIn desktop={desktop} /> : undefined
                                 }
                             />
                             <Area />
@@ -748,30 +736,15 @@ function SideFailure() {
     );
 }
 
-/** The console, paired first like the browser shell; `stream` stands in for the page's own stream in tests. */
-export function Console({
-    api,
-    desktop,
-    stream,
-    bootstrapped = false,
-}: {
-    api?: Api;
-    desktop: JasonDesktop;
-    stream?: JournalStream;
-    /** The page read the pairing before it started the console, as a tab's start does to learn its bridge. */
-    bootstrapped?: boolean;
-}) {
+/** The console, paired first; `stream` stands in for the page's own stream in tests. */
+export function Console({ api, desktop, stream }: { api?: Api; desktop: JasonDesktop; stream?: JournalStream }) {
     const client = useMemo(() => api ?? new HttpApi(session), [api]);
-    const [ready, setReady] = useState(bootstrapped);
+    const [ready, setReady] = useState(false);
     useEffect(() => {
-        if (!bootstrapped) void session.bootstrap().finally(() => setReady(true));
-    }, [bootstrapped]);
+        void session.bootstrap().finally(() => setReady(true));
+    }, []);
     if (!ready) return null;
-    // A browser tab shows the demo as a view of its own, the console put away; the window's demo is the desktop's.
-    if (route.value.screen === 'demo' && placeKind() !== 'window') return <DemoView />;
     if (!session.paired.value) return <PairAgain />;
-    // A tab with no desktop draws the demo or one page, never the console.
-    if (!showsConsole()) return <NoDesktopPage api={client} />;
     return (
         <ApiProvider api={client}>
             <Shell api={client} desktop={desktop} stream={stream} />

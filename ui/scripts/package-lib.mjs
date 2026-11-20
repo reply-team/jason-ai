@@ -5,26 +5,6 @@ import yazl from 'yazl';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The layout's directory for content the UI does not trust (`UiAssetLayout.SealedDirectory`): pages only, none below it. */
-const sealedDirectory = 'sealed';
-
-/**
- * The demo page the desktop shows in Demo, which the build carries too: one source, `desktop/demo/index.html`, copied
- * byte for byte into the layout's sealed directory, where the runtime serves it unable to act.
- */
-export const sealedPage = {
-    from: join(root, '..', 'desktop', 'demo', 'index.html'),
-    to: `${sealedDirectory}/demo.html`,
-};
-
-/**
- * What the demo page carries inside it, as the desktop names it (`desktop/scripts/notices.mjs`, `demoCarries`): no
- * lockfile names these, so they are named here, each with its licence text beside the page.
- */
-export const sealedCarries = [
-    { name: '@fontsource-variable/inter', version: '5.3.0', licence: 'OFL-1.1', file: 'LICENSE-Inter.txt' },
-];
-
 /** Every file under dist as a forward-slashed relative path, checked the way the runtime's unpacker checks an archive. */
 function buildFiles(dist) {
     if (!existsSync(join(dist, 'index.html'))) throw new Error(`${dist} holds no index.html, so it is not a build`);
@@ -38,20 +18,13 @@ function buildFiles(dist) {
             // version it is published as.
             if (rel === 'manifest.json') continue;
             if (statSync(path).isDirectory()) {
-                if (rel !== 'assets' && rel !== sealedDirectory) {
+                if (rel !== 'assets') {
                     throw new Error(
-                        `${rel}/ is a directory other than assets/ and ${sealedDirectory}/; a build keeps its files at the root, under assets/ and under ${sealedDirectory}/`,
+                        `${rel}/ is a directory other than assets/; a build keeps its files at the root and under assets/`,
                     );
                 }
                 walk(path);
             } else {
-                // Under sealed/ a build holds pages alone, as the runtime serves and the CLI installs them
-                // (`UiAssetLayout.AdmitsKind`).
-                if (rel.startsWith(`${sealedDirectory}/`) && !rel.endsWith('.html')) {
-                    throw new Error(
-                        `${rel} is not a page; a build holds under ${sealedDirectory}/ only files ending in .html`,
-                    );
-                }
                 files.push(rel);
             }
         }
@@ -105,19 +78,6 @@ function thirdPartyNotices(bundle) {
     )) {
         lines.push(`## ${name} ${version} — ${license}`, '', text.trim(), '');
     }
-    if (sealedPage.to in bundle) {
-        lines.push(
-            `# What ${sealedPage.to} carries`,
-            '',
-            `The demo page under ${sealedDirectory}/ is one static file with its script, styles and fonts inline. Besides`,
-            'Jason’s own code it carries, each under the licence named here:',
-            '',
-        );
-        for (const { name, version, licence, file } of sealedCarries) {
-            const text = readFileSync(join(dirname(sealedPage.from), file), 'utf8');
-            lines.push(`### ${name} ${version} — ${licence}`, '', text.trim(), '');
-        }
-    }
     return lines.join('\n');
 }
 
@@ -151,21 +111,6 @@ export function buildNotices() {
         enforce: 'post',
         generateBundle(_options, bundle) {
             this.emitFile({ type: 'asset', fileName: 'THIRD-PARTY-NOTICES', source: thirdPartyNotices(bundle) });
-        },
-    };
-}
-
-/** The build carries the desktop's demo page as it is, its bytes untouched, under the layout's sealed directory. */
-export function buildSealedPage() {
-    return {
-        name: 'jason-ui-sealed-page',
-        apply: 'build',
-        generateBundle() {
-            this.emitFile({
-                type: 'asset',
-                fileName: sealedPage.to,
-                source: new Uint8Array(readFileSync(sealedPage.from)),
-            });
         },
     };
 }

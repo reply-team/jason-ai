@@ -1,11 +1,10 @@
 import { effect, signal } from '@preact/signals-react';
-import { can } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, type Mode } from '../platform/mode';
-import { ChatNotes, hostOf, isRefusal, newChatMode, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
+import { ChatNotes, hostOf, isRefusal, newChatMode, sendTurn, startChat } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
@@ -14,7 +13,7 @@ import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
 import { openSettings } from '../screens/send-modes/open-settings';
 import { voiceKnown } from '../screens/settings/voice-state';
-import { changeChat, chats, conversations, here, inTab, messageOf, setup, setupError } from './state';
+import { changeChat, chats, conversations, here, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -148,13 +147,6 @@ async function begin(text: string): Promise<void> {
     }
     startPick.value = newChat('', null);
     startMode.value = null;
-    // A tab sends to a chat only in Ask first or Plan only: a chat made in another mode keeps the words in the box.
-    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) {
-        startDraft.value = text;
-        changeChat(id, (each) => told(each, tabLockedSentence(chats.value[id]?.mode ?? '')));
-        here().dock.showChat(id);
-        return;
-    }
     // The chat's first turn names what the controls chose; a mode the desktop did not start the chat in is asked of it.
     changeChat(id, (each) => ({
         ...each,
@@ -163,7 +155,7 @@ async function begin(text: string): Promise<void> {
         effort: pick.effort,
         typing: pick.typing,
     }));
-    if (chats.value[id]?.mode !== wanted && can('chat.setMode')) {
+    if (chats.value[id]?.mode !== wanted) {
         try {
             const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
             if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));
@@ -209,7 +201,7 @@ function placeholder(): string {
     return host?.id === 'claude' ? `${t('start.placeholder')} ${t('start.placeholder.site')}` : t('start.placeholder');
 }
 
-/** The window, and a tab the desktop opened, open on the chat; a tab with no desktop never draws the console. */
+/** The window opens on the chat. */
 export function StartPanel() {
     return <StartChat />;
 }

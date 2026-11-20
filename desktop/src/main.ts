@@ -43,8 +43,7 @@ import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed, UpdateBusy } from './installation.ts';
 import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, startPastUpdate, StillUpdating, updateHolds, updateWaitMs, updateWaitSentence, writable } from './machine-setup.ts';
-import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
-import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
+import { eventChannels, handle, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, namedDataDirectory, type DesktopPaths } from './paths.ts';
 import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
@@ -147,12 +146,10 @@ function showStarting(window: BrowserWindow, message: string, failed: boolean): 
 /**
  * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
  * it goes to the system browser only when it is https. Of what the page asks for, only writing to the clipboard is
- * granted, and only at the runtime's origin; no other permission, no webview. Answers the two ways to the system
- * browser: `leave`, which the Reply card's links take too, opens an https URL and refuses any other, logging neither;
- * `ownPage` opens a page of the runtime's own UI at its origin, the chat in a tab, and refuses any other address. The
- * page names neither address: `ownPage` is handed only the link the main process made from what the CLI printed.
+ * granted, and only at the runtime's origin; no other permission, no webview. Answers the one way to the system
+ * browser, `leave`, which the Reply card's links take too: it opens an https URL and refuses any other, logging neither.
  */
-function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): { leave: (url: string) => Promise<void>; ownPage: (url: string) => Promise<void> } {
+function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): { leave: (url: string) => Promise<void> } {
     const leave = (url: string): Promise<void> => {
         if (!isHttps(url)) {
             log.warn('link_refused', {});
@@ -166,8 +163,6 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
             },
         );
     };
-    // Held to the runtime's own page as the run file says it at this moment, whatever the caller held (`openOwnPage`).
-    const ownPage = (url: string): Promise<void> => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });
     const guard = (event: { preventDefault(): void }, url: string) => {
         const here = origin();
         if (here !== null && originOf(url) === here) return;
@@ -184,7 +179,7 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
     });
     contents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())));
     contents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()));
-    return { leave, ownPage };
+    return { leave };
 }
 
 function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | null, log: Logger, changed: () => void): void {
@@ -268,9 +263,8 @@ function linkOf(data: unknown): unknown {
 
 /** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
 async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
-    // Every member the page may ask for is registered through `seam`, which checks the window's sender and keeps each
-    // handler in one registry: the browser bridge reaches the same handlers through it (`browser-bridge.ts`).
-    const seam = withMembers(ipcMain);
+    // Every member the page may ask for is registered on `seam` by `handle`, which checks the window's sender.
+    const seam: IpcRegistrar = ipcMain;
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -360,16 +354,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
-    // The bridge a browser tab reaches the chat through: opened only when the person first opens the chat in a browser,
-    // closed with the window and at quit.
-    // The chat is made further down; the bridge opens only on the person's act, long after it is.
-    const bridges = new BridgeHolder(() => BrowserBridge.open({ origin, members: seam.members, modeOf: (chatId) => chat.modeNow(chatId), log }));
-    // The one way an event reaches the page: the window, and every tab paired with the bridge for the channels a tab reads.
+    // The one way an event reaches the page.
     const toPage = (channel: keyof typeof eventChannels, ...args: unknown[]) => {
         current?.webContents.send(eventChannels[channel], ...args);
-        bridges.publish(channel, args);
     };
-    const { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);
+    const { leave: toBrowser } = lockNavigation(window.webContents, origin, log);
     // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
     handle(seam, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     window.webContents.on('did-start-navigation', (details) => {
@@ -732,9 +721,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
         copy: (text) => clipboard.writeText(text),
         terminalFlags,
-        // The chat in a tab of the system's browser: the bridge is opened on the first ask, and the link is the one the CLI
-        // printed for the runtime's own page, with the bridge's code in its fragment (`browser-bridge.ts`).
-        browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),
         log: (event, fields) => log.info(event, fields),
         continuable: (chatId) => chat.continuable(chatId),
         chatFolder: () => paths.chat,
@@ -764,16 +750,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(seam, 'openIn.changeJason', origin, () => openIn.changeJason(), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
-    // Nor does a browser tab's bridge: its sessions end with it.
     window.on('closed', () => {
         chat.closeAll();
         models.close();
-        void bridges.close();
     });
     app.on('before-quit', () => {
         chat.closeAll();
         models.close();
-        void bridges.close();
     });
 
     await showStarting(window, 'Starting Jason…', false);

@@ -46,15 +46,13 @@ jason ui revoke <token-id>
 `jason ui open` answers with a link into the browser UI and opens it in the person's default browser; `--no-open`
 prints the link alone, which is what you want from a session: hand the person the `url` and say it works once, within
 a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open at the
-address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
-this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
-where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
+address of one item. This release's build draws its console in Jason Desktop's window alone; the tab this opens shows
+one sentence and no console, so say that to the person, who can decide from their agent or the `jason approval` and
 `jason decision` commands. Where Jason was installed by its install script or Jason Desktop's own package, on macOS,
-Windows or Linux, Jason Desktop is already there, since it is the installation itself: name opening it, not the page's
-download link, which is for Linux, where a command-line install made by hand has no desktop.
+Windows or Linux, Jason Desktop is already there, since it is the installation itself: name opening it.
 
-That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
-draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
+That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop's
+window draws this release's console. When they ask what happened, what is
 queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
 and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
 

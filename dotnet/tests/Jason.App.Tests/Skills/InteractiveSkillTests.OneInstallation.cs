@@ -43,7 +43,7 @@ public partial class InteractiveSkillTests
 
         var catalog = Regex.Replace(File.ReadAllText(SkillPack.Catalog()), @"\s+", " ");
         Assert.Contains(
-            "opening the browser UI (this release's UI build draws its console only in Jason Desktop and in a tab the desktop opens itself, so a tab `jason ui open` opens shows the Demo, or, while something waits, one page of text that says so, whether Jason Desktop is installed or not, and neither is the person's work; a custom build under `ui/custom` is served first)",
+            "opening the browser UI (this release's UI build draws its console only in Jason Desktop's window, so a tab `jason ui open` opens shows one sentence and no console, whether Jason Desktop is installed or not, and it is not the person's work; a custom build under `ui/custom` is served first)",
             catalog,
             StringComparison.Ordinal);
     }
@@ -100,7 +100,7 @@ public partial class InteractiveSkillTests
         Assert.Contains($"refused with `{UpdateCodes.CarriedByDesktop}`", skill, StringComparison.Ordinal);
         Assert.Contains($"The deb's `jason` refuses with `{UpdateCodes.ManagedByPackageManager}`, since the system updates the package from Jason's apt repository", skill, StringComparison.Ordinal);
         Assert.Contains("A person who installs Jason Desktop on macOS or Windows by hand, from its disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it carries", skill, StringComparison.Ordinal);
-        Assert.Contains("Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download link, which is for Linux", skill, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop is already there, since it is the installation itself: name opening it.", skill, StringComparison.Ordinal);
 
         // The likely cause the skill names is the one the verb's refusal gives.
         var carried = Regex.Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "CarriedUpdate.cs")), @"""\s*\+\s*""", string.Empty);

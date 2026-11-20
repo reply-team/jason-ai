@@ -813,7 +813,7 @@ export type ActsRead = 'reading' | 'clear' | 'acted' | 'unread';
 
 /**
  * A choice as it stands: live; standing but not to be pressed now (a turn runs, a message waits, no host drives the
- * chat, it is in a tab that may not send, or the person's acts are still being read); answered by one of its labels or
+ * chat, or the person's acts are still being read); answered by one of its labels or
  * in the person's own words; locked by another entry; locked by an act of the person's on the agent; or locked because
  * whether it still stands could not be read.
  */
@@ -832,7 +832,7 @@ export type ChoiceState =
  * decides: a message of the person's marks the label it equals, both trimmed, or says they answered in their own words;
  * any other locks it with no mark. Nothing after it, in an agent's chat it is locked by a person's act on that agent at
  * or after the entry's moment (`acts`, read for that moment), and drawn locked when the entry has no moment or the read
- * failed: an unknown state never leaves a live button. `maySend` says a host drives the chat and this place may send.
+ * failed: an unknown state never leaves a live button. `maySend` says a host drives the chat.
  * A choice read from the desktop's record when the page opened the chat, with nothing after it, is drawn locked: the
  * record keeps no notice, no campaign attached and no session started fresh, so what locked it may be gone from it. An
  * act of the person's during the turn, before the moment the words were kept, does not lock it.

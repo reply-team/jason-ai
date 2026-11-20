@@ -1,0 +1,21 @@
+.own-place {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 0 16px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    font:
+        16px/1.5 system-ui,
+        sans-serif;
+    color: #1f2328;
+    background: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+    .own-place {
+        color: #e6e6e6;
+        background: #16181c;
+    }
+}

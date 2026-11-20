@@ -1,15 +1,12 @@
 import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
 import { fullAccessStanding } from '../platform/full-access';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -24,8 +21,6 @@ import { activePanel, chats, conversations, feedId, here, lines, setup, setupErr
 
 // An agent is one place: its chat and its page's tabs under one header, each tab an address of its own. The address is
 // the truth for a reload, a deep link, Back and Forward; a pane with no address of its own stands at the chat's.
-
-type Place = 'window' | 'tab';
 
 const spring = 'conv_01JDKEPT0000000000000000S1';
 const setupChat = 'conv_01JDKEPT0000000000000000U1';
@@ -61,22 +56,13 @@ function api(get: Record<string, FixtureName> = agents): FakeApi {
 }
 
 async function renderAt(
-    place: Place,
     address = '',
     fake: FakeApi = api(),
 ): Promise<{ desktop: StubDesktop; fake: FakeApi; journal: StubStream }> {
     const desktop = stubDesktop({ ...setupFound });
     desktop.keep({ id: spring, campaignId: 'cmp_1', title: 'Spring' });
     desktop.keep({ id: setupChat, title: 'Set-up' });
-    let used: Parameters<typeof Console>[0]['desktop'] = desktop;
-    let held: Bridge | null = null;
-    if (place === 'tab') {
-        const stand = standInBridge(desktop);
-        held = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch);
-        used = tabDesktop(held);
-        setPlace('tab', used);
-    } else setPlace('window');
-    await loadMode(used);
+    await loadMode(desktop);
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -88,9 +74,8 @@ async function renderAt(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    session.bridge.value = held;
     const journal = stubStream();
-    render(<Console api={fake} desktop={used} stream={journal.stream} bootstrapped />);
+    render(<Console api={fake} desktop={desktop} stream={journal.stream} />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
     return { desktop, fake, journal };
 }
@@ -152,16 +137,14 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
-    setPlace('window');
     mode.value = 'live';
     modeRefusal.value = null;
     modeUnopened.value = null;
-    session.bridge.value = null;
 });
 
-describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
+describe('An agent', () => {
     it('opens from its row in Recent under its header, on its Chat tab, at its own address', async () => {
-        await renderAt(place);
+        await renderAt();
         const header = await openSpring();
         expect(location.hash).toBe('#/campaigns/cmp_1/chat');
         // The runtime's state and type, as pills; its one move; its tabs with the People tab's count.
@@ -186,7 +169,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('keeps its header, its draft and the lines that came while a page tab was shown, through Back and Forward', async () => {
-        const { desktop } = await renderAt(place);
+        const { desktop } = await renderAt();
         const header = await openSpring();
         fireEvent.change(box(), { target: { value: 'half a thought' } });
         fireEvent.click(tab(/^People/));
@@ -210,7 +193,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('keeps a running turn’s Thinking… and Stop through the People tab and Back, and Stop stops it', async () => {
-        const { desktop } = await renderAt(place);
+        const { desktop } = await renderAt();
         // The desktop runs a turn of the agent's conversation.
         desktop.keep({
             id: spring,
@@ -239,7 +222,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('moves its People tab’s line and Add people into the tab, and draws no line of counts twice', async () => {
-        await renderAt(place, '#/campaigns/cmp_1/people');
+        await renderAt('#/campaigns/cmp_1/people');
         await headOf('Spring');
         const panel = await waitFor(() => {
             const found = document.querySelector<HTMLElement>('.panel[data-panel="agent"] .people-head');
@@ -260,7 +243,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
         ['#/campaigns/cmp_1/settings', '#/campaigns/cmp_1/settings', 'page'],
         ['#/campaigns/cmp_1/details', '#/campaigns/cmp_1/settings', 'page'],
     ])('a reload or a deep link at %s lands at %s, under the header', async (address, lands, pane) => {
-        await renderAt(place, address);
+        await renderAt(address);
         await headOf('Spring');
         await waitFor(() => expect(location.hash).toBe(lands));
         if (pane === 'chat') await springChatShown();
@@ -268,7 +251,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('a set-up chat has no header, and stands under the agent’s header once it becomes that agent’s', async () => {
-        const { desktop } = await renderAt(place);
+        const { desktop } = await renderAt();
         fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
         await waitFor(() => expect(activePanel.value).toBe(`chat:${setupChat}`));
         expect(head()).toBeNull();
@@ -285,7 +268,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('leaving an agent’s tab for a set-up chat adds one entry, and Back comes back to that tab', async () => {
-        await renderAt(place, '#/campaigns/cmp_1/people');
+        await renderAt('#/campaigns/cmp_1/people');
         await headOf('Spring');
         await pageShown();
         fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
@@ -304,7 +287,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('leaving an agent’s Chat for a panel of the console comes back to that Chat with Back', async () => {
-        await renderAt(place);
+        await renderAt();
         await openSpring();
         fireEvent.change(box(), { target: { value: 'kept' } });
         flush(() => here().dock.show('needs'));
@@ -318,7 +301,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 
     it('moves between tabs from the keyboard, focus staying on the tab chosen', async () => {
-        await renderAt(place);
+        await renderAt();
         await openSpring();
         const chat = tab('Chat');
         chat.focus();
@@ -334,7 +317,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 });
 
-describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in the %s', (place) => {
+describe('An agent with no conversation yet', () => {
     // Drawing an agent's Chat tab makes nothing: no conversation, no child process, no folder. Its conversation is made
     // at the person's first act that needs one: a send, a chip, or opening one of the composer's menus.
     const creates = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.create');
@@ -352,7 +335,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     it.each(['#/campaigns/cmp_2', '#/campaigns/cmp_2/chat'])(
         'at %s, by a reload or a deep link, draws its Chat with an empty thread and the composer, and makes nothing',
         async (address) => {
-            const { desktop } = await renderAt(place, address, autumnApi());
+            const { desktop } = await renderAt(address, autumnApi());
             await headOf('Autumn');
             await autumnChatShown();
             expect(location.hash).toBe('#/campaigns/cmp_2/chat');
@@ -363,7 +346,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     );
 
     it('by its tab, Back and Forward, and the Agents list’s Chat, makes nothing', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/people', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/people', autumnApi());
         await headOf('Autumn');
         await pageShown();
         fireEvent.click(tab('Chat'));
@@ -389,7 +372,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('a keystroke makes nothing, and the words stay through the tabs', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'not yet' } });
         fireEvent.click(tab(/^People/));
@@ -401,7 +384,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('a send makes exactly one conversation and sends to it, which Recent lists from then on', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         // The desktop names a conversation it makes after the agent, as the runtime answers it.
         desktop.names.set('cmp_2', 'Autumn');
         await autumnChatShown();
@@ -417,7 +400,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('quick sends make one conversation, the later ones waiting together for the first turn', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         for (const words of ['first', 'second', 'third']) {
             fireEvent.change(shownBox(), { target: { value: words } });
@@ -431,7 +414,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('a chip makes exactly one conversation and sends its words', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         const chip = shown().querySelector<HTMLButtonElement>('.sugs .sug')!;
         fireEvent.click(chip);
@@ -441,7 +424,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('opening the model menu makes exactly one conversation, then opens the menu in it', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         await waitFor(() => expect(within(shown()).getByRole('button', { name: /^Model: / })).toBeTruthy());
         fireEvent.click(within(shown()).getByRole('button', { name: /^Model: / }));
@@ -458,7 +441,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('keeps the focus in the composer when the first send makes the conversation', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         shownBox().focus();
         fireEvent.change(shownBox(), { target: { value: 'Find me ten founders' } });
@@ -469,7 +452,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('opens a composer menu once on Space, whose click comes after the key, and makes one conversation', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         const model = await waitFor(() => within(shown()).getByRole('button', { name: /^Model: / }));
         model.focus();
@@ -501,7 +484,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('closes its “…”, whose acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
-        await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         const more = within(head()!).getByRole('button', { name: "More for this agent's conversation" });
         more.focus();
@@ -522,7 +505,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('gives way to the conversation made for it elsewhere, carrying the words typed, through Recent and the tabs', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'typed before it was made' } });
         // Another place on the same agent sent, so the desktop holds its conversation, and the list says so.
@@ -551,7 +534,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('gives way to a set-up chat that becomes the agent’s, carrying the words typed', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'typed in the unmade chat' } });
         fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
@@ -571,7 +554,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
 
     it('keeps the words of both sides when it gives way to a conversation that holds words of its own', async () => {
         const blank = String.fromCharCode(10, 10);
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'typed in the unmade chat' } });
         fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
@@ -596,7 +579,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('a create refused leaves the words in the box and says why in the chat', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'keep these words' } });
@@ -607,7 +590,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 
     it('a create refused after a second send gives both messages back to the box, in the order they were sent', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        const { desktop } = await renderAt('#/campaigns/cmp_2/chat', autumnApi());
         desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');
         await autumnChatShown();
         fireEvent.change(shownBox(), { target: { value: 'first thought' } });
@@ -622,9 +605,9 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
-describe.each<Place>(['window', 'tab'])('An archived agent with no conversation, in the %s', (place) => {
+describe('An archived agent with no conversation', () => {
     it('says on its Chat tab that it is archived, and draws nothing that could make a conversation', async () => {
-        const { desktop } = await renderAt(place, '#/campaigns/cmp_4/chat');
+        const { desktop } = await renderAt('#/campaigns/cmp_4/chat');
         const header = await headOf('Winter');
         await waitFor(() => expect(within(header).getByText('Archived')).toBeTruthy());
         const line = await waitFor(() => {
@@ -673,7 +656,6 @@ describe.each<Place>(['window', 'tab'])('An archived agent with no conversation,
 describe('An agent whose conversation the desktop could not open', () => {
     it('says so under its own header on its Chat tab, never another agent’s pane, and tries again', async () => {
         const { desktop } = await renderAt(
-            'window',
             '#/campaigns/cmp_2/chat',
             api().answerAnyRequest('route.resolve', 'route.resolve/no-route'),
         );
@@ -706,7 +688,7 @@ describe('An agent the runtime no longer knows', () => {
     it.each(['#/campaigns/cmp_gone', '#/campaigns/cmp_gone/chat'])(
         'at %s, says the agent no longer exists, draws no composer and makes nothing',
         async (address) => {
-            const { desktop } = await renderAt('window', address, api({ ...agents, cmp_gone: 'campaign.get/gone' }));
+            const { desktop } = await renderAt(address, api({ ...agents, cmp_gone: 'campaign.get/gone' }));
             await waitFor(() =>
                 expect(document.querySelector('[data-pane="page"]')?.textContent).toContain(
                     'The agent in this address no longer exists; it was closed.',
@@ -726,7 +708,7 @@ describe('The conversation’s acts in the agent’s “…”', () => {
     const more = () => within(head()!).getByRole('button', { name: "More for this agent's conversation" });
 
     it('names the conversation in each, from the keyboard, and Escape gives the focus back', async () => {
-        await renderAt('window');
+        await renderAt();
         await openSpring();
         more().focus();
         fireEvent.keyDown(more(), { key: 'ArrowDown' });
@@ -744,20 +726,8 @@ describe('The conversation’s acts in the agent’s “…”', () => {
         expect(document.activeElement).toBe(more());
     });
 
-    it('in a tab the desktop opened holds Rename conversation alone', async () => {
-        await renderAt('tab');
-        await openSpring();
-        fireEvent.click(more());
-        const menu = within(head()!).getByRole('menu');
-        expect(
-            within(menu)
-                .getAllByRole('menuitem')
-                .map((each) => each.textContent),
-        ).toEqual(['Rename conversation']);
-    });
-
     it('asks before Remove from a page tab, in the Chat tab, saying the agent stays and where its acts are', async () => {
-        const { desktop } = await renderAt('window', '#/campaigns/cmp_1/settings');
+        const { desktop } = await renderAt('#/campaigns/cmp_1/settings');
         await headOf('Spring');
         await pageShown();
         fireEvent.click(more());
@@ -778,7 +748,7 @@ describe('What the header says of the agent', () => {
     it('says no name, state or type it has not read, and follows the journal: an agent archived elsewhere has no move', async () => {
         const fake = api({ ...agents, cmp_1: 'campaign.get/archive-spring' });
         const release = fake.hold('campaign.get');
-        const { journal } = await renderAt('window', '', fake);
+        const { journal } = await renderAt('', fake);
         fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Spring' })));
         await springChatShown();
         // Unread, the header says the name the conversation gives, and no state, type or move.
@@ -800,7 +770,7 @@ describe('What the header says of the agent', () => {
     });
 
     it('says an archived agent is archived, offers no Start, and keeps its tabs readable', async () => {
-        await renderAt('window', '#/campaigns/cmp_4/settings');
+        await renderAt('#/campaigns/cmp_4/settings');
         const header = await headOf('Winter');
         expect(within(header).getByText('Archived')).toBeTruthy();
         expect(within(header).queryByRole('button', { name: /Start|Pause|Resume/ })).toBeNull();
@@ -816,7 +786,7 @@ describe('What the header says of the agent', () => {
     });
 
     it('draws the Adaptive pill where the runtime says the agent runs with no provider campaign', async () => {
-        await renderAt('window', '#/campaigns/cmp_2/settings', api({ ...agents, cmp_2: 'campaign.get/started' }));
+        await renderAt('#/campaigns/cmp_2/settings', api({ ...agents, cmp_2: 'campaign.get/started' }));
         const header = await headOf('Running');
         await waitFor(() => expect(header.querySelector('.agent-kind')?.textContent).toBe('Adaptive'));
     });

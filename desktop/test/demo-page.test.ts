@@ -904,7 +904,7 @@ function importsOf(file: string): string[] {
 }
 
 test('the Demo’s two modules reach no jason, no runtime, no program, no process and nothing of the earlier demo', () => {
-    const refused = /^\.\/(cli|programs|installation|own-runtime|chat.*|setup|repair|window-pairing|browser-bridge|ipc|preload|demo-(over|runtime|folders))\.ts$|child_process|^node:net$|^node:http/;
+    const refused = /^\.\/(cli|programs|installation|own-runtime|chat.*|setup|repair|window-pairing|ipc|preload|demo-(over|runtime|folders))\.ts$|child_process|^node:net$|^node:http/;
     for (const file of ['demo-page.ts', 'demo-window.ts']) {
         const imports = importsOf(file);
         assert.ok(imports.length > 0, file);

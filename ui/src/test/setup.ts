@@ -1,6 +1,5 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach } from 'vitest';
-import { setPlace } from '../platform/places';
 import { forgetEdits } from '../screens/attention/reasking';
 import { takeUnanswered } from './fake-api';
 
@@ -13,9 +12,6 @@ configure({ asyncUtilTimeout: 15_000 });
 
 // Vitest globals are off, so testing-library's automatic cleanup is not; each screen test starts from an empty document.
 // A request the test recorded no answer for fails it, even when the screen caught the error and showed a failure.
-// A screen test runs in the desktop's own window unless it says otherwise; the page names its place as it starts.
-beforeEach(() => setPlace('window'));
-
 // A message edited on the page is the page's own memory, which a test starts without.
 beforeEach(() => forgetEdits());
 

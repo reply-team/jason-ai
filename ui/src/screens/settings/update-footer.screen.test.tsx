@@ -3,9 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ApiProvider } from '../../api/context';
 import { consoleShell } from '../../platform/console-shell';
 import { mode } from '../../platform/mode';
-import { noDesktop, setPlace, tabDesktop } from '../../platform/places';
-import { Bridge } from '../../platform/bridge';
-import { standInBridge, standInSecret } from '../../test/bridge';
 import { stubDesktop, type StubDesktop } from '../../test/desktop';
 import { FakeApi } from '../../test/fake-api';
 import { chosenSection } from './chosen';
@@ -19,7 +16,7 @@ const loaded = consoleShell.loaded;
 const sections = consoleShell.settingsSections;
 
 function open(desktop: StubDesktop = stubDesktop()) {
-    setPlace('window', desktop);
+    window.jasonDesktop = desktop;
     render(
         <ApiProvider api={new FakeApi().answer('preference.list', 'preference.list/set')}>
             <SettingsScreen />
@@ -44,6 +41,7 @@ describe('the update item at the foot of Settings', () => {
     });
     afterEach(() => {
         cleanup();
+        delete window.jasonDesktop;
         consoleShell.loaded = loaded;
         consoleShell.settingsSections = sections;
         mode.value = 'live';
@@ -112,33 +110,5 @@ describe('the update item at the foot of Settings', () => {
         expect(screen.queryByRole('navigation')).toBeNull();
         expect(document.querySelector('.settings-update')).toBeNull();
         expect(screen.queryByText(/Jason Desktop/)).toBeNull();
-    });
-
-    it('is not drawn in a tab with no desktop, which is asked nothing of it', async () => {
-        const none = noDesktop();
-        setPlace('none', none);
-        render(
-            <ApiProvider api={new FakeApi().answer('preference.list', 'preference.list/set')}>
-                <SettingsScreen />
-            </ApiProvider>,
-        );
-        await screen.findByRole('heading', { name: 'Settings', level: 1 });
-        await act(async () => undefined);
-        expect(document.querySelector('.settings-update')).toBeNull();
-    });
-
-    it('is not drawn in a tab the desktop opened: the bridge carries no update item', async () => {
-        const desktop = stubDesktop();
-        const bridge = new Bridge({ port: 43210, secret: standInSecret }, standInBridge(desktop).fetch);
-        setPlace('tab', tabDesktop(bridge));
-        render(
-            <ApiProvider api={new FakeApi().answer('preference.list', 'preference.list/set')}>
-                <SettingsScreen />
-            </ApiProvider>,
-        );
-        await screen.findByRole('navigation', { name: 'Settings' });
-        await act(async () => undefined);
-        expect(document.querySelector('.settings-update')).toBeNull();
-        expect(desktop.calls.filter((each) => each.name.startsWith('updates.'))).toEqual([]);
     });
 });

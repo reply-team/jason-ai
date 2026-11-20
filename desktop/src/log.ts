@@ -29,8 +29,6 @@ export const templates = {
     link_opened: 'An https link was handed to the system browser',
     link_refused: 'A link that is not https was refused',
     link_open_failed: 'The system browser was asked to open a link and did not',
-    own_page_opened: "Jason's own page was handed to the system browser",
-    own_page_refused: "A link that is not Jason's own page was refused",
     ipc_refused: 'A call on {Channel} from outside {Origin} was refused',
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
@@ -155,12 +153,6 @@ export const templates = {
     open_in_continue_refused: 'A chat could not be continued in a terminal in {Host}',
     open_in_change_jason: 'Change Jason itself was opened, its host from {Host}; jason session open exited {Exit}',
     open_in_change_jason_refused: 'Change Jason itself could not be opened, its host from {Host}; jason session open exited {Exit} with the code {Code}',
-    bridge_opened: 'The browser bridge listens on 127.0.0.1:{Port}',
-    bridge_closed: 'The browser bridge closed, ending {Sessions} sessions',
-    bridge_paired: 'A browser tab paired with the bridge; {Sessions} sessions are live',
-    bridge_refused: 'The browser bridge refused a request: {Why}, member {Member}',
-    bridge_stream_closed: 'An event stream of the browser bridge was closed: {Why}',
-    bridge_tab_refused: 'A browser tab could not be opened: {Why}',
     // Never said by the desktop: jason uninstall's waiter writes it into the desktop's file of the day, which the desktop's
     // writer opens and closes per line, so another writer's line lands beside its own. The waiter's copy of this template
     // (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff.LogTemplate) is held to this one.

@@ -1,18 +1,16 @@
 import type { Plugin, Routes } from '../api/types';
 import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
-import { can } from '../platform/places';
 import { act, define } from './actions';
 import { cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
 import type { Chat } from './chat-model';
 import { html, type Html } from './html';
 import { svg } from './icons';
-import { here, inTab } from './state';
+import { here } from './state';
 
 // The accounts card the chat's AI asks for. It holds no member, so nothing on it is the AI's: what it shows is read by
 // the shared frame's rule (when it is the conversation's last card that reads, and again on its Refresh), from two
 // readers, each in its own part. Reply's part is the desktop's read of the provider now (`setup.status()`, the read the
-// Connect card paints), with each account's state in the word Reply wrote; in a browser tab, which reads no provider
-// here, the part is the Accounts page's sentence about where connecting is done. The runtime's part, under "On record
+// Connect card paints), with each account's state in the word Reply wrote. The runtime's part, under "On record
 // now", is the plugin the global routes name for messages and its state as `plugin.list` answers it. The card follows
 // neither the journal nor the desktop's changes, and acts on nothing: its buttons are Refresh and Open Accounts.
 
@@ -22,9 +20,9 @@ type Part<T> = { ok: true; value: T } | { ok: false; said: Said };
 /** A plugin as the card names it: its id, the name its manifest gives (null when none), and its state. */
 type Listed = Plugin & { name?: string | null };
 
-/** The card's read: Reply as the desktop read it (null where no desktop's read is made here), and the runtime's two. */
+/** The card's read: Reply as the desktop read it, and the runtime's two. */
 interface AccountsRead {
-    reply: Part<DesktopReply> | null;
+    reply: Part<DesktopReply>;
     routes: Part<Routes>;
     plugins: Part<Listed[]>;
 }
@@ -38,19 +36,13 @@ function listed(answer: unknown): Listed[] {
     return Array.isArray(list) ? (list as Listed[]) : [];
 }
 
-/** Whether this place reads the provider through the desktop: Jason Desktop's own window, not a tab. */
-const readsProvider = (): boolean => !inTab() && can('setup.status');
-
 /** The card's three reads, together; a refusal is said in its part and nothing throws. */
 async function readAccounts(): Promise<AccountsRead> {
     const { api, desktop } = here();
     // A desktop that throws rather than refuses is a read that failed, like one that refuses.
-    const reply: Promise<Part<DesktopReply> | null> = readsProvider()
-        ? new Promise<DesktopSetup>((resolve) => resolve(desktop.setup.status())).then(
-              (status) => answered(status.reply),
-              failed,
-          )
-        : Promise.resolve(null);
+    const reply: Promise<Part<DesktopReply>> = new Promise<DesktopSetup>((resolve) =>
+        resolve(desktop.setup.status()),
+    ).then((status) => answered(status.reply), failed);
     const [replyPart, routes, plugins] = await Promise.all([
         reply,
         api.call<Routes>('route.list').then(answered, failed),
@@ -149,16 +141,8 @@ function replyFacts(part: Part<DesktopReply>): Html {
         )}`;
 }
 
-/**
- * Reply's part, under its own label above the runtime's facts; in a place that reads no provider, the Accounts page's
- * sentence about where connecting is done.
- */
+/** Reply's part, under its own label above the runtime's facts. */
 function outside(read: AccountsRead): Html {
-    if (read.reply === null)
-        return html`<p class="ask-w card-provider">
-            Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason Desktop; a browser
-            cannot do them.
-        </p>`;
     return html`<div class="card-facts card-provider">
         <div class="card-rec">Read from Reply now</div>
         ${replyFacts(read.reply)}
