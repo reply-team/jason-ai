@@ -50,7 +50,7 @@ public sealed partial class InstallDesktopScriptTests
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         var calls = linux.Calls();
         var install = Assert.Single(calls, call => call.StartsWith("pkexec ", StringComparison.Ordinal));
-        Assert.Contains("apt-get install -y -o DPkg::Lock::Timeout=600 ", install, StringComparison.Ordinal);
+        Assert.StartsWith($"pkexec {Path.Combine(linux.SystemBin, "apt-get")} install -y -o DPkg::Lock::Timeout=600 ", install, StringComparison.Ordinal);
         Assert.Contains("-o Acquire::http::Proxy=http://proxy.example.test:3128/a b ", install, StringComparison.Ordinal);
         Assert.Contains($" {Path.Combine(linux.WorkingDirectory, "relative-tmp")}/", install, StringComparison.Ordinal);
         Assert.Equal("apt-get-arguments 11|", Assert.Single(calls, call => call.StartsWith("apt-get-arguments ", StringComparison.Ordinal)));
@@ -119,6 +119,32 @@ public sealed partial class InstallDesktopScriptTests
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         Assert.True(File.Exists(linux.DebCarried), run.Stdout + run.Stderr);
         Assert.Equal($"install --roles|{linux.Data}", linux.Calls()[^1]);
+    }
+
+    /// <summary>
+    /// The programs the apt route runs, and hands to sudo or pkexec to run as root, are named by the paths Debian and Ubuntu
+    /// keep them at, /usr/bin, never looked up on the PATH; and those files decide the route: an apt-get and a dpkg found on
+    /// the PATH alone, where whatever started the line may have put them, are not the system's, and the line installs the
+    /// AppImage. Catches a PATH that hands sudo or pkexec another program under apt's name.
+    /// </summary>
+    [Fact]
+    [UnsupportedOSPlatform("windows")]
+    public void Linux_the_apt_route_runs_the_system_s_own_tools_by_their_paths_and_they_decide_it()
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
+        foreach (var (variable, tool) in Linux.AptTools)
+        {
+            Assert.Equal(1, Count(text, $"\n{variable}=\"/usr/bin/{tool}\"\n"));
+            Assert.DoesNotContain($"command -v {tool} ", text, StringComparison.Ordinal);
+        }
+
+        var linux = Linux.Start(_tree, apt: true, aptOnPath: true);
+
+        var run = linux.Run(linux.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Equal([Path.Combine(linux.Applications, "jason-desktop-linux-x64.AppImage")], linux.InApplications());
+        Assert.DoesNotContain(linux.Calls(), call => call.StartsWith("pkexec", StringComparison.Ordinal) || call.StartsWith("apt-get", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -342,7 +368,7 @@ public sealed partial class InstallDesktopScriptTests
 
         private readonly TempTree _tree;
 
-        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse, string home)
+        private Linux(TempTree tree, bool apt, bool pkexec, bool userNamespaces, bool fuse, string home, bool aptOnPath)
         {
             _tree = tree;
             Home = tree.NewDirectory(home);
@@ -353,6 +379,8 @@ public sealed partial class InstallDesktopScriptTests
             DebPlace = Path.Combine(tree.NewDirectory("opt"), "Jason");
             WorkingDirectory = tree.NewDirectory("cwd");
             Stubs = tree.NewDirectory("stubs");
+            SystemBin = tree.NewDirectory("usr-bin");
+            var aptPlace = aptOnPath ? Stubs : SystemBin;
             foreach (var tool in Tools)
             {
                 var found = new[] { "/usr/bin", "/bin" }.Select(folder => Path.Combine(folder, tool)).FirstOrDefault(File.Exists);
@@ -363,7 +391,7 @@ public sealed partial class InstallDesktopScriptTests
             Stub("uname", "case \"${1:-}\" in -m) echo x86_64 ;; *) echo Linux ;; esac\n");
             Stub("id", "case \"${1:-}\" in -u) echo \"${STUB_UID:-1000}\" ;; -nG) echo \"${STUB_GROUPS:-user sudo}\" ;; *) exit 1 ;; esac\n");
             Stub("pgrep", "[ -n \"${STUB_RUNNING:-}\" ]\n");
-            Stub("timeout", $"echo \"timeout $1|\" >> '{Log}'\nshift\nexec \"$@\"\n");
+            Stub(aptPlace, "timeout", $"echo \"timeout $1|\" >> '{Log}'\nshift\nexec \"$@\"\n");
             Stub("unshare", userNamespaces ? "exit 0\n" : "echo 'unshare: write failed /proc/self/uid_map: Operation not permitted' >&2\nexit 1\n");
             if (fuse)
             {
@@ -375,15 +403,15 @@ public sealed partial class InstallDesktopScriptTests
             {
                 // apt-get installs the file by putting the package's carried jason in its place, and dpkg-query says what is
                 // installed by the file the stand-in keeps beside that place.
-                Stub("apt-get", $"echo \"apt-get $*|\" >> '{Log}'\necho \"apt-get-arguments $#|\" >> '{Log}'\nmkdir -p '{DebPlace}/resources/bundle'\ncp '{Path.Combine(DebPlace, "..", "jason")}' '{DebCarried}'\nchmod 755 '{DebCarried}'\necho '{LinuxVersion}' > '{DebPlace}.version'\n");
-                Stub("dpkg", "[ \"$1\" = --compare-versions ] || exit 0\n[ \"$(printf '%s\\n%s\\n' \"$2\" \"$4\" | sort -V | tail -n 1)\" = \"$2\" ] && [ \"$2\" != \"$4\" ]\n");
-                Stub("dpkg-query", $"[ -f '{DebPlace}.version' ] || exit 1\nprintf 'ii |%s' \"$(cat '{DebPlace}.version')\"\n");
+                Stub(aptPlace, "apt-get", $"echo \"apt-get $*|\" >> '{Log}'\necho \"apt-get-arguments $#|\" >> '{Log}'\nmkdir -p '{DebPlace}/resources/bundle'\ncp '{Path.Combine(DebPlace, "..", "jason")}' '{DebCarried}'\nchmod 755 '{DebCarried}'\necho '{LinuxVersion}' > '{DebPlace}.version'\n");
+                Stub(aptPlace, "dpkg", "[ \"$1\" = --compare-versions ] || exit 0\n[ \"$(printf '%s\\n%s\\n' \"$2\" \"$4\" | sort -V | tail -n 1)\" = \"$2\" ] && [ \"$2\" != \"$4\" ]\n");
+                Stub(aptPlace, "dpkg-query", $"[ -f '{DebPlace}.version' ] || exit 1\nprintf 'ii |%s' \"$(cat '{DebPlace}.version')\"\n");
             }
 
             if (pkexec)
             {
                 // A dialog nobody answers: timeout ends pkexec at the bound, and pkexec says nothing.
-                Stub("pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ \"${{STUB_PKEXEC_EXIT:-}}\" = 124 ] && [ -z \"${{STUB_PKEXEC_SAYS:-}}\" ]; then exit 124; fi\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
+                Stub(aptPlace, "pkexec", $"echo \"pkexec $*|\" >> '{Log}'\nif [ \"${{STUB_PKEXEC_EXIT:-}}\" = 124 ] && [ -z \"${{STUB_PKEXEC_SAYS:-}}\" ]; then exit 124; fi\nif [ -n \"${{STUB_PKEXEC_AFTER:-}}\" ]; then \"$@\"; echo \"$STUB_PKEXEC_AFTER\" >&2; exit 124; fi\nif [ -n \"${{STUB_PKEXEC_SAYS:-}}\" ]; then echo \"$STUB_PKEXEC_SAYS\" >&2; exit \"$STUB_PKEXEC_EXIT\"; fi\nexec \"$@\"\n");
             }
 
             File.WriteAllText(Path.Combine(DebPlace, "..", "jason"), StandInJason);
@@ -398,6 +426,16 @@ public sealed partial class InstallDesktopScriptTests
         public string Log { get; }
 
         public string Running { get; }
+
+        /// <summary>
+        /// The programs the apt route runs, each named in the script by the path Debian and Ubuntu keep it at, and in a row's
+        /// copy of it by the path of its stand-in in <see cref="SystemBin"/>.
+        /// </summary>
+        public static readonly (string Variable, string Tool)[] AptTools =
+            [("APT_GET", "apt-get"), ("DPKG", "dpkg"), ("DPKG_QUERY", "dpkg-query"), ("SUDO", "sudo"), ("PKEXEC", "pkexec"), ("TIMEOUT", "timeout")];
+
+        /// <summary>The row's stand-in for /usr/bin: where the apt route's stand-ins are, off the PATH.</summary>
+        public string SystemBin { get; }
 
         /// <summary>The folder the line runs in, where a relative TMPDIR is read from.</summary>
         public string WorkingDirectory { get; }
@@ -422,10 +460,11 @@ public sealed partial class InstallDesktopScriptTests
             + "esac\n";
 
         /// <param name="home">The name of the account's home folder, which may hold any character a file name can.</param>
-        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true, string home = "home")
+        /// <param name="aptOnPath">The apt route's stand-ins on the PATH alone, not where the script's copy names them.</param>
+        public static Linux Start(TempTree tree, bool apt, bool pkexec = true, bool userNamespaces = true, bool fuse = true, string home = "home", bool aptOnPath = false)
         {
             Assert.SkipWhen(!OperatingSystem.IsLinux(), "install.sh's Linux routes are run by sh on Linux; CI's Linux leg runs these rows.");
-            return new Linux(tree, apt, pkexec, userNamespaces, fuse, home);
+            return new Linux(tree, apt, pkexec, userNamespaces, fuse, home, aptOnPath);
         }
 
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];
@@ -489,7 +528,13 @@ public sealed partial class InstallDesktopScriptTests
             var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
             Assert.Equal(1, Count(text, "\nDEB_PLACE=\"/opt/Jason\"\n"));
             var script = Path.Combine(_tree.NewDirectory("test-build"), "install.sh");
-            File.WriteAllText(script, text.Replace("\nDEB_PLACE=\"/opt/Jason\"\n", $"\nDEB_PLACE=\"{DebPlace}\"\n", StringComparison.Ordinal));
+            text = text.Replace("\nDEB_PLACE=\"/opt/Jason\"\n", $"\nDEB_PLACE=\"{DebPlace}\"\n", StringComparison.Ordinal);
+            foreach (var (variable, tool) in AptTools)
+            {
+                text = text.Replace($"\n{variable}=\"/usr/bin/{tool}\"\n", $"\n{variable}=\"{Path.Combine(SystemBin, tool)}\"\n", StringComparison.Ordinal);
+            }
+
+            File.WriteAllText(script, text);
 
             var environment = new Dictionary<string, string>(Variables)
             {
@@ -515,9 +560,11 @@ public sealed partial class InstallDesktopScriptTests
 
         public (int Exit, string Stdout, string Stderr) Run(string feed) => Run(feed, []);
 
-        private void Stub(string name, string body)
+        private void Stub(string name, string body) => Stub(Stubs, name, body);
+
+        private static void Stub(string folder, string name, string body)
         {
-            var path = Path.Combine(Stubs, name);
+            var path = Path.Combine(folder, name);
             File.WriteAllText(path, "#!/bin/sh\n" + body);
             File.SetUnixFileMode(path, (UnixFileMode)0b111_101_101);
         }

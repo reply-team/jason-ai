@@ -17,7 +17,8 @@
 # of jason, for the shell it ran in and an agent's session already running, which read no profile again.
 #
 # On Linux it installs Jason Desktop as each system's users install comparable applications, and opens nothing. The
-# package manager the system has decides. Where there is apt (Ubuntu, Debian, Mint): the release's deb, checked against
+# package manager the system has decides. Where there is apt (/usr/bin/apt-get and /usr/bin/dpkg: Ubuntu, Debian, Mint),
+# every tool of its route named by its path there: the release's deb, checked against
 # checksums.txt and installed by apt, with the one password a system package needs - asked by sudo where this line has a
 # terminal (whether /dev/tty opens), else by the desktop's own dialog through pkexec, for at most twenty minutes - and refused
 # in its own words where none can be asked or given; the package adds Jason's apt repository, its key and /usr/bin/jason,
@@ -438,6 +439,14 @@ APPIMAGE_ASSET="jason-desktop-linux-x64.AppImage"
 APPIMAGE_PLACE="$HOME/Applications"
 # How long apt waits for the package lock another installation holds.
 LOCK_SECONDS=600
+# The programs the apt route runs, and hands to sudo or pkexec to run as root, each by the path Debian and Ubuntu keep it
+# at, never looked up on a PATH whatever started the line may have set: these files decide the route, too.
+APT_GET="/usr/bin/apt-get"
+DPKG="/usr/bin/dpkg"
+DPKG_QUERY="/usr/bin/dpkg-query"
+SUDO="/usr/bin/sudo"
+PKEXEC="/usr/bin/pkexec"
+TIMEOUT="/usr/bin/timeout"
 
 # How long an install through the system's password dialog is given: apt's wait for the lock and ten minutes more, for
 # the password and apt's own work, so that apt answers first.
@@ -467,7 +476,6 @@ administrator() {
 # session). Which refusal it is is read from their own words, never from an exit code alone.
 apt_install() {
     FILE="$1"
-    APT_GET="$(command -v apt-get)"
     # What apt is given, as a list of arguments, each one argument whatever it holds: the package lock waited for, a
     # configuration file the person changed kept, the person's proxy, which sudo and pkexec both drop, and the file.
     set -- -y -o "DPkg::Lock::Timeout=$LOCK_SECONDS" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
@@ -477,17 +485,17 @@ apt_install() {
     : > "$TMP/apt.err"
     STATUS=0
     ROUTE=none
-    if (: < /dev/tty) 2>/dev/null && command -v sudo >/dev/null 2>&1; then
+    if (: < /dev/tty) 2>/dev/null && [ -x "$SUDO" ]; then
         ROUTE=sudo
         echo "Installing Jason Desktop's package with apt; sudo asks for your password."
-        sudo "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
-    elif command -v pkexec >/dev/null 2>&1; then
+        "$SUDO" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
+    elif [ -x "$PKEXEC" ]; then
         ROUTE=pkexec
         echo "Installing Jason Desktop's package with apt; your desktop asks for your password in its own window."
-        if command -v timeout >/dev/null 2>&1; then
-            timeout "$ASK_SECONDS" pkexec "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
+        if [ -x "$TIMEOUT" ]; then
+            "$TIMEOUT" "$ASK_SECONDS" "$PKEXEC" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
         else
-            pkexec "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
+            "$PKEXEC" "$APT_GET" install "$@" 2> "$TMP/apt.err" || STATUS=$?
         fi
     else
         STATUS=127
@@ -496,7 +504,7 @@ apt_install() {
     cat "$TMP/apt.err" >&2
     # The bound on the dialog ends the wait, not apt, which runs as root once the password is given: a late answer, or apt
     # waiting on the package lock, may still install the package. Where it did, it is installed.
-    case "$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)" in
+    case "$("$DPKG_QUERY" -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)" in
         ii*"|$WANTED")
             echo "apt went on after the wait ended and installed the package."
             return 0
@@ -519,7 +527,7 @@ apt_install() {
         fail "The password dialog was not answered within $((ASK_SECONDS / 60)) minutes, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
     elif grep -qE 'Request dismissed|Not authorized|incorrect password attempt|incorrect authentication attempt|Authentication failed|a password is required|is not in the sudoers file|may not run sudo|afraid I can.t do that' "$TMP/apt.err"; then
         fail "The install needs an administrator's password once, and none was given, so nothing was installed. Run the line again to be asked again.$NOT_ADMIN"
-    elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || ! command -v pkexec >/dev/null 2>&1; then
+    elif grep -qE 'No authentication agent found|Error getting authority' "$TMP/apt.err" || [ ! -x "$PKEXEC" ]; then
         fail "Jason Desktop is installed from a system package here, which needs your password once, and this session has no way to ask for it: run the line in a terminal of your desktop, or download $DEB_ASSET from $BASE and run: sudo apt install ./$DEB_ASSET"
     elif grep -qE 'Message recipient disconnected|No session for cookie' "$TMP/apt.err"; then
         fail "The system's password dialog failed, so nothing was installed. Sign out and back in (or restart), then run the line again."
@@ -534,7 +542,7 @@ install_deb() {
     CARRIED="$DEST/resources/bundle/jason"
     INSTALLED="$LATEST"
     WANTED="$(printf '%s' "$LATEST" | tr '-' '~')"
-    PLACED_STATE="$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)"
+    PLACED_STATE="$("$DPKG_QUERY" -W -f='${db:Status-Abbrev}|${Version}' jason-desktop 2>/dev/null || true)"
     PLACED_VERSION=""
     case "$PLACED_STATE" in
         ii*'|'*) PLACED_VERSION="${PLACED_STATE#*|}" ;;
@@ -542,7 +550,7 @@ install_deb() {
     if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
     if [ "$PLACED_VERSION" = "$WANTED" ]; then
         echo "Jason Desktop $LATEST is already installed; nothing to download."
-    elif [ -n "$PLACED_VERSION" ] && dpkg --compare-versions "$PLACED_VERSION" gt "$WANTED"; then
+    elif [ -n "$PLACED_VERSION" ] && "$DPKG" --compare-versions "$PLACED_VERSION" gt "$WANTED"; then
         INSTALLED="$(printf '%s' "$PLACED_VERSION" | tr '~' '-')"
         echo "Jason Desktop $INSTALLED is already installed; it is kept as it is, and nothing is downloaded."
     else
@@ -683,7 +691,7 @@ install_linux() {
     # The package manager the system has decides: apt's package where there is apt, else the AppImage. An AppImage already
     # in its place stays the installation, apt or not, and no deb is installed beside it.
     DEB_ROUTE=""
-    if [ ! -e "$APPIMAGE_PLACE/$APPIMAGE_ASSET" ] && command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+    if [ ! -e "$APPIMAGE_PLACE/$APPIMAGE_ASSET" ] && [ -x "$APT_GET" ] && [ -x "$DPKG" ]; then
         DEB_ROUTE=1
     fi
     # What apt installs runs as root with the person's password, so its feed is one the person typed, never one the

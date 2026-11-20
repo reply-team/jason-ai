@@ -80,7 +80,7 @@ public interface IMoveSystem
     /// <summary>Whether this account may write into <paramref name="folder"/>: a new application goes into the shared folder only then.</summary>
     bool MayWriteInto(string folder);
 
-    /// <summary>Linux: whether apt installs packages here, by the install line's rule: <c>apt-get</c> and <c>dpkg</c> both on the PATH.</summary>
+    /// <summary>Linux: whether apt installs packages here, by the install line's rule: <c>/usr/bin/apt-get</c> and <c>/usr/bin/dpkg</c> both there.</summary>
     bool HasApt();
 
     /// <summary>
@@ -392,7 +392,7 @@ public sealed class MoveSystem : IMoveSystem
         return false;
     }
 
-    public bool HasApt() => Executables.OnPath("apt-get", null) is not null && Executables.OnPath("dpkg", null) is not null;
+    public bool HasApt() => File.Exists(AptGet) && File.Exists(Dpkg);
 
     public bool RunsNamed(string name)
     {
@@ -482,24 +482,28 @@ public sealed class MoveSystem : IMoveSystem
     private static async Task<PackageRun> AptAsync(string doing, IReadOnlyList<string> arguments, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(progress);
-        var aptGet = Executables.OnPath("apt-get", null) ?? throw new IOException("apt-get is not on the PATH.");
+        if (!File.Exists(AptGet))
+        {
+            throw new IOException($"{AptGet} is not there.");
+        }
+
         string asker;
-        if (HasTerminal() && Executables.OnPath("sudo", null) is { } sudo)
+        if (HasTerminal() && File.Exists(Sudo))
         {
             progress($"{doing}; sudo asks for your password");
-            asker = sudo;
+            asker = Sudo;
         }
-        else if (Executables.OnPath("pkexec", null) is { } pkexec)
+        else if (File.Exists(Pkexec))
         {
             progress($"{doing}; your desktop asks for your password in its own window");
-            asker = pkexec;
+            asker = Pkexec;
         }
         else
         {
             return new PackageRun(false, 127, string.Empty);
         }
 
-        var (exit, _, error) = await RunTool(asker, [aptGet, .. arguments], bound, cancellationToken).ConfigureAwait(false);
+        var (exit, _, error) = await RunTool(asker, [AptGet, .. arguments], bound, cancellationToken).ConfigureAwait(false);
         return new PackageRun(true, exit == -1 ? PackageRun.TimedOut : exit, error);
     }
 
@@ -527,6 +531,18 @@ public sealed class MoveSystem : IMoveSystem
             return false;
         }
     }
+
+    /// <summary>
+    /// The tools the move and the deb's uninstall run on Linux as root, with the person's password, each where Debian and
+    /// Ubuntu keep it, as the install line names them: never looked up on a PATH whatever started this jason may have set.
+    /// </summary>
+    internal const string AptGet = "/usr/bin/apt-get";
+
+    internal const string Dpkg = "/usr/bin/dpkg";
+
+    internal const string Sudo = "/usr/bin/sudo";
+
+    internal const string Pkexec = "/usr/bin/pkexec";
 
     /// <summary>The tools a move runs on macOS, each where macOS keeps it.</summary>
     internal const string Sysctl = "/usr/sbin/sysctl";
