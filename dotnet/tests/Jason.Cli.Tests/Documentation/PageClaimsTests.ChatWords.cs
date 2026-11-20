@@ -16,7 +16,7 @@ public partial class PageClaimsTests
         Assert.Contains("six file commands run without a card when every path they name is inside the turn's folder, the conversation's own or, for a conversation an earlier version made, the shared one: `mkdir`, `touch`, `mv`, `cp`, `rm` and `rmdir`", desktop, StringComparison.Ordinal);
         Assert.Contains("and every path strictly inside the turn's folder once links are followed", desktop, StringComparison.Ordinal);
         Assert.Contains("a file in the turn's folder named like one of the six", desktop, StringComparison.Ordinal);
-        Assert.Contains("any read or write under the data directory outside the turn's folder (the settings file", desktop, StringComparison.Ordinal);
+        Assert.Contains("a read or a write that names a path under the data directory outside the turn's folder (the settings file", desktop, StringComparison.Ordinal);
         Assert.Contains("to the `.claude`, `.agents` and `.codex` folders of the turn's folder and to its `.mcp.json`.", desktop, StringComparison.Ordinal);
         Assert.Contains("a read outside the turn's folder and the added folders", desktop, StringComparison.Ordinal);
         foreach (var old in new[] { "strictly inside the chat folder", "a file in the chat folder named", "outside the chat folder (the settings file", "folders of the chat folder", "a read outside the chat folder" })

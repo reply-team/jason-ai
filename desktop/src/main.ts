@@ -581,6 +581,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
+    // The chat, once made below: the listing of the hosts draws a turn's mode by what it knows of Claude Code's bypass.
+    let chatMade: Chat | null = null;
     const setup = new Setup({
         paths,
         cli,
@@ -598,6 +600,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             writeSettings(paths.settings, next);
         },
         models,
+        bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
         ownServers: { env: process.env, home },
         // A box is closed, and read as a no, when its window is hidden or closed.
@@ -639,7 +642,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
-        // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code current.
+        // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code on the other
+        // side of the floor of Full access, or its bypass not available here.
         handedClaudeVersion: () => setup.handedClaudeVersion(),
         setupChanged: () => toPage('setup.changed'),
         skillsGate,
@@ -653,6 +657,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             roles.atTurn(host);
         },
     });
+    chatMade = chat;
     registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The

@@ -506,7 +506,7 @@ describe('the desktop’s conversations', () => {
             expect(asking.textContent).toContain('the AI host keeps its own transcript of it');
             if (own)
                 expect(asking.textContent).toContain(
-                    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. If a terminal holds it, it stays where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.",
+                    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. On Windows, a program that has it open keeps it where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.",
                 );
             else expect(asking.textContent).not.toMatch(/folder|seven days|chat-full-ended/);
             fireEvent.click(within(asking).getByRole('button', { name: 'Keep it' }));

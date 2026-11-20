@@ -347,7 +347,7 @@ describe('the start screen', () => {
         await ready();
         const line = await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
         expect(line.textContent).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
         expect(within(startForm()).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         expect(calls(desktop, 'chat.create')).toHaveLength(0);

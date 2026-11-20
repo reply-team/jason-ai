@@ -5,7 +5,7 @@
 import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
 import { isEffort, type Effort } from './chat-models.ts';
-import { allowRules, denyRules, helpNouns, helpRules } from './chat-deny.ts';
+import { allowRules, denyRules, helpNouns, helpRules, withoutRequestFiles } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { attemptVariable, chatTurnVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
@@ -36,13 +36,23 @@ export const claudeAllowedTools: readonly string[] = [
 ];
 
 /**
- * The tools taken out of every turn by a bare rule, which removes a tool from the model's context. PowerShell is on by
+ * The tools taken out of a turn by a bare rule, which removes a tool from the model's context. PowerShell is on by
  * default on Windows for claude.ai accounts with Git Bash, and Monitor runs a command in the background; the fence (the
  * deny rules and the `jason`/`reply` allow rules) names the Bash tool, so with both gone the one shell a turn has is the
- * fenced one. Git Bash is Claude Code's own prerequisite on Windows. The permission model still reads any tool input that
- * carries a command as a shell command.
+ * fenced one. Git Bash is Claude Code's own prerequisite on Windows. A turn in Full access, the host's own bypass, keeps
+ * the PowerShell tool as a terminal's session does (`fullAccessRemovedTools`): the turn's hook reads its commands as it
+ * reads Bash's. The permission model reads any tool input that carries a command as a shell command.
  */
 export const claudeRemovedTools: readonly string[] = ['PowerShell', 'Monitor'];
+
+/** The tools taken out of a turn in Full access: Monitor alone, which runs a command in the background. */
+export const fullAccessRemovedTools: readonly string[] = ['Monitor'];
+
+/**
+ * The permission mode each mode names to Claude Code, by name every time, so that a `defaultMode` of the person's or a
+ * project's never decides it: Full access the host's own bypass, Ask first and Auto-edit its default, Plan only plan.
+ */
+export const permissionModes: Readonly<Record<ChatMode, string>> = { full_access: 'bypassPermissions', ask_first: 'default', auto_edit: 'default', plan_only: 'plan' };
 
 export interface ClaudeTurn {
     /** The turn's `--mcp-config` file, which names the permission endpoint. */
@@ -57,7 +67,11 @@ export interface ClaudeTurn {
     reads?: readonly string[] | undefined;
     /** The chat's mode; absent, Ask first. */
     mode?: ChatMode | undefined;
-    /** Full access only: the turn's settings file (`fullAccessSettings`), which carries the turn's secret, so never argv. */
+    /**
+     * A turn the hook rides: its settings file (`hookedSettings`), which carries the turn's secret, so never argv. Full
+     * access always has one; Ask first and Auto-edit have one from the floor of Full access on, and the inline settings
+     * below it.
+     */
     settingsFile?: string | undefined;
     /** The host's file rules for the installation's data outside the chat folder (`dataRules`). */
     dataRules: readonly string[];
@@ -116,20 +130,18 @@ export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOuts
 export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, ...serverDefences() });
 
 /**
- * The settings of a turn in Full access, written to the turn's own file: those of every turn, and a `PreToolUse` hook on
- * every tool that posts the tool use to the turn's endpoint, which answers allow, ask or deny by Full access's judgement.
- * Claude Code's deny rules match a command as written only, so the hook reads what they cannot. Anthropic,
- * https://code.claude.com/docs/en/hooks (read 2026-11-11): `"allow"` "skips the permission prompt, except for actions no
- * mode auto-approves", `"deny"` "prevents the tool call", `"ask"` "prompts the user to confirm", and "Deny and ask rules
- * are still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence of the event";
- * "To block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295
- * or later." Under `-p` in the default mode a hook's `ask` overrides an allow rule, so an allowed command the hook holds
- * still reaches the permission prompt tool, and the turn waits for its answer: seen on Claude Code 2.1.322, which no page
- * states in one sentence, and which is therefore Full access's floor (`fullAccessFloor`).
+ * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit those of every turn
+ * (`claudeTurnSettings`), in Full access those with no rule that a page asks; and a `PreToolUse` hook on every tool that
+ * posts the tool use to the turn's endpoint, which answers a refusal of the three kinds or nothing (`HookAnswer`).
+ * Claude Code's deny rules match a command as written only, so the hook reads what they cannot, and a refusal of it
+ * stands in front of an allow rule. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"`
+ * "prevents the tool call", and "Deny and ask rules are still evaluated regardless of what the hook returns"; a matcher
+ * of `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
+ * `command` or `http` hook. Requires Claude Code v2.1.295 or later."
  */
-export function fullAccessSettings(hookUrl: string, secret: string) {
+export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string) {
     return {
-        permissions: { blockReadsOutsideWorkingDirectories: true },
+        permissions: mode === 'full_access' ? { blockReadsOutsideWorkingDirectories: true } : { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] },
         // No project file can switch the hook off or filter it out. Anthropic, https://code.claude.com/docs/en/settings
         // (read 2026-11-12), of command-line settings: "A key you set there overrides the same key in your project and
         // user settings files", and "Lists merge instead of overriding", so the hook's address is always on the list.
@@ -195,14 +207,18 @@ export const searchRules: readonly string[] = searchVariables.flatMap((name) => 
 export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 
 /**
- * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default.
- * Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool as any
- * other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only:
- * `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. In every mode
- * the nouns' help runs too, exactly as written (`helpRules`). Full access:
- * no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
- * (`fullAccessSettings`); what the hook asks about, and what the host asks about whatever the hook said, reaches the
- * prompt tool as in Ask first. Every deny rule is passed in every mode; Anthropic,
+ * The command line of one Claude Code turn, in the chat's mode, its permission mode named every time
+ * (`permissionModes`). Ask first: the host's default, with the turn's settings file, whose hook refuses three kinds
+ * before the host's own rules (`hookedSettings`), from the floor of Full access; below it, the inline settings and no
+ * hook. Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool
+ * as any other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only: plan, the
+ * plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
+ * nouns' help runs too, exactly as written (`helpRules`). Full access: the host's own bypass, with the turn's settings
+ * file and its hook, and the PowerShell tool kept (`fullAccessRemovedTools`); what the host asks about in that mode
+ * itself reaches the prompt tool. Below the floor, where no hook rides an Ask first or Auto-edit turn to read where a
+ * request's content comes from, the host is given no allow rule for a form of a verb that reads one from a file or from
+ * standard input (`withoutRequestFiles`), so each reaches the prompt tool, which refuses a redirect from the
+ * installation's own data and runs a plain form with no card, as the rule would. Every deny rule is passed in every mode; Anthropic,
  * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
  * `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat, and from `noChromeFrom` on `--no-chrome`, so
@@ -214,11 +230,13 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
-    args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : turn.settingsFile ? turn.allowed : withoutRequestFiles(turn.allowed);
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
+    const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
-    args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);
-    if (mode === 'plan_only') args.push('--permission-mode', 'plan');
+    args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
+    args.push('--permission-mode', permissionModes[mode]);
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (compareVersions(turn.version, noChromeFrom) >= 0) args.push('--no-chrome');
@@ -414,11 +432,17 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
 /**
  * The host's own rules for the installation's data: every entry of the data directory but `desktop`, and every entry of
  * `desktop` but the turn's chat folder (the turns' configurations among them), the known ones whether they exist or not,
- * refused to its file tools. Whether the host also applies these Read rules to a redirection's target or to a file
- * command in Bash (`cat`, `head`) is not shown: no test of the real host has seen it, and a command an allow rule matches
- * is never put to the permission model, so holding it is a hook's work, not these rules'. The permission model refuses
- * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
- * harness root) are refused whole, the folder and everything under it, with no entry left open.
+ * refused to its file tools. The host's maker documents that it checks a redirection's target, and a file command it
+ * recognizes in Bash (`cat`, `head`), against these rules as if its own file tools read or wrote that file (Anthropic,
+ * https://code.claude.com/docs/en/permissions, read 2026-11-20). Where no hook rides the turn, in Plan only and, below
+ * Claude Code's floor of Full access, for a command an allow rule lets run with no card (the allow list's verbs and the
+ * forms of the person's word), the rules' hold of a redirect rests on that documentation: it is documented by the host's
+ * maker and not observed by us, since no test of the real host has seen it. A command an allow rule matches is never put to the permission model. The turn's `PreToolUse` hook
+ * holds it (`hookedSettings`): in Full access, and in Ask first and Auto-edit from Claude Code's floor of Full access on,
+ * it refuses such a command before the host's allow rules let it run. The permission model refuses the same paths when
+ * it is asked. In a demo run
+ * the person's own directories (`whole`: the person's data directory and harness root) are refused whole, the folder and
+ * everything under it, with no entry left open.
  */
 export function dataRules(
     platform: Platform,
@@ -450,8 +474,10 @@ export function dataRules(
 
 /**
  * The host's own refusal of an edit of the chat's own names directly in the chat folder: its instructions, and its agent
- * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold in every mode,
- * beside the permission model's refusal of the same places by every route.
+ * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold in every mode but
+ * Full access, where the turn's folder is its own, a conversation's own and the shared chat folder alike, and is put
+ * right again before the next turn: its instructions written afresh and its agent folders holding only what the desktop
+ * placed (`ownAgentFolder`).
  */
 export function chatRules(platform: Platform, chat: string): string[] {
     const paths = platform === 'win32' ? win32 : posix;
@@ -642,6 +668,8 @@ export function hostEnvironment(
 /** What one line a host prints means. */
 export type HostLine =
     | { kind: 'session'; id: string }
+    /** The permission mode Claude Code says the turn runs in, on its `system/init` line, as one word. */
+    | { kind: 'permission_mode'; mode: string }
     /** Claude Code began to use a tool: its id and name, said before the step that shows it. */
     | { kind: 'tool_use'; id: string; name: string }
     /** A tool's result came back to Claude Code, by the id of its use: the tool ran, or was refused. */
@@ -808,7 +836,10 @@ export function claudeLine(line: string): HostLine[] {
     if (event === null) return [];
     if (event.type === 'system' && event.subtype === 'init') {
         const session: HostLine[] = typeof event.session_id === 'string' && sessionShape.test(event.session_id) ? [{ kind: 'session', id: event.session_id }] : [];
-        return [...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
+        // The mode the turn runs in: a Full access turn whose host turned its bypass off says so here alone, as seen on 2.1.329.
+        // It comes first, so a start stopped for it names no session.
+        const mode: HostLine[] = typeof event.permissionMode === 'string' && /^[A-Za-z]{1,32}$/.test(event.permissionMode) ? [{ kind: 'permission_mode', mode: event.permissionMode }] : [];
+        return [...mode, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
     }
     if (event.type === 'system' && event.subtype === 'api_retry') {
         if (event.error === 'authentication_failed' || event.error_status === 401) return [{ kind: 'refused' }];

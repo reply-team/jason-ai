@@ -1,5 +1,5 @@
 // The fence around the person's own tools: an MCP tool of a server other than the chat's own is a card of its own in Ask
-// first and held in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
+// first and runs in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
 // never cut; the files and commands that add a server to an agent; and what every turn's command line and settings carry
 // so that no server, connector or browser of the person's reaches a turn.
 
@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import { join, posix } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
-import { chatRules, claudeArguments, claudeTurnSettings, codexArguments, codexWindowsSandbox, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { fullAccessJudgement, heldSentence, judge, personsToolTitle, serversTitle, type ChatScope } from '../src/chat-permission-model.ts';
+import { chatRules, claudeArguments, claudeTurnSettings, codexArguments, codexWindowsSandbox, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
+import { fullAccessJudgement, judge, personsToolTitle, serversTitle, type ChatScope } from '../src/chat-permission-model.ts';
 import { claudeFloor, codexFloor, codexFloorSentence, noChromeFrom, printedCodexVersion } from '../src/host-version.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -28,7 +28,7 @@ const scope: ChatScope = {
     deniedOperations: fence.operations,
     real: () => null,
 };
-const held = { outcome: 'held', message: heldSentence };
+const runs = { outcome: 'runs' };
 
 test('an MCP tool of a server other than the chat\'s own is a card of its own, even when an argument is named command', () => {
     assert.deepEqual(judge('mcp__s__run', { command: 'ls' }, scope), { verdict: 'ask', title: personsToolTitle, detail: 's · run\n{"command":"ls"}', remember: null });
@@ -41,30 +41,30 @@ test('an MCP tool of a server other than the chat\'s own is a card of its own, e
     assert.equal(personsToolTitle, 'Use one of your own tools');
 });
 
-test('in Full access an MCP tool of the person\'s is held, never run: its arguments are no shell words', () => {
-    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'jason campaign list' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__acme-crm__find_contact', { query: 'dentists' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__claude-in-chrome__navigate', { url: 'https://example.com/' }, scope), held);
+test('in Full access an MCP tool of the person\'s runs, the hook answering nothing: its arguments are no shell words', () => {
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'jason campaign list' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__acme-crm__find_contact', { query: 'dentists' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__claude-in-chrome__navigate', { url: 'https://example.com/' }, scope), runs);
 });
 
-test('every string of an MCP tool\'s input, at any depth, is held to the text checks: a refusal with no card', () => {
-    const refusals: Record<string, unknown>[] = [
-        { query: 'jason approval approve x' },
-        { nested: { list: ['fine', { deeper: 'jason decision answer y --option a' }] } },
-        { query: 'jason approv\\al approve x' },
+test('every string of an MCP tool\'s input, at any depth, is held to the text checks: a refusal with no card in Ask first, and in Full access where it names the three kinds', () => {
+    const kinds: Record<string, unknown>[] = [
         { path: posix.join(data, 'run', 'x') },
         { path: '~/.jason/desktop/provider-keys/openai' },
         { text: 'echo $JASON_CONFINED' },
         { text: 'unset jason_confined' },
-        { call: 'system.shutdown' },
-        { [posix.join(data, 'config', 'settings.json')]: 'a key that names the data' },
+        { nested: { list: ['fine', { deeper: `cat ${posix.join(data, 'run', 'runtime.json')}` }] } },
     ];
-    for (const input of refusals) {
-        const judged = judge('mcp__s__run', input, scope);
-        assert.equal(judged.verdict, 'deny', JSON.stringify(input));
-        assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
-    }
+    const verbs: Record<string, unknown>[] = [
+        { query: 'jason approval approve x' },
+        { nested: { list: ['fine', { deeper: 'jason decision answer y --option a' }] } },
+        { query: 'jason approv\\al approve x' },
+        { call: 'system.shutdown' },
+    ];
+    for (const input of [...kinds, ...verbs]) assert.equal(judge('mcp__s__run', input, scope).verdict, 'deny', JSON.stringify(input));
+    for (const input of kinds) assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
+    for (const input of verbs) assert.deepEqual(fullAccessJudgement('mcp__s__run', input, scope), runs, JSON.stringify(input));
     assert.equal(judge('mcp__s__run', { query: 'jason approval list' }, scope).verdict, 'ask', 'a verb that is no person\'s act stays a card');
     assert.equal(judge('mcp__s__run', { path: posix.join(chat, 'notes.md') }, scope).verdict, 'ask', 'the chat folder is not the data');
 });
@@ -78,19 +78,20 @@ test('an MCP tool\'s input that spreads one command over several strings is judg
     ];
     for (const input of spread) {
         assert.equal(judge('mcp__s__run', input, scope).verdict, 'deny', JSON.stringify(input));
-        assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
+        assert.deepEqual(fullAccessJudgement('mcp__s__run', input, scope), runs, `Full access leaves a verb to the host's rules and the CLI: ${JSON.stringify(input)}`);
     }
+    assert.equal(fullAccessJudgement('mcp__s__run', { argv: ['cat', posix.join(data, 'run'), 'runtime.json'] }, scope).outcome, 'refused', 'the data, joined in order');
     // Joined in order, so the words a person reads in that order are the ones judged.
     assert.equal(judge('mcp__s__run', { argv: ['jason', 'approval', 'list'] }, scope).verdict, 'ask');
     assert.equal(judge('mcp__s__run', { argv: ['approve', 'approval', 'jason'] }, scope).verdict, 'ask');
 });
 
-test('an MCP tool\'s input longer than the card shows whole is refused, never cut', () => {
+test('an MCP tool\'s input longer than the card shows whole is refused in Ask first, never cut; Full access runs it', () => {
     const long = { text: 'a'.repeat(5000) };
     const judged = judge('mcp__s__run', long, scope);
     assert.equal(judged.verdict, 'deny');
     assert.match(judged.verdict === 'deny' ? judged.message : '', /longer than the card can show whole/);
-    assert.equal(fullAccessJudgement('mcp__s__run', long, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', long, scope), runs);
     const fits = judge('mcp__s__run', { text: 'a'.repeat(3900) }, scope);
     assert.equal(fits.verdict, 'ask');
     assert.ok(fits.verdict === 'ask' && !fits.detail.endsWith('…'), 'a detail that fits is shown whole');
@@ -100,23 +101,23 @@ test('the chat\'s own permission tool stays refused to the agent', () => {
     assert.equal(judge('mcp__jason_desktop__approve', { allow: true }, scope).verdict, 'deny');
 });
 
-test('.mcp.json is refused at the chat folder\'s top and a card elsewhere, held in Full access', () => {
+test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it, a turn reading no server file of its folder', () => {
     const top = { file_path: posix.join(chat, '.mcp.json'), content: '{"mcpServers":{}}' };
     const judged = judge('Write', top, scope);
     assert.equal(judged.verdict, 'deny');
-    assert.equal(fullAccessJudgement('Write', top, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'the folder the turn runs in');
     assert.equal(judge('Bash', { command: 'echo {} > .mcp.json' }, scope).verdict, 'deny', 'a command too');
     for (const path of [posix.join(campaign, '.mcp.json'), posix.join(chat, 'sub', '.mcp.json'), posix.join(home, 'elsewhere', '.mcp.json')]) {
         const input = { file_path: path, content: '{}' };
         const card = judge('Write', input, scope);
         assert.equal(card.verdict, 'ask', path);
         assert.equal(card.verdict === 'ask' ? card.remember : 'x', null, path);
-        assert.deepEqual(fullAccessJudgement('Write', input, scope), held, path);
+        assert.deepEqual(fullAccessJudgement('Write', input, scope), runs, path);
     }
     assert.ok(chatRules('linux', chat).includes(`Edit(/${posix.join(chat, '.mcp.json')})`));
 });
 
-test('.claude.json is a card each time wherever it lies, held in Full access', () => {
+test('.claude.json is a card each time wherever it lies, and runs in Full access', () => {
     for (const path of [posix.join(home, '.claude.json'), posix.join(chat, '.claude.json'), posix.join(campaign, '.claude.json')]) {
         for (const [tool, input] of [
             ['Write', { file_path: path, content: '{}' }],
@@ -125,13 +126,13 @@ test('.claude.json is a card each time wherever it lies, held in Full access', (
             const card = judge(tool, input, scope);
             assert.equal(card.verdict, 'ask', `${tool} ${path}`);
             assert.equal(card.verdict === 'ask' ? card.remember : 'x', null);
-            assert.deepEqual(fullAccessJudgement(tool, input, scope), held, `${tool} ${path}`);
+            assert.deepEqual(fullAccessJudgement(tool, input, scope), runs, `${tool} ${path}`);
         }
     }
     assert.equal(judge('Read', { file_path: posix.join(chat, '.claude.json') }, scope).verdict, 'allow', 'a read in a working folder is not a write');
 });
 
-test('claude mcp and codex mcp are a card each time, never "always", and held in Full access', () => {
+test('claude mcp and codex mcp are a card each time, never "always", and run in Full access', () => {
     for (const command of [
         'claude mcp add crm -- node crm.js',
         'claude mcp list',
@@ -142,9 +143,7 @@ test('claude mcp and codex mcp are a card each time, never "always", and held in
         'claude m\\cp add crm -- node crm.js',
     ]) {
         assert.deepEqual(judge('Bash', { command }, scope), { verdict: 'ask', title: serversTitle, detail: command, remember: null }, command);
-        // A shell command's hold also says why (`reason`); what it is, held with the held sentence, is what matters here.
-        const full = fullAccessJudgement('Bash', { command }, scope);
-        assert.deepEqual({ outcome: full.outcome, message: full.outcome === 'runs' ? '' : full.message }, held, command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
     const plain = judge('Bash', { command: 'claude --version' }, scope);
     assert.equal(plain.verdict === 'ask' ? plain.title : '', 'Run a command', 'another word of claude is a command like any');
@@ -172,7 +171,7 @@ test('every Claude Code turn at or above the version that knows it carries --no-
 
 test('every Claude Code turn\'s settings turn the claude.ai connectors off and deny the browser\'s server, in each mode', () => {
     const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
-    for (const settings of [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), fullAccessSettings('http://127.0.0.1:4100/hook', 'the-secret')]) {
+    for (const settings of [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), ...(['full_access', 'ask_first', 'auto_edit'] as const).map((mode) => hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'))]) {
         assert.equal(settings.disableClaudeAiConnectors, defences.disableClaudeAiConnectors);
         assert.deepEqual(settings.deniedMcpServers, defences.deniedMcpServers);
     }

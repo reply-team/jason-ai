@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type ChatMode } from './chat-modes.ts';
+import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type BypassWhy, type ChatMode } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -269,6 +269,11 @@ export interface SetupDeps {
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
+    /**
+     * Why Claude Code's bypass, which Full access runs in, is not available here, as the chat knows it
+     * (`Chat.bypassUnavailable`); absent, nothing is known, and a turn finds it.
+     */
+    bypass?(): BypassWhy | null;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**
@@ -507,7 +512,8 @@ export class Setup {
      * Claude Code's version as the last listing of the hosts read it, from which the page drew the mode a turn runs in
      * (`runs`): null when it could not be read, undefined before a listing read it or when Claude Code was not found. A turn
      * holds the version it reads itself to it (`Chat.send`), and asks the page to read the hosts again when the two differ
-     * across the floor of Full access.
+     * across the floor of Full access. The window and a browser tab are handed the one version, so a listing whose version
+     * stands across that floor from the last listing's asks every page to read the hosts again itself.
      */
     handedClaudeVersion(): string | null | undefined {
         return this.#handedClaude;
@@ -517,7 +523,11 @@ export class Setup {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
+        const before = this.#handedClaude;
         this.#handedClaude = claude === null ? undefined : claude.version;
+        // A page may have drawn its turns from the last listing, which another page asked for: across the floor of Full
+        // access, every page is asked to draw them again.
+        if (before !== undefined && claude !== null && (fullAccessSentence(before) === null) !== (claude.fullAccess === null)) this.#changed();
         const kept = this.#deps.models?.lists() ?? new Map();
         const offered = (id: string, label: string) => {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
@@ -526,6 +536,7 @@ export class Setup {
         // Codex has Full access with no floor; Claude Code has it from its floor of Full access. A Claude Code not found offers
         // nothing yet. While this version does not offer it, every host that drives the chat says so.
         const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
+        const bypass = this.#deps.bypass?.() ?? null;
         const fullAccessOn = (program: string, drives: boolean) =>
             !drives
                 ? null
@@ -543,7 +554,7 @@ export class Setup {
                 const out: TurnSteps = {};
                 if (!drives) return out;
                 for (const recorded of chatModes) {
-                    const turn = turnMode(recorded, program, { fromTab, offered: offeredHere, claudeVersion: program === 'claude' ? claude?.version : undefined });
+                    const turn = turnMode(recorded, program, { fromTab, offered: offeredHere, claudeVersion: program === 'claude' ? claude?.version : undefined, bypass });
                     if (turn.why !== null) out[recorded] = { mode: turn.mode, why: turn.why.text };
                 }
                 return out;

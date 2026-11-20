@@ -218,8 +218,9 @@ them on.
 - `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder, where every turn of it runs, in every
   mode. It is made at the conversation's first turn, and before each turn the desktop places in it the skills and the
   instructions the shared folder below holds. When you remove the conversation, its folder moves to
-  `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed; one a terminal still holds stays where
-  it is until a later start of the desktop moves it, and on macOS and Linux a terminal open in it follows it there.
+  `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed. On Windows, a program that has it open
+  keeps it where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows
+  it there.
 - `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier version of the desktop
   made still run. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
@@ -357,8 +358,8 @@ use and runs `jason session open --setup`, with `--host` naming the program in u
 preference; where either cannot be read, or no program is in use, it runs the command with no host, which opens the
 preference's host, else Claude Code. Only where the host it ran the command for is not installed, or the preference
 cannot be read or names no host this jason knows, does it run the command once more with a host the desktop finds that
-was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
-changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
+was not tried, Claude Code, else Codex. It is never the default, and the chat, whose check refuses a command that
+names the data directory where Jason's roles, plugins and settings are, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
@@ -733,9 +734,10 @@ says before a start how many people the agent holds and how its messages go; it 
 becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
 turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
 conversation's record from this computer after one question, saying that the agent stays as it is and, for a
-conversation with a folder of its own, that the folder is kept seven days and where, that one a terminal holds stays where
-it is until a later start moves it, and that on macOS and Linux a terminal open in it follows it there; the host keeps its
-own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
+conversation with a folder of its own, that the folder is kept seven days and where, that on Windows a program that has
+it open keeps it where it is until a later start of Jason Desktop moves it, and that on macOS and Linux a terminal open in
+it follows it there; the host keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**,
+**Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
@@ -857,8 +859,9 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 
 Each chat has an access mode, chosen from a menu beside the composer. The line under the composer and the menu's check
 say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
-a Claude Code too old for it, in a browser tab or while Full access is not offered, an Auto-edit chat on Codex), when
-they say Ask first, with the reason under the composer, and the chat keeps its mode. Choosing Ask first
+a Claude Code older than 2.1.322, in a browser tab, while Full access is not offered or where Claude Code's bypass mode
+is not available, an Auto-edit chat on Codex), when they say Ask first, with the reason under the composer, and the
+chat keeps its mode. Choosing Ask first
 there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
 of every new chat. **Ask first** is the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
@@ -901,18 +904,25 @@ first, unless it is in Plan only, and says once why: an earlier version keeps no
 Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access, which asks for no confirmation. On Codex, Full access is no sandbox and nothing of what
-follows, as above. In Full access on Claude Code the AI runs commands and changes files on this computer without
-asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
-access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. One line under its
-title says why it asks, for example what in the command Jason could not read plainly, what it would run or change, a
-tool of one of your own MCP servers, a tool Jason does not know, or that Claude Code asked about it itself; a page older
-than the desktop draws the card without a line it has no words for. A held card offers no
-"Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
-every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
-refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
-not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
-configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat whose next
-turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
+follows, as above. In Full access on Claude Code, Claude Code runs in its own bypass mode, as it would in a terminal
+started that way: the AI runs commands and changes files on this computer without asking, with the PowerShell tool
+among its tools. Jason's check before each tool use refuses three kinds, with no card, each by a
+sentence that names the `jason` command that does what was asked: a tool use or a command that names the
+installation's settings files or its run file; one that names its data directory outside the conversation's own
+folder, and in a demo run your own installation; and one that names what Jason itself sets for the turn: its variables
+and its permission tool, that is `JASON_CONFINED`, `JASON_CHAT_TURN` and `JASON_ATTEMPT_ID`, with where the shell finds
+a program (`PATH`, `PATHEXT`), and the tool that answers the chat's own permission requests, which only you answer. On
+Windows a path that names this computer as another computer would, `\\localhost\C$\` say, is read as the drive it
+leads to, and one in a device's or a volume's namespace is refused as the data directory is. The check reads what a
+command names, not what it builds while it runs: a command that reaches one of them by a pattern (`~/.jas*`), a
+variable, `cd "$HOME"` and then a relative path, or `~user` runs. The turn's folder is its own, the chat's instructions
+and agent folders in it included: before the next turn Jason writes its instructions there afresh and leaves its agent
+folders holding only what Jason placed, in a conversation's own folder and in the shared folder of a conversation an
+earlier version made alike. What Claude Code still asks about in its bypass mode is a card titled "Full access asks
+about this one", which waits thirty minutes and then is not run, and the turn goes on; one line under its title says
+that Claude Code asked about it itself, and "Allow for this chat" works on it as in Ask first. Jason does not read a
+program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
+can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
 Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
 here follows its campaign's send mode; the AI approves when you tell it to." None of your own MCP servers or connectors
 reaches a turn. A folder an earlier version gave a chat in Full access is moved aside when Jason starts; the chat says
@@ -920,14 +930,37 @@ where it is, with an Open folder button, and Jason removes it after seven days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
 until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once and
-keeps its mode: a turn on a Claude Code too old for it, sent from a browser tab, or sent while Full access is not
-offered. A turn on Codex runs in Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the composer drawn
-again. A tool that ran without Jason having seen it ends the turn and puts the chat in Ask first, a turn you stopped too;
-a mode narrower than Ask first that you chose meanwhile stays.
+keeps its mode: a turn on a Claude Code older than 2.1.322, sent from a browser tab, or sent while Full access is not
+offered. A turn on Codex runs in Full access with no sandbox. Once you update Claude Code, the next turn runs in Full
+access, says so once and has the composer drawn again. Where Claude Code's bypass mode is not available, that turn and
+every later turn on Claude Code run in Ask first until Jason Desktop starts again, the chat keeping Full access on its
+record, and the chat says why once: "Full access is not
+available here until Jason Desktop starts again", with the cause after it, where a setting of yours or an
+administrator's turns the mode off, Claude Code refuses it in its restricted mode or under a policy, or a tool ran that
+Jason's check never saw, a policy having filtered the check out, which also stops the turn it ran in; and "Full access
+is not available here" where Jason Desktop runs as root or under sudo. A turn whose mode a setting turned off is
+stopped at its first line and started again in Ask first, as Ask first's own turn is. A turn you stopped ends with no
+word of a mode.
+
+From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
+rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused
+before it runs; where a policy has filtered the check out, the turn runs on and the chat says so once. On an older
+Claude Code no check rides a turn in Ask first or Auto-edit, so Claude Code is given no allow rule for a `jason` verb
+that reads a request's content from a file or from standard input, and the desktop's permission tool answers it
+instead: fed a settings file by a redirection, it is refused; written plainly, one command whose content comes from
+nothing, a here-document or one file in the folders the turn works in, it runs with no card, as the rule would have run
+it; anything else is a card. A turn in Plan only carries
+no check of its own: no verb on its list takes a request on standard input, every other command is refused there
+already, and where a command's output is sent meets Claude Code's own rules for the data directory, which every mode
+carries. That those rules hold where a redirection reads or writes, in Plan only and on an older Claude Code for a
+command an allow rule runs with no card, is documented by Claude Code's maker
+([permissions](https://code.claude.com/docs/en/permissions), read 2026-11-20); we have not observed it ourselves.
 
 ### What runs without asking, what is refused, what is a card
 
-Claude Code turns are held by two lines, the host's own rules and the desktop's permission tool.
+Claude Code turns are held by the host's own rules and the desktop's permission tool, and in every mode but Plan only by
+the check before each tool use in front of both (above). The list is Ask first's and Auto-edit's; where Plan only or Full
+access differs, it says so.
 
 - **Runs without asking.** The skills, web search (Codex searches an index its vendor keeps, never the live web),
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
@@ -938,8 +971,11 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
   `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
   the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
-  the command with no card, and the act is recorded under the actor the command names. The chat's instructions name the
-  nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option.
+  the command with no card, and the act is recorded under the actor the command names. On a Claude Code older than
+  2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
+  standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
+  written plainly with no card, as the rule would (above). The chat's instructions name
+  the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
@@ -954,14 +990,17 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   approval, a standing approval, another preference, a campaign's send mode, is one of them. Pausing an agent, adding
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
   a verdict on a reply is a card in Ask first and Auto-edit and runs in Full access: a verdict of yours can lift the lock
-  an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused: any `reply` command
-  but the two above, any read or write under the data directory outside the turn's folder (the settings file, the run
-  file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
-  names that directory, a command that names `JASON_CONFINED` or `JASON_CHAT_TURN`, Jason's own variables, which Jason
-  alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never
-  a role's run), a command that changes where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a
-  card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents` and
-  `.codex` folders of the turn's folder and to its `.mcp.json`.
+  an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused:
+  a read or a write that names a path under the data directory outside the turn's folder (the settings file, the run file
+  and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that names that directory,
+  and what Jason itself sets for the turn, its variables and its permission tool: a command that names `JASON_CONFINED`
+  or `JASON_CHAT_TURN`, which Jason alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never a role's run),
+  a command that changes where the shell finds a program (`PATH`, `PATHEXT`), and a use of the tool that answers the
+  chat's own permission requests, which only you answer; a command an allow rule would run with no card among them from
+  Claude Code 2.1.322 on. In every mode but Full access, refused as well: any `reply` command but the two above, a command too long
+  for a card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents`
+  and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
+  puts its own files back before the next turn.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the turn's
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
@@ -972,7 +1011,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
   whose texts would be refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`, the data directory). Full access
-  does not run it. "Allow for this chat" is never offered for it.
+  runs it, and refuses one whose input names what Full access refuses. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
   pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
@@ -985,8 +1024,9 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   interpreter or a package runner (`python`, `node`, `npm`, `make` and the like), a program named by a path, or a command
   with a word the shell would rewrite. A remembered grant never allows what the model
   refuses.
-- **PowerShell and Monitor are removed** from the chat's turns, so the one shell a turn has is the fenced one. On Windows
-  that shell is Git Bash, which Claude Code needs there.
+- **Monitor is removed** from every turn, and **PowerShell** from every turn but Full access's, so the one shell a turn
+  has outside Full access is the fenced one; in Full access Jason's check reads a PowerShell command as it reads a Bash
+  one. On Windows that shell is Git Bash, which Claude Code needs there.
 - **The agent runs nothing in the background**: every command it starts finishes inside the turn, and it is told to say
   what to click in Jason rather than tell you to run a command.
 

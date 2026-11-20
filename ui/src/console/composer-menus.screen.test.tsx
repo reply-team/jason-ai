@@ -348,7 +348,7 @@ describe('the line under a composer', () => {
         const form = screen.getByRole('form', { name: 'Message' });
         const line = () => form.querySelector(':scope > .under .accline');
         expect(line()?.textContent).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
         expect(form.querySelector('.composer .under')).toBeNull();
         chooseIn('Access mode', 'mode', 'ask_first');

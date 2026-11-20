@@ -6,7 +6,8 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fullAccessSettings } from './chat-hosts.ts';
+import { hookedSettings } from './chat-hosts.ts';
+import type { ChatMode } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 const turnIdShape = /^[0-9a-f]{24}$/;
@@ -56,20 +57,28 @@ export function turnSettingsPath(turns: string, turnId: string): string {
 }
 
 /**
- * Writes the settings of a turn in Full access (`fullAccessSettings`) beside its MCP configuration, the same way: readable
+ * Writes the settings of a turn the hook rides, in its mode (`hookedSettings`), beside its MCP configuration, the same way: readable
  * by this user alone, never over a file already there.
  */
-export function writeTurnSettings(turns: string, turnId: string, hookUrl: string, secret: string): string {
+export function writeTurnSettings(turns: string, turnId: string, hookUrl: string, secret: string, mode: Exclude<ChatMode, 'plan_only'> = 'full_access'): string {
     const file = turnSettingsPath(turns, turnId);
     mkdirSync(turns, { recursive: true, mode: 0o700 });
-    writeFileSync(file, `${JSON.stringify(fullAccessSettings(hookUrl, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    writeFileSync(file, `${JSON.stringify(hookedSettings(mode, hookUrl, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     return file;
 }
 
 /** Removes the turn's files: its MCP configuration, and its settings when it had them. */
 export function removeTurnFiles(turns: string, turnId: string): void {
-    rmSync(turnConfigPath(turns, turnId), { force: true });
-    rmSync(turnSettingsPath(turns, turnId), { force: true });
+    // Each is removed whatever became of the other; one that cannot be is left for the next start to remove.
+    const failures: unknown[] = [];
+    for (const file of [turnConfigPath(turns, turnId), turnSettingsPath(turns, turnId)]) {
+        try {
+            rmSync(file, { force: true });
+        } catch (error) {
+            failures.push(error);
+        }
+    }
+    if (failures.length > 0) throw failures[0];
 }
 
 const turnFileShape = /^turn-[0-9a-f]{24}\.(mcp|settings)\.json$/;

@@ -187,6 +187,27 @@ export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
 }
 
 /**
+ * The verbs of the CLI that read a request's content from a file or from standard input, by an option its one reader of
+ * such content serves (`--file`, `--value-file`, `--note-file`, `--result-file`). Below the floor of Full access no hook
+ * rides an Ask first or Auto-edit turn to read where such content comes from, so the host is given no allow rule for a
+ * form of one of these verbs (`withoutRequestFiles`): each reaches the permission tool, which refuses a redirect from
+ * the installation's own data and runs a plain form with no card, as the host's rule would (`plainForm`), so it costs no
+ * card the rule did not. Held to the CLI's command tree by DesktopDenyListTests, so a verb that
+ * gains such an option is red there until it is named here.
+ */
+export const requestFileVerbs: readonly string[] = [
+    'campaign add-contacts', 'campaign archive', 'campaign create', 'campaign pause', 'campaign remove-contacts', 'campaign start', 'campaign update',
+    'campaign update-context', 'contact archive', 'contact create', 'contact update', 'journal append', 'preference set', 'profile create',
+    'profile update', 'project create', 'project update', 'report submit', 'role add', 'rolenote set', 'workitem cancel', 'workitem complete',
+    'workitem create', 'workitem resume', 'workitem set-result', 'workitem update',
+];
+
+/** The forms whose verb reads no request's content (`requestFileVerbs`): a form is a verb, or a verb and its key. */
+export function withoutRequestFiles(forms: readonly string[]): string[] {
+    return forms.filter((form) => !requestFileVerbs.some((verb) => form === verb || form.startsWith(`${verb} `)));
+}
+
+/**
  * The host's allow rules for the allow list: each verb and whatever follows it. A jason command none of them begins, an
  * option before the verb or a doubled space say, is not allowed by the host and goes to the permission tool.
  */

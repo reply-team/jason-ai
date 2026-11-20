@@ -10,7 +10,9 @@ import { heldByWhatRuns, readLiteral } from '../src/chat-literal.ts';
 import { realPathOf, textLimit, textOf } from '../src/chat-real-path.ts';
 
 // In a demo run the desktop runs on `~/.jason-demo` and the person's own installation is `~/.jason` with its harness root
-// `~/Jason`: the chat refuses both whole, in every mode, Full access included.
+// `~/Jason`: the chat refuses both whole, in every mode, Full access included, where it reads them. Full access is Claude
+// Code's own bypass: its hook reads a file tool's path, a command's text and its literal words, and a written file's text,
+// and leaves what it does not refuse to Claude Code.
 
 const denied = ['approval approve', 'runtime'];
 const deniedOperations = ['approval.approve'];
@@ -191,7 +193,7 @@ test('a command naming a folder that holds a person\'s directory is a card no "a
     assert.equal(demo.verdict, 'ask');
     assert.equal(demo.verdict === 'ask' ? demo.remember : 'not a card', null);
     assert.equal(judge('Grep', { pattern: 'key', path: '/Users/someone/Documents' }, demoMac(root)).verdict, 'deny');
-    assert.equal(fullAccessJudgement('Bash', { command: 'ls /Users/someone/Documents' }, demoMac(root)).outcome, 'held');
+    assert.equal(fullAccessJudgement('Bash', { command: 'ls /Users/someone/Documents' }, demoMac(root)).outcome, 'runs');
     const live = judge('Bash', { command: 'ls /Users/someone/Documents' }, liveMac(root));
     assert.equal(live.verdict, 'ask');
     assert.notEqual(live.verdict === 'ask' ? live.remember : null, null);
@@ -281,7 +283,16 @@ function broker(scope: ChatScope): PermissionBroker {
     return made_;
 }
 
-for (const mode of modes) {
+/** The modes Jason's own judgement decides every request in; in Full access the hook refuses the three kinds alone. */
+const judgedModes = modes.filter((mode) => mode !== 'full_access');
+
+/** Why the literal reading holds a command: its grammar's reason, or what the command runs; null when it holds nothing. */
+function readingHolds(tool: string, command: string, scope: ChatScope): string | null {
+    const reading = readLiteral(tool, command, { platform: scope.platform, home: null });
+    return reading.held ? reading.reason : heldByWhatRuns(reading.commands);
+}
+
+for (const mode of judgedModes) {
     test(`${mode}: a path that names a host, whatever the host, is never read or walked, in a demo run and in the person's own installation`, async () => {
         for (const scope of [demoWindows(), liveWindows()]) {
             for (const path of [
@@ -307,7 +318,10 @@ for (const mode of modes) {
         }
     });
 
-    test(`${mode}: a command that hands a file or a command to the system's opener or scheduler is never run unasked, nor covered by "always"`, async () => {
+}
+
+for (const mode of modes) {
+    test(`${mode}: a command that hands a file or a command to the system's opener or scheduler is a card no "always" covers, or refused; Full access runs it`, async () => {
         const launches: [ChatScope, string[]][] = [
             [demoWindows(), ['explorer.exe s.bat', 'start s.bat', 'pcalua -a s.bat', 'wt s.bat', 'schtasks /run /tn x', 'msiexec /i s.msi']],
             [liveWindows(), ['explorer s.bat']],
@@ -316,17 +330,7 @@ for (const mode of modes) {
             [linuxOf(demoMac()), ['xdg-open s.desktop', 'gio launch s.desktop', 'gtk-launch s', 'systemd-run --user ./s.sh', 'kde-open s.desktop', 'dbus-send --session --dest=x /x x.y']],
         ];
         for (const [scope, commands] of launches) {
-            for (const command of commands) {
-                const said = `${mode} ${scope.platform} ${command}`;
-                const got = await outcome(mode, scope, 'Bash', { command });
-                // Refused where Ask first refuses (Plan only refuses every command), and otherwise a card no "always" covers.
-                if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, `${said}: ${JSON.stringify(got)}`);
-                else assert.deepEqual(got, { card: null }, said);
-                if (mode === 'full_access') {
-                    assert.equal(broker(scope).hook('turn_1', 'Bash', { command }, null).decision, 'ask', said);
-                    assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'held', said);
-                }
-            }
+            for (const command of commands) await heldOrCarded(mode, scope, 'Bash', command);
         }
     });
 
@@ -377,6 +381,9 @@ for (const mode of modes) {
         await refusedIn(mode, demoWindows(), 'Bash', { command: 'cd /c/Users/someone && cat Jason/Northwind/AGENTS.md' }, persons);
     });
 
+}
+
+for (const mode of judgedModes) {
     test(`${mode}: where the reader cannot see the path, a command that could reach a fenced folder is never run unasked, nor covered by "always"`, async () => {
         // A variable joined at run time, another person's ~, a home built from two variables, a change to a folder named by
         // a variable: the text does not say where they lead.
@@ -391,7 +398,6 @@ for (const mode of modes) {
             const got = await outcome(mode, scope, 'Bash', { command });
             if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, said);
             else assert.ok(typeof got === 'object' && ('refused' in got || got.card === null), `${said}: ${JSON.stringify(got)}`);
-            if (mode === 'full_access') assert.notEqual(fullAccessJudgement('Bash', { command }, scope).outcome, 'runs', said);
         }
     });
 }
@@ -401,21 +407,23 @@ for (const mode of modes) {
 const deviceSentence = /device or a volume/;
 const launchSentence = /opener, launcher, session or scheduler/;
 
-/** Refused where Ask first refuses, and otherwise a card no "always" covers; in Full access held by its hook and its reading. */
+/**
+ * Refused where Ask first refuses, and otherwise a card no "always" covers. In Full access the hook answers nothing and the
+ * command runs, a card being Claude Code's to ask for; the literal reading still holds it, by its reason where one is named.
+ */
 async function heldOrCarded(mode: ChatMode, scope: ChatScope, tool: string, command: string, reason?: string): Promise<void> {
     const said = `${mode} ${scope.platform} ${command}`;
     const got = await outcome(mode, scope, tool, { command });
     if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, `${said}: ${JSON.stringify(got)}`);
     else assert.deepEqual(got, { card: null }, said);
     if (mode === 'full_access') {
-        assert.equal(broker(scope).hook('turn_1', tool, { command }, null).decision, 'ask', said);
-        const judged = fullAccessJudgement(tool, { command }, scope);
-        assert.equal(judged.outcome, 'held', said);
-        if (reason !== undefined) assert.equal(judged.outcome === 'held' ? judged.reason : undefined, reason, said);
+        assert.equal(broker(scope).hook('turn_1', tool, { command }, null).decision, 'none', said);
+        assert.deepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'runs' }, said);
+        if (reason !== undefined) assert.equal(readingHolds(tool, command, scope), reason, said);
     }
 }
 
-for (const mode of modes) {
+for (const mode of judgedModes) {
     test(`${mode}: a path in a Windows device's or volume's namespace is never read or written by a command or a file tool, in a demo run and in the person's own installation`, async () => {
         for (const scope of [demoWindows(), liveWindows()]) {
             for (const command of [
@@ -436,7 +444,9 @@ for (const mode of modes) {
         await refusedIn(mode, demoWindows(), 'Bash', { command: "cat '\\\\?\\C:\\Users\\someone\\Jason\\Northwind\\AGENTS.md'" }, persons);
         await refusedIn(mode, liveWindows(), 'Bash', { command: "cat '\\\\.\\C:\\Users\\someone\\.jason\\run\\runtime.json'" }, ownData);
     });
+}
 
+for (const mode of modes) {
     test(`${mode}: a link's target is read from the folder the link is made in, and refused where that is fenced`, async () => {
         for (const scope of [demoMac(), linuxOf(demoMac()), demoWindows()]) {
             for (const command of [
@@ -458,7 +468,7 @@ for (const mode of modes) {
         }
     });
 
-    test(`${mode}: a command that makes a link, wherever it points, or walks a tree following links, is never run unasked`, async () => {
+    test(`${mode}: a command that makes a link, wherever it points, or walks a tree following links, is a card, or refused; Full access runs it`, async () => {
         for (const scope of [demoMac(), liveMac(), linuxOf(demoMac())]) {
             for (const command of ['ln -s /tmp/elsewhere l', 'ln notes.md hard.md', 'cp -s notes.md l.md', 'link notes.md hard.md', 'mount --bind /tmp/x a']) {
                 await heldOrCarded(mode, scope, 'Bash', command, 'link');
@@ -489,20 +499,20 @@ for (const mode of modes) {
                 'zip -r out.zip a',
                 'diff -r a b',
             ]) {
-                const judged = fullAccessJudgement('Bash', { command }, scope);
-                assert.deepEqual(judged.outcome === 'held' ? judged.reason : judged, 'link', `${scope.platform} ${command}`);
+                assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform} ${command}`);
+                assert.equal(readingHolds('Bash', command, scope), 'link', `${scope.platform} ${command}`);
             }
             for (const command of ['grep -r secret .', 'zip -ry out.zip a', 'tar -cf out.tar a', 'cp -r a b', 'diff -r --no-dereference a b', 'ls -l a']) {
                 assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform} ${command}`);
+                assert.equal(readingHolds('Bash', command, scope), null, `${scope.platform} ${command}`);
             }
         }
         for (const command of ['robocopy a b /E', 'xcopy a b /S', 'findstr /S secret *.md', 'where /R . notes.md']) {
-            const judged = fullAccessJudgement('Bash', { command }, demoWindows());
-            assert.notEqual(judged.outcome, 'runs', command);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, demoWindows()), { outcome: 'runs' }, command);
         }
     });
 
-    test(`${mode}: a program that hands a command to a process already running is never run unasked, nor covered by "always"`, async () => {
+    test(`${mode}: a program that hands a command to a process already running is a card no "always" covers, or refused; Full access runs it`, async () => {
         for (const [scope, commands] of [
             [demoWindows(), ['bitsadmin /SetNotifyCmdLine job s.bat NUL', 'nircmd exec show s.bat', 'gsudo s.bat']],
             [liveWindows(), ['bitsadmin /SetNotifyCmdLine job s.bat NUL']],
@@ -515,7 +525,7 @@ for (const mode of modes) {
     });
 }
 
-test('full_access: a script the chat writes that starts a launcher, or hands a command to a running process, is refused, from the one list', async () => {
+test('full_access: a script the chat writes runs whatever launcher it starts or running process it hands a command to, read for the three kinds alone', async () => {
     for (const scope of [demoMac(), liveMac(), demoWindows(), liveWindows()]) {
         const at = (name: string) => `${scope.chat}${scope.platform === 'win32' ? '\\' : '/'}${name}`;
         for (const [tool, input] of [
@@ -533,16 +543,15 @@ test('full_access: a script the chat writes that starts a launcher, or hands a c
             ['Edit', { file_path: at('s.sh'), old_string: 'a', new_string: 'X=1 schtasks /run /tn x' }],
             ['MultiEdit', { file_path: at('s.ps1'), edits: [{ old_string: 'a', new_string: '& "C:\\Windows\\explorer.exe" s.bat' }] }],
             ['NotebookEdit', { notebook_path: at('n.ipynb'), new_source: 'print(1)\n!xdg-open s.desktop' }],
-        ] as const) {
-            await refusedIn('full_access', scope, tool, input, launchSentence);
-        }
-        // Prose and a script whose words only name a launcher are written: the names are words too.
-        for (const [tool, input] of [
+            ['Write', { file_path: at('s.sh'), content: "ex''plorer.exe s.bat\n" }],
+            ['Write', { file_path: at('s.sh'), content: 'e\\xplorer.exe s.bat\n' }],
+            ['Write', { file_path: at('s.sh'), content: 'o"pe"n s.command\n' }],
+            ['Write', { file_path: at('s.ps1'), content: '& C:\\Windows\\explorer.exe s.bat\n' }],
             ['Write', { file_path: at('notes.md'), content: 'Open questions\nstart here\nat noon, see the list\n' }],
-            ['Write', { file_path: at('s.sh'), content: 'npm start\ngit commit -m "open the door"\necho start\n' }],
             ['Write', { file_path: at('package.json'), content: '{"scripts":{"start":"node index.js","dev":"npm start"}}' }],
         ] as const) {
             assert.deepEqual(fullAccessJudgement(tool, input, scope), { outcome: 'runs' }, `${scope.platform} ${JSON.stringify(input)}`);
+            assert.equal(broker(scope).hook('turn_1', tool, input, null).decision, 'none', `${scope.platform} ${JSON.stringify(input)}`);
         }
     }
 });
@@ -588,29 +597,19 @@ test('full_access: a script the chat writes is read as a command from its own fo
 test('full_access: an edit is judged by the file as it would read after it, where a replacement completes a word the file begins', () => {
     const files = new Map<string, string>();
     const reading = (scope: ChatScope): ChatScope => ({ ...scope, text: (path) => files.get(path) ?? null });
-    for (const scope of [reading(demoMac()), reading(liveMac()), reading(demoWindows())]) {
+    for (const [scope, sentence] of [[reading(demoMac()), persons], [reading(liveMac()), ownData], [reading(demoWindows()), persons]] as const) {
         files.clear();
         files.set(inChat(scope, 's.sh'), 'exXYZ s.bat\n');
-        files.set(inChat(scope, 'run.sh'), 'jason ruXYZ\n');
         files.set(inChat(scope, 'notes.md'), 'see ~/.jaXYZ\n');
-        writeRefused(scope, 'Edit', { file_path: inChat(scope, 's.sh'), old_string: 'XYZ', new_string: 'plorer.exe' }, launchSentence);
-        writeRefused(scope, 'MultiEdit', { file_path: inChat(scope, 's.sh'), edits: [{ old_string: 'XYZ', new_string: 'plorer.exe' }] }, launchSentence);
-        writeRefused(scope, 'Edit', { file_path: inChat(scope, 'run.sh'), old_string: 'XYZ', new_string: 'ntime stop' }, /never writes it/);
-        writeRefused(scope, 'Edit', { file_path: inChat(scope, 'notes.md'), old_string: 'XYZ', new_string: 'son/run/runtime.json' }, /never writes it/);
+        writeRefused(scope, 'Edit', { file_path: inChat(scope, 'notes.md'), old_string: 'XYZ', new_string: 'son/run/runtime.json' }, sentence);
+        writeRefused(scope, 'MultiEdit', { file_path: inChat(scope, 'notes.md'), edits: [{ old_string: 'XYZ', new_string: 'son/run/runtime.json' }] }, sentence);
         // An edit whose text is not in the file changes nothing, and is judged by its replacement alone.
-        assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(scope, 's.sh'), old_string: 'absent', new_string: 'plorer.exe' }, scope), { outcome: 'runs' });
+        assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(scope, 'notes.md'), old_string: 'absent', new_string: 'son/run/runtime.json' }, scope), { outcome: 'runs' });
+        // A launcher a replacement completes runs, as the launcher itself does.
+        assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(scope, 's.sh'), old_string: 'XYZ', new_string: 'plorer.exe' }, scope), { outcome: 'runs' });
     }
     // With no way to read the file, the replacement alone is judged, as before.
-    assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(liveMac(), 's.sh'), old_string: 'XYZ', new_string: 'plorer.exe' }, liveMac()), { outcome: 'runs' });
-});
-
-test('full_access: a launcher\'s name spliced by quotes or a backslash in a written script is read as the shell reads it', () => {
-    for (const scope of [demoMac(), liveWindows()]) {
-        for (const content of ["ex''plorer.exe s.bat\n", 'e\\xplorer.exe s.bat\n', 'o"pe"n s.command\n', "nohu''p ./s.sh\n"]) {
-            writeRefused(scope, 'Write', { file_path: inChat(scope, 's.sh'), content }, launchSentence);
-        }
-        writeRefused(scope, 'Write', { file_path: inChat(scope, 's.ps1'), content: '& C:\\Windows\\explorer.exe s.bat\n' }, launchSentence);
-    }
+    assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(liveMac(), 'notes.md'), old_string: 'XYZ', new_string: 'son/run/runtime.json' }, liveMac()), { outcome: 'runs' });
 });
 
 for (const mode of modes) {
@@ -644,7 +643,7 @@ for (const mode of modes) {
         await refusedIn(mode, liveWindows(), 'PowerShell', { command: 'New-Item -ItemType:SymbolicLink -Path:a/b/c/r -Target:../../../../../run' }, ownData);
     });
 
-    test(`${mode}: an archiver or a copy that follows links while it walks is never run unasked, nor covered by "always"`, async () => {
+    test(`${mode}: an archiver or a copy that follows links while it walks is a card no "always" covers, or refused; Full access runs it`, async () => {
         for (const scope of [demoWindows(), liveMac(), linuxOf(demoMac())]) {
             for (const command of ['7z a o.7z a', '7za u o.7z a', 'scp -r a host:x', 'pax -L -w -f o.pax a', 'bsdtar -L -cf o.tar a', 'cpio -oL -F o.cpio']) {
                 await heldOrCarded(mode, scope, 'Bash', command, 'link');
@@ -665,8 +664,9 @@ test('the text an edit is judged by is the file on disk, read only when it is a 
     const root = mkdtempSync(join(tmpdir(), 'jason-text-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const script = join(root, 's.sh');
-    writeFileSync(script, 'exXYZ s.bat\n');
-    assert.equal(textOf(script), 'exXYZ s.bat\n');
+    const begun = `cat ${join(root, 'da').replace(/\\/g, '/')}XYZ/run/runtime.json\n`;
+    writeFileSync(script, begun);
+    assert.equal(textOf(script), begun);
     assert.equal(textOf(root), null);
     assert.equal(textOf(join(root, 'absent.sh')), null);
     const large = join(root, 'large.sh');
@@ -674,6 +674,7 @@ test('the text an edit is judged by is the file on disk, read only when it is a 
     assert.equal(textOf(large), null);
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
     const scope: ChatScope = { platform, cwd: root, chat: root, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
-    const judged = fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'plorer.exe' }, scope);
+    const judged = fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, scope);
     assert.equal(judged.outcome, 'refused', JSON.stringify(judged));
+    assert.deepEqual(fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, { ...scope, text: () => null }), { outcome: 'runs' }, 'the replacement alone names nothing');
 });

@@ -42,6 +42,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         { ask: { tool: 'Bash', input: { command: planted.command } } },
         { ask: { tool: 'Read', input: { file_path: planted.path } } },
         { ask: { tool: 'Bash', input: { command: 'jason --actor human:planted runtime stop' } } },
+        { ask: { tool: 'Bash', input: { command: 'echo planted $JASON_CONFINED' } } },
     ]);
     const log = fileLogger(b.paths.logs);
     const events: ChatEvent[] = [];
@@ -78,7 +79,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes('planted'), false, 'nothing planted reached the log');
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
-    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
+    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
     // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project, and asks the
     // runtime where the harness root is, for the client's memory file.
     assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get', 'runtime status']);
@@ -93,12 +94,14 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         EventName: 'chat_turn_started',
     });
     const endLine = lines.find((line) => line.EventName === 'chat_turn_ended');
-    assert.equal(endLine?.Steps, 4, 'a tool the allowed tools let through is a step and no request');
-    assert.equal(endLine?.Requests, 3);
+    assert.equal(endLine?.Steps, 5, 'a tool the allowed tools let through is a step and no request');
+    assert.equal(endLine?.Requests, 4);
     assert.equal(endLine?.Exit, 0);
+    // What the host asks about in Full access is a card the person answers, a jason command Ask first refuses among them;
+    // one of the three kinds is the model's refusal.
     assert.deepEqual(
         lines.filter((line) => line.EventName === 'chat_request_decided').map((line) => `${line.Outcome} ${line.By}`),
-        ['allowed person', 'allowed person', 'refused model'],
+        ['allowed person', 'allowed person', 'allowed person', 'refused model'],
     );
 });
 
@@ -289,6 +292,26 @@ test('a key source that stops nothing is logged by its word alone', (t) => {
         .filter((line) => line.EventName === 'chat_key_source')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
     assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
+});
+
+test('a tool the hook never saw is logged by its turn\'s mode alone: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.unchecked();
+    logged.hookFiltered('ask_first');
+    logged.hookFiltered('auto_edit');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_turn_stopped' || line.EventName === 'chat_hook_filtered')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { '@l': 'Warning', EventName: 'chat_turn_stopped', Cause: 'unchecked_tool' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit' },
+    ]);
 });
 
 test('an ask of the models Codex offers is logged by its host id and a count, or the kind of its failure, and nothing the host said', (t) => {
