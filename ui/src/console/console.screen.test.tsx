@@ -144,10 +144,11 @@ describe('the console', () => {
                 ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
             );
         });
-        // What the empty chat promises holds whatever the send mode: what is written here waits for the person.
+        // What the empty chat says in Ask first is true of it: a message follows its campaign's send mode, and the AI
+        // approves on the person's word.
         const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
         expect(hero.querySelector('p')?.textContent).toBe(
-            'Nothing written here reaches a person without your approval.',
+            'A message written here waits for your approval unless its campaign sends on its own; the AI approves for you when you tell it to.',
         );
         // What waits is a page of its own, chosen from the sidebar.
         const needs = await openNeeds();

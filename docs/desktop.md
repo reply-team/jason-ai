@@ -337,8 +337,9 @@ than shown.
 editor is not started with a changed PATH. The desktop and the command line share one data directory, the one
 `JASON_DATA_DIR` names or `~/.jason`, but a `jason` typed in an editor is whichever your PATH finds first, which may be
 another installation's or none; the sentence after an editor's open says which. Open in is the page's
-own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
-refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
+own act, through the window's one object. In a chat turn the `jason session` commands, which start a session on your
+computer, are refused in Plan only, are a card in Ask first and Auto-edit, as every command that changes the installation
+is, and run in Full access as they would in a terminal. It does not open the data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
 it, to change Jason itself.
 
@@ -868,8 +869,9 @@ every time. A deletion on a critical path and a tool Jason never saw are cards t
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
 not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
 configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat in Full
-access does not carry the line "Nothing written here reaches a person without your approval." that the empty chat draws
-in the other modes. None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
+access carries no line about approval. The empty chat draws one in the other modes, true of each: in Plan only "Nothing
+written here reaches a person without your approval."; in Ask first and Auto-edit "A message written here waits for your
+approval unless its campaign sends on its own; the AI approves for you when you tell it to." None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
@@ -898,9 +900,11 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test; outside Plan only, seven verbs of a person's word as well, which you
-  ask for in your own words: `approval approve`, `approval reject`, `approval set-standing`, `decision answer`,
-  `preference set`, `preference unset` and `campaign start`; and, for each noun with a verb on that list, its help, exactly
+  every time, held to the real tree by a test; outside Plan only, the acts of a person's word as well: `approval approve`,
+  `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
+  `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. The allow rule
+  runs them with no card, and the chat's instructions keep them to your word: the AI runs one when you said so, and it is
+  recorded under the actor the command names, yours; and, for each noun with a verb on that list, its help, exactly
   `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
   itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
@@ -911,14 +915,17 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
   `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
-  names an operation these verbs call is refused there too. In every other mode none of them is refused: the seven
-  verbs of a person's word above run with no card, and every other one is a card in Ask first and Auto-edit and runs in
-  Full access, as any `jason` command that no allowed verb begins does. Pausing an agent, adding someone to the
-  do-not-contact register, cancelling work and recording a verdict on a reply are the AI's, since each stops reaching a
-  person. In every mode, refused: any `reply` command
+  names an operation these verbs call is refused there too. In every other mode none of them is refused: the acts of a
+  person's word above run with no card, and every other one is a card in Ask first and Auto-edit and runs in Full
+  access, as any `jason` command that no allowed verb begins does: an act that would let messages go without your
+  approval, a standing approval, another preference, a campaign's send mode, is one of them. Pausing an agent, adding
+  someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person; recording
+  a verdict on a reply can let a drafted answer go under a standing approval, so outside Plan only it is a card in Ask
+  first and Auto-edit and runs in Full access. In every mode, refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
-  names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
+  names that directory, a command that names `JASON_CONFINED` or `JASON_CHAT_TURN`, Jason's own variables, which Jason
+  alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never
   a role's run), a command that changes where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a
   card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents` and
   `.codex` folders of the chat folder and to its `.mcp.json`.
@@ -931,7 +938,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
+  whose texts would be refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`, the data directory). Full access
   does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
@@ -956,8 +963,11 @@ rights, as every UI token does; there is one level of trust.
 
 Under the chat, these things differ from a terminal:
 
-- **Nothing of `jason` is confined.** No turn sets `JASON_CONFINED`, so the `jason` a turn runs refuses none of its
-  commands and reads a file an option names as it does in a terminal; what the chat runs is the mode's to say, above.
+- **A file `jason` reads comes on standard input.** Every turn sets `JASON_CHAT_TURN`, so an option of `jason` that
+  reads a file's content into a request (`--file`, `--value-file`, `--note-file`, `--result-file`) takes only `-`, the
+  content coming on standard input, and `jason status --provider-cli` runs only a bare name found on the search path. In
+  Plan only the turn sets `JASON_CONFINED` too, and the `jason` it runs refuses the verbs of the deny list before any
+  request; in the other modes what the chat runs is the mode's to say, above.
 - **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
   every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
   by value, from the commands the host runs. `reply` signed in through its own store is unaffected.

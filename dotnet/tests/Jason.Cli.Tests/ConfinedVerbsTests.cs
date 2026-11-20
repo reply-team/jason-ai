@@ -366,7 +366,11 @@ public class ConfinedVerbsTests
         Assert.Empty(run.Requests);
     }
 
-    /// <summary>Help is not a run of the verb: a refused command still shows its help, and the help states the rule.</summary>
+    /// <summary>
+    /// Help is not a run of the verb: a refused command still shows its help, and the help says what is true for every
+    /// caller: the act is the person's, an agent runs it on their word and it is recorded as theirs, and Plan only's
+    /// variable refuses it.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Entries))]
     public async Task Confined_the_help_of_a_refused_command_is_shown_and_states_the_rule(string entry)
@@ -377,10 +381,13 @@ public class ConfinedVerbsTests
 
         var exit = await CliApp.RunAsync([.. entry.Split(' '), "--help"], env, TestContext.Current.CancellationToken);
 
-        var text = output.ToString();
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
         Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("The act is the person's: an agent runs it when the person said so, and it is recorded as theirs.", text, StringComparison.Ordinal);
+        Assert.Contains("Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request.", text, StringComparison.Ordinal);
         Assert.Contains("A higher bar, not a boundary", text, StringComparison.Ordinal);
-        Assert.Contains("JASON_CONFINED", text, StringComparison.Ordinal);
         Assert.Contains("a claim, not a proof", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not for an agent", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Jason's window", text, StringComparison.Ordinal);
     }
 }

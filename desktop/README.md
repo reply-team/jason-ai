@@ -382,13 +382,14 @@ applies to the turns a person starts by sending, from the next one on.
   folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
 - **A denied verb in any letter case is refused, in Plan only.** Outside Plan only no verb of the deny list is refused
-  (`modeFence`): the seven verbs of a person's word (`personsWordVerbs`) are allowed as the allow list's verbs are, and
-  every other one is the mode's card. In Plan only `jason Campaign Set-Send-Mode` is refused as
+  (`modeFence`): the acts of a person's word (`personsWordForms`: five verbs, and `preference set` and `unset` of two
+  keys, `sender.identity` and `tone_of_voice`, each a host rule of its own) are allowed as the allow list's verbs are,
+  `reply record` (`cardedVerbs`) leaves the allow list, and every other one is the mode's card. In Plan only `jason Campaign Set-Send-Mode` is refused as
   `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
   sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
   its lower-case spelling already was.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands and the operations by
-  their dots (in Plan only, the one mode that refuses them), the confining variable, the attempt's variable and the data directory's names are looked for a second time over a normalised text:
+  their dots (in Plan only, the one mode that refuses them), Jason's own variables, the attempt's variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
   `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused in Plan only as their plain spelling
   is, and a re-spelled variable or data directory in every mode, the content of a file being written in Full access
@@ -397,8 +398,9 @@ applies to the turns a person starts by sending, from the next one on.
   64 expansions is refused, never judged on the first ones), and reads `\n`, `\t` and `\r` in a string as the space they print.
   What the plain spelling would not refuse stays a card in Ask first. An
   `env` that clears the environment (`-i`, `-`, `-u`, `--unset`) or `exec -c`, in a command part that runs a jason,
-  clears the confining variable without naming it, and is refused in every mode; an `env` elsewhere in a command list
-  is not.
+  clears Jason's own variables without naming them, and Jason alone sets those: a jason started without the chat's
+  environment may act on another installation than the one this window shows, so it is refused in every mode; an `env`
+  elsewhere in a command list is not.
 - **The chat's own names, by every route.** The chat's instructions, its `.claude`, `.agents` and `.codex` folders and its
   `.mcp.json` directly in the chat folder are refused in every mode to a shell command as to the file tools, and the
   host is denied edits of them (`chatRules`).
@@ -413,7 +415,7 @@ applies to the turns a person starts by sending, from the next one on.
   the card is "Use one of your own tools", its detail the server and the tool, then the input exactly as the host sent
   it (`JSON.stringify`), never cut. Before the card, an input whose detail would be longer than the card shows whole
   (4,000 characters) is refused, and so is one any of whose strings, at any depth and the keys of its objects among
-  them, is refused when read as a command's text: in Plan only a deny-list verb or operation, plainly or re-spelled; `JASON_CONFINED`, `JASON_ATTEMPT_ID`,
+  them, is refused when read as a command's text: in Plan only a deny-list verb or operation, plainly or re-spelled; `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`,
   the data directory's variable or the data directory in any spelling, the settings file and the run file included.
   "Allow for this chat" is never offered for it, Plan only refuses it, and Full access holds it on every call.
 - **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,

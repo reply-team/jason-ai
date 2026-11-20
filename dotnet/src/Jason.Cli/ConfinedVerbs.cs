@@ -5,10 +5,11 @@ namespace Jason.Cli;
 
 /// <summary>
 /// The commands the CLI refuses under <c>JASON_CONFINED</c> (<see cref="Confinement"/>): a person's own word and the
-/// acts that change this installation. The desktop sets the variable on every chat turn, so what an agent in the chat
-/// runs is refused here, locally, before any request; the person gives these in Jason's window or in a terminal, which
-/// never carries the variable. This table is also the command half of <c>desktop/chat-deny-list.txt</c>, which
-/// <c>DesktopDenyListTests</c> writes and checks from it, so the two cannot drift apart.
+/// acts that change this installation. The desktop sets the variable on a chat turn in Plan only, so what an agent runs
+/// there is refused here, locally, before any request; no chat turn in Ask first, Auto-edit or Full access sets it any
+/// more, and there the turn's mode decides, with the agent acting on the person's word. This table is also the command
+/// half of <c>desktop/chat-deny-list.txt</c>, which <c>DesktopDenyListTests</c> writes and checks from it, so the two
+/// cannot drift apart.
 /// </summary>
 /// <remarks>
 /// A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a caller that
@@ -86,11 +87,15 @@ public static class ConfinedVerbs
     public const string Sentence =
         "Under JASON_CONFINED this is refused: it is a person's word or changes this installation; the person does it in Jason's window or a terminal.";
 
-    /// <summary>What a refused command's <c>--help</c> says. An attempt id in the environment is no exception: it is a claim, not a proof.</summary>
+    /// <summary>
+    /// What a refused command's <c>--help</c> says, true for every caller: the act is the person's, an agent runs it when
+    /// the person said so, and it is recorded as theirs. An attempt id in the environment is no exception under the
+    /// variable: it is a claim, not a proof.
+    /// </summary>
     public const string Help =
-        "Under JASON_CONFINED (set on every chat turn of the desktop) this is refused before any request: it is not for an agent "
-        + "to do, and the person does it in Jason's window or a terminal. A higher bar, not a boundary: "
-        + "the runtime cannot tell a person from a program that holds the token, "
+        "The act is the person's: an agent runs it when the person said so, and it is recorded as theirs. "
+        + "Under JASON_CONFINED, which a chat turn of Jason Desktop sets in Plan only, it is refused before any request. "
+        + "A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, "
         + "and an attempt id in the environment is a claim, not a proof, so it changes nothing here.";
 
     /// <summary>The entry that covers <paramref name="verb"/> (<c>runtime</c> covers <c>runtime stop</c>), or null.</summary>

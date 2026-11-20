@@ -660,8 +660,9 @@ given as a path is looked up in its own directory and reads no PATH, so the answ
 exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
 says whose PATH that was.
 
-Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CONFINED` set, so the program is
-named by name and found on the search path, and a name with a directory in it is neither looked up nor started. Run a
+Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CHAT_TURN` set, and in Plan only
+with `JASON_CONFINED` too, so the program is named by name and found on the search path, and a name with a directory in
+it is neither looked up nor started. Run a
 path from a terminal.
 
 **When something does not work**, run `jason doctor --dry-run`, then `jason doctor`, and open an
