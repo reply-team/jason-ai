@@ -354,7 +354,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Every job that updates from a previous release fetches the one <see cref="PreviousRelease"/> names, given to its
     /// fetch by name, and never reads which release is the latest published one: these legs begin in the world before one
-    /// installation, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against.
+    /// installation, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against. The fetch
+    /// takes its tag from the pin and holds the files it verifies to that release's checksums.txt by their digests.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a proof job that updates from the latest published release fails every previous-release leg once 0.49.0 is published, and blocks the first fix after it")]
@@ -371,16 +372,42 @@ public partial class ReleaseWorkflowTests
             Assert.DoesNotContain("releases/latest", run, StringComparison.Ordinal);
             Assert.Contains("PREVIOUS_RELEASE", run, StringComparison.Ordinal);
             Assert.Contains("https://github.com/reply-team/jason-ai/releases/download/$tag/", run, StringComparison.Ordinal);
+            AssertTheFetchHoldsItsFiles(run, name, "PREVIOUS_RELEASE", "PREVIOUS");
+        }
+    }
+
+    /// <summary>
+    /// A fetch of a pinned release takes the release's tag from the pin's own variable, once, and holds each file it
+    /// verifies to that release's checksums.txt: a file with no line there fails, and so does one whose SHA-256 differs,
+    /// read by Get-FileHash on Windows and by shasum -a 256 -c on a Mac.
+    /// </summary>
+    private static void AssertTheFetchHoldsItsFiles(string run, string job, string pin, string folder)
+    {
+        if (job.EndsWith("-windows", StringComparison.Ordinal))
+        {
+            Assert.Single(Regex.Matches(run, @"(?m)^\$tag = "));
+            Assert.Contains($"\n$tag = $env:{pin}\n", run, StringComparison.Ordinal);
+            Assert.Contains("if (-not $listed.ContainsKey($name)) { throw \"$name has no line in $tag's checksums.txt\" }", run, StringComparison.Ordinal);
+            Assert.Contains($"if ((Get-FileHash -LiteralPath (Join-Path $env:{folder} $name) -Algorithm SHA256).Hash -ne $listed[$name]) {{ throw \"$name does not match $tag's checksums.txt\" }}", run, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Single(Regex.Matches(run, @"(?m)^tag="));
+            Assert.Contains($"\ntag=\"${pin}\"\n", run, StringComparison.Ordinal);
+            Assert.Contains("[ -n \"$line\" ] || { echo \"::error::$name has no line in $tag's checksums.txt\"; exit 1; }", run, StringComparison.Ordinal);
+            Assert.Contains($"(cd \"${folder}\" && printf '%s\\n' \"$line\" | shasum -a 256 -c - > /dev/null) || {{ echo \"::error::$name does not match $tag's checksums.txt\"; exit 1; }}", run, StringComparison.Ordinal);
         }
     }
 
     /// <summary>
     /// Each release proof job updates from two named releases, each fetched by its own step: <see cref="PreviousRelease"/>, a
     /// 0.48 release, and <see cref="OneInstallationRelease"/>, at or after v0.49.0 and before the version this tree builds,
-    /// given to its fetch by name and never read as the latest published. That fetch holds the files the release's own
-    /// install script installs to its checksums.txt and says the others unverified; it comes before the one leg that needs
-    /// it, which hands the folder it fetched to the step that updates from it, and compares the uninstall after it with the
-    /// machine before. CI's union jobs fetch no one-installation release (<see cref="ReleaseOnly"/> says why).
+    /// given to its fetch by name and never read as the latest published. That fetch takes its tag from the pin, holds the
+    /// files the release's own install script installs to its checksums.txt by their digests and says the others
+    /// unverified; it comes before the one leg that needs it, which hands the folder it fetched to the step that updates from
+    /// it, and compares the uninstall after it with the machine before. The job's summary says that release's handing proven
+    /// only where the leg's step succeeded having run to its end, and otherwise that the leg failed or was not run. CI's
+    /// union jobs fetch no one-installation release (<see cref="ReleaseOnly"/> says why).
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a one-installation pin read as the latest published, or not before the version a release builds, fails the leg updating from it and blocks the release")]
@@ -394,14 +421,20 @@ public partial class ReleaseWorkflowTests
         Assert.True(pinned < builds, $"{OneInstallationRelease} is not before {builds}, the version this tree builds");
 
         var release = Mapping(Parse(Read(Release)), "jobs");
-        foreach (var (name, verified, unverifiable, step, compare) in new[]
+        var releaseText = Read(Release).Replace("\r\n", "\n", StringComparison.Ordinal);
+        foreach (var (name, verified, unverifiable, step, compare, judged) in new[]
         {
             ("proof-windows", "$verified = @('jason-desktop-windows-x64-setup.exe')", "$unverifiable = @('install.ps1', 'manifest.json')",
                 "./.github/scripts/Test-InstallationWindows.ps1 -Step FromOneInstallation -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -OneInstallation $env:ONE_INSTALLATION",
-                "./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before"),
+                "./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before",
+                "$ended = Join-Path $env:OUT 'legs-ended.txt'\n"
+                    + "$handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } else { 'is not proven here: its leg was not run' }\n"),
             ("proof-macos", "verified=\"jason-desktop-macos-arm64.zip\"", "unverifiable=\"install.sh manifest.json\"",
                 "bash .github/scripts/test-installation-macos.sh from-one-installation \"$ONE_INSTALLATION\" \"$FEED\" \"$VERSION\"",
-                "bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before"),
+                "bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before",
+                "if [ \"$ONE_INSTALLATION_LEG\" = success ] && grep -qxF -- \"$ONE_INSTALLATION_LEG_NAME\" \"$OUT/legs-ended.txt\" 2>/dev/null; then handed=\"is proven here, by its leg\"\n"
+                    + "elif [ \"$ONE_INSTALLATION_LEG\" = failure ]; then handed=\"is not proven here: its leg failed\"\n"
+                    + "else handed=\"is not proven here: its leg was not run\"; fi\n"),
         })
         {
             var job = Mapping(release, name);
@@ -419,15 +452,36 @@ public partial class ReleaseWorkflowTests
             Assert.Contains("https://github.com/reply-team/jason-ai/releases/download/$tag/", run, StringComparison.Ordinal);
             Assert.Contains(verified, run, StringComparison.Ordinal);
             Assert.Contains(unverifiable, run, StringComparison.Ordinal);
+            AssertTheFetchHoldsItsFiles(run, name, "ONE_INSTALLATION_RELEASE", "ONE_INSTALLATION");
+
+            // The comment over the fetch says the pin is never read as the latest published release.
+            var jobText = Job(releaseText, name);
+            var fetchAt = jobText.IndexOf($"\n      - name: {FetchOneInstallation}\n", StringComparison.Ordinal);
+            Assert.True(fetchAt > 0, $"{name} has no step '{FetchOneInstallation}' at a step's indentation");
+            var comment = jobText[(jobText.LastIndexOf("\n\n", fetchAt, StringComparison.Ordinal) + 2)..fetchAt];
+            Assert.Contains("# Never read as the latest published release", comment, StringComparison.Ordinal);
 
             var needing = steps.Where(candidate => (Scalar(candidate, "run") ?? "").Contains($"{FetchOneInstallation}=${{{{ steps.one-installation.outcome }}}}", StringComparison.Ordinal)).ToList();
             var leg = Assert.Single(needing);
             Assert.Equal(FromOneInstallationLeg, Scalar(leg, "name"));
+            Assert.Equal("from-one-installation", Scalar(leg, "id"));
             Assert.True(steps.IndexOf(fetch) < steps.IndexOf(leg), $"{name} runs '{FromOneInstallationLeg}' before it fetches what that leg needs");
             var lines = Lines(leg);
             Assert.Contains(step, lines);
             Assert.Contains(compare, lines);
             Assert.True(lines.IndexOf(step) < lines.IndexOf(compare), $"{name}: the leg compares before it updates");
+
+            // What the job does not prove says the one-installation release's handing proven only where the leg's step
+            // succeeded having run to its end, which a leg its begin did not run never reaches; failed where the step failed;
+            // and not run otherwise.
+            var summary = Assert.Single(steps, candidate => Scalar(candidate, "name") == "Say what this job does not prove");
+            Assert.Equal("always()", Scalar(summary, "if"));
+            Assert.Equal("${{ steps.from-one-installation.outcome }}", Scalar(Mapping(summary, "env"), "ONE_INSTALLATION_LEG"));
+            Assert.Equal(FromOneInstallationLeg, Scalar(Mapping(summary, "env"), "ONE_INSTALLATION_LEG_NAME"));
+            var says = Scalar(summary, "run")!;
+            Assert.Contains(judged, says, StringComparison.Ordinal);
+            Assert.Contains("the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.", says, StringComparison.Ordinal);
+            Assert.True(says.IndexOf(judged, StringComparison.Ordinal) < says.IndexOf("$handed.", StringComparison.Ordinal), $"{name}: the summary says the handing before it judges it");
         }
 
         Assert.DoesNotContain("ONE_INSTALLATION", Read(Ci), StringComparison.Ordinal);
