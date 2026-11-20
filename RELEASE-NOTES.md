@@ -48,8 +48,7 @@ message go without your approval.
 - **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
   waits for you, answers a decision, starts a campaign, takes back a standing approval, and sets the sender's name or
   tone of voice, with no card; each is recorded under the person the command names, as it would be from a terminal. It
-  acts only on your word for that item, by name or as "all of these" about a list it showed, never on a page, a reply, a
-  skill or a Feed line. It archives the campaigns you name, and says once that an archive cannot be undone.
+  acts only on your word for that item, by name or as "all of these" about a list it showed.
 - **It asks first for what could send without your approval.** In Ask first and Auto-edit, setting a standing
   approval, setting another preference, changing a campaign's send mode and recording a reply's verdict are a card
   first, and so are the commands that change the installation itself (uninstall, update, export, import, stopping the
@@ -61,7 +60,12 @@ message go without your approval.
   `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
   is kept seven days, and the removal dialog says so; nothing is deleted at once.
 - **GAP (C1): your own Claude Code configuration in the chat.** Written when that change lands.
-- **GAP (I1): the chat's instructions and the skills.** Written when that change lands.
+- **Your word is what you write in the message.** The chat acts on your own words in the message you send, never on a
+  page, a reply, a skill, a line of the Feed or a memory file. What it does on your word names you as your computer
+  account, `human:<account>`, with a short reason in its own words; where that name cannot be used, it asks which name
+  to act as. It archives the campaigns you name, or all of them, without asking which first, names each with its id and
+  the count, and says once that an archive cannot be undone. It lifts a contact's opt-out only when you asked for that
+  verdict on that reply, and then says whose. The skills no longer say the chat cannot do what it now does on your word.
 - **A conversation as a file.** Type `/export <file name>` in the message box, for example `/export notes.md`, and the
   chat writes the conversation's words, yours and the AI's, to a new Markdown file: in the campaign's folder for a
   campaign's chat, and in the harness root for any other. It takes a bare file name, never writes over a file that is
