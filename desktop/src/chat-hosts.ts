@@ -10,7 +10,7 @@ import type { ChatMode } from './chat-modes.ts';
 import { isTurnServerName, promptToolName } from './chat-permission-endpoint.ts';
 import { attemptVariable, chatTurnVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
 import { compareVersions, noChromeFrom } from './host-version.ts';
-import { withReplyClient } from './reply-client.ts';
+import { replyClientVariable, withReplyClient } from './reply-client.ts';
 import { isSessionMarker, sessionMarkers } from './session-markers.ts';
 
 /**
@@ -753,8 +753,9 @@ export function hostEnvironment(
  * "when more than one settings file sets a variable, the highest-precedence one applies", and of command-line settings,
  * https://code.claude.com/docs/en/settings: "A key you set there overrides the same key in your project and user settings
  * files". The names: PATH, the data directory, Jason's three variables of a turn, the folder and background variables,
- * the backgrounding of tool calls and a session's markers it withholds, `HOME` where the turn names one, and
- * `CLAUDE_CODE_EFFORT_LEVEL` where the turn names an effort. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is left out: where a file
+ * the backgrounding of tool calls and a session's markers it withholds, the label for reply-cli, `HOME` where the turn
+ * names one, and `CLAUDE_CODE_EFFORT_LEVEL` where the turn names an effort: every name `hostEnvironment` sets or
+ * withholds by name but the two below, which a row holds to what it does. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is left out: where a file
  * of the person's sets it in Full access, Claude Code starts in another mode and the turn is started again in Ask first,
  * which carries it. A provider's variables are left out too, so no key is written to a file: a turn on a provider's key
  * loads none of the person's settings (`claudeArguments`). An empty value is no value to the jason the turn runs, which
@@ -772,6 +773,7 @@ export function pinnedEnvironment(environment: Readonly<Record<string, string>>,
         noBackground,
         'CLAUDE_AUTO_BACKGROUND_TASKS',
         ...sessionMarkers,
+        replyClientVariable,
         ...(options.home !== undefined ? ['HOME'] : []),
         ...(options.effortNamed === true ? [effortLevel] : []),
     ];

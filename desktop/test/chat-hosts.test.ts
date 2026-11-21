@@ -516,6 +516,7 @@ test('what a hooked turn\'s settings set of its environment is, for each name th
                     'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS',
                     'CLAUDE_AUTO_BACKGROUND_TASKS',
                     ...Object.keys(plantedMarkers),
+                    'REPLY_CLIENT',
                     ...('home' in options ? ['HOME'] : []),
                     ...('effortNamed' in options ? ['CLAUDE_CODE_EFFORT_LEVEL'] : []),
                 ];
@@ -529,12 +530,57 @@ test('what a hooked turn\'s settings set of its environment is, for each name th
                 assert.equal(pins.JASON_DATA_DIR, data ?? '', said);
                 assert.equal(pins.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR, '1', said);
                 assert.equal(pins.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1', said);
-                for (const name of ['JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${said} ${name}`);
+                for (const name of ['JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', 'REPLY_CLIENT', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${said} ${name}`);
                 if ('home' in options) assert.equal(pins.HOME, '/turn-home', said);
                 if ('effortNamed' in options) assert.equal(pins.CLAUDE_CODE_EFFORT_LEVEL, '', said);
                 assert.ok(!('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' in pins), said);
                 assert.ok(!('ANTHROPIC_API_KEY' in pins) && !('CLAUDE_CONFIG_DIR' in pins), said);
                 assert.ok(!JSON.stringify(pins).includes('sk-planted-pinned'), said);
+            }
+        }
+    }
+});
+
+test('a hooked turn\'s settings pin every name the desktop decides of the turn\'s environment, read from what it does with a planted one, so a name it comes to set or withhold is pinned too: all but the scrub, a provider\'s variables and a plugin\'s configuration', () => {
+    // Every name the sources that decide the environment spell, each planted with a value of its own, beside a person's
+    // configuration: a name the desktop decides is one whose value the turn's environment does not keep as it came.
+    const spelled = new Set<string>(['JASON_Plugins__Config__planted__Key']);
+    for (const file of ['chat-hosts.ts', 'chat-permission-model.ts', 'session-markers.ts', 'reply-client.ts']) {
+        for (const [, name] of readFileSync(join(here, '..', 'src', file), 'utf8').matchAll(/'([A-Z][A-Z0-9]*(?:_[A-Z0-9]*)*)'/g)) spelled.add(name as string);
+    }
+    assert.ok(['PATH', 'JASON_DATA_DIR', 'CLAUDE_AUTO_BACKGROUND_TASKS', 'REPLY_CLIENT'].every((name) => spelled.has(name)), 'the sources were read');
+    const inherited: Record<string, string> = { ...plantedConfiguration };
+    for (const name of spelled) inherited[name] ??= `planted-${name}`;
+    const upper = (env: Readonly<Record<string, string>>) => new Map(Object.entries(env).map(([name, value]) => [name.toUpperCase(), value]));
+    const before = upper(inherited);
+    const shapes = [
+        { home: '/turn-home', effortNamed: true },
+        { effortNamed: false },
+        {},
+    ];
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+            for (const options of shapes) {
+                for (const data of ['/d', null]) {
+                    for (const bundleVersion of ['0.49.2', null]) {
+                        for (const keyed of [false, true]) {
+                            const provider: Record<string, string> = keyed ? { ANTHROPIC_API_KEY: 'sk-planted-pinned', CLAUDE_CONFIG_DIR: '/keyed' } : {};
+                            const shape = { platform, bundleVersion, bundle: '/b', data, program: 'claude' as const, mode, ...options };
+                            const env = hostEnvironment(inherited, { ...shape, keyed, provider });
+                            const after = upper(env);
+                            const decided = [...new Set([...before.keys(), ...after.keys()])].filter((name) => before.get(name) !== after.get(name));
+                            // What the same turn on the person's own sign-in decides: the rest a keyed turn decides is a
+                            // provider's, and a keyed turn loads no settings file of the person's (`claudeArguments`).
+                            const signedIn = keyed ? upper(hostEnvironment(inherited, { ...shape, keyed: false, provider: {} })) : after;
+                            const providers = (name: string) => keyed && before.get(name) === signedIn.get(name);
+                            const expected = decided.filter((name) => name !== 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' && !name.startsWith('JASON_PLUGINS__') && !providers(name) && !(name in provider));
+                            const pins = pinnedEnvironment(env, options);
+                            const said = `${platform} ${mode} ${JSON.stringify(options)} ${String(data)} ${String(bundleVersion)} ${keyed}`;
+                            assert.deepEqual(Object.keys(pins).sort(), expected.sort(), said);
+                            for (const [name, value] of Object.entries(pins)) assert.equal(value, after.get(name) ?? '', `${said} ${name}`);
+                        }
+                    }
+                }
             }
         }
     }
