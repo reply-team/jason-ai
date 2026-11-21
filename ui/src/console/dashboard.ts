@@ -32,7 +32,7 @@ import {
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
-import { newAgent } from './new-agent';
+import { agentMaking, newAgent } from './new-agent';
 import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
@@ -357,7 +357,7 @@ function header(waiting: Count): Html {
                 class="btn ${waiting.n > 0 ? '' : 'p'}"
                 type="button"
                 ${act('dash.new')}
-                ${offUnless('chat.createAgent')}
+                ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
             >
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
