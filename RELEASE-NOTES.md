@@ -19,12 +19,12 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.2-rc.3
+# Jason 0.49.2-rc.4
 
 This is a candidate, published as a pre-release. It is built on 0.49.1 and carries 0.49.2's work on Jason Desktop's
-chat, with the fixes below. It follows 0.49.2-rc.2 and replaces it. Beside the chat it carries a set of smaller
+chat, with the fixes below. It follows 0.49.2-rc.3 and replaces it. Beside the chat it carries a set of smaller
 changes: an agent's menus open its agent host in a terminal, Open in on Windows opens Windows Terminal, Update has a
-section of its own in Settings, `--human` says an error as a sentence, and the Reply package needs reply-cli 0.22.0.
+section of its own in Settings, `--human` says an error as a sentence, the runtime starts at logon by default, and the Reply package needs reply-cli 0.22.0.
 
 0.49.1 made Jason on Linux one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries,
 installed, updated and removed once. This candidate carries all of it.
@@ -154,6 +154,21 @@ voice.
   because a switch was off and Windows' switches now read as on, `jason status` counts the toast as reaching you
   again. Where it cannot read the switches, it words a toast Windows did not show as what Windows answered when the
   toast was last sent.
+- **The runtime starts at logon by default.** Installing Jason, or updating it, registers the runtime's start at logon
+  once. Nothing is started at that moment: the next logon starts it. Your turn-off is kept: `jason runtime autostart
+  disable` is now recorded, and an install or an update never turns it back on. "Start the Runtime at Logon" is no longer
+  in the Jason menu or the tray; "Open Jason at Login" is still there.
+  - **The Demo stays first.** A new installation's first start of Jason Desktop still opens on the Demo, and nothing is
+    registered then. The start at logon is registered once Live has brought the installation up.
+  - **`jason runtime autostart enable` starts the runtime now** where none answers, on all three systems.
+  - **What a turn-off and a stop mean is said.** `disable` says that after a restart nothing of Jason runs until
+    `jason runtime start`. Your `jason runtime stop` says that it holds only until the next logon, while a registration
+    stands. `jason status` says when you turned the start at logon off.
+  - **The set-up's report** has a `logon` member saying what it did: `registered`, `already`, `off`, `left`,
+    `no_installation`, `refused` or `unsupported`. A system that refuses never fails an install.
+- **A new campaign's folder is named by when it was made**, for example `2026-11-21-143005-k3x9qa`: the moment in the
+  local time of the computer the runtime runs on, then the end of its id. A rename never moves it, and a move to
+  another project keeps it. Existing campaigns keep their folders. `jason campaign get --human` shows a `Folder:` line.
 - **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install this candidate as "Upgrading"
   says. On a Mac where Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the
   application, its link and its state under `~/Library` to Homebrew, and its report names
@@ -174,6 +189,10 @@ voice.
   was last refused, Jason Desktop now runs that turn in Ask first in that conversation itself, with all of it in
   Claude Code's memory, instead of in a fresh session given a recap of it. The first refusal after a Full access turn
   worked still takes the fresh session with the recap.
+- **A start at logon that Homebrew's formula registered is moved to the `jason` Jason Desktop carries** on macOS and
+  Linux, where the formula is still linked beside it. Before, such a start kept bringing the formula's older runtime
+  back at every logon, beside the application's own. Set-up rewrites it and starts nothing. A start naming another
+  program or another data directory is left, and is said.
 - **A Reply mailbox that cannot send is that mailbox's block.** Where Reply says a mailbox cannot send direct emails
   at all, its daily limit being 0 or its team's plan sending nothing, the Reply package (0.19.0) now holds that as the
   mailbox's block: the messages wait on it and go once the mailbox can send, instead of each failing. Its note says
@@ -199,7 +218,7 @@ voice.
 
 - **Installing this candidate.** A candidate is never the latest release, so no update reaches it: an installed Jason
   Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.1. It is installed by naming
-  its version, over 0.49.1, rc.1 or rc.2, once Jason Desktop is quit (Quit in its tray menu); while Jason Desktop runs it
+  its version, over 0.49.1, rc.1, rc.2 or rc.3, once Jason Desktop is quit (Quit in its tray menu); while Jason Desktop runs it
   installs nothing and says to quit it. On Windows (PowerShell):
   ```powershell
   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
@@ -216,8 +235,14 @@ voice.
   uninstall`, which keeps your data directory, then run the line. The first start of this version then sets Jason up
   again, as after any update. The final 0.49.2 reaches a deb with the system's own updates, Software Updater or
   `sudo apt update && sudo apt upgrade`, and an AppImage by its own update item or `jason update apply`.
-- **From 0.49.0, rc.1 or rc.2.** This version adds no migration to the database, so each opens the same data as it
+- **From 0.49.0, rc.1, rc.2 or rc.3.** This version adds no migration to the database, so each opens the same data as it
   is. 0.49.1's Linux work comes with it.
+- **The runtime now starts at logon by default:** installing or updating registers it once, unless you turned it off
+  with `jason runtime autostart disable`; nothing is started at that moment. On Windows and Linux a disable made before
+  this version left no record, so run it again to keep it off. Start the Runtime at Logon is no longer in the Jason menu
+  or the tray.
+- **`jason uninstall` removes the start at logon's records** (`autostart/off.json`, `autostart/default.json`) even when
+  it keeps the data, and `jason export` no longer carries them. An import is a new machine.
 - **The Reply package needs reply-cli 0.22.0 or later.** The Reply package, now 0.19.0, and Jason Desktop's Reply card
   ask for reply-cli 0.22.0 or later. With an older one the Reply package is unavailable, `jason plugin list` says
   `executable_incompatible`, and the Reply card says to update the Reply CLI and offers its install where npm is on this
