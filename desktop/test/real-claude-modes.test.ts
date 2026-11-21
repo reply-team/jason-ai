@@ -193,8 +193,8 @@ function realDesktop(t: { after(fn: () => void | Promise<void>): void }, row: { 
         chat,
         starts,
         started,
-        /** Sends one message to the chat and waits for its turn's end. */
-        async turn(id: string): Promise<void> {
+        /** Sends one message to the chat and waits for its turn's end; with an effort, on the model the effort is offered for. */
+        async turn(id: string, effort?: string): Promise<void> {
             const done = new Promise<void>((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error('the turn never ended')), 60_000);
                 dones.set(id, () => {
@@ -202,7 +202,7 @@ function realDesktop(t: { after(fn: () => void | Promise<void>): void }, row: { 
                     resolve();
                 });
             });
-            await chat.send(id, 'hello', { host: 'claude' });
+            await chat.send(id, 'hello', effort === undefined ? { host: 'claude' } : { host: 'claude', model: 'opus', effort });
             await done;
         },
     };
@@ -293,14 +293,17 @@ test('the real Claude Code, signed out, keeps in a Full access turn what the des
         }),
     );
     writeFileSync(join(desk.config, '.claude.json'), JSON.stringify({ mcpServers: { theirs: { type: 'stdio', command: process.execPath, args: [script, out.server] } } }));
+    // The turn names an effort, so its settings set CLAUDE_CODE_EFFORT_LEVEL empty, and Claude Code still starts.
     const { id } = await desk.chat.create();
-    await desk.turn(id);
+    await desk.turn(id, 'high');
     const start = desk.starts[0];
     assert.ok(start !== undefined, 'the turn started Claude Code');
     await start.host.exited;
     const seen = existsSync(out.hook) ? 'hook' : existsSync(out.server) ? 'server' : null;
     t.diagnostic(`Claude Code ${version ?? '?'}: init names ${String(start.init?.permissionMode)}, environment read by the person's ${seen ?? 'nothing'}`);
     assert.equal(start.init?.permissionMode, 'bypassPermissions', 'the turn still runs in its bypass');
+    assert.equal(start.args[start.args.indexOf('--effort') + 1], 'high', 'the turn named its effort');
+    assert.equal(JSON.parse(Object.entries(start.files).find(([file]) => file.startsWith('--settings '))?.[1] ?? '{}').env?.CLAUDE_CODE_EFFORT_LEVEL, '', 'its settings set the effort variable empty');
     assert.ok(seen !== null, 'a hook or a server of the person\'s was started and wrote its environment');
     const env = JSON.parse(readFileSync(seen === 'hook' ? out.hook : out.server, 'utf8')) as Record<string, string>;
     const named = (name: string) => Object.entries(env).find(([each]) => each.toUpperCase() === name)?.[1];
