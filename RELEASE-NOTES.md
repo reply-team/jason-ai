@@ -111,12 +111,13 @@ voice.
   conversation's words to a new Markdown file.
 - **A file dropped on the message box puts its path in the text.** The path is quoted and set at
   the caret, as a terminal does; several files put several paths. On macOS and Linux it goes in single quotes. On
-  Windows it goes in single quotes where the name holds none, in double quotes where it holds one and nothing
-  PowerShell would expand, and otherwise in single quotes with each quote doubled, as PowerShell reads them.
+  Windows it goes in single quotes where the name holds none; in double quotes where it holds one, a typographic one
+  among them, and no `$`, backtick or double quote, and is not a network path; and otherwise in single quotes with each
+  quote doubled, as PowerShell reads them.
 - **A right-click on an agent's row opens its menu.** In the console's left column, the row of an agent offers the
-  actions its own "..." menu offers, among them Open and Archive. For an agent pinned to a provider's campaign,
-  Archive... there offers Jason's pause first, as the same dialog in the agent's Settings does: ask in the agent's
-  chat to pause that campaign, and archive once that work has finished.
+  actions its own "..." menu offers, among them Open and Archive. For an agent pinned to a provider's campaign, where
+  its route can pause that campaign, Archive... there offers Jason's pause first, as the same dialog in the agent's
+  Settings does: ask in the agent's chat to pause that campaign, and archive once that work has finished.
 - **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
   `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
   is kept seven days, and the removal dialog says so; nothing is deleted at once.
@@ -149,15 +150,17 @@ voice.
   of its own. Without `--human` the output is the same as before: the exact JSON body.
 - **Notifications say what Windows answered, and when.** In Settings, Notifications, a toast Windows did not show is
   said as what Windows answered at that notification and how long ago, and that Windows is asked again at the next
-  one. Jason Desktop reads it again each time its window takes the focus back. `jason status` counts the toast as
-  reaching you again once Windows' switches read as on, and words a toast Windows did not show as what Windows
-  answered when it was last sent.
-- **Jason and Homebrew on a Mac.** Where Homebrew placed Jason Desktop, `jason uninstall` takes off what Jason set up
-  and leaves the application, its link and its state under `~/Library` to Homebrew, and its report names
-  `brew uninstall --zap --cask jason`, which takes them off. Where the older Homebrew formula is still linked beside
-  the `jason` Jason Desktop carries, set-up says so and stops a runtime started from it, and set-up and `jason status`
-  name `brew uninstall --formula jason`, which takes it off; every command Jason prints for the formula now says
-  `--formula`. Jason Desktop is not yet offered in Homebrew's tap: install this candidate as "Upgrading" says.
+  one. Jason Desktop reads it again each time its window takes the focus back. Where the last toast was not shown
+  because a switch was off and Windows' switches now read as on, `jason status` counts the toast as reaching you
+  again. Where it cannot read the switches, it words a toast Windows did not show as what Windows answered when the
+  toast was last sent.
+- **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install this candidate as "Upgrading"
+  says. On a Mac where Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the
+  application, its link and its state under `~/Library` to Homebrew, and its report names
+  `brew uninstall --zap --cask jason`, which takes them off. On macOS and Linux, where the older Homebrew formula is
+  still linked beside the `jason` Jason Desktop carries, set-up says so and stops a runtime started from it, and set-up
+  and `jason status` name `brew uninstall --formula jason`, which takes it off; every command Jason prints for the
+  formula now says `--formula`.
 
 ## Fixed since 0.49.1
 
@@ -167,15 +170,18 @@ voice.
 - **A question is no longer answered as if you asked it twice.** A conversation whose message had to be started again in Ask
   first now holds that message once; before, the session it went on in could hold it twice.
 - **A refused Full access turn keeps the whole conversation.** When Claude Code refuses Full access on a turn of a
-  conversation it already holds, Jason Desktop now runs that turn in Ask first in the same conversation, with all of
-  it in Claude Code's memory, instead of in a fresh session given a recap of it.
+  conversation it already holds, and no Full access turn has worked since Jason Desktop started or since Full access
+  was last refused, Jason Desktop now runs that turn in Ask first in that conversation itself, with all of it in
+  Claude Code's memory, instead of in a fresh session given a recap of it. The first refusal after a Full access turn
+  worked still takes the fresh session with the recap.
 - **A Reply mailbox that cannot send is that mailbox's block.** Where Reply says a mailbox cannot send direct emails
   at all, its daily limit being 0 or its team's plan sending nothing, the Reply package (0.19.0) now holds that as the
   mailbox's block: the messages wait on it and go once the mailbox can send, instead of each failing. Its note says
   what to change in Reply.
 - **A daily-limit block clears no later than the next midnight UTC.** Where an email was held for a later day that is
-  already full, the mailbox's block used to run to the end of that day, weeks out. It now clears at the next midnight
-  UTC; a shorter wait is kept, and the active-contacts limit is not capped.
+  already full, the mailbox's block used to name the end of that day, weeks out, as the moment it clears, though the
+  work was still tried each day. It now names the next midnight UTC; a shorter wait is kept, and the active-contacts
+  limit is not capped.
 - **Jason Desktop no longer offers Reply's shared mailbox page.** Where Reply makes no link for one mailbox, the Reply
   card says the Reply CLI answered `email_link.not_available` and offers nothing else.
 - **Recent leaves out a conversation whose agent is archived.** Recent no longer lists it.
@@ -193,7 +199,7 @@ voice.
 
 - **Installing this candidate.** A candidate is never the latest release, so no update reaches it: an installed Jason
   Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.1. It is installed by naming
-  its version, over 0.49.1 or over rc.1, once Jason Desktop is quit (Quit in its tray menu); while Jason Desktop runs it
+  its version, over 0.49.1, rc.1 or rc.2, once Jason Desktop is quit (Quit in its tray menu); while Jason Desktop runs it
   installs nothing and says to quit it. On Windows (PowerShell):
   ```powershell
   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
@@ -223,8 +229,8 @@ voice.
   file is removed at the first start.
 - **Going back.** If you go back to an earlier Jason Desktop and then return to this one, the chats that earlier
   version used open in Ask first, a chat in Plan only keeps it, and each says why once. The earlier version does not
-  keep the mode or the folder this release writes with a chat. The Reply package stays at 0.19.0, which 0.48.7 reads as
-  it is, since it adds no manifest key, and which still needs reply-cli 0.22.0 or later.
+  keep the mode or the folder this release writes with a chat. The Reply package stays at 0.19.0, which an earlier
+  release, 0.48.7 among them, reads as it is, since it adds no manifest key, and which still needs reply-cli 0.22.0 or later.
   [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says how
   to go back to an earlier release.
 
