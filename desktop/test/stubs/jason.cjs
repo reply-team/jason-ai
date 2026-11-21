@@ -126,13 +126,25 @@ if (args[0] === 'status') {
     const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
     const key = flag('--idempotency-key');
     let made = key === null ? undefined : items.find((each) => each.idempotency_key === key);
+    // As the CLI does: with no --project, the project is the one the nearest marker above the working folder names,
+    // else the default.
+    let project = flag('--project');
+    for (let dir = process.cwd(); project === null; ) {
+        try {
+            const marker = JSON.parse(readFileSync(join(dir, '.jason', 'marker.json'), 'utf8'));
+            if (marker.kind === 'project') project = marker.id;
+        } catch {}
+        const up = join(dir, '..');
+        if (up === dir) break;
+        dir = up;
+    }
     if (made === undefined) {
-        made = { id: `cmp_MADE${items.length + 1}`, name: flag('--name'), status: 'draft', created_at: new Date().toISOString(), idempotency_key: key };
+        made = { id: `cmp_MADE${items.length + 1}`, name: flag('--name'), status: 'draft', created_at: new Date().toISOString(), idempotency_key: key, project_id: project || 'prj_01STUB' };
         items.push(made);
         writeFileSync(process.env.STUB_CAMPAIGNS_FILE, JSON.stringify(items));
     }
     if (process.env.STUB_CREATE_LOST === 'yes') process.exit(1);
-    print({ id: made.id, name: made.name, status: made.status, project_id: 'prj_01STUB', project_slug: 'default', folder_path: null });
+    print({ id: made.id, name: made.name, status: made.status, project_id: made.project_id, folder_path: null });
 } else if (verb === 'journal list') {
     // The lines STUB_JOURNAL_FILE holds, as one page: newest first, as the runtime answers; STUB_JOURNAL_MORE=yes says
     // there is a next page, and STUB_JOURNAL_FAILS=yes answers as an unreachable runtime does.
@@ -275,7 +287,9 @@ if (args[0] === 'status') {
 } else if (verb === 'project get') {
     // STUB_PROJECT_GET_FAILS=yes: the runtime does not answer, as when it is down for a moment.
     if (process.env.STUB_PROJECT_GET_FAILS === 'yes') process.exit(3);
-    print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
+    // By --slug the default project answers by its own id, prj_01STUB, as every installation's default does.
+    const bySlug = args.includes('--slug');
+    print({ id: bySlug ? 'prj_01STUB' : args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
     // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
     // STUB_SKILLS_FAIL_HOST names a host whose deployment fails.

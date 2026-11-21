@@ -4,7 +4,8 @@
 // clicks are taken one after another; a list or a create that fails makes nothing.
 
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, ChatRefused, type ChatOptions } from '../src/chat.ts';
@@ -24,7 +25,7 @@ interface Rig {
     campaigns: string;
     again(): Chat;
     jason(): string[][];
-    made(): { id: string; name: string; idempotency_key?: string }[];
+    made(): { id: string; name: string; idempotency_key?: string; project_id?: string }[];
 }
 
 function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partial<ChatOptions> = {}): Rig {
@@ -66,7 +67,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
         campaigns,
         again: make,
         jason: () => b.record().filter((each) => each.name === 'jason').map((each) => each.args),
-        made: () => JSON.parse(readFileSync(campaigns, 'utf8')) as { id: string; name: string; idempotency_key?: string }[],
+        made: () => JSON.parse(readFileSync(campaigns, 'utf8')) as { id: string; name: string; idempotency_key?: string; project_id?: string }[],
     };
 }
 
@@ -76,7 +77,7 @@ const creates = (r: Rig) => r.jason().filter((args) => args[0] === 'campaign' &&
 
 test('the next number is one more than the highest exact "New agent N", gaps never filled, renamed agents not counted', () => {
     assert.equal(nextAgentNumber([]), 1);
-    assert.equal(nextAgentNumber(['Spring', 'New agent', 'New agent 0', 'New agent 01', 'new agent 4', 'New agent 2 copy', ' New agent 3']), 1);
+    assert.equal(nextAgentNumber(['Spring', 'New agent', 'New agent 0', 'New agent 01', 'new agent 4', 'New agent 2 copy', ' New agent 3', 'New agent 3x']), 1);
     assert.equal(nextAgentNumber(['New agent 1', 'New agent 4', 'Spring']), 5);
     assert.equal(nextAgentNumber(['New agent 12', 'New agent 9']), 13);
 });
@@ -103,7 +104,8 @@ test('a click makes "New agent N" in the default project under its key and the p
     const made = await r.chat.createAgent(clickA);
     assert.deepEqual(r.jason(), [
         ['campaign', 'list', '--all-projects', '--include-archived', '--limit', '1000'],
-        ['campaign', 'create', '--name', 'New agent 5', '--idempotency-key', `desktop-agent:${clickA}`, '--actor', 'human:ada'],
+        ['project', 'get', '--slug', 'default'],
+        ['campaign', 'create', '--name', 'New agent 5', '--project', 'prj_01STUB', '--idempotency-key', `desktop-agent:${clickA}`, '--actor', 'human:ada'],
     ]);
     assert.deepEqual(made.campaign, { id: 'cmp_MADE4', name: 'New agent 5' });
     assert.deepEqual({ ...made.conversation, updatedAt: '' }, { id: made.conversation.id, campaignId: 'cmp_MADE4', title: 'New agent 5', updatedAt: '', running: false, mode: 'full_access', ownFolder: true, madeAtClick: true });
@@ -119,7 +121,7 @@ test('a click makes "New agent N" in the default project under its key and the p
 test('an account whose name cannot stand makes the agent under the CLI\'s own actor', async (t) => {
     const r = rig(t, { account: null });
     await r.chat.createAgent(clickA);
-    assert.deepEqual(creates(r), [['campaign', 'create', '--name', 'New agent 1', '--idempotency-key', `desktop-agent:${clickA}`]]);
+    assert.deepEqual(creates(r), [['campaign', 'create', '--name', 'New agent 1', '--project', 'prj_01STUB', '--idempotency-key', `desktop-agent:${clickA}`]]);
 });
 
 test('a retry of the same click asks the same create by the same name, and a create whose answer was lost gives that campaign back', async (t) => {
@@ -133,11 +135,11 @@ test('a retry of the same click asks the same create by the same name, and a cre
     const made = await r.chat.createAgent(clickA);
     assert.deepEqual(made.campaign, { id: 'cmp_MADE1', name: 'New agent 1' });
     assert.equal(r.made().filter((each) => each.idempotency_key === `desktop-agent:${clickA}`).length, 1, 'one campaign for the click');
-    assert.deepEqual(creates(r).map((args) => args.slice(0, 6)), [
-        ['campaign', 'create', '--name', 'New agent 1', '--idempotency-key', `desktop-agent:${clickA}`],
-        ['campaign', 'create', '--name', 'New agent 1', '--idempotency-key', `desktop-agent:${clickA}`],
+    assert.deepEqual(creates(r).map((args) => args.slice(0, 8)), [
+        ['campaign', 'create', '--name', 'New agent 1', '--project', 'prj_01STUB', '--idempotency-key', `desktop-agent:${clickA}`],
+        ['campaign', 'create', '--name', 'New agent 1', '--project', 'prj_01STUB', '--idempotency-key', `desktop-agent:${clickA}`],
     ]);
-    assert.equal(r.jason().filter((args) => args[1] === 'list').length, 1, 'the list is read once, for the click\'s name');
+    assert.equal(r.jason().filter((args) => args[1] === 'list' || args[0] === 'project').length, 2, 'the list and the project are read once, for the click\'s name');
     // The same click once more is the same agent and the same conversation.
     assert.equal((await r.chat.createAgent(clickA)).conversation.id, made.conversation.id);
     assert.equal(r.chat.list().length, 1);
@@ -148,7 +150,7 @@ test('two clicks at once are made one after another, N and N+1', async (t) => {
     plant(r, [{ id: 'cmp_A', name: 'New agent 2' }]);
     const [first, second] = await Promise.all([r.chat.createAgent(clickA), r.chat.createAgent(clickB)]);
     assert.deepEqual([first.campaign.name, second.campaign.name], ['New agent 3', 'New agent 4']);
-    assert.deepEqual(r.jason().map((args) => args[1]), ['list', 'create', 'list', 'create'], 'the second list is read after the first create');
+    assert.deepEqual(r.jason().map((args) => args[1]), ['list', 'get', 'create', 'list', 'get', 'create'], 'the second list is read after the first create');
     assert.notEqual(first.conversation.id, second.conversation.id);
 });
 
@@ -168,6 +170,34 @@ test('a list that cannot be read whole, an unreachable runtime and a refused cre
     // A failed click does not hold the next one back.
     delete r.b.env.STUB_CREATE_FAILS;
     assert.equal((await r.chat.createAgent(clickB)).campaign.name, 'New agent 1');
+});
+
+test('the agent is made in the default project, by its id, even when the desktop runs inside another project\'s folder', async (t) => {
+    const r = rig(t);
+    // Outside the bench: on Windows a folder a process was started in can stay held after the run, so its removal is tried
+    // and a held one left in the temporary folder.
+    const other = mkdtempSync(join(tmpdir(), 'jason-agent-cwd-'));
+    t.after(() => {
+        try {
+            rmSync(other, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        } catch {
+            // Held still: the system's temporary folder keeps it.
+        }
+    });
+    mkdirSync(join(other, '.jason'), { recursive: true });
+    writeFileSync(join(other, '.jason', 'marker.json'), JSON.stringify({ marker_version: 1, kind: 'project', id: 'prj_01ACME' }));
+    const was = process.cwd();
+    process.chdir(other);
+    t.after(() => process.chdir(was));
+    const made = await r.chat.createAgent(clickA);
+    assert.deepEqual(r.made().map((each) => [each.id, each.project_id]), [[made.campaign.id, 'prj_01STUB']]);
+});
+
+test('a default project that cannot be read makes nothing, said in the desktop\'s words', async (t) => {
+    const r = rig(t);
+    r.b.env.STUB_PROJECT_GET_FAILS = 'yes';
+    await assert.rejects(r.chat.createAgent(clickA), { message: 'Jason is not running. Start it, then try again.' });
+    assert.deepEqual(creates(r), []);
 });
 
 test('a click the page did not make as a click is refused before anything runs', async (t) => {

@@ -1,7 +1,8 @@
 import { signal } from '@preact/signals-react';
 import { earlier } from '../platform/places';
 import { reload as reloadCampaigns } from './campaigns';
-import { isRefusal } from './chat';
+import { holdOpening, isRefusal } from './chat';
+import { startWaiting } from './start';
 import { conversations, here, messageOf } from './state';
 
 // New GTM agent: the click makes the agent. The desktop makes a campaign named "New agent N" and its conversation, kept
@@ -22,13 +23,15 @@ const clickId = (): string => crypto.randomUUID();
 
 /**
  * Makes the agent of a click and opens its place; a click made while one is being made is not taken. `again` is a
- * failed click's id, sent once more by Try again; a new click forgets a failed one.
+ * failed click's id, sent once more by Try again; a new click while that failure is shown sends it too.
  */
 export async function newAgent(again?: string): Promise<void> {
     if (agentMaking.value) return;
     const { desktop, dock } = here();
     if (earlier(desktop).chat?.createAgent === undefined) return dock.show('start');
-    const id = again ?? clickId();
+    // While a failed click's line stands, a new click is that click once more: if its create went through after all, the
+    // same agent comes back, never a second.
+    const id = again ?? agentFailure.value?.clickId ?? clickId();
     agentFailure.value = null;
     agentMaking.value = true;
     try {
@@ -39,6 +42,13 @@ export async function newAgent(again?: string): Promise<void> {
         }
         // The conversation is kept from now: it is listed at once, so the agent's place opens on it.
         const { conversation, campaign } = made;
+        // A message Start holds for an AI to be connected moves with the person into the agent's opening: one message
+        // in one place, shown there with Take back, and sent into this agent once an AI is there.
+        const waiting = startWaiting.value;
+        if (waiting !== null) {
+            startWaiting.value = null;
+            holdOpening(conversation.id, waiting);
+        }
         conversations.value = [conversation, ...conversations.value.filter((each) => each.id !== conversation.id)];
         void reloadCampaigns();
         dock.chat({ id: campaign.id, name: campaign.name });

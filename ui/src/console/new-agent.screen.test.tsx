@@ -9,6 +9,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
+import type { DesktopSetup } from '../platform/desktop';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -16,8 +17,10 @@ import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
+import { openingWaiting } from './chat';
 import { agentFailure, agentMaking } from './new-agent';
 import { closeMenus } from './side';
+import { startWaiting } from './start';
 import { forgetWaiting } from './waiting';
 import { activePanel, chats, conversations, feedId, here, lines, setup, setupError } from './state';
 
@@ -28,28 +31,42 @@ import { activePanel, chats, conversations, feedId, here, lines, setup, setupErr
 
 type Place = 'window' | 'tab';
 
-/** Autumn is a draft with an empty brief; the counts the list reads say who is in it. */
-function api(summary: FixtureName = 'campaign.summary/inbox-all'): FakeApi {
+const noHost: DesktopSetup = { ...setupFound, hosts: setupFound.hosts.map((each) => ({ ...each, found: false })) };
+
+/**
+ * The draft the click made, as the runtime's own tests recorded it: "New agent 1", no brief and no one in it. A test
+ * may give it a brief, or counts that hold people.
+ */
+function api(
+    summary: FixtureName = 'campaign.summary/new-agent',
+    get: FixtureName = 'campaign.get/new-agent',
+): FakeApi {
     return new FakeApi()
         .answerAnyRequest('approval.list', 'approval.list/empty')
         .answerAnyRequest('decision.list', 'decision.list/empty')
         .answerAnyRequest('preference.list', 'preference.list/set')
-        .answerAnyRequest('campaign.list', 'campaign.list/screen')
+        .answerAnyRequest('campaign.list', 'campaign.list/new-agent')
         .answerAnyRequest('campaign.summary', summary)
-        .answerAnyRequest('campaign.get', 'campaign.get/unlinked')
+        .answerAnyRequest('campaign.get', get)
         .answerAnyRequest('campaign.list_contacts', 'campaign.list_contacts/summary-waiting')
         .answerAnyRequest('workitem.list', 'workitem.list/creating-none')
         .answerAnyRequest('journal.list', 'journal.list/by-campaign')
+        .answerAnyRequest('campaign.activity', 'campaign.activity/all-7-days')
+        .answerAnyRequest('reply.count', 'reply.count/period-none')
         .answerAnyRequest('plugin.list', 'plugin.list/none')
         .answerAnyRequest('route.list', 'route.list/empty')
         .answerAnyRequest('ui.tokens', 'ui.tokens/two')
         .answerAnyRequest('system.info', 'system.info/with-ui');
 }
 
-async function renderAt(place: Place, fake: FakeApi = api()): Promise<{ desktop: StubDesktop; fake: FakeApi }> {
-    const desktop = stubDesktop({ ...setupFound });
+async function renderAt(
+    place: Place,
+    fake: FakeApi = api(),
+    status: DesktopSetup = setupFound,
+): Promise<{ desktop: StubDesktop; fake: FakeApi }> {
+    const desktop = stubDesktop({ ...status });
     // The campaign the runtime makes for the click, as the recorded draft names it.
-    desktop.agentCampaign = { id: 'cmp_2', name: 'Autumn' };
+    desktop.agentCampaign = { id: 'cmp_1', name: 'New agent 1' };
     let used: Parameters<typeof Console>[0]['desktop'] = desktop;
     let held: Bridge | null = null;
     if (place === 'tab') {
@@ -85,7 +102,7 @@ const click = () => fireEvent.click(side().getByRole('button', { name: 'New GTM 
 /** The agent's place once the click made it: its header, and its Chat asking Start's question. */
 async function opened(): Promise<{ header: HTMLElement; opening: HTMLElement }> {
     const header = await waitFor(() => {
-        expect(head()?.querySelector('h2')?.textContent).toBe('Autumn');
+        expect(head()?.querySelector('h2')?.textContent).toBe('New agent 1');
         return head()!;
     });
     const opening = await waitFor(() => {
@@ -117,6 +134,8 @@ beforeEach(() => {
     classicCampaigns.shown.value = null;
     classicCampaigns.campaign.value = null;
     forgetWaiting();
+    startWaiting.value = null;
+    openingWaiting.value = {};
 });
 
 afterEach(() => {
@@ -133,8 +152,8 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         const { opening } = await opened();
         expect(made(desktop)).toHaveLength(1);
         expect(desktop.calls.some((each) => each.name === 'chat.create')).toBe(false);
-        expect(location.hash).toBe('#/campaigns/cmp_2/chat');
-        expect(within(opening).getByRole('heading', { name: 'Who should Autumn reach?', level: 2 })).toBeTruthy();
+        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+        expect(within(opening).getByRole('heading', { name: 'Who should New agent 1 reach?', level: 2 })).toBeTruthy();
         // Start's box, with its two menus and its arrow, under the question; the chips under it; no second box below.
         const box = within(opening).getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
         expect(box.placeholder).toBe(
@@ -150,7 +169,7 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         await waitFor(() =>
             expect(
                 within(side().getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
-                    name: 'Autumn',
+                    name: 'New agent 1',
                 }),
             ).toBeTruthy(),
         );
@@ -174,13 +193,20 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         expect(shownPane().querySelectorAll('textarea[aria-label="Your message"]')).toHaveLength(1);
     });
 
-    it('offers no Start while the draft has no brief and no one in it, and Start once someone is in it', async () => {
+    it('offers no Start while the draft has no brief and no one in it', async () => {
         await renderAt(place);
         click();
         const { header } = await opened();
         expect(within(header).getByText('Draft')).toBeTruthy();
-        await waitFor(() => expect(agentFacts.value['cmp_2']).toBeDefined());
+        await waitFor(() => expect(agentFacts.value['cmp_1']).toBeDefined());
         expect(within(header).queryByRole('button', { name: 'Start' })).toBeNull();
+    });
+
+    it('keeps Start for a draft with a brief and no one in it', async () => {
+        await renderAt(place, api('campaign.summary/new-agent', 'campaign.get/new-agent-brief'));
+        click();
+        const { header } = await opened();
+        await waitFor(() => expect(within(header).getByRole('button', { name: 'Start' })).toBeTruthy());
     });
 
     it('keeps Start for a draft with no brief once people are in it', async () => {
@@ -205,6 +231,76 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         const [first, second] = made(desktop).map((each) => each.args);
         expect(second).toEqual(first);
         expect(side().queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('New GTM agent with no AI connected', () => {
+    const connect = (desktop: StubDesktop) => {
+        desktop.status = setupFound;
+        flush(() => desktop.changed());
+    };
+    const sends = (desktop: StubDesktop) =>
+        desktop.calls.filter((each) => each.name === 'chat.send').map((each) => [each.args[0], each.args[1]]);
+
+    it('shows the AI card in the opening; its first message waits, shown, with Take back, and goes once an AI is connected', async () => {
+        const { desktop } = await renderAt('window', api(), noHost);
+        click();
+        const { opening } = await opened();
+        expect(within(opening).getByRole('region', { name: 'Connect an AI' })).toBeTruthy();
+        const box = () => within(opening).getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        fireEvent.change(box(), { target: { value: 'Heads of finance at Polish SaaS firms' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        const note = await waitFor(() => within(opening).getByRole('status', { name: 'Waiting message' }));
+        expect(note.textContent).toContain('Waiting for an AI to be connected.');
+        expect(note.textContent).toContain('Heads of finance at Polish SaaS firms');
+        expect(box().disabled).toBe(true);
+        expect(sends(desktop)).toEqual([]);
+        // Taken back, the words are in the box again; sent again, they wait again.
+        fireEvent.click(within(note).getByRole('button', { name: 'Take back' }));
+        expect(box().value).toBe('Heads of finance at Polish SaaS firms');
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => within(opening).getByRole('status', { name: 'Waiting message' }));
+        connect(desktop);
+        const conversation = [...desktop.kept.values()].find((each) => each.madeAtClick === true)!.id;
+        await waitFor(() => expect(sends(desktop)).toEqual([[conversation, 'Heads of finance at Polish SaaS firms']]));
+    });
+
+    it('carries a message Start holds into the new agent’s opening, where it waits and goes, never into a set-up chat', async () => {
+        const { desktop } = await renderAt('window', api(), noHost);
+        const start = await waitFor(() => document.querySelector<HTMLFormElement>('form[aria-label="Start"]')!);
+        const startBox = within(start).getByRole<HTMLTextAreaElement>('textbox');
+        fireEvent.change(startBox, { target: { value: 'Founders of seed-stage fintechs' } });
+        fireEvent.keyDown(startBox, { key: 'Enter' });
+        await waitFor(() => expect(startWaiting.value).toBe('Founders of seed-stage fintechs'));
+        click();
+        const { opening } = await opened();
+        const note = await waitFor(() => within(opening).getByRole('status', { name: 'Waiting message' }));
+        expect(note.textContent).toContain('Founders of seed-stage fintechs');
+        expect(startWaiting.value).toBeNull();
+        connect(desktop);
+        const conversation = [...desktop.kept.values()].find((each) => each.madeAtClick === true)!.id;
+        await waitFor(() => expect(sends(desktop)).toEqual([[conversation, 'Founders of seed-stage fintechs']]));
+        expect(desktop.calls.some((each) => each.name === 'chat.create')).toBe(false);
+    });
+});
+
+describe('The agent made at the click, everywhere the console lists agents', () => {
+    it('is a plain draft in Agents, one draft row in Recent, not among the Dashboard’s running agents, and nothing in Needs you', async () => {
+        await renderAt('window');
+        click();
+        await opened();
+        const recent = within(side().getByRole('navigation', { name: 'Conversations' }));
+        await waitFor(() => expect(recent.getAllByRole('button', { name: 'New agent 1' })).toHaveLength(1));
+        // Its row's dot is the draft's, once the list of agents holds it.
+        await waitFor(() =>
+            expect(recent.getByRole('button', { name: 'New agent 1' }).querySelector('.rdot.draft')).not.toBeNull(),
+        );
+        // The Dashboard's agents are the running ones: a draft is not among them.
+        flush(() => here().dock.show('dashboard'));
+        await waitFor(() => expect(activePanel.value).toBe('dashboard'));
+        expect(within(shownPane()).queryByText('New agent 1')).toBeNull();
+        flush(() => here().dock.show('needs'));
+        await waitFor(() => expect(shownPane().querySelector('.needs-empty')).not.toBeNull());
     });
 });
 

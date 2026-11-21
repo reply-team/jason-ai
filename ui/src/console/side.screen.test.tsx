@@ -175,7 +175,7 @@ describe('the sidebar', () => {
         expect(version.contains(settings)).toBe(true);
     });
 
-    it('asks the desktop for an agent from New GTM agent, one click id a click, and makes no chat of no agent', async () => {
+    it('asks the desktop for an agent from New GTM agent, and makes no chat and opens nothing when the desktop refuses', async () => {
         const desktop = renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
@@ -183,14 +183,20 @@ describe('the sidebar', () => {
         // The desktop refuses, so the click opens nothing: where the agent opens is the agent's own test's.
         desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
         fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
-        await waitFor(() => expect(side().getByRole('alert').textContent).toContain('Jason is not running.'));
+        const alert = await waitFor(() => side().getByRole('alert'));
+        expect(alert.textContent).toContain('Jason is not running.');
+        // A click while the failure stands is that click again; once the line is closed, a click is a new one.
         fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
         await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(2));
-        const [first, second] = calls(desktop, 'chat.createAgent').map((each) => each.args);
+        fireEvent.click(within(await waitFor(() => side().getByRole('alert'))).getByRole('button', { name: 'Close' }));
+        fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
+        await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(3));
+        const [first, second, third] = calls(desktop, 'chat.createAgent').map((each) => each.args);
         expect(first).toEqual([
             expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
         ]);
-        expect(second).not.toEqual(first);
+        expect(second).toEqual(first);
+        expect(third).not.toEqual(first);
         expect(inFront()).toBe('Agents');
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });

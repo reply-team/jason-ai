@@ -1,4 +1,4 @@
-import { computed, effect } from '@preact/signals-react';
+import { computed, effect, signal } from '@preact/signals-react';
 import {
     useCallback,
     useEffect,
@@ -254,6 +254,41 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
         return null;
     }
 }
+
+/**
+ * By chat id, the first message an agent's opening took while no AI that drives the chat was connected, or Start's that
+ * waited the same way when New GTM agent was clicked: shown in the opening with Take back, and sent once an AI is there,
+ * once, into that agent's own conversation. It waits while the window is open, as Start's does.
+ */
+export const openingWaiting = signal<Readonly<Record<string, string>>>({});
+
+/** Holds a first message in an agent's opening until an AI that drives the chat is connected. */
+export function holdOpening(id: string, text: string): void {
+    const words = text.trim();
+    if (words) openingWaiting.value = { ...openingWaiting.value, [id]: words };
+}
+
+/** The waiting message back into the opening's box. */
+export function takeOpeningBack(id: string): void {
+    const held = openingWaiting.value[id];
+    if (held === undefined) return;
+    const rest = { ...openingWaiting.value };
+    delete rest[id];
+    openingWaiting.value = rest;
+    changeChat(id, (each) => typed(each, held));
+}
+
+// A held first message goes as soon as an AI is there to take it and its chat is held here, each once: it is taken out
+// of waiting before it is sent.
+effect(() => {
+    const held = openingWaiting.value;
+    const ready = Object.keys(held).filter((id) => chats.value[id] !== undefined);
+    if (ready.length === 0 || chatHosts(setup.value?.hosts ?? []).drive.length === 0) return;
+    const rest = { ...held };
+    for (const id of ready) delete rest[id];
+    openingWaiting.value = rest;
+    for (const id of ready) sendTurn(id, held[id]!, true, undefined, true);
+});
 
 /** What marks the id an agent's chat is drawn under before its conversation is made: never one the desktop gives. */
 const unmadeMark = 'unmade:';
@@ -1796,6 +1831,15 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
+        // The agent's opening, as Start, takes the first message while no AI drives the chat: it waits, shown, and goes
+        // once one is connected.
+        if (!tabLocked && current && !host && asksStart(current) && openingWaiting.value[chatId] === undefined) {
+            if (!current.draft.trim()) return;
+            drop.reset();
+            holdOpening(chatId, current.draft);
+            changeChat(chatId, (each) => typed(each, ''));
+            return;
+        }
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
         // What the box said of a drop goes with the words it was said beside.
         drop.reset();
@@ -1842,6 +1886,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const opening = asksStart(chat);
     const aiCard =
         opening && (setup.value ? chatHosts(setup.value.hosts).drive.length === 0 : setupError.value !== null);
+    const heldWords = opening ? openingWaiting.value[chatId] : undefined;
     const composer = (
         <form className="cform" onSubmit={send} aria-label="Message">
             <div className="composer">
@@ -1878,7 +1923,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                 <textarea
                     ref={messageBox}
                     rows={1}
-                    disabled={chat.removing || tabLocked}
+                    disabled={chat.removing || tabLocked || heldWords !== undefined}
                     placeholder={
                         chat.running
                             ? t('chat.queue.placeholder')
@@ -1937,7 +1982,13 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             type="submit"
                             title="Send"
                             aria-label="Send"
-                            disabled={!host || chat.removing || nameMissing || tabLocked}
+                            disabled={
+                                (!host && !opening) ||
+                                chat.removing ||
+                                nameMissing ||
+                                tabLocked ||
+                                heldWords !== undefined
+                            }
                             {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
                         >
                             <Glyph name="up" size={16} />
@@ -2072,6 +2123,23 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             <h2>{t('agent.new.question', { name: chat.title })}</h2>
                         </div>
                         {aiCard && <Painted className="start-ai" view={aiCardView} />}
+                        {heldWords !== undefined && (
+                            <div className="note start-waiting" role="status" aria-label="Waiting message">
+                                <div>
+                                    {setup.value
+                                        ? 'Waiting for an AI to be connected. This waits here while the window is open, and goes when one is:'
+                                        : setupError.value !== null
+                                          ? 'The setup could not be read, so this is not sent yet:'
+                                          : 'Reading what is set up; this goes once an AI is there:'}
+                                </div>
+                                <div className="said">{heldWords}</div>
+                                <div className="crow">
+                                    <button className="btn sm" type="button" onClick={() => takeOpeningBack(chatId)}>
+                                        Take back
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         {composer}
                     </div>
                 )}

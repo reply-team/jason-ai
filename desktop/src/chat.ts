@@ -463,6 +463,7 @@ type Listed = Map<string, { created: number; name: string }>;
 
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
+const projectIdShape = /^prj_[0-9A-Za-z]{1,64}$/;
 const textLimit = 1_000_000;
 /** The most lines one `feed` call takes: as many as the runtime's stream sends at one look. */
 const feedBatch = 200;
@@ -633,8 +634,11 @@ export class Chat {
      * one made and never sent to is not listed or written.
      */
     #kept = new Set<string>();
-    /** By click id, the name that click's agent was given in this run, so a retry of the click asks the same create. */
-    #clickNames = new Map<string, string>();
+    /**
+     * By click id, the name that click's agent was given in this run and the default project's id it is made in, so a
+     * retry of the click asks the same create.
+     */
+    #clickNames = new Map<string, { name: string; project: string }>();
     /** The clicks' creates, one after another, so a click's number is read after every earlier click's agent was made. */
     #clicks: Promise<unknown> = Promise.resolve();
     /**
@@ -1160,7 +1164,8 @@ export class Chat {
     }
 
     /**
-     * The agent a click on New GTM agent makes: a campaign in the default project named "New agent N", N one more than
+     * The agent a click on New GTM agent makes: a campaign in the default project, named by its id whatever folder the
+     * desktop runs in, and named "New agent N", N one more than
      * the highest number a campaign carries in that name (`nextAgentNumber`), made through the CLI under the click's own
      * key and the person's actor, and its conversation, kept from now and marked made at the click. A retry of the same
      * click asks the same create, by the same name and key, so a create that went through before its answer was lost
@@ -1175,15 +1180,21 @@ export class Chat {
     }
 
     async #makeAgent(clickId: string): Promise<AgentMade> {
-        let name = this.#clickNames.get(clickId);
-        if (name === undefined) {
+        let chosen = this.#clickNames.get(clickId);
+        if (chosen === undefined) {
             const listed = await this.#listCampaigns();
             if (listed === null) throw new ChatRefused(agentRuntimeAway);
-            name = agentName(nextAgentNumber([...listed.values()].map((each) => each.name)));
-            this.#clickNames.set(clickId, name);
+            // The default project, named by its id: never the project of a folder the desktop happens to run in.
+            const read = await this.#options.cli.run(['project', 'get', '--slug', 'default']);
+            if (read.exit === 3) throw new ChatRefused(agentRuntimeAway);
+            const project = read.exit === 0 ? objectOf(read.stdout) : null;
+            if (typeof project?.id !== 'string' || !projectIdShape.test(project.id) || project.default !== true) throw new ChatRefused(agentRefused(read));
+            chosen = { name: agentName(nextAgentNumber([...listed.values()].map((each) => each.name))), project: project.id };
+            this.#clickNames.set(clickId, chosen);
         }
+        const { name } = chosen;
         const actor = agentActor(this.#options.account);
-        const args = ['campaign', 'create', '--name', name, '--idempotency-key', agentKey(clickId), ...(actor === null ? [] : ['--actor', actor])];
+        const args = ['campaign', 'create', '--name', name, '--project', chosen.project, '--idempotency-key', agentKey(clickId), ...(actor === null ? [] : ['--actor', actor])];
         const answer = await this.#options.cli.run(args);
         if (answer.exit === 3) throw new ChatRefused(agentRuntimeAway);
         const campaign = answer.exit === 0 ? objectOf(answer.stdout) : null;
