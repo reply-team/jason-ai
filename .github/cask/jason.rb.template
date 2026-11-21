@@ -16,6 +16,7 @@ cask "jason" do
 
   auto_updates true
   depends_on arch: :arm64
+  # Electron 44.10.2's README: "macOS (Ventura and up)".
   depends_on macos: ">= :ventura"
 
   app "Jason.app"
@@ -28,12 +29,19 @@ cask "jason" do
               must_succeed: false,
             }
 
-  zap script: {
+  zap script:    {
         executable:   "#{appdir}/Jason.app/Contents/Resources/bundle/jason",
         args:         ["uninstall", "--keep-application"],
         must_succeed: false,
       },
-      trash:  [
+      launchctl: [
+        "ai.jason.runtime",
+        "ai.jasonharness.desktop",
+      ],
+      delete:    [
+        "~/.local/bin/jason",
+      ],
+      trash:     [
         "~/Library/Application Support/ai.jasonharness.desktop",
         "~/Library/Caches/ai.jasonharness.desktop",
         "~/Library/HTTPStorages/ai.jasonharness.desktop",
@@ -51,7 +59,8 @@ cask "jason" do
       brew uninstall --formula jason
     brew uninstall --cask jason takes off the application and its link, and leaves the jason
     command's wrapper and the start at logon pointing at nothing;
-    brew uninstall --zap --cask jason takes them off too.
+    brew uninstall --zap --cask jason also takes off the wrapper and the start at logon.
+    jason uninstall, run before either, takes off all Jason set up.
     Your data in ~/.jason and your work in ~/Jason stay in both.
   EOS
 end

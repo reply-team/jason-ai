@@ -57,9 +57,12 @@ public sealed partial class InstallCommandTests
         Assert.DoesNotContain(report.Problems, problem => problem.Contains("Homebrew", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task A_runtime_started_from_the_formulas_keg_is_stopped_as_a_retired_installs_is_and_the_keg_is_left()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_runtime_started_from_the_formulas_keg_is_stopped_as_a_retired_installs_is_and_the_keg_is_left(bool commandLineInstallToo)
     {
+        var old = commandLineInstallToo ? PlantMacCommandLineInstall() : null;
         var executable = Carried();
         var (env, _, keg) = FormulaBeside(MacPlaces(), executable);
         Directory.CreateDirectory(_data.Paths.Root);
@@ -92,6 +95,10 @@ public sealed partial class InstallCommandTests
         Assert.Empty(processes.Launches);
         Assert.True(File.Exists(keg.Executable), "the keg's jason was touched");
         Assert.Contains(HomebrewFormula.Linked(env)!.Problem(), report.Problems);
+        if (old is not null)
+        {
+            Assert.DoesNotContain(report.Left, line => line.Contains("so it was left running", StringComparison.Ordinal));
+        }
     }
 
     [Fact]

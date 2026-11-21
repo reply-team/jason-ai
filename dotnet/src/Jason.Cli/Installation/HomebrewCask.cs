@@ -68,8 +68,11 @@ public static class HomebrewCask
         return null;
     }
 
-    /// <summary>The prefixes asked, in order: the variable's, where it is an absolute path, then the defaults, once each.</summary>
-    public static IReadOnlyList<string> Prefixes(string? prefixVariable)
+    /// <summary>
+    /// The prefixes asked, in order: the variable's, where it is an absolute path, then the defaults, then, where a home is
+    /// given, <c>~/.linuxbrew</c>, Linux's older default for an install without administrator rights; once each.
+    /// </summary>
+    public static IReadOnlyList<string> Prefixes(string? prefixVariable, string? home = null)
     {
         var prefixes = new List<string>();
         if (prefixVariable is { Length: > 1 } given && Path.IsPathFullyQualified(given))
@@ -80,6 +83,11 @@ public static class HomebrewCask
         foreach (var prefix in DefaultPrefixes.Where(prefix => !prefixes.Contains(prefix, StringComparer.Ordinal)))
         {
             prefixes.Add(prefix);
+        }
+
+        if (home is { Length: > 0 } && Path.IsPathFullyQualified(home) && Path.Combine(home, ".linuxbrew") is var own && !prefixes.Contains(own, StringComparer.Ordinal))
+        {
+            prefixes.Add(own);
         }
 
         return prefixes;

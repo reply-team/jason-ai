@@ -78,6 +78,7 @@ public sealed partial class HomebrewCaskTests : IDisposable
 
         Assert.Null(HomebrewCask.Placed(application, prefix, new PlantedRecords()));
         Assert.Equal("/Applications", HomebrewCask.DefaultAppDir);
+        Assert.Equal(prefix, HomebrewCask.Placed("/Applications/Jason.app", prefix, new PlantedRecords()));
     }
 
     [Fact]
@@ -88,6 +89,15 @@ public sealed partial class HomebrewCaskTests : IDisposable
         Assert.Equal([prefix, "/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"], HomebrewCask.Prefixes(prefix + Path.DirectorySeparatorChar));
         Assert.Equal(["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"], HomebrewCask.Prefixes("relative/homebrew"));
         Assert.Equal(["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"], HomebrewCask.Prefixes(null));
+    }
+
+    [Fact]
+    public void Linux_s_older_default_under_the_home_is_asked_last()
+    {
+        var home = Path.Combine(_layouts.Root, "home");
+
+        Assert.Equal(["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew", Path.Combine(home, ".linuxbrew")], HomebrewCask.Prefixes(null, home));
+        Assert.Equal(["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"], HomebrewCask.Prefixes(null, "relative"));
     }
 
     [Fact]
@@ -114,6 +124,19 @@ public sealed partial class HomebrewCaskTests : IDisposable
         var kept = DesktopRemoval.ApplicationStatePlaces("~").Select(place => place.Replace('\\', '/')).Order(StringComparer.Ordinal);
 
         Assert.Equal(kept, trash);
+    }
+
+    /// <summary>
+    /// The zap takes off, with no application needed, the two things a plain uninstall leaves pointing at nothing: the
+    /// wrapper, by its path, and the start at logon, by the runtime's and the application's launchd labels.
+    /// </summary>
+    [Fact]
+    public void The_casks_zap_takes_the_wrapper_and_the_starts_at_logon_without_the_application()
+    {
+        var zap = Between(Template(), "zap script:", "trash:");
+
+        Assert.Contains($"launchctl: [\n        \"{Jason.Cli.Autostart.AutostartArtifacts.Label}\",\n        \"{DesktopRemoval.Identifier}\",\n      ]", zap, StringComparison.Ordinal);
+        Assert.Contains("delete:    [\n        \"~/.local/bin/jason\",\n      ]", zap, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -154,7 +177,7 @@ public sealed partial class HomebrewCaskTests : IDisposable
         Assert.Contains($"brew uninstall --formula jason", caveats, StringComparison.Ordinal);
         Assert.Equal(HomebrewFormula.UninstallCommand, "brew uninstall --formula jason");
         Assert.Contains("brew uninstall --cask jason takes off the application and its link, and leaves the jason\n    command's wrapper and the start at logon pointing at nothing;", caveats, StringComparison.Ordinal);
-        Assert.Contains(DesktopRemoval.HomebrewZap + " takes them off too.", caveats, StringComparison.Ordinal);
+        Assert.Contains(DesktopRemoval.HomebrewZap + " also takes off the wrapper and the start at logon.\n    jason uninstall, run before either, takes off all Jason set up.", caveats, StringComparison.Ordinal);
         Assert.DoesNotContain("reinstall", Template(), StringComparison.Ordinal);
     }
 

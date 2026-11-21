@@ -27,7 +27,7 @@ public sealed record HomebrewFormula(string Link, PackageOwner Owner, string Ver
         }
 
         var given = env.Variables is { } variables ? variables.GetValueOrDefault(HomebrewCask.PrefixVariable) : Environment.GetEnvironmentVariable(HomebrewCask.PrefixVariable);
-        foreach (var prefix in HomebrewCask.Prefixes(given))
+        foreach (var prefix in HomebrewCask.Prefixes(given, env.Setup?.Home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)))
         {
             if (Linked(Path.Combine(prefix, "bin", "jason"), records) is { } linked)
             {

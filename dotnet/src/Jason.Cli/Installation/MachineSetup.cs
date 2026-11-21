@@ -184,7 +184,9 @@ public static class MachineSetup
                 // Held from the moment it is found until the stop has given its answer: a stop that throws past this line
                 // leaves nothing of the install to be written over, retired or registered again.
                 holding = true;
-                (runtime, holding) = await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
+                (runtime, holding) = run.FormulaRuntime() is { } beside
+                    ? await run.StopOldRuntimeAsync(beside, cancellationToken).ConfigureAwait(false)
+                    : await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
 
