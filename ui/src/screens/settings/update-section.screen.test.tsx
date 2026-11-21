@@ -142,6 +142,16 @@ describe('Update, a section of Settings', () => {
         );
         await shown.findByText('Version 0.48.6 is available.');
         expect(shown.getAllByRole('status')).toHaveLength(1);
+        // A check that failed says why, in the desktop's words.
+        act(() =>
+            desktop.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Check for Updates…', enabled: true },
+                said: 'Could not check for updates: the list of releases could not be read.',
+            }),
+        );
+        await shown.findByText('Could not check for updates: the list of releases could not be read.');
+        expect(shown.getAllByRole('status')).toHaveLength(1);
         act(() =>
             desktop.updateMoved({
                 version: '0.48.5',
