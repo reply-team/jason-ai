@@ -496,7 +496,12 @@ test('a file tool\'s target that is another link to a settings file or the run f
     writeFileSync(join(data, 'run', 'runtime.json'), '{}');
     writeFileSync(join(documents, 'plain.md'), 'x');
     writeFileSync(join(documents, 'copy.json'), '{}');
-    linkSync(join(data, 'config', 'settings.json'), join(documents, 'notes.json'));
+    try {
+        linkSync(join(data, 'config', 'settings.json'), join(documents, 'notes.json'));
+    } catch {
+        t.skip('the file system of the temporary folder cannot make a second link to a file');
+        return;
+    }
     linkSync(join(data, 'run', 'runtime.json'), join(documents, 'state.json'));
     linkSync(join(documents, 'plain.md'), join(documents, 'plain-again.md'));
     const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
