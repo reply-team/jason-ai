@@ -169,17 +169,28 @@ export const personsWordForms: readonly string[] = [
 /**
  * The allow list's verbs that a chat outside Plan only does not run by itself, since each can let sends go without the
  * person's approval: a reply's verdict (`reply record`) can lift an opt-out and vouch for a draft under a standing
- * approval. The CLI's tests write it on the allow list; the turn takes it off, so it is a card in Ask first and Auto-edit
- * and runs in Full access. Plan only never had it, being no read.
+ * approval. The CLI's tests write it on the allow list; the turn takes it off, so it reaches the permission model in Ask
+ * first and Auto-edit, which runs it with no card where the hook rides the turn and shows a card below the floor of Full
+ * access; Full access runs it. Plan only never had it, being no read.
  */
 export const cardedVerbs: readonly string[] = ['reply record'];
 
 /**
+ * The verbs that keep a card in Ask first and Auto-edit where the turn's hook rides them, from Claude Code's floor of Full
+ * access on, every form of each: taking the installation off the machine, placing an archive over the installation,
+ * putting back the executable an update replaced, and granting a plugin what it may reach. Every other jason verb runs
+ * there with no card (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each written as the chat's
+ * instructions write a person's word; below the floor nothing changed, and Plan only runs none of them.
+ */
+export const askingCardedVerbs: readonly string[] = ['uninstall', 'import', 'update rollback', 'plugin grant'];
+
+/**
  * The fence one turn runs under in its mode. Plan only: the fence as it is read, every command and operation of the deny
  * list refused. Every other mode: no command or operation of the deny list is refused. The forms of a person's word
- * (`personsWordForms`) join the allow list and run with no card, and `cardedVerbs` leave it; every other command of the
- * deny list goes to the person as any jason command the host does not run by itself does: a card in Ask first and
- * Auto-edit, and in Full access what Full access does with such a card.
+ * (`personsWordForms`) join the allow list and run with no card, and `cardedVerbs` leave it. Every other command of the
+ * deny list goes to the permission model as any jason command the host does not run by itself does: where the hook rides
+ * the turn it runs with no card but the verbs of `askingCardedVerbs`, and below the floor of Full access it is a card in
+ * Ask first and Auto-edit; Full access runs it.
  */
 export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
     if (mode === 'plan_only') return fence;
