@@ -60,7 +60,7 @@ public static class ApiFixtures
     //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
     //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
     //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
-    //                     campaign.archive archive-spring|-spring-again (the agent page's archive, its own story).
+    //                     campaign.archive archive-spring|-spring-again|-unknown (the agent page's archive, its own story).
     //
     // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
     // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
@@ -250,6 +250,7 @@ public static class ApiFixtures
         "campaign.add_contacts/to-archived",
         "campaign.archive/archive-spring",
         "campaign.archive/archive-spring-again",
+        "campaign.archive/archive-unknown",
         "campaign.audience/first-page",
         "campaign.audience/latest-search",
         "campaign.audience/next-page",

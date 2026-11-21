@@ -12,8 +12,8 @@ import type {
 } from '../../api/types';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
+import { can } from '../../platform/places';
 import { countCancels, jasonMayPauseFirst, many, nothingOpen, type Cancels } from './archive-model';
-import { useCampaignChat } from './campaign-chat';
 import { unfinishedStatuses } from './kind';
 import { provider, type Movable } from './pause-dialog';
 import * as store from './store';
@@ -187,7 +187,9 @@ type DialogProps = { campaign: Movable; onDone: (archived: Campaign, open: WasOp
 /** The confirmation: the agent named, that it cannot be undone, and what it cancels, read as it opens. */
 export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const api = useApi();
-    const chat = useCampaignChat() !== null;
+    // Whether this place has an agent's chat to ask in: a fact of the place, never of where the dialog is mounted, so the
+    // agent's Settings and the menu on its row under Recent offer the same way first.
+    const chat = can('chat.send');
     const [read, setRead] = useState<Read | null>(null);
     const [reading, setReading] = useState(0);
     const [reason, setReason] = useState('');
