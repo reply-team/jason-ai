@@ -796,6 +796,7 @@ public sealed class TerminalPlanTests : IDisposable
     [Theory]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe", true)]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.2681.0_x64__8wekyb3d8bbwe\wt.exe", true)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.10000.0_x64__8wekyb3d8bbwe\wt.exe", true)]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminalPreview_1.25.1.0_arm64__8wekyb3d8bbwe\wt.exe", true)]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.1462.0_x64__8wekyb3d8bbwe\wt.exe", false)]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.17.11461.0_x64__8wekyb3d8bbwe\wt.exe", false)]
@@ -829,6 +830,9 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData("C:/Program Files/WindowsApps/Microsoft.WindowsTerminalPreview_1.25.2.0_neutral__8wekyb3d8bbwe/wt.exe", "1.25.2.0")]
     [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24_x64__8wekyb3d8bbwe\wt.exe", null)]
     [InlineData(@"C:\Program Files\WindowsApps\Contoso.WindowsTerminal_9.9.9.9_x64__8wekyb3d8bbwe\wt.exe", null)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.10000.0_x64__8wekyb3d8bbwe\wt.exe", "1.18.10000.0")]
+    [InlineData("C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\n\\wt.exe", null)]
+    [InlineData("C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_\u0661.24.1.0_x64__8wekyb3d8bbwe\\wt.exe", null)]
     [InlineData("wt.exe", null)]
     [InlineData("", null)]
     public void The_version_is_read_from_the_package_folders_name(string target, string? version)

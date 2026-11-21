@@ -48,7 +48,7 @@ public sealed record OwnJason(string DataDirectory, string? ExecutableFolder, st
 /// installation's own <c>jason</c> (<see cref="OwnJason"/>): every system is handed the data directory by name and the
 /// opening executable's folder first on PATH, so another <c>jason</c> earlier on the person's PATH does not win there.
 /// </summary>
-public static class TerminalPlan
+public static partial class TerminalPlan
 {
     /// <summary>The console host's file, in the system directory and nowhere else.</summary>
     public const string ConsoleHost = "conhost.exe";
@@ -453,9 +453,13 @@ public static class TerminalPlan
             return null;
         }
 
-        var match = System.Text.RegularExpressions.Regex.Match(parts[^2], @"^Microsoft\.WindowsTerminal(?:Preview)?_(\d+\.\d+\.\d+\.\d+)_[^_]*__[a-z0-9]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        var match = PackageFolder().Match(parts[^2]);
         return match.Success && Version.TryParse(match.Groups[1].Value, out var version) ? version : null;
     }
+
+    /// <summary>A Windows Terminal package folder's name: the package, its four-part version, its architecture and its publisher's id.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^Microsoft\.WindowsTerminal(?:Preview)?_([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)_[^_]*__[a-z0-9]+\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex PackageFolder();
 
     private static TerminalFound? FindOnWindows(string? systemDirectory, string? windowsApps, Func<string, string?>? aliasTarget)
     {
