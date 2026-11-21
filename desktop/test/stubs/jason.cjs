@@ -89,7 +89,16 @@ if (args[0] === 'status') {
         print({ error: { code: 'campaign_not_found', message: 'No campaign has that id.', retryable: false } });
         process.exit(1);
     }
-    print({ id: args[2], name: process.env.STUB_CAMPAIGN_NAME || 'Spring', status: process.env.STUB_CAMPAIGN_STATUS || 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+    // A campaign STUB_CAMPAIGNS_FILE holds answers with its own name, as the runtime would; any other id as before.
+    let stored = null;
+    if (process.env.STUB_CAMPAIGNS_FILE) {
+        try {
+            stored = JSON.parse(readFileSync(process.env.STUB_CAMPAIGNS_FILE, 'utf8')).find((each) => each.id === args[2]) ?? null;
+        } catch {
+            stored = null;
+        }
+    }
+    print({ id: args[2], name: stored?.name ?? (process.env.STUB_CAMPAIGN_NAME || 'Spring'), status: process.env.STUB_CAMPAIGN_STATUS || 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
 } else if (verb === 'campaign list') {
     // Every campaign STUB_CAMPAIGNS_FILE holds, in pages of STUB_PAGE_SIZE (else --limit), the cursor the index of the
     // next page; STUB_LIST_FAIL_PAGE names a page (from 1) that is refused, 'all' every page.
