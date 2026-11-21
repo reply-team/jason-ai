@@ -1528,7 +1528,7 @@ export const ROWS = {
         "clears": "next_utc_day",
         "keeps_no_send": true,
         "unnamed_sender": "mailbox_limit_spent",
-        "note": "The mailbox has sent as many direct emails today as Reply allows it, so nothing was sent. The message waits on the mailbox's block and goes once Reply's day turns, at midnight UTC, and a trial gets past it."
+        "note": "Reply refused the email for the mailbox's daily limit: it has sent as many direct emails today as Reply allows it, or the later day the email is due on already has as many emails due as the mailbox may send that day. Nothing was sent. The message waits on the mailbox's block, which is tried again once Reply's day turns, at midnight UTC, and goes once a trial gets past it."
       },
       "mailbox_active_contacts_limit": {
         "when": "The send answered Reply's code `contact.activeContactsLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`email.limit_reached`, with `active_contacts` under `details.limit`): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
