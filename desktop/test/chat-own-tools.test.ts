@@ -105,7 +105,7 @@ test('the chat\'s own permission tool stays refused to the agent', () => {
 });
 
 test('a tool of any server whose name begins with the fixed prefix is the chat\'s own, refused to the agent by the hook and the permission model: a turn\'s, and one of the old fixed name from the person\'s own scopes', () => {
-    const own = /answers the chat's own permission requests/;
+    const own = /carries the chat's own permission requests/;
     for (const tool of ['mcp__jason_desktop__decide', 'mcp__jason_desktop__approve', 'mcp__jason_desktop_0123456789abcdef__decide', 'mcp__jason_desktop_fedcba9876543210__other']) {
         const judged = judge(tool, { tool_name: 'Bash', input: { command: 'ls' } }, scope);
         assert.match(judged.verdict === 'deny' ? judged.message : judged.verdict, own, tool);
@@ -190,12 +190,15 @@ test('every turn that does not run in Full access keeps the sealed line whole, i
         }
     }
     // Each of those settings carries the server defences: inline below the floor of Full access and in Plan only, in the
-    // file the hook rides at the floor and above.
-    const sealed = [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), hookedSettings('ask_first', hookUrl, 'the-secret'), hookedSettings('auto_edit', hookUrl, 'the-secret')] as Record<string, unknown>[];
-    for (const each of sealed) {
+    // file the hook rides at the floor and above. The inline ones block reads outside the working folders; the hooked ones
+    // do not, since the hook refuses the three kinds wherever a tool names them.
+    const inline = [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings)] as Record<string, unknown>[];
+    const hooked = [hookedSettings('ask_first', hookUrl, 'the-secret'), hookedSettings('auto_edit', hookUrl, 'the-secret')] as Record<string, unknown>[];
+    for (const each of [...inline, ...hooked]) {
         for (const [key, value] of Object.entries(defences)) assert.deepEqual(each[key], value, key);
-        assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
     }
+    for (const each of inline) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
+    for (const each of hooked) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, undefined);
     assert.equal(noChromeFrom, '2.1.285');
 });
 
@@ -211,7 +214,7 @@ test('a turn that runs in Full access, at the floor of Full access and above, lo
     }
     const full = hookedSettings('full_access', hookUrl, 'the-secret') as Record<string, unknown>;
     for (const key of Object.keys(defences)) assert.equal(key in full, false, key);
-    assert.equal((full['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
+    assert.equal('permissions' in full, false, 'no block of reads, and no rule that a page asks');
     assert.equal(full['disableAllHooks'], false);
     assert.deepEqual(full['allowedHttpHookUrls'], [hookUrl]);
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access', version: fullAccessFloor }), /settings file/, 'never without the file its hook rides in');

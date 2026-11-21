@@ -106,11 +106,13 @@ function serverDefences() {
 }
 
 /**
- * The settings every Claude Code turn carries on its command line. Claude Code runs its built-in read-only commands
- * (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside the working folders
- * blocked, such a command on a path outside the chat folder and the added folders asks, and so reaches the permission
- * tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as inline JSON. The key
- * is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version would skip it.
+ * The settings an Ask first or Auto-edit turn carries on its command line where the hook does not ride it, below Claude
+ * Code's floor of Full access; a turn the hook rides carries its own (`hookedSettings`). Claude Code runs its built-in
+ * read-only commands (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside
+ * the working folders blocked, such a command on a path outside the chat folder and the added folders asks, and so
+ * reaches the permission tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as
+ * inline JSON. The key is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version
+ * would skip it.
  *
  * Every fetch asks too, so that each page reaches the permission model, which opens the documentation hosts' pages with
  * no card (`documentationHosts`) and puts a card in front of any other. Without the rule Claude Code would open a page of
@@ -137,15 +139,19 @@ export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOuts
 export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, ...serverDefences() });
 
 /**
- * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit those of every turn
- * (`claudeTurnSettings`), the server defences among them, in Full access those with no rule that a page asks and no server
- * defence; and a `PreToolUse` hook on every tool that
- * posts the tool use to the turn's endpoint, which answers a refusal of the three kinds or nothing (`HookAnswer`).
- * Claude Code's deny rules match a command as written only, so the hook reads what they cannot, and a refusal of it
- * stands in front of an allow rule. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"`
- * "prevents the tool call", and "Deny and ask rules are still evaluated regardless of what the hook returns"; a matcher
- * of `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
- * `command` or `http` hook. Requires Claude Code v2.1.295 or later."
+ * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit the rule that every
+ * page asks (`claudeTurnSettings`) and the server defences (`serverDefences`), in Full access no rule and no server
+ * defence; and a `PreToolUse` hook on every tool that posts the tool use to the turn's endpoint, which answers a refusal
+ * of the three kinds or nothing (`HookAnswer`). Reads outside the working folders are not blocked: the hook refuses the
+ * three kinds wherever a tool names them, so a read anywhere else runs in Full access, and in Ask first and Auto-edit
+ * reaches the prompt tool, which runs it with no card, and a change outside the working folders is the one card
+ * (`ChatScope.hooked`). With the block, Claude Code refused such a read before it asked anyone, and an edit, which needs
+ * a read of the file first, died with it. Claude Code's deny rules match a command as written only, so the hook reads
+ * what they cannot, and a refusal of it stands in front of an allow rule. Anthropic,
+ * https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"` "prevents the tool call", and "Deny and ask rules are
+ * still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence of the event"; "To
+ * block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295 or
+ * later."
  *
  * A turn that runs in Full access loads the person's own configuration, their hooks among it, which run beside this one;
  * a refusal of this one stands whatever theirs answer. Anthropic, https://code.claude.com/docs/en/hooks (read
@@ -155,7 +161,7 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
  */
 export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string) {
     return {
-        permissions: mode === 'full_access' ? { blockReadsOutsideWorkingDirectories: true } : { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] },
+        ...(mode === 'full_access' ? {} : { permissions: { ask: ['WebFetch(domain:*)'] } }),
         // No settings file of the person's or a project's can switch the hook off or filter it out. Anthropic,
         // https://code.claude.com/docs/en/settings (read 2026-11-12), of command-line settings: "A key you set there
         // overrides the same key in your project and user settings files", and "Lists merge instead of overriding", so the
@@ -245,8 +251,10 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * request's content comes from, the host is given no allow rule for a form of a verb that reads one from a file or from
  * standard input (`withoutRequestFiles`), so each reaches the prompt tool, which refuses a redirect from the
  * installation's own data and runs a plain form with no card, as the rule would. Every deny rule is passed in every mode; Anthropic,
- * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
- * `--bare`, which drops the subscription sign-in and the skills.
+ * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". The rule against
+ * a jason that starts with an option is passed only where no hook rides the turn (`denyRules`): where one does, such a
+ * command reaches the prompt tool, which runs jason's own help and version and refuses any other. Never `--bare`, which
+ * drops the subscription sign-in and the skills.
  *
  * A turn that runs in Full access loads the person's own Claude Code configuration, as a terminal does: no
  * `--setting-sources`, no `--strict-mcp-config`, no `--no-chrome`, so their settings, rules and hooks, their skills, their
@@ -254,25 +262,28 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20: `--permission-mode`
  * "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole: Plan only, Ask
  * first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
- * browser tab, as root, started again after Claude Code refused or turned off its bypass, or once the hook was found
- * filtered out: which line a turn gets follows the mode it runs in (`turnMode`, and `running.mode` once a start is
- * narrowed), never the one the chat shows. The sealed line is `--setting-sources project`, `--strict-mcp-config`, and from
- * `noChromeFrom` on `--no-chrome`, so none of the person's settings, servers, connectors or browser reaches the turn (its
- * settings' `serverDefences` hold below that version). In every mode the turn's own `--mcp-config` names the prompt
- * tool's server, under the turn's own name for it (`ownServer`), beside the person's servers in Full access, so a
- * question the host asks reaches the prompt tool and never hangs a `-p` turn; reads outside the working folders blocked
- * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives, so a
- * comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
+ * browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
+ * the hook was found filtered out: which line a turn gets follows the mode it runs in (`turnMode`, and `running.mode`
+ * once a start is narrowed), never the one the chat shows. The sealed line is `--setting-sources project`,
+ * `--strict-mcp-config`, and from `noChromeFrom` on `--no-chrome`, so none of the person's settings, servers, connectors
+ * or browser reaches the turn (its settings' `serverDefences` hold below that version). In every mode the turn's own
+ * `--mcp-config` names the prompt tool's server, under the turn's own name for it (`ownServer`), beside the person's
+ * servers in Full access, so a question the host asks reaches the prompt tool and never hangs a `-p` turn; reads outside
+ * the working folders blocked where no hook rides the turn (`claudeTurnSettings`, `planTurnSettings`), and not where one
+ * does (`hookedSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives, so
+ * a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const sealed = mode !== 'full_access';
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : turn.settingsFile ? turn.allowed : withoutRequestFiles(turn.allowed);
+    // The hook rides every turn given a settings file of its own, and Plan only, which carries its inline settings, never.
+    const hooked = mode !== 'plan_only' && turn.settingsFile !== undefined;
+    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : hooked ? turn.allowed : withoutRequestFiles(turn.allowed);
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied, hooked), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     if (sealed) args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
@@ -606,9 +617,10 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
  * Never set on Linux either, nor passed on there when the desktop inherited it:
  * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
  * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the
- * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn sets
- * (`claudeTurnSettings`), it denies reads of the home directory (the settings reference, "Sandboxed commands under the
- * block"), so Jason's data directory and the runtime's descriptor in it are hidden; and "a sandboxed command's
+ * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn the hook
+ * does not ride sets (`claudeTurnSettings`, `planTurnSettings`), it denies reads of the home directory (the settings
+ * reference, "Sandboxed commands under the block"), so Jason's data directory and the runtime's descriptor in it are
+ * hidden; and "a sandboxed command's
  * `localhost` is private to that command", so the runtime's loopback address is out of reach too. `socat` is only the
  * sandbox's network relay, which stock Ubuntu lacks, and the PID namespace the variable also brings on Linux is a
  * separate effect. In Full access, and on Linux in every mode, a key and the credentials the turn carries reach the

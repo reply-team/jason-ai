@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
-import { personsWordForms, readFence } from '../src/chat-deny.ts';
+import { askingCardedForms, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
 import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { loggedTurns } from '../src/chat-log.ts';
@@ -286,7 +286,9 @@ test('a Full access turn starts Claude Code in its bypass mode, with every deny 
     assert.ok(settings.startsWith(r.b.paths.turns));
     const rest = args.slice(args.indexOf('--disallowedTools') + 1);
     const disallowed = rest.slice(0, rest.findIndex((arg) => arg.startsWith('--')));
-    for (const rule of ['Bash(jason -*)', 'Bash(*JASON_CONFINED*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), rule);
+    for (const rule of ['Bash(*JASON_CONFINED*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), rule);
+    // A jason that starts with an option is none of the three kinds the hook refuses, so the host refuses it no more.
+    assert.ok(!disallowed.includes('Bash(jason -*)'));
     assert.ok(!existsSync(settings), 'the settings file goes with the turn');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
     assert.deepEqual(r.started, ['full_access']);
@@ -1858,7 +1860,10 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
         }
         for (const verb of ['approval set-standing', 'reply record', 'preference set', 'preference unset']) assert.ok(!allowed.includes(`Bash(jason ${verb}:*)`), `${mode}: ${verb} is not allowed whole`);
         for (const entry of fence.commands) assert.equal(disallowed.includes(`Bash(jason ${entry}:*)`), mode === 'plan_only', `${mode}: ${entry}`);
-        for (const rule of ['Bash(jason -*)', 'Bash(*JASON_CONFINED*)', 'Bash(*JASON_CHAT_TURN*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), `${mode}: ${rule}`);
+        for (const rule of ['Bash(*JASON_CONFINED*)', 'Bash(*JASON_CHAT_TURN*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), `${mode}: ${rule}`);
+        // Where the hook rides the turn, here every mode but Plan only on a Claude Code at the floor of Full access, the
+        // model judges a jason that starts with an option, and runs jason's own help and version.
+        assert.equal(disallowed.includes('Bash(jason -*)'), mode === 'plan_only', `${mode}: Bash(jason -*)`);
     }
 });
 
@@ -1887,18 +1892,28 @@ test('every turn, on either host and in every mode, carries the chat\'s variable
     }
 });
 
-test('in Ask first and Auto-edit each installation verb and each act that lets sends go unapproved is the person\'s card, never a refusal; in Plan only each is refused with no card', async (t) => {
+test('in Ask first and Auto-edit, where the hook rides the turn, each installation verb and each act that lets sends go unapproved runs with no card but uninstall, export, import and plugin grant, each the person\'s card; below the floor of Full access each is a card, never a refusal; in Plan only each is refused with no card', async (t) => {
     const carded = [...installationVerbs, ...releasingActs, replyRecord];
-    for (const mode of ['ask_first', 'auto_edit'] satisfies ChatMode[]) {
-        const r = rig(t);
-        const { id } = await r.chat.create();
-        // A new chat starts in Full access, so Ask first is chosen as Auto-edit is.
-        await r.chat.setMode(id, mode, 'claude');
-        plan(r, carded.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
-        const said = await answered(r, id, carded.map(() => false));
-        assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), carded.map((command) => `Run a command: ${command}`), mode);
-        assert.ok(!texts(said).some((text) => text.includes('person\'s own act')), `${mode}: ${JSON.stringify(texts(said))}`);
+    const keepsCard = (command: string) =>
+        askingCardedForms.some(({ verb, options }) => (command === `jason ${verb}` || command.startsWith(`jason ${verb} `)) && (options === undefined || options.some((option) => command.split(' ').includes(option))));
+    const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+    t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
+    for (const [floor, env] of [['at the floor', {}], ['below the floor', { STUB_CLAUDE_VERSION_FILE: versionFile }]] as const) {
+        for (const mode of ['ask_first', 'auto_edit'] satisfies ChatMode[]) {
+            const r = rig(t, { env });
+            const { id } = await r.chat.create();
+            // A new chat starts in Full access, so Ask first is chosen as Auto-edit is.
+            await r.chat.setMode(id, mode, 'claude');
+            plan(r, carded.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
+            const asked = floor === 'at the floor' ? carded.filter(keepsCard) : carded;
+            const said = await answered(r, id, asked.map(() => false));
+            assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), asked.map((command) => `Run a command: ${command}`), `${floor}, ${mode}`);
+            assert.ok(!texts(said).some((text) => text.includes('person\'s own act')), `${floor}, ${mode}: ${JSON.stringify(texts(said))}`);
+            assert.equal(texts(said).filter((text) => text === 'decision allow').length, carded.length - asked.length, `${floor}, ${mode}: the rest ran with no card`);
+        }
     }
+    assert.deepEqual(carded.filter(keepsCard), ['jason uninstall', 'jason export out.zip', 'jason import in.zip', 'jason plugin grant reply --http api.example.com']);
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'plan_only');

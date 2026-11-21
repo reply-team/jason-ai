@@ -72,7 +72,7 @@ test('what the model refuses is refused with its message, and no card is shown',
     turn('chat_a', 'turn_1');
     const answer = await broker.ask('turn_1', 'Read', { file_path: '/Users/someone/.jason/config/settings.json' });
     assert.equal(answer.behavior, 'deny');
-    assert.match(answer.behavior === 'deny' ? answer.message : '', /installation's own data/);
+    assert.match(answer.behavior === 'deny' ? answer.message : '', /Jason's own data/);
     assert.deepEqual(sent, []);
     assert.deepEqual(decided, [{ outcome: 'refused', by: 'model', mode: 'ask_first' }]);
 });
@@ -199,7 +199,7 @@ test('a remembered grant never allows what the model refuses: the refusal is the
         ['Bash', { command: 'git status $JASON_DATA_DIR/state' }]] as const) {
         const answer = await within(broker.ask('turn_1', tool, input));
         assert.equal(answer.behavior, 'deny', `${tool} ${JSON.stringify(input)}`);
-        assert.match(answer.behavior === 'deny' ? answer.message : '', /installation's own data/);
+        assert.match(answer.behavior === 'deny' ? answer.message : '', /Jason's own data/);
         assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model', mode: 'ask_first' });
     }
     assert.equal(sent.length, cards);

@@ -126,7 +126,7 @@ test('in Plan only a Claude turn is denied adding a role and linking a project\'
     assert.equal(allowed.length, 47);
 });
 
-test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before', () => {
+test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before but where the hook rides', () => {
     const nouns = helpNouns(fence.allowed, fence.reads);
     assert.deepEqual(nouns, ['approval', 'audience', 'block', 'campaign', 'contact', 'decision', 'events', 'journal', 'operation', 'plugin', 'preference', 'project', 'reply', 'report', 'role', 'rolenote', 'route', 'sender', 'subscription', 'suppression', 'workitem']);
     const rules = nouns.map((noun) => `Bash(jason ${noun} --help)`);
@@ -135,12 +135,14 @@ test('each noun with a verb on the allow list or the plan list has its help allo
         const args = claudeArguments({ ...turn, reads: fence.reads, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
         const help = valuesOf(args, '--allowedTools').filter((rule) => rule.endsWith(' --help)'));
         assert.deepEqual(help, rules, mode);
-        // The deny rules are not touched: every jason that starts with an option stays refused by the host, root help included.
+        // Every jason that starts with an option stays refused by the host where no hook rides the turn, root help
+        // included: Plan only, and Ask first below the floor of Full access. Where the hook rides, the model judges it.
         const refused = valuesOf(args, '--disallowedTools');
-        assert.ok(refused.includes('Bash(jason -*)'), mode);
+        assert.equal(refused.includes('Bash(jason -*)'), mode === 'plan_only', mode);
         // Full access keeps the PowerShell tool, as a terminal's session does (`fullAccessRemovedTools`).
-        for (const rule of denied.filter((rule) => mode !== 'full_access' || rule !== 'PowerShell')) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
+        for (const rule of denied.filter((rule) => (mode !== 'full_access' || rule !== 'PowerShell') && (mode === 'plan_only' || rule !== 'Bash(jason -*)'))) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
     }
+    assert.ok(denied.includes('Bash(jason -*)'), 'below the floor');
     // Only `--help`, and no rule for all of a noun, the root's help or a noun the deny list takes away whole.
     const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
     for (const rule of ['Bash(jason --help)', 'Bash(jason -h)', 'Bash(jason campaign -h)', 'Bash(jason campaign --help:*)', 'Bash(jason campaign:*)', 'Bash(jason runtime --help)', 'Bash(jason profile --help)', 'Bash(jason update --help)', 'Bash(jason skills --help)', 'Bash(jason ui --help)', 'Bash(jason session --help)', 'Bash(jason status --help)', 'Bash(jason logs --help)']) {

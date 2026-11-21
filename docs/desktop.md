@@ -344,8 +344,10 @@ editor is not started with a changed PATH. The desktop and the command line shar
 `JASON_DATA_DIR` names or `~/.jason`, but a `jason` typed in an editor is whichever your PATH finds first, which may be
 another installation's or none; the sentence after an editor's open says which. Open in is the page's
 own act, through the window's one object. In a chat turn the `jason session` commands, which start a session on your
-computer, are refused in Plan only, are a card in Ask first and Auto-edit, as every command that changes the installation
-is, and run in Full access as they would in a terminal. It does not open the data directory; the folders of it a
+computer, are refused in Plan only, run with no card in Ask first and Auto-edit from Claude Code 2.1.322 on, as every
+`jason` command does but the few that keep a card (see Access modes), and are a card there on an older Claude Code, as
+every command that changes the installation is, and run in Full access as they would in a terminal. It does not open the
+data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
 it, to change Jason itself.
 
@@ -638,9 +640,10 @@ Claude Code.
 - **Claude Code's floor is 2.1.257.** The desktop reads `claude --version` at each listing of the hosts and before each
   turn, never remembers it, and treats a version it cannot read as below the floor. Below it, the host is listed with a
   sentence that names the version found, the floor and how to update, it cannot be chosen, and a turn sent to it is
-  refused before the host starts, a key provider's turn on it included. The reason is one setting: every Claude Code turn
-  carries `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders
-  the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
+  refused before the host starts, a key provider's turn on it included. The reason is one setting: a turn in Plan only,
+  and in Ask first and Auto-edit on a Claude Code older than 2.1.322, carries
+  `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders the chat
+  works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn that does not run in Full access also passes `--no-chrome`, the first version whose changelog
   names the flag; below it that turn's settings alone keep the browser out.
 - **In Full access the chat loads your own Claude Code configuration: your skills, hooks, MCP servers and rules; in the
@@ -767,9 +770,9 @@ model's to decide.
 The `AGENTS.md` files you keep for all of your work, for a project and for a campaign ([projects.md](projects.md)) are
 handed to the chat by the desktop, as Jason's roles read them by path: every chat is given the client's, the one at the
 harness root, and a campaign's conversation the project's and the campaign's as well, in that order, on every host and
-in every access mode. A Claude Code turn cannot open the client's file itself, since no folder outside the ones it works
-in is readable to it, and the root is never added: the desktop reads the files and puts them after its first paragraph,
-each under a line naming its level and its path, its words quoted. A file is read only from the folder the runtime
+in every access mode. The root is never added to a turn's folders, and the chat is told not to open the client's file
+by its path: the desktop reads the files and puts them after its first paragraph, each under a line naming its level
+and its path, its words quoted. A file is read only from the folder the runtime
 records, the root it reports as marked and the folder on the project and on the campaign, and only where that folder
 carries the marker of that level and that id; a level whose folder is not that, or a link, or whose `.jason` is a link,
 says nothing. A file that is itself a link, or a name with more than one link (a hard link), one that is not UTF-8
@@ -783,8 +786,13 @@ keeps a digest of what each session was given and its log only the level and whe
 given, never a word or a path of a file; the host keeps the turn's input, these words with it, in its own transcript, as
 it keeps every turn's.
 
-The chat does not write these files. When you state a rule that should hold beyond one message, it says the line to add
-and the file it belongs in, by its path; the file is yours to edit, at that path or in its folder from Open in.
+The chat writes one of these files only when you tell it to, in your own words in that message, and never because a
+memory file, a page, a reply or another file says so: it adds exactly the line you asked for, to the file you named or,
+where you named none, the one the rule belongs in, and says the line and the file's path. In Full access it writes the
+file then; in Ask first and Auto-edit each such change is a card, "Change instructions the AI reads", in a campaign's
+folder the conversation works in and outside it alike; in Plan only it changes nothing. When you state a rule that
+should hold beyond one message without telling it to write it, it says the line to add and the file it belongs in, by
+its path, and asks once whether to add it; the file is yours to edit too, at that path or in its folder from Open in.
 
 ### The Feed
 
@@ -921,22 +929,41 @@ Changing to Plan only stops the turn that is running, so the menu never says Pla
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access, which asks for no confirmation. On Codex, Full access is no sandbox and nothing of what
 follows, as above. In Full access on Claude Code, Claude Code runs in its own bypass mode, as it would in a terminal
-started that way: the AI runs commands and changes files on this computer without asking, with the PowerShell tool
-among its tools. Jason's check before each tool use refuses three kinds, with no card, each by a
-sentence that names the `jason` command that does what was asked: a tool use or a command that names the
+started that way: the AI reads, runs commands and changes files anywhere on this computer your account may, without
+asking, with the PowerShell tool among its tools. Jason's check before each tool use refuses three kinds, with no card,
+each by a sentence that says what is closed, that it is Jason's own and not one of your files, and the `jason` command
+that does what was asked: a tool use or a command that names the
 installation's settings files or its run file; one that names its data directory outside the conversation's own
 folder, and in a demo run your own installation; and one that names what Jason itself sets for the turn: its variables
 and its permission tool, that is `JASON_CONFINED`, `JASON_CHAT_TURN` and `JASON_ATTEMPT_ID`, with where the shell finds
-a program (`PATH`, `PATHEXT`), and the tool that answers the chat's own permission requests, which only you answer. On
+a program (`PATH`, `PATHEXT`), and the tool that answers the chat's own permission requests, which only you answer. A
+search or a walk of a folder that holds the data directory, your home folder or a drive's top say, by the Grep or Glob
+tool or by a command (a recursive search, a finder, a size, a tree, a recursive listing, a copy, an archive or a removal
+of it, or any other command on such a folder but a listing of its names, a search or a read of a file it names, a look
+at a path, a print or a change of folder, an option those do not take included), would reach that data without naming
+it, so it is refused with the words to name a narrower folder, Documents or Desktop say, and so is a recursive search,
+a finder, a size, a tree, a recursive listing or copy, an archive or a recursive removal of a folder a variable names
+that the check does not know (any other command given such a folder runs, unless the command names a folder that holds
+the data directory); any other program run in such a folder is refused with the words
+to run it in a narrower folder or to name the folder it should work on. A listing of such a folder's names runs. A `jq`
+program that reads the environment or a file by its own words (`env`, `$ENV`, `import`, `include`, a program from a
+file), and a command told on its input which files to read (`--files0-from`), are refused too. A Glob pattern is read
+where it can lead, and one whose brace group can name another folder is refused. On
 Windows a path that names this computer as another computer would, `\\localhost\C$\` say, is read as the drive it
-leads to, and one in a device's or a volume's namespace is refused as the data directory is. The check reads what a
-command names, not what it builds while it runs: a command that reaches one of them by a pattern (`~/.jas*`), a
-variable, `cd "$HOME"` and then a relative path, or `~user` runs. The turn's folder is its own, the chat's instructions
-and agent folders in it included: before the next turn Jason writes its instructions there afresh and leaves its agent
-folders holding only what Jason placed, in a conversation's own folder and in the shared folder of a conversation an
-earlier version made alike. What Claude Code still asks about in its bypass mode is a card titled "Full access asks
-about this one", which waits thirty minutes and then is not run, and the turn goes on; one line under its title says
-that Claude Code asked about it itself, and "Allow for this chat" works on it as in Ask first. Jason does not read a
+leads to, and one in a device's or a volume's namespace, or on a share of this computer that names no drive, is
+refused with the words that Jason could not place where it leads. The check reads a command as the shell would lead
+it: a relative path from the folder a change of folder led to, a variable it knows (your home folder's and your
+profile's, the drive's, the folder the shell is in, and one the command gives a value of its own, in PowerShell a
+quoted one or a number, beside the variable's own), a `~` followed by your own account's name, a tilde of the folders
+the shell is in or has been in (`~+`, `~-`, `~1`), and a pattern by every name it can match, for a read and a listing
+alike. What it does not
+read is a variable it does not know and a path a program builds while it runs: a command that reaches one of them so
+runs. The turn's folder is its own, the chat's instructions and agent folders in it included: before the next turn
+Jason writes its instructions there afresh and leaves its agent folders holding only what Jason placed, in a
+conversation's own folder and in the shared folder of a conversation an earlier version made alike. What Claude Code
+still asks about in its bypass mode is a card titled "Full access asks about this one", which waits thirty minutes
+and then is not run, and the turn goes on; one line under its title says that Claude Code asked about it itself, and
+"Allow for this chat" works on it as in Ask first. Jason does not read a
 program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
 can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
 Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
@@ -978,7 +1005,38 @@ conversation begins; the line under the composer still says why the next turn ru
 
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
 rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused
-before it runs; where a policy has filtered the check out, the turn runs on and the chat says so once. On an older
+before it runs; where a policy has filtered the check out, the turn runs on and the chat says so once. Such a turn
+asks only about a change and about a few of Jason's own commands:
+
+- **A read runs with no card, anywhere,** by Read, Glob, Grep, a listing or one of Claude Code's own read-only commands,
+  a file you name by its path with spaces or letters of any script included; the check refuses the three kinds above, a
+  search or a walk of a folder that holds the data directory, and the `jq` programs and commands above that read what no
+  word of them shows, as in Full access.
+- **A change to a file outside the chat's folders is one card,** "Change a file outside the chat's folders", for a new
+  file and for an edit alike, lines added at the end of a file among them; inside the chat's folders, as before.
+- **Every `jason` command runs with no card but these,** which keep a card in every form and spelling, in a compound
+  too: `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, in every
+  form; and a verb that changes the installation in a form that names another source, place, ref or version, while its
+  plain form, which takes the release's own, runs with no card: `jason update apply` with `--version` or `--feed`;
+  `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with `--source`,
+  `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire`. The program or
+  the command a role will be run by is such a source too: `jason profile create` and `jason profile update` keep a card
+  with `--program`, `--cli-command` or `--file`. A `jason` whose words do not begin with a verb of the CLI, or with a
+  noun's help, is a card too: one with another word before the noun, and the executable's own modes that are no verb
+  (`runtime run`, `plugin-host`, `toast-host`, `host-hook` and a link it is handed). Full access runs them, as it runs
+  any program. An act of your word
+  is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the agent's own words, each in
+  single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`, `jason --version` and the help of any
+  noun or verb run with no card, those of the commands above included; any other `jason` that starts with an option is
+  refused, with the words to put the verb first.
+- **A pipeline or a sequence runs with no card** when every part of it is such a `jason` command or one of `jq`, `grep`,
+  `head`, `tail`, `wc`, `sort`, `uniq`, `cut`, `tr`, `cat`, `ls` and `echo`, each with only the options Jason knows it
+  takes, none that walks a folder, reads a file it is told of on its input or by another file, writes a file or starts a
+  program (`jq` with `-r`, `-c`, `-e`, `-s`, `-j`, `-S`, `-M`, `-a`, `--arg` and `--argjson` alone, `uniq` with one file
+  at most), each reading only what the pipe gives it and naming no file (`ls` aside), with no change of folder and
+  nothing sent into a file. Any other program, option or file is a card, as before.
+
+On an older
 Claude Code no check rides a turn in Ask first or Auto-edit, so Claude Code is given no allow rule for a `jason` verb
 that reads a request's content from a file or from standard input, and the desktop's permission tool answers it
 instead: fed a settings file by a redirection, it is refused; written plainly, one command whose content comes from
@@ -993,8 +1051,8 @@ command an allow rule runs with no card, is documented by Claude Code's maker
 ### What runs without asking, what is refused, what is a card
 
 Claude Code turns are held by the host's own rules and the desktop's permission tool, and in every mode but Plan only by
-the check before each tool use in front of both (above). The list is Ask first's and Auto-edit's; where Plan only or Full
-access differs, it says so.
+the check before each tool use in front of both (above). The list is Ask first's and Auto-edit's on a Claude Code older
+than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.322 on (above) differ, it says so.
 
 - **Runs without asking.** The skills, web search (Codex searches an index its vendor keeps, never the live web),
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
@@ -1009,7 +1067,9 @@ access differs, it says so.
   2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
   standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
   written plainly with no card, as the rule would (above). The chat's instructions name
-  the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option.
+  the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an
+  option, in Plan only and on an older Claude Code; from 2.1.322 on Ask first and Auto-edit run it (above), and so does
+  Full access.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
@@ -1019,14 +1079,19 @@ access differs, it says so.
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
   `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
   names an operation these verbs call is refused there too. In every other mode none of them is refused: those the bullet
-  above names run with no card, and every other one is a card in Ask first and Auto-edit and runs in Full
-  access, as any `jason` command that no allowed verb begins does: an act that would let messages go without your
-  approval, a standing approval, another preference, a campaign's send mode, is one of them. Pausing an agent, adding
+  above names run with no card; every other one, a standing approval, another preference and a campaign's send mode
+  among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason`
+  command that no allowed verb begins does; from 2.1.322 on, in Ask first and Auto-edit every `jason` command runs with
+  no card but `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, and a
+  form of a verb that changes the installation that names another source, place, ref or version, each named above; the
+  plain form of such a verb, which takes the release's own, runs with no card. Pausing an agent, adding
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
-  a verdict on a reply is a card in Ask first and Auto-edit and runs in Full access: a verdict of yours can lift the lock
+  a verdict on a reply is a card in Ask first and Auto-edit on an older Claude Code, and runs with no card from 2.1.322
+  on and in Full access: a verdict of yours can lift the lock
   an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused:
   a read or a write that names a path under the data directory outside the turn's folder (the settings file, the run file
-  and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that names that directory,
+  and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that names
+  that directory, where Jason's check rides the turn a search or a walk of a folder that holds it (above),
   and what Jason itself sets for the turn, its variables and its permission tool: a command that names `JASON_CONFINED`
   or `JASON_CHAT_TURN`, which Jason alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never a role's run),
   a command that changes where the shell finds a program (`PATH`, `PATHEXT`), and a use of the tool that answers the
@@ -1035,12 +1100,15 @@ access differs, it says so.
   for a card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents`
   and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
   puts its own files back before the next turn.
-- **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the turn's
-  folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
+- **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included on
+  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the turn's
+  folder and the added folders, in Plan only and on an older Claude Code; a write outside them, or in a campaign's or a
+  project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
   Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
   each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A
-  path that begins with `~` or is spelled in a way the system would read differently is a card too.
+  path that begins with `~` or is spelled in a way the system would read differently is a card too, but from 2.1.322
+  on a path that begins with your home folder's `~`, and for a read one spelled differently, is read where it leads.
 - **A tool of an MCP server of yours runs in Full access, the one mode your servers reach.** Full access refuses one
   whose input names what Full access refuses. In the other modes none reaches a turn; the fence stands anyway: such a
   tool is a card each time, "Use one of your own tools", with the server and the tool, and the input exactly as the host
@@ -1088,17 +1156,19 @@ Under the chat, these things differ from a terminal:
   Full access a key and the credentials the turn carries reach the commands the agent runs, as in a terminal session.
 - **On Linux it does in every mode.** No Claude Code turn sets that variable there, and one the desktop inherited is
   not passed on: on Linux the variable runs every command the agent runs inside Claude Code's sandbox, and the sandbox
-  shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn of the chat sets, it denies reads
-  of the home directory, so Jason's data directory and the runtime's descriptor in it are hidden; and a sandboxed
+  shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which a turn sets where Jason's
+  check does not ride it, it denies reads of the home directory, so Jason's data directory and the runtime's descriptor
+  in it are hidden; and a sandboxed
   command's `localhost` is its own, so the runtime's loopback address is out of reach as well. (`socat` is the sandbox's
   network relay, and the process namespace the variable also brings is a separate effect.) So on Linux a key connected
   on a Connect card, and the credentials the turn carries from the desktop's own environment, reach the commands the
   agent runs, as they would in a terminal.
 - **A folder the chat works in is trusted** the way a folder you open your agent in is trusted: the agent definitions and
   skills it carries run with what they declare, and the cards stand in front of what the agent itself asks for.
-- **Limits that are said.** Claude Code's documentation leaves one case open, a read-only command that names no path after
-  a `cd` the host traced outside the folders, and the desktop adds nothing for it. A network path is told by its spelling,
-  so a mapped drive reads as a local one.
+- **Limits that are said.** Where reads outside the folders are blocked, Claude Code's documentation leaves one case
+  open, a read-only command that names no path after a `cd` the host traced outside the folders, and the desktop adds
+  nothing for it. Where Jason's check rides the turn, a variable it does not know and a path a program builds while
+  it runs are not read. A network path is told by its spelling, so a mapped drive reads as a local one.
 - **The CLI expands no response file, anywhere.** An argument that starts with an at sign is a word like any other, so
   `jason @args.txt` is a usage error and exits 2; a script that relied on it passes the arguments itself
   ([handbook.md](handbook.md), [the release notes](../RELEASE-NOTES.md)).
