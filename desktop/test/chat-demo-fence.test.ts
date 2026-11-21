@@ -70,7 +70,7 @@ function liveMac(personsRoot?: string): ChatScope {
 }
 
 const persons = /person's own installation, and this chat runs in the demo/;
-const ownData = /installation's own data/;
+const ownData = /Jason's own data/;
 
 const made: PermissionBroker[] = [];
 afterEach(() => {
@@ -338,7 +338,7 @@ for (const mode of modes) {
         for (const [scope, sentence] of [[demoMac(), persons], [liveMac(), ownData]] as const) {
             await refusedIn(mode, scope, 'Read', { file_path: '/System/Volumes/Data/Users/someone/.jason/config/settings.json' }, sentence);
             await refusedIn(mode, scope, 'Bash', { command: 'cat /System/Volumes/Data/Users/someone/.jason/run/runtime.json' }, sentence);
-            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '/system/volumes/data/Users/someone/.jason' }, /installation/);
+            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '/system/volumes/data/Users/someone/.jason' }, /installation|Jason's own data/);
         }
         await refusedIn(mode, demoMac(), 'Write', { file_path: '/System/Volumes/Data/Users/someone/Jason/Northwind/notes.md', content: 'x' }, persons);
         for (const [scope, sentence] of [[demoWindows(), persons], [liveWindows(), ownData]] as const) {

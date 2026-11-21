@@ -442,9 +442,9 @@ test('under Full access the hook refuses a read of the turns folder and of the k
     const desktop = join(w.root, 'desktop');
     for (const folder of ['turns', 'claude-keyed', 'codex-keyed', 'provider-keys']) {
         const path = join(desktop, folder, 'held.json');
-        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /installation's own data/, `Read ${folder}`);
-        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /installation's own data/, `cat ${folder}`);
-        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /installation's own data/, `Grep ${folder}`);
+        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /Jason's own data/, `Read ${folder}`);
+        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /Jason's own data/, `cat ${folder}`);
+        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /Jason's own data/, `Grep ${folder}`);
     }
 });
 

@@ -1000,18 +1000,21 @@ test('Plan only is as it was: the deny list refused, a read outside the folders 
 
 test('the settings and the data refusals say what is closed, that it is Jason\'s own and not one of the person\'s files, and which jason verb does the thing instead', () => {
     for (const sentence of [settingsRefusal, dataRefusal]) {
+        assert.match(sentence, /Jason's own data, which is not one of the person's files, so the chat does not open it/, sentence);
+    }
+    // Each sentence of the three kinds and of the walk says Jason's own, and none says the installation's.
+    for (const sentence of [settingsRefusal, dataRefusal, searchRefusal, inRootRefusal, filesFromRefusal, confinedRefusal, attemptRefusal, lookupRefusal, ownToolRefusal]) {
         assert.match(sentence, /Jason's own/, sentence);
-        assert.match(sentence, /not one of the person's files/, sentence);
-        assert.match(sentence, /the chat does not open it/, sentence);
+        assert.doesNotMatch(sentence, /installation's/, sentence);
     }
     assert.match(settingsRefusal, /`jason status`/);
     assert.match(settingsRefusal, /`jason route set` and `jason plugin grant`/);
     assert.match(dataRefusal, /`jason campaign list`/);
-    assert.match(searchRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
+    assert.match(searchRefusal, /a folder that holds Jason's data directory, or one the chat cannot tell from such a folder, so it would pass through Jason's own data, which is not one of the person's files: the chat does not take it/);
     assert.match(searchRefusal, /Name a narrower folder that does not hold it/);
     assert.match(searchRefusal, /search, walk, copy, archive or remove/);
     assert.match(searchRefusal, /On such a folder the chat runs a listing of its names, a read or a search of a file named in it, a look at a path/);
-    assert.match(inRootRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
+    assert.match(inRootRefusal, /run a program in a folder that holds Jason's own data, which is not one of the person's files, or in one the chat could not follow, which may hold it: the chat does not take it/);
     assert.match(inRootRefusal, /Run it in a narrower folder/);
     assert.match(inRootRefusal, /name in the command the folder it should work on/);
     assert.notEqual(inRootRefusal, searchRefusal);

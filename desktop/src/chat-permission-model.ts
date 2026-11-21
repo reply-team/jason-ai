@@ -210,12 +210,12 @@ export const replyNoCardForms: readonly string[] = (() => {
  * first, Auto-edit and Plan only refuse the same places by the same sentences.
  */
 export const settingsRefusal =
-    'That is Jason\'s settings file or its run file: the installation\'s own data, Jason\'s own and not one of the person\'s files, so the chat does not open it. '
+    'That is Jason\'s settings file or its run file: Jason\'s own data, which is not one of the person\'s files, so the chat does not open it. '
     + '`jason status` says whether Jason runs and can work, `jason route list` and `jason plugin list` show its routes and plugins, `jason route set` and '
     + '`jason plugin grant` change them, and a plugin\'s configuration is the person\'s to write. Nothing was done.';
 export const dataRefusal =
-    'That path is in Jason\'s data directory, outside the chat\'s folder: the installation\'s own data, Jason\'s own and not one of the person\'s files, so the '
-    + 'chat does not open it. Jason answers for what is there, with `jason campaign list`, `jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
+    'That path is in Jason\'s data directory, outside the chat\'s folder: Jason\'s own data, which is not one of the person\'s files, so the chat does not '
+    + 'open it. Jason answers for what is there, with `jason campaign list`, `jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
 export const personsRefusal =
     'That path is the person\'s own installation, and this chat runs in the demo, which does not open it: the demo\'s own `jason` answers for its data, '
     + 'such as `jason campaign list`. Nothing was done.';
@@ -240,18 +240,18 @@ export const ownToolRefusal =
  * (`dataRefusal`).
  */
 export const searchRefusal =
-    'That would search, walk, copy, archive or remove a folder that holds Jason\'s data directory, the installation\'s own data and not one of the person\'s '
-    + 'files, or one the chat cannot tell from such a folder, so it would pass through Jason\'s own data: the chat does not take it. On such a folder the chat '
-    + 'runs a listing of its names, a read or a search of a file named in it, a look at a path, a print and a change of folder. Name a narrower folder that '
-    + 'does not hold it, written out, such as Documents or Desktop. Nothing was done.';
+    'That would search, walk, copy, archive or remove a folder that holds Jason\'s data directory, or one the chat cannot tell from such a folder, so it would '
+    + 'pass through Jason\'s own data, which is not one of the person\'s files: the chat does not take it. On such a folder the chat runs a listing of its '
+    + 'names, a read or a search of a file named in it, a look at a path, a print and a change of folder. Name a narrower folder that does not hold it, '
+    + 'written out, such as Documents or Desktop. Nothing was done.';
 /**
  * Where the hook rides the turn, the refusal of a program that is no plain form run in a folder that holds the data
  * directory, or in one the walk could not follow (`walksRoot`), whatever it names.
  */
 export const inRootRefusal =
-    'That would run a program in a folder that holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, or in one the '
-    + 'chat could not follow, where it may read through Jason\'s own data: the chat does not take it. Run it in a narrower folder, written out, such as '
-    + 'Documents or Desktop, or name in the command the folder it should work on. Nothing was done.';
+    'That would run a program in a folder that holds Jason\'s own data, which is not one of the person\'s files, or in one the chat could not follow, which '
+    + 'may hold it: the chat does not take it. Run it in a narrower folder, written out, such as Documents or Desktop, or name in the command the folder it '
+    + 'should work on. Nothing was done.';
 /**
  * Where the hook rides the turn, the refusal of a jq program that reads what its input does not hold: the environment
  * (`env`, `$ENV`), a module or a data file by its own words (`import`, `include`), or a program from a file (`-f`).
@@ -2959,7 +2959,7 @@ function isPersonsTool(tool: string): boolean {
     return tool.startsWith('mcp__') && !tool.startsWith(`mcp__${serverName}__`);
 }
 
-const personsInputRefusal = 'That tool\'s input names one of Jason\'s own variables, the installation\'s own data, or a command this mode refuses: the chat never sends it. Nothing was sent.';
+const personsInputRefusal = 'That tool\'s input names one of Jason\'s own variables, Jason\'s own data, or a command this mode refuses: the chat never sends it. Nothing was sent.';
 const personsLongRefusal = 'That tool\'s input is longer than the card can show whole, so nobody could read what they would allow: the chat never sends it. Nothing was sent.';
 
 /** Every string of a tool's input at any depth, the keys of its objects among them. */
