@@ -99,11 +99,13 @@ function serverDefences() {
 }
 
 /**
- * The settings every Claude Code turn carries on its command line. Claude Code runs its built-in read-only commands
- * (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside the working folders
- * blocked, such a command on a path outside the chat folder and the added folders asks, and so reaches the permission
- * tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as inline JSON. The key
- * is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version would skip it.
+ * The settings an Ask first or Auto-edit turn carries on its command line where the hook does not ride it, below Claude
+ * Code's floor of Full access; a turn the hook rides carries its own (`hookedSettings`). Claude Code runs its built-in
+ * read-only commands (`cat`, `ls`, `grep` and the like) without asking, wherever the path they name; with reads outside
+ * the working folders blocked, such a command on a path outside the chat folder and the added folders asks, and so
+ * reaches the permission tool, as does a command whose folder the host cannot trace. It holds no secret, so it travels as
+ * inline JSON. The key is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version
+ * would skip it.
  *
  * Every fetch asks too, so that each page reaches the permission model, which opens the documentation hosts' pages with
  * no card (`documentationHosts`) and puts a card in front of any other. Without the rule Claude Code would open a page of
@@ -238,10 +240,12 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : turn.settingsFile ? turn.allowed : withoutRequestFiles(turn.allowed);
+    // The hook rides every turn given a settings file of its own, and Plan only, which carries its inline settings, never.
+    const hooked = mode !== 'plan_only' && turn.settingsFile !== undefined;
+    const allowed = mode === 'plan_only' ? (turn.reads ?? []) : hooked ? turn.allowed : withoutRequestFiles(turn.allowed);
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied, turn.settingsFile !== undefined), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied, hooked), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
@@ -572,9 +576,10 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
  * Never set on Linux either, nor passed on there when the desktop inherited it:
  * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
  * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the
- * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn sets
- * (`claudeTurnSettings`), it denies reads of the home directory (the settings reference, "Sandboxed commands under the
- * block"), so Jason's data directory and the runtime's descriptor in it are hidden; and "a sandboxed command's
+ * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn the hook
+ * does not ride sets (`claudeTurnSettings`, `planTurnSettings`), it denies reads of the home directory (the settings
+ * reference, "Sandboxed commands under the block"), so Jason's data directory and the runtime's descriptor in it are
+ * hidden; and "a sandboxed command's
  * `localhost` is private to that command", so the runtime's loopback address is out of reach too. `socat` is only the
  * sandbox's network relay, which stock Ubuntu lacks, and the PID namespace the variable also brings on Linux is a
  * separate effect. In Full access, and on Linux in every mode, a key and the credentials the turn carries reach the

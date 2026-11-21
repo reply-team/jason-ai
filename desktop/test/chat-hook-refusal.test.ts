@@ -22,6 +22,7 @@ import {
     judge,
     lookupRefusal,
     personsRefusal,
+    searchRefusal,
     settingsRefusal,
     type ChatScope,
     type Platform,
@@ -78,9 +79,11 @@ test('every mode but Plan only carries the turn\'s settings file, whose hook blo
         assert.deepEqual(hook?.hooks[0], { type: 'http', url: 'http://127.0.0.1:4100/hook', headers: { Authorization: 'Bearer secret' }, timeout: 30, onFailure: 'block' }, mode);
         assert.equal(settings['disableAllHooks'], false, mode);
         assert.deepEqual(settings['allowedHttpHookUrls'], ['http://127.0.0.1:4100/hook'], mode);
-        const ask = (settings['permissions'] as { ask?: string[] }).ask;
-        // Ask first and Auto-edit keep their own rule that every page asks; Full access opens a page with no card.
-        assert.deepEqual(ask, mode === 'full_access' ? undefined : ['WebFetch(domain:*)'], mode);
+        const permissions = settings['permissions'] as { ask?: string[]; blockReadsOutsideWorkingDirectories?: boolean } | undefined;
+        // Ask first and Auto-edit keep their own rule that every page asks; Full access opens a page with no card. No mode
+        // the hook rides blocks a read: the hook refuses the three kinds wherever a tool names them.
+        assert.deepEqual(permissions?.ask, mode === 'full_access' ? undefined : ['WebFetch(domain:*)'], mode);
+        assert.equal(permissions?.blockReadsOutsideWorkingDirectories, undefined, mode);
     }
 });
 
@@ -262,7 +265,6 @@ const refusedBefore: [string, string, Record<string, unknown>, ChatScope][] = [
     ['reply beyond its no-card forms', 'Bash', { command: 'reply sequence start seq_1' }, linux],
     ['a path on another computer', 'Read', { file_path: '\\\\server\\share\\notes.md' }, windows],
     ['a pattern that climbs out of the data directory', 'Glob', { pattern: '../../../../work/*.md' }, linux],
-    ['a search of a folder that holds the data directory', 'Grep', { pattern: 'x', path: '/home/someone' }, linux],
     ['the chat\'s own instructions in its own folder', 'Write', { file_path: 'CLAUDE.md', content: 'x' }, linux],
     ['the chat\'s own skills in its own folder', 'Bash', { command: 'echo x > .claude/skills/x/SKILL.md' }, linux],
     ['an MCP tool\'s input longer than a card shows', 'mcp__notes__save', { text: 'a'.repeat(5_000) }, linux],
@@ -277,6 +279,20 @@ test('what Full access refused before that is none of the three kinds runs, with
         assert.deepEqual(fullAccessJudgement(tool, input, scope), runs, name);
         broker.openTurn('c1', name, scope, 'full_access');
         assert.deepEqual(broker.hook(name, tool, input, null), { decision: 'none' }, name);
+    }
+});
+
+test('with no read blocked, a walk of a folder that holds the data directory is the data\'s kind: a search of it by the Grep tool and a recursive command are refused by the hook, and a plain listing of it runs', () => {
+    for (const [tool, input] of [
+        ['Grep', { pattern: 'x', path: '/home/someone' }],
+        ['Grep', { pattern: 'x', path: '/' }],
+        ['Bash', { command: 'grep -r x /home/someone' }],
+        ['Bash', { command: 'find / -name runtime.json' }],
+    ] as const) {
+        assert.deepEqual(fullAccessJudgement(tool, input, linux), refused(searchRefusal), `${tool} ${JSON.stringify(input)}`);
+    }
+    for (const [tool, input] of [['LS', { path: '/home/someone' }], ['Bash', { command: 'ls -la /home/someone' }], ['Grep', { pattern: 'x', path: '/home/someone/Documents' }]] as const) {
+        assert.deepEqual(fullAccessJudgement(tool, input, linux), runs, `${tool} ${JSON.stringify(input)}`);
     }
 });
 

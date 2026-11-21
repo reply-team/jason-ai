@@ -95,7 +95,10 @@ test('Ask first starts Claude Code in its default mode, named, with the settings
     const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
     const hooked = claudeArguments({ ...base, mode: 'ask_first', settingsFile });
     assert.equal(after(hooked, '--settings'), settingsFile);
-    assert.deepEqual(values(hooked, '--disallowedTools'), values(asked, '--disallowedTools'), 'the same rules as without the hook');
+    // The host's refusal of a jason that starts with an option aside: where the hook rides, the model judges that, and
+    // runs jason's own help and version.
+    assert.deepEqual(values(hooked, '--disallowedTools'), values(asked, '--disallowedTools').filter((rule) => rule !== 'Bash(jason -*)'), 'the same rules as without the hook');
+    assert.ok(values(asked, '--disallowedTools').includes('Bash(jason -*)'));
 });
 
 test('Plan only starts Claude Code in plan mode, with the classifier kept out, the plan list in place of the allow list and no way out of planning', () => {
@@ -118,8 +121,9 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     const args = claudeArguments({ ...base, mode: 'full_access', settingsFile });
     assert.equal(after(args, '--permission-mode'), 'bypassPermissions');
     assert.equal(after(args, '--settings'), settingsFile);
-    const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell');
+    const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell' && rule !== 'Bash(jason -*)');
     assert.deepEqual(others(values(args, '--disallowedTools')), others(values(claudeArguments(base), '--disallowedTools')));
+    assert.ok(!values(args, '--disallowedTools').includes('Bash(jason -*)'), 'the hook rides the turn, and a jason that starts with an option is none of its three kinds');
     assert.ok(!values(args, '--disallowedTools').includes('PowerShell') && values(args, '--disallowedTools').includes('Monitor'));
     for (const kept of ['--strict-mcp-config', '--permission-prompt-tool']) assert.ok(args.includes(kept), kept);
     assert.equal(after(args, '--setting-sources'), 'project');
@@ -127,13 +131,12 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the settings of a turn the hook rides: reads outside the folders still blocked, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
+test('the settings of a turn the hook rides: no block of reads outside the folders, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
     const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
     for (const mode of ['ask_first', 'auto_edit'] as const) {
-        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { ...settings, permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] } }, mode);
+        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { permissions: { ask: ['WebFetch(domain:*)'] }, ...settings }, mode);
     }
     assert.deepEqual(settings, {
-        permissions: { blockReadsOutsideWorkingDirectories: true },
         disableSkillShellExecution: true,
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],

@@ -172,7 +172,9 @@ test('a turn with nothing to ask starts Claude Code in the conversation\'s own f
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');
     const fence = flagValues(host.args, '--disallowedTools');
-    assert.ok(fence.includes('Bash(jason -*)') && !fence.some((rule) => rule.startsWith('Bash(jason approval')), fence.join(' '));
+    // A new chat's turn is Full access, which the hook rides: a jason that starts with an option is none of its three
+    // kinds, so the host refuses it no more.
+    assert.ok(!fence.includes('Bash(jason -*)') && !fence.some((rule) => rule.startsWith('Bash(jason approval')), fence.join(' '));
     assert.ok(fence.some((rule) => rule.endsWith('/config/**)')) && fence.some((rule) => rule.endsWith('/logs/**)')), 'the data directory outside the chat is fenced off');
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');

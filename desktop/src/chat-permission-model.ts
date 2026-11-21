@@ -4,6 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
+import { askingCardedVerbs } from './chat-deny.ts';
 import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -61,10 +62,10 @@ export interface ChatScope {
     /**
      * Whether the turn's hook rides it: Full access, and Ask first and Auto-edit from Claude Code's floor of Full access on,
      * where the turn's settings block no read (`hookedSettings`) and the hook refuses the three kinds wherever a tool names
-     * them. There a read anywhere else runs with no card, the host's own read-only commands among them (`noCardCommand`),
-     * a change outside the chat's folders is one card, a walk of a folder that holds the data directory is refused
-     * (`walkRefusal`), and every jason verb runs with no card but those of `askingCardedVerbs`, its help and its version
-     * among them. Absent or false, below the floor and in Plan only: as it was.
+     * them. There a read anywhere else runs with no card, a listing and the host's own read-only commands among them
+     * (`hookedNoCard`), a change outside the chat's folders is one card, a walk of a folder that holds the data directory is
+     * refused (`walkRefusal`), and every jason verb runs with no card but those of `askingCardedVerbs`, jason's own help and
+     * version among them. Absent or false, below the floor and in Plan only: as it was.
      */
     hooked?: boolean;
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
@@ -189,33 +190,37 @@ export const replyNoCardForms: readonly string[] = (() => {
 /**
  * The three kinds the turn's hook refuses in every mode it rides, and the only refusals of Full access (`hookRefusal`):
  * Jason's settings files and run file, its data directory outside the turn's folder, and what Jason itself sets for the
- * turn: its variables, with where the shell finds a program, and its permission tool. Each sentence says what the chat
- * does not open and names the `jason` verb that does what was asked, never that the chat cannot, the permission tool's
- * that only the person answers it; Ask first, Auto-edit and Plan only refuse the same places by the same sentences.
+ * turn: its variables, with where the shell finds a program, and its permission tool. Each sentence, which the agent
+ * passes on, says what is closed, that it is Jason's own and not one of the person's files, and the `jason` verb that does
+ * what was asked where one does, never that the chat cannot, the permission tool's that only the person answers it; Ask
+ * first, Auto-edit and Plan only refuse the same places by the same sentences.
  */
 export const settingsRefusal =
-    'That is Jason\'s settings file or its run file, Jason\'s own and not one of the person\'s files, so the chat does not open it: `jason status` says '
-    + 'whether Jason runs and can work, `jason route list` and `jason plugin list` show its routes and plugins, `jason route set` and `jason plugin grant` '
-    + 'change them, and a plugin\'s configuration is the person\'s to write. Nothing was done.';
+    'That is Jason\'s settings file or its run file: the installation\'s own data, Jason\'s own and not one of the person\'s files, so the chat does not open it. '
+    + '`jason status` says whether Jason runs and can work, `jason route list` and `jason plugin list` show its routes and plugins, `jason route set` and '
+    + '`jason plugin grant` change them, and a plugin\'s configuration is the person\'s to write. Nothing was done.';
 export const dataRefusal =
-    'That path is in Jason\'s own data directory, outside the chat\'s folder: Jason\'s own and not one of the person\'s files, so the chat does not open it. '
-    + 'Jason answers for what is there, with `jason campaign list`, `jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
+    'That path is in Jason\'s data directory, outside the chat\'s folder: the installation\'s own data, Jason\'s own and not one of the person\'s files, so the '
+    + 'chat does not open it. Jason answers for what is there, with `jason campaign list`, `jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
 export const personsRefusal =
     'That path is the person\'s own installation, and this chat runs in the demo, which does not open it: the demo\'s own `jason` answers for its data, '
     + 'such as `jason campaign list`. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat neither reads nor writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
-const braceRefusal = 'That pattern has a brace group that can name another folder: the chat does not take it. Name the folder as the path instead. Nothing was done.';
-const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
+export const braceRefusal = 'That pattern has a brace group that can name another folder: the chat does not take it. Name the folder as the path instead. Nothing was done.';
+export const ownToolRefusal =
+    'That tool is Jason\'s own, set for this turn: it carries the chat\'s own permission requests, and only the person answers them, so the chat does not use it. Nothing was done.';
 /**
- * The refusal of a walk of a folder that holds Jason's data directory: a search of it by the Grep or Glob tool, and where
- * the hook rides the turn a command that walks it (`walkRefusal`), with how to go on. A plain listing of such a folder is
- * no walk; a listing of the data directory itself is a read of the data (`dataRefusal`).
+ * The refusal of a walk of a folder that holds Jason's data directory, or in a demo run one of the person's own
+ * directories: a search of it by the Grep or Glob tool, and where the hook rides the turn a command that walks it
+ * (`walkRefusal`), with how to go on. A walk reads the data without naming it, so it is the data's kind. A plain listing
+ * of such a folder is no walk where the hook rides the turn; a listing of the data directory itself is a read of the data
+ * (`dataRefusal`).
  */
 export const searchRefusal =
-    'That folder holds Jason\'s own data directory, which is not one of the person\'s files, so a search or a walk of it would reach Jason\'s data: the chat '
-    + 'does not take it. Search a folder inside it instead, such as Documents or Desktop. Nothing was done.';
+    'That folder holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, so a search or a walk of it would reach that '
+    + 'data: the chat does not take it. Name a narrower folder that does not hold it, such as Documents or Desktop. Nothing was done.';
 const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
@@ -231,12 +236,12 @@ export const rootHelpRefusal = 'That command starts jason with an option, which 
  * form that gives a request's content instead.
  */
 export const confinedRefusal =
-    'That command names or clears JASON_CONFINED or JASON_CHAT_TURN, Jason\'s own variables, which Jason alone sets and the chat does not open or change: '
-    + 'a jason started without them may act on another installation than the one this window shows. Run the `jason` verb you need as it is, such as '
-    + '`jason campaign list`, with a request\'s content on standard input, as `--file - < file`. Nothing was run.';
+    'That command names or clears JASON_CONFINED or JASON_CHAT_TURN, Jason\'s own variables for this turn and not the person\'s, which Jason alone sets and the '
+    + 'chat does not open or change: a jason started without them may act on another installation than the one this window shows. Run the `jason` verb you '
+    + 'need as it is, such as `jason campaign list`, with a request\'s content on standard input, as `--file - < file`. Nothing was run.';
 export const attemptRefusal =
-    'That command names JASON_ATTEMPT_ID, one of Jason\'s own variables, which says a role\'s attempt runs: the chat is never one, and does not open or change it. '
-    + '`jason workitem get` reads an item and its attempts. Nothing was run.';
+    'That command names JASON_ATTEMPT_ID, one of Jason\'s own variables and not the person\'s, which says a role\'s attempt runs: the chat is never one, and '
+    + 'does not open or change it. `jason workitem get` reads an item and its attempts. Nothing was run.';
 export const lookupRefusal =
     'That command changes where the shell finds a program, which Jason itself sets for the turn and the chat does not open or change, so that '
     + 'the jason it starts stays the desktop\'s: run the `jason` verb you need as it is, such as `jason campaign list`. Nothing was run.';
@@ -528,7 +533,17 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
     if (spelling.verdict !== 'ask') return spelling;
     const judged = judgeLocated(value, scope, writes);
     if (judged.verdict === 'deny') return judged;
+    // Where the hook rides the turn a path is judged where its one spelling leads, as the hook judges it (`pathKind`): a
+    // `~` of the home folder is no card of its own there, since the file tools take it for the home folder this judges it
+    // against, so a change outside the chat's folders is its one card; and for a read, nor is a name Windows reads as
+    // another. A `~user` keeps its card.
+    if (scope.hooked === true && (homeTilde(value) || (!writes && spelling.title === windowsNameTitle))) return judged;
     return writes && spelling.title === windowsNameTitle && judged.verdict === 'ask' && guardTitles.has(judged.title) ? judged : spelling;
+}
+
+/** True when a path begins with the home folder's own `~`: alone, or followed by a separator. */
+function homeTilde(value: string): boolean {
+    return /^~([\\/]|$)/.test(value);
 }
 
 function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgement {
@@ -545,6 +560,8 @@ function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgeme
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
     if (writes) return judgeWrite(scope, path);
     if (workingFolderOf(scope, path) !== null) return allow;
+    // Where the hook rides the turn a read anywhere else runs with no card: the refusals above are the hook's own kinds.
+    if (scope.hooked === true) return allow;
     return {
         verdict: 'ask',
         title: 'Read a file outside the chat\'s folders',
@@ -616,6 +633,9 @@ function judgeGlob(input: Record<string, unknown>, scope: ChatScope): Judgement 
         fixed.push(part);
     }
     const separator = pathsOf(scope.platform).sep;
+    // Where the hook rides the turn a pattern under the home folder's own `~` is a walk of its fixed folders, judged as a
+    // folder's walk is, with no card of its own (`homeTilde`).
+    if (scope.hooked === true && homeTilde(pattern)) return worse(judgeFolder('Glob', fixed.join(separator), scope), judged);
     if (pattern.startsWith('~')) {
         // A walk of a ~ folder that holds the data directory is refused; any other is a card each time.
         const home: Judgement = { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(pattern), remember: null };
@@ -734,6 +754,8 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'option' | 'help' 
             found = 'jason';
             const words = tokens.slice(at + 1);
             if (words.some((word) => word.startsWith('@'))) return 'option';
+            // Where the hook rides the turn jason's own help and version, each alone, are jason's like any verb.
+            if (scope.hooked === true && words.length === 1 && rootForms.includes(words[0] as string)) continue;
             if (words[0]?.toLowerCase() === '--help') help = true;
             else if (words[0]?.startsWith('-')) return 'option';
             if (scope.denied.some((entry) => holdsEntry(words, entry))) return 'deny';
@@ -743,6 +765,12 @@ function jasonIn(command: string, scope: ChatScope): 'deny' | 'option' | 'help' 
     if (scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text))) return 'deny';
     return help ? 'help' : found;
 }
+
+/**
+ * jason's own help and version, each the one word after `jason`: where the hook rides the turn they run with no card, and
+ * elsewhere a jason that starts with an option is refused (`jasonIn`).
+ */
+const rootForms: readonly string[] = ['--help', '-h', '--version'];
 
 /** The refusal of what `jasonIn` found, or null where it found nothing refused. */
 function jasonRefusal(found: ReturnType<typeof jasonIn>): string | null {
@@ -784,6 +812,212 @@ function plainForm(tool: string, command: string, places: readonly string[], sco
     } catch {
         return false;
     }
+}
+
+/**
+ * The programs that run with no card beside jason where the hook rides an Ask first or Auto-edit turn, alone or in a
+ * pipeline or a sequence with it (`hookedNoCard`): a closed list of the host's read-only commands and `jq`, each of which
+ * reads its input or the files it names and prints, and writes nothing, starts nothing and runs nothing it is given. Each
+ * is named bare, as the shell finds it. `sort` runs with no option that writes a file or starts a program (`sortWrites`),
+ * and `uniq` with at most one file, since its second is the file it writes. Any other program is a card, as before.
+ */
+export const noCardFilters: readonly string[] = ['jq', 'grep', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'cat', 'ls', 'echo'];
+
+/**
+ * True when sort's words write a file or start a program: `-o` or `-T` in a cluster of short options before any letter
+ * that takes the rest as its value, or `--output`, `--temporary-directory` or `--compress-program` by any prefix of them,
+ * since GNU takes an abbreviated long option.
+ */
+function sortWrites(args: readonly string[]): boolean {
+    for (const word of args) {
+        if (word === '--') return false;
+        if (word.startsWith('--')) {
+            const name = (word.slice(2).split('=')[0] ?? '').toLowerCase();
+            if (name !== '' && ['output', 'temporary-directory', 'compress-program'].some((long) => long.startsWith(name))) return true;
+            continue;
+        }
+        if (!/^-[A-Za-z0-9]/.test(word)) continue;
+        for (const letter of word.slice(1)) {
+            if (letter === 'o' || letter === 'T') return true;
+            if ('ktS'.includes(letter)) break;
+        }
+    }
+    return false;
+}
+
+/** The words of a program's that are files, not options: every word after `--`, a lone `-`, and a word with no dash. */
+function fileWords(args: readonly string[]): string[] {
+    const at = args.indexOf('--');
+    const before = at < 0 ? args : args.slice(0, at);
+    return [...before.filter((word) => word === '-' || !word.startsWith('-')), ...(at < 0 ? [] : args.slice(at + 1))];
+}
+
+/** True when a program of `noCardFilters` runs with these words with no card where the hook rides the turn. */
+function noCardFilter(program: string, args: readonly string[]): boolean {
+    if (!noCardFilters.includes(program)) return false;
+    if (program === 'sort') return !sortWrites(args);
+    if (program === 'uniq') return fileWords(args).length <= 1;
+    return true;
+}
+
+/**
+ * True when the words after `jason` run with no card where the hook rides an Ask first or Auto-edit turn: any verb but the
+ * four that keep a card (`askingCardedVerbs`), which are told in any letter case and with anything between their words
+ * (`holdsEntry`); the help of one of the four, its words exactly and then `--help` or `-h`, which runs nothing; and
+ * jason's own help and version, each alone (`rootForms`). Nothing else that starts with an option.
+ */
+function noCardJason(rest: readonly string[]): boolean {
+    const first = rest[0];
+    if (first === undefined) return false;
+    if (first.startsWith('-')) return rest.length === 1 && rootForms.includes(first);
+    const carded = askingCardedVerbs.find((verb) => holdsEntry(rest, verb));
+    if (carded === undefined) return true;
+    const words = carded.split(' ');
+    const help = rest[words.length];
+    return words.every((word, at) => rest[at] === word) && (help === '--help' || help === '-h');
+}
+
+/**
+ * Where the hook rides an Ask first or Auto-edit turn, true when the Bash tool's command runs with no card: read
+ * literally (`readLiteral`, a `~` taken only where the shell's home is the judgement's), one command or a pipeline or a
+ * sequence of them, each the desktop's own `jason` in a form that runs with no card (`noCardJason`) or a program of
+ * `noCardFilters`; no directory change; standard input nothing, a pipe, a here-document or one file given by its only
+ * redirection, and every other redirection to `/dev/null` alone, so nothing is written into a file; no file named like one
+ * of its programs in the folder the shell runs in (`shadowed`) and no guard's card. It is judged after every refusal, the
+ * three kinds and a walk of a folder that holds the data directory among them, so a place any of its words names is
+ * refused before it is looked at. Anything else, compound or not, is the card it was.
+ */
+function hookedNoCard(tool: string, command: string, places: readonly string[], scope: ChatScope): boolean {
+    if (scope.hooked !== true || tool !== 'Bash') return false;
+    // Whatever goes wrong while the command is read, it keeps its card: a reading that failed never runs anything.
+    try {
+        const reading = readLiteral('Bash', command, { platform: scope.platform, home: shellHomeOf(scope) });
+        if (reading.held) return false;
+        const programs = new Set<string>();
+        for (const { words, targets, input, cwd } of reading.commands) {
+            if (cwd !== null) return false;
+            if (input === 'file' ? targets.length !== 1 : targets.some((target) => target !== '/dev/null')) return false;
+            const [program = '', ...rest] = words;
+            if (program === 'jason' ? !noCardJason(rest) : !noCardFilter(program, rest)) return false;
+            programs.add(program);
+        }
+        if (shadowed(scope, programs)) return false;
+        return !changesServers(command, scope) && !namesSearch(command) && guardedPlace(places, scope) === undefined && !namesLocalJason(command, scope);
+    } catch {
+        return false;
+    }
+}
+
+/** The programs that walk every folder they are given whatever their options: searches, finders, sizes, trees, copies. */
+const alwaysWalks: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'find', 'du', 'tree', 'robocopy']);
+/** The archivers, which walk a folder they are given when they create or add to an archive. */
+const archivers: ReadonlySet<string> = new Set(['tar', 'bsdtar', 'gtar']);
+/** The programs that walk the folder they run in when no folder is given: what a walk reaches after a directory change. */
+const walksHere: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'find', 'du', 'tree', 'ls', 'dir', 'gci', 'get-childitem', 'findstr']);
+/** The searches whose first word that is no option is the pattern, unless an option gives it. */
+const patternFirst: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'findstr']);
+/** The copies whose last word that is no option is where they copy to, which they do not walk. */
+const copies: ReadonlySet<string> = new Set(['cp', 'scp', 'rsync', 'robocopy', 'xcopy', 'copy-item', 'cpi', 'copy']);
+
+/** A PowerShell parameter that makes a listing or a copy recursive: `-Recurse` or any prefix of it, or `-Depth`. */
+function recursesInPowerShell(word: string): boolean {
+    const name = word.toLowerCase().split(':')[0] ?? '';
+    return (name.length >= 2 && '-recurse'.startsWith(name)) || name === '-depth';
+}
+
+/** True when a word of a program's makes it walk what it is given (`walkRefusal`), by the program's own spelling of it. */
+function recursiveWord(program: string, word: string, platform: Platform, powershell: boolean): boolean {
+    const slash = platform === 'win32' ? word.toLowerCase() : '';
+    switch (program) {
+        case 'grep':
+        case 'egrep':
+        case 'fgrep':
+            return /^-[^-]*[rR]/.test(word) || /^--(recursive|dereference-recursive|directories=recurse)$/.test(word);
+        case 'ls':
+        case 'dir':
+        case 'gci':
+        case 'get-childitem':
+            return /^-[^-]*R/.test(word) || word === '--recursive' || (powershell && recursesInPowerShell(word)) || slash === '/s';
+        case 'cp':
+        case 'scp':
+            return /^-[^-]*[rRa]/.test(word) || word === '--recursive' || word === '--archive';
+        case 'copy-item':
+        case 'cpi':
+        case 'copy':
+            return powershell && recursesInPowerShell(word);
+        case 'rsync':
+            return /^-[^-]*[ra]/.test(word) || word === '--recursive' || word === '--archive';
+        case 'zip':
+            return /^-[^-]*r/.test(word) || word === '--recurse-paths';
+        case 'findstr':
+        case 'xcopy':
+            return slash === '/s' || slash === '/e';
+        case 'where':
+            return slash === '/r';
+        default:
+            return false;
+    }
+}
+
+/** True when an archiver's words create or add to an archive: the first word's letters, or an option, say so. */
+function archives(words: readonly string[]): boolean {
+    return words.some((word, index) => (index === 0 && /^-?[A-Za-z]*[cru][A-Za-z]*$/.test(word)) || /^-[^-]*[cru]/.test(word) || /^--(create|append|update)$/.test(word));
+}
+
+/** A word that is an option and no folder: one that begins with a dash, or on Windows a short slash option (`/s`). */
+function optionWord(word: string, platform: Platform): boolean {
+    return word.startsWith('-') || (platform === 'win32' && /^\/[A-Za-z?]{1,4}(:.*)?$/.test(word));
+}
+
+/**
+ * The folders one command's words walk: after each word that names a walking program (`alwaysWalks`, an archiver that
+ * creates, or a program a recursive word makes walk, `recursiveWord`), the words after it that are no option, less a
+ * search's pattern and a copy's destination, and, for a program that walks where it runs, the folder it runs in when it
+ * is given none. A program is looked for at every word, so a wrapper (`sudo`, `xargs`) does not hide it; that reads more
+ * folders than the command walks, which only adds refusals.
+ */
+function walkedWords(words: readonly string[], platform: Platform, powershell: boolean): string[] {
+    const walked: string[] = [];
+    words.forEach((word, at) => {
+        const program = programOf(platform, word).toLowerCase();
+        const rest = words.slice(at + 1);
+        const walks = alwaysWalks.has(program) || (archivers.has(program) ? archives(rest) : rest.some((each) => recursiveWord(program, each, platform, powershell)));
+        if (!walks) return;
+        let operands: string[];
+        if (program === 'find') {
+            const end = rest.findIndex((each) => /^[-(!]/.test(each));
+            operands = end < 0 ? rest : rest.slice(0, end);
+        } else {
+            operands = rest.filter((each) => !optionWord(each, platform));
+            if (patternFirst.has(program) && !rest.some((each) => /^(-[^-]*[ef]|--regexp(=.*)?|--file(=.*)?|\/c:.*|\/g:.*)$/i.test(each))) operands = operands.slice(1);
+            if (copies.has(program) && operands.length > 1) operands = operands.slice(0, -1);
+        }
+        walked.push(...operands);
+        if (operands.length === 0 && walksHere.has(program)) walked.push('.');
+    });
+    return walked;
+}
+
+/**
+ * Where the hook rides the turn, the refusal of a command that walks a folder holding the installation's data
+ * (`holdsFenced`), as a search of it by the Grep tool is refused (`searchRefusal`): a recursive search, a finder, a size,
+ * a tree, a recursive listing or copy, an archive made of it. With reads outside the working folders no longer blocked,
+ * such a walk would read the data without naming it. The folders are read from the command's words as written, split on
+ * the shell's separators, from the folder the turn runs in, and again from each command of the literal reading, read from
+ * the folder a literal directory change sets for it. A plain listing of such a folder is no walk, and is not refused.
+ * Null when no walk reaches the data.
+ */
+function walkRefusal(tool: string, command: string, scope: ChatScope): string | null {
+    const written = command.split(/&&|\|\||[;|&\n\r()`]/).map((part) => ({ words: part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, literal: false }));
+    const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
+    const read = reading.held
+        ? []
+        : reading.commands.map((each) => ({ words: each.words, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) }, literal: true }));
+    for (const each of [...written, ...read]) {
+        const folders = placesOfWords(walkedWords(each.words, scope.platform, tool === 'PowerShell'), each.scope, each.literal);
+        if (folders.some((folder) => !network(scope.platform, folder) && holdsFenced(scope, folder))) return searchRefusal;
+    }
+    return null;
 }
 
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */
@@ -1171,6 +1405,17 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (places.some((path) => isProtected(scope, path))) return { verdict: 'deny', message: settingsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
+    // Where the hook rides the turn no read is blocked, so a walk of a folder that holds the data reaches it without naming
+    // it: refused, as the hook refuses it (`walkRefusal`).
+    if (scope.hooked === true) {
+        let walked: string | null;
+        try {
+            walked = walkRefusal(tool, command, scope);
+        } catch {
+            walked = unreadRefusal;
+        }
+        if (walked !== null) return { verdict: 'deny', message: walked };
+    }
     const jason = jasonIn(command, scope);
     const jasonRefused = jasonRefusal(jason);
     if (jasonRefused !== null) return { verdict: 'deny', message: jasonRefused };
@@ -1179,9 +1424,11 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     const own = chatsOwnPlace(places, scope);
     if (own !== null) return { verdict: 'deny', message: own };
     if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
-    // A plain form of the host's own allow rules runs with no card, as the host's rule would run it (`plainForm`): no card
-    // shows it, so it is not held to a card's length.
+    // A plain form of the host's own allow rules runs with no card, as the host's rule would run it (`plainForm`), and so
+    // does what runs with no card where the hook rides the turn (`hookedNoCard`): no card shows either, so neither is held
+    // to a card's length.
     if (jason === 'jason' && plainForm(tool, command, places, scope)) return allow;
+    if (hookedNoCard(tool, command, places, scope)) return allow;
     // After every refusal and before any card: a card cuts its detail at the limit, so Allow would run what nobody saw.
     // A grant is looked at only for a card, so none allows it either.
     if (command.length > detailLimit) return { verdict: 'deny', message: longRefusal };
@@ -1195,7 +1442,9 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesLocalJason(command, scope)) return { verdict: 'ask', title: jasonFileTitle, detail: shorten(command), remember: null };
     // A noun's help, exactly as the host's help rule names it, runs here too: it prints and changes nothing.
     if (isNounHelp(tool, command, scope)) return allow;
-    // A jason command in no plain form of the allow list is the person's to answer, each time.
+    // A jason command in no plain form of the allow list is the person's to answer, each time; where the hook rides the
+    // turn that is a verb of `askingCardedVerbs`, or a jason with something that is no filter of `noCardFilters` beside
+    // it, a directory change or a redirection into a file.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
@@ -1630,9 +1879,12 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
  * and a pattern's fixed folders, a command's text as written and its words as the literal reading resolves them, what a
  * writer tool would write, a script read as its lines, and every string of an MCP tool's input; on Windows a path that
  * names this computer as another computer would, through a drive's share, as that drive's path (`hookPlace`). A command
- * whose words are not literal is read by its text alone, and a path a program builds while it runs is not seen. Null for
- * anything else: the turn's folder is its own, the chat's instructions and agent folders in it among it, which the
- * desktop puts back before the next turn.
+ * whose words are not literal is read by its text alone, and a path a program builds while it runs is not seen. No read
+ * is blocked where the hook rides the turn, so a walk of a folder that holds the data directory is the data's kind too:
+ * a search of it by the Grep or Glob tool (`walkKind`), or a command that walks it (`walkRefusal`), said by the sentence
+ * that says how to go on (`searchRefusal`); a plain listing of such a folder is no walk. Null for anything else: the
+ * turn's folder is its own, the chat's instructions and agent folders in it among it, which the desktop puts back before
+ * the next turn.
  */
 export function hookRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
     if (tool.startsWith(`mcp__${serverName}__`)) return ownToolRefusal;
@@ -1647,6 +1899,7 @@ export function hookRefusal(tool: string, input: Record<string, unknown>, scope:
     const reader = readers[tool];
     if (reader !== undefined) {
         const value = input[reader];
+        if (tool === 'Grep') return pathKind(named(value) ? value : scope.cwd, scope) ?? walkKind(named(value) ? value : scope.cwd, scope);
         return named(value) ? pathKind(value, scope) : null;
     }
     const writer = writers[tool];
@@ -1657,6 +1910,16 @@ export function hookRefusal(tool: string, input: Record<string, unknown>, scope:
     }
     const command = input['command'];
     return typeof command === 'string' ? commandKind(tool, command, scope) : null;
+}
+
+/**
+ * The data's kind of a folder a search walks, where no read is blocked: a folder that holds the data directory, or in a
+ * demo run one of the person's own directories, read where it leads (`hookPlace`), is refused by the sentence that says
+ * how to go on (`searchRefusal`), since the walk would reach the data without naming it. Null for any other.
+ */
+function walkKind(value: string, scope: ChatScope): string | null {
+    const place = hookPlace(located(value, scope), scope);
+    return place !== null && !network(scope.platform, place) && holdsFenced(scope, place) ? searchRefusal : null;
 }
 
 /** Whether a located path is one of the installation's settings files or its run file. */
@@ -1712,21 +1975,32 @@ function hookPlace(path: string, scope: ChatScope): string | null {
     return drive === null ? null : located(`${drive[1]}:\\${rest.join('\\')}`, scope);
 }
 
-/** A search's folder, and the fixed folders its pattern begins with, read as paths are. */
+/**
+ * A search's folder, and the folder its pattern walks, read as paths are, each refused where it is or holds the data
+ * (`walkKind`): the fixed folders the pattern begins with, climbed once more for each `..` after them, since a wildcard and
+ * a `..` after it lead back to the folder the wildcard was in, and nothing climbs higher than that. A brace group that can
+ * name a place is not read, and is refused by the sentence that says how to go on.
+ */
 function globKind(input: Record<string, unknown>, scope: ChatScope): string | null {
     const folder = named(input['path']) ? input['path'] : scope.cwd;
-    const atFolder = pathKind(folder, scope);
+    const atFolder = pathKind(folder, scope) ?? walkKind(folder, scope);
     if (atFolder !== null) return atFolder;
     const pattern = typeof input['pattern'] === 'string' ? input['pattern'] : '';
+    if (/\{[^{}]*[\\/:~][^{}]*\}/.test(pattern)) return braceRefusal;
+    const parts = pattern.split(/[\\/]/);
     const fixed: string[] = [];
-    for (const part of pattern.split(/[\\/]/)) {
+    for (const part of parts) {
         if (/[*?[{]/.test(part)) break;
         fixed.push(part);
     }
-    if (fixed.length === 0) return null;
-    const separator = pathsOf(scope.platform).sep;
+    const climbs = parts.slice(fixed.length).join('/').split(/[\\/{},]/).filter((part) => part === '..').length;
+    if (fixed.length === 0 && climbs === 0) return null;
+    const paths = pathsOf(scope.platform);
+    const separator = paths.sep;
     const leading = pattern.startsWith('/') && fixed[0] === '' ? `${separator}${fixed.slice(1).join(separator)}` : fixed.join(separator);
-    return pathKind(pattern.startsWith('~') ? leading : pathsOf(scope.platform).resolve(spelled(folder, scope), leading || '.'), scope);
+    let walked = pattern.startsWith('~') ? leading || '~' : paths.resolve(spelled(folder, scope), leading || '.');
+    for (let up = 0; up < climbs; up++) walked = paths.dirname(located(walked, scope));
+    return pathKind(walked, scope) ?? walkKind(walked, scope);
 }
 
 /**
@@ -1773,15 +2047,19 @@ function commandKind(tool: string, command: string, scope: ChatScope): string | 
     if (respelled !== null) return respelled;
     if (command.split(/&&|\|\||[;|&\n\r]/).some((part) => clearsConfinement(part.trim().split(/\s+/).map(unquoted)))) return confinedRefusal;
     const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope) });
-    if (reading.held) return null;
-    const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
-    const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)]);
-    const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
-    for (const text of new Set([resolved, percentDecoded(resolved)])) {
-        const refused = kindOver(text, places, scope);
-        if (refused !== null) return refused;
+    if (!reading.held) {
+        const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
+        const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)]);
+        const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
+        for (const text of new Set([resolved, percentDecoded(resolved)])) {
+            const refused = kindOver(text, places, scope);
+            if (refused !== null) return refused;
+        }
+        if (reading.commands.some((each) => clearsConfinement(each.words))) return confinedRefusal;
     }
-    return reading.commands.some((each) => clearsConfinement(each.words)) ? confinedRefusal : null;
+    // No read is blocked where the hook rides the turn, so a walk of a folder that holds the data reaches it without
+    // naming it: the data's kind too.
+    return walkRefusal(tool, command, scope);
 }
 
 /**
@@ -2118,6 +2396,8 @@ function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatSco
     if (reader !== undefined) {
         const value = input[reader];
         if (tool === 'Read') return named(value) ? judgePath(value, scope, false) : unnamed(tool, input);
+        // Where the hook rides the turn a listing reads one folder's names and is judged as a read of it; a search walks.
+        if (tool === 'LS' && scope.hooked === true) return judgePath(named(value) ? value : '.', scope, false);
         return judgeFolder(tool, named(value) ? value : '.', scope);
     }
     const writer = writers[tool];

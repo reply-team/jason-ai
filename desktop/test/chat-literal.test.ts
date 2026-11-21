@@ -11,7 +11,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { modeFence, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { heldByWhatRuns, readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
-import { autoEditJudgement, confinedRefusal, fullAccessJudgement, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { autoEditJudgement, confinedRefusal, fullAccessJudgement, judge, searchRefusal, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -415,7 +415,11 @@ test('a search variable named, a jason of the agent\'s own, and a folder that ho
     runsHeld('Bash', 'echo PATH', 'search');
     assert.equal(fullAccessJudgement('Bash', { command: 'PATH=/tmp frobnicate' }, scope).outcome, 'refused', 'a change of the search is refused as in Ask first');
     runsHeld('Bash', './jason campaign list', 'local_jason');
-    for (const command of ['ls /home/someone', 'ls ~', 'du -s /']) runsHeld('Bash', command, 'holds_data');
+    for (const command of ['ls /home/someone', 'ls ~']) runsHeld('Bash', command, 'holds_data');
+    // A walk of such a folder reaches the data without naming it: with no read blocked where the hook rides, the hook
+    // refuses it as the data's kind.
+    assert.deepEqual(judge('Bash', { command: 'du -s /' }, scope), { verdict: 'ask', title: 'Run a command', detail: 'du -s /', remember: null }, 'below the floor, a card each time');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'du -s /' }, scope), { outcome: 'refused', message: searchRefusal });
 });
 
 test('a relative word after a directory change to a relative target is held; after a literal absolute one it is read from there', () => {

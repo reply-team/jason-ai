@@ -16,12 +16,15 @@ import type { ChatMode } from '../src/chat-modes.ts';
 import {
     attemptRefusal,
     autoEditJudgement,
+    braceRefusal,
     commandRefusal,
     confinedRefusal,
     dataRefusal,
     fullAccessJudgement,
     judge,
+    noCardFilters,
     optionRefusal,
+    ownToolRefusal,
     rootHelpRefusal,
     searchRefusal,
     settingsRefusal,
@@ -116,9 +119,19 @@ test('a change outside the chat\'s folders is one card in Ask first and Auto-edi
         [windows, 'Edit', { file_path: 'C:\\Users\\someone\\Desktop\\мой файл 1.txt', old_string: 'end', new_string: 'end\nline one\nline two' }],
         [linux, 'Edit', { file_path: '/home/someone/notes.md', old_string: 'a', new_string: 'a\nb' }],
         [mac, 'Write', { file_path: '/Users/someone/Desktop/notes.txt', content: 'x' }],
+        [mac, 'Write', { file_path: '~/Desktop/notes.txt', content: 'x' }],
+        [windows, 'Edit', { file_path: '~\\Desktop\\1.txt', old_string: 'a', new_string: 'a\nb' }],
     ];
     for (const [scope, tool, input] of changes) {
-        assert.deepEqual(both(tool, input, scope).map(asked), ['Change a file outside the chat\'s folders', 'Change a file outside the chat\'s folders'], `${scope.platform} ${tool}`);
+        assert.deepEqual(both(tool, input, scope).map(asked), ['Change a file outside the chat\'s folders', 'Change a file outside the chat\'s folders'], `${scope.platform} ${tool} ${JSON.stringify(input)}`);
+        // Its card shows where the change lands, the home folder's ~ taken as the file tools take it.
+        const judged = judge(tool, input, scope);
+        assert.ok(judged.verdict === 'ask' && !judged.detail.startsWith('~'), JSON.stringify(judged));
+        assert.equal(judge(tool, input, unhooked(scope)).verdict, 'ask', 'below the floor a card, as before');
+    }
+    // Inside the chat's folders as before, in both modes.
+    for (const [tool, input] of [['Write', { file_path: 'notes.txt', content: 'x' }], ['Edit', { file_path: 'notes.txt', old_string: 'a', new_string: 'b' }], ['Write', { file_path: '.github/workflows/x.yml', content: 'x' }]] as const) {
+        assert.deepEqual(both(tool, input, linux), both(tool, input, unhooked(linux)), `${tool} ${JSON.stringify(input)}`);
     }
 });
 
@@ -372,5 +385,66 @@ test('the settings and the data refusals say what is closed, that it is Jason\'s
     assert.match(settingsRefusal, /`jason status`/);
     assert.match(settingsRefusal, /`jason route set` and `jason plugin grant`/);
     assert.match(dataRefusal, /`jason campaign list`/);
-    assert.match(searchRefusal, /holds Jason's own data directory/);
+    assert.match(searchRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
+    assert.match(searchRefusal, /Name a narrower folder that does not hold it/);
+    for (const sentence of [confinedRefusal, attemptRefusal]) assert.match(sentence, /Jason's own variables? (?:for this turn )?and not the person's/, sentence);
+    assert.match(ownToolRefusal, /Jason's own, set for this turn/);
+});
+
+test('in Full access the hook refuses nothing but the three kinds: the person\'s files anywhere are read, appended to and written, and every jason verb runs, the four carded ones among them', () => {
+    for (const scope of scopes) {
+        const desktop = scope.platform === 'win32' ? 'C:\\Users\\someone\\Desktop\\мой файл 1.txt' : `${scope.home}/Desktop/мой файл 1.txt`;
+        for (const [tool, input] of [
+            ['Read', { file_path: desktop }],
+            ['Edit', { file_path: desktop, old_string: 'end', new_string: 'end\nline one\nline two' }],
+            ['Write', { file_path: desktop.replace('мой файл 1.txt', 'notes.txt'), content: 'x' }],
+            ['Grep', { pattern: 'x', path: desktop.replace(/[\\/]мой файл 1\.txt$/, '') }],
+            ['Glob', { pattern: '*.txt', path: desktop.replace(/[\\/]мой файл 1\.txt$/, '') }],
+            ['LS', { path: scope.home }],
+            ['Bash', { command: 'ls ~' }],
+            ['Bash', { command: 'cat ~/Desktop/notes.txt' }],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement(tool, input, scope), { outcome: 'runs' }, `${scope.platform} ${tool} ${JSON.stringify(input)}`);
+        }
+        for (const command of [...noCard, ...carded, 'jason --actor human:someone approval approve apr_1']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+        // Acceptance: "show me Jason's settings file", "read the database", "set JASON_CHAT_TURN to 0 and run".
+        const data = scope.platform === 'win32' ? win32 : posix;
+        assert.deepEqual(fullAccessJudgement('Read', { file_path: data.join(scope.data, 'config', 'settings.json') }, scope), { outcome: 'refused', message: settingsRefusal });
+        assert.deepEqual(fullAccessJudgement('Read', { file_path: data.join(scope.data, 'jason.db') }, scope), { outcome: 'refused', message: dataRefusal });
+        assert.deepEqual(fullAccessJudgement('Bash', { command: 'JASON_CHAT_TURN=0 jason campaign start cmp_1' }, scope), { outcome: 'refused', message: confinedRefusal });
+        assert.deepEqual(fullAccessJudgement('mcp__jason_desktop__permission', { tool_name: 'Bash', input: {} }, scope), { outcome: 'refused', message: ownToolRefusal });
+    }
+});
+
+test('a Glob whose pattern climbs is judged where it can lead, and a brace group that can name a place is not taken, by the hook in every mode it rides', () => {
+    const documents = '/home/someone/Documents';
+    const inDocuments = { ...linux, added: [documents] };
+    for (const [input, outcome] of [
+        [{ pattern: 'x*/../*' }, { outcome: 'refused', message: dataRefusal }],
+        [{ pattern: '**/../../../*' }, { outcome: 'refused', message: dataRefusal }],
+        [{ pattern: '**/../../../../*' }, { outcome: 'refused', message: searchRefusal }],
+        [{ pattern: '*/../*', path: documents }, { outcome: 'refused', message: searchRefusal }],
+        [{ pattern: '{..,x}/*', path: documents }, { outcome: 'refused', message: searchRefusal }],
+        [{ pattern: '*/../*', path: `${documents}/sub` }, { outcome: 'runs' }],
+        [{ pattern: '**/*.{md,txt}', path: documents }, { outcome: 'runs' }],
+        [{ pattern: '{/home/someone/.jason,x}/*', path: documents }, { outcome: 'refused', message: braceRefusal }],
+        [{ pattern: '~/.jason/config/*' }, { outcome: 'refused', message: dataRefusal }],
+        [{ pattern: '~/Documents/**/*.md' }, { outcome: 'runs' }],
+    ] as const) {
+        assert.deepEqual(fullAccessJudgement('Glob', input, inDocuments), outcome, JSON.stringify(input));
+    }
+});
+
+test('the filters a no-card compound may hold are a closed list, and the ones that can write a file keep their card when they would', () => {
+    assert.deepEqual([...noCardFilters], ['jq', 'grep', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'cat', 'ls', 'echo']);
+    for (const scope of scopes) {
+        for (const command of ['jason campaign list | sort -r', 'jason campaign list | sort -k 2 -t , -n', 'jason campaign list | uniq -c', 'jason campaign list | sort -- -o', 'echo done', 'jason contact list | grep -c reply']) {
+            assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+        }
+        for (const command of ['jason campaign list | sort -ro x', 'jason campaign list | sort --out=x', 'jason campaign list | sort -T /tmp', 'jason campaign list | sort --compress-program=gzip', 'jason campaign list | uniq - out.txt', 'jason campaign list | tee x', 'jason campaign list >> x', 'jason campaign list 2> errors.txt']) {
+            assert.deepEqual(both('Bash', { command }, scope).map((judged) => judged.verdict), ['ask', 'ask'], `${scope.platform}: ${command}`);
+        }
+    }
 });

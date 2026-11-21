@@ -358,7 +358,24 @@ applies to the turns a person starts by sending, from the next one on.
   file decides it (`permissionModes`); what the permission model does not settle is a card. From Claude Code's floor of
   Full access on, the turn carries Full access's hook as well, which answers a refusal of the three kinds or nothing
   (below), so a command an allow rule lets run with no card, one fed the settings file by a redirection say, is refused
-  before it runs. Below the floor no hook rides the turn, and the host is given no allow rule for a form of a verb that
+  before it runs; its settings block no read (`hookedSettings`), and the permission model judges it by what the hook
+  refuses (`ChatScope.hooked`):
+  - a read anywhere, by Read, Glob, Grep, a listing or the host's own read-only commands, runs with no card, and a walk
+    of a folder that holds the data directory is refused as the hook refuses it (below);
+  - a change outside the chat's folders is one card, "Change a file outside the chat's folders", for Write and Edit
+    alike, an append among them, a `~` of the home folder taken as the file tools take it; inside them as before;
+  - every `jason` verb runs with no card but the four of `askingCardedVerbs`, `uninstall`, `import`, `update rollback`
+    and `plugin grant`, each a card in every form, its words told in any letter case and with anything between them
+    (`holdsEntry`), and in a compound too; the help of one of them, `--help` or `-h` right after its words, runs;
+  - jason's own `--help`, `-h` and `--version`, each alone, and any noun's or verb's help run with no card; any other
+    option before the verb is refused (`optionRefusal`);
+  - a pipeline or a sequence whose every part is such a `jason` or a program of `noCardFilters` (`jq`, `grep`, `head`,
+    `tail`, `wc`, `sort` with no option that writes a file or starts a program, `uniq` with one file at most, `cut`,
+    `tr`, `cat`, `ls`, `echo`), read literally, with no directory change, no file named like one of its programs in the
+    turn's folder and nothing redirected into a file, runs with no card (`hookedNoCard`); anything else is a card, as
+    before.
+
+  Below the floor no hook rides the turn, and the host is given no allow rule for a form of a verb that
   reads a request's content from a file or from standard input (`requestFileVerbs`, held to the CLI's command tree by
   `DesktopDenyListTests`): each reaches the permission tool, which refuses a redirection from the installation's data
   and runs its plain form with no card, as the host's rule would (`plainForm` in `src/chat-permission-model.ts`): one
@@ -385,8 +402,9 @@ applies to the turns a person starts by sending, from the next one on.
   Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
-- **Full access** is Claude Code's own bypass mode, and on Codex its run with no sandbox: the AI runs commands and
-  changes files on this computer without asking, on Claude Code except the three kinds Jason refuses (below).
+- **Full access** is Claude Code's own bypass mode, and on Codex its run with no sandbox: the AI reads, runs commands
+  and changes files anywhere on this computer the account may, without asking, on Claude Code except the three kinds
+  Jason refuses (below), its settings blocking no read.
   It is the mode of every new chat, the Feed's included (`feedDefaultMode`), and asks for no confirmation: a record with
   no `mode` is in Full access, and choosing it from the menu clears the field. The `full-access.json` and
   `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
@@ -430,14 +448,15 @@ applies to the turns a person starts by sending, from the next one on.
   the conversation `codexFullAccessNarrowed`; every other warning is dropped, as before. No event names the sandbox a
   turn ran in (`thread.started` carries the thread alone), so a narrowing Codex does not warn of goes unseen.
 - **How Full access runs on Claude Code.** Claude Code starts with `--permission-mode bypassPermissions`. Anthropic says a Bash rule
-  "isn't a security boundary around the program", so every deny rule is passed as in Ask first, and the turn's settings,
+  "isn't a security boundary around the program", so every deny rule is passed as in an Ask first turn the hook rides, and the turn's settings,
   in a file under `<data>/desktop/turns/` beside its MCP file and removed with it (`hookedSettings`), add a `PreToolUse`
   HTTP hook on every tool with `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in
   `allowedHttpHookUrls`, so no project file can switch the hook off or filter it. The hook posts each tool use to the
   turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
   judgement (`fullAccessJudgement`), the same in every mode the hook rides:
-  - **refused**, with no card, for three kinds alone, each by a sentence that says what the chat does not open and names
-    the `jason` verb that does the act, never that it cannot: the installation's settings files and run file, under
+  - **refused**, with no card, for three kinds alone, each by a sentence that says what is closed, that it is Jason's own
+    and not one of the person's files, and the `jason` verb that does the act where one does, never that it cannot: the
+    installation's settings files and run file, under
     every layout (`settingsRefusal`); its data directory outside the turn's folder (`dataRefusal`), and in a demo run the
     person's own installation (`personsRefusal`); and what Jason itself sets for the turn: its variables and its
     permission tool, that is `JASON_CONFINED` and `JASON_CHAT_TURN` (`confinedRefusal`), `JASON_ATTEMPT_ID`
@@ -449,9 +468,14 @@ applies to the turns a person starts by sending, from the next one on.
     volume's namespace, or through another share of this computer, as the data directory (`hookPlace`); in the text a
     writer tool would put in a file; and in every string of an MCP tool's input. **The limit:** a command that names one
     of them is refused, and a command that builds the name while it runs is not seen: a pattern (`~/.jas*`), a variable,
-    `cd "$HOME"` and then a relative path, or `~user` runs in Full access. A judgement that fails refuses;
-  - **nothing** for everything else, the deny list's verbs, PowerShell and a command Jason does not read literally
-    among them: the host's own mode and rules decide it.
+    `cd "$HOME"` and then a relative path, or `~user` runs in Full access. With no read blocked, a walk of a folder that
+    holds the data directory is the data's kind: a search of it by the Grep or Glob tool (`walkKind`), and a command
+    that walks it, a recursive search, a finder, a size, a tree, a recursive listing or copy, or an archive made of it
+    (`walkRefusal`), are refused by the sentence that says to name a narrower folder (`searchRefusal`); a plain listing
+    of such a folder runs. A Glob pattern is read where it can lead, its fixed folders climbed once for each `..` after
+    them, and one whose brace group can name a place is refused (`braceRefusal`). A judgement that fails refuses;
+  - **nothing** for everything else, the deny list's verbs, a jason that starts with an option, PowerShell and a
+    command Jason does not read literally among them: the host's own mode and rules decide it.
 - **What Claude Code still asks about in its bypass mode is a card.** It reaches the permission tool, which refuses the
   three kinds first and makes anything else a card titled "Full access asks about this one" (`askedCard`), why
   `host_asked`; it waits thirty minutes, then is not run and the turn goes on, and "Allow for this chat" works on it as
@@ -500,7 +524,9 @@ applies to the turns a person starts by sending, from the next one on.
 - **A denied verb in any letter case is refused, in Plan only.** Outside Plan only no verb of the deny list is refused
   (`modeFence`): the acts of a person's word (`personsWordForms`: five verbs, and `preference set` and `unset` of two
   keys, `sender.identity` and `tone_of_voice`, each a host rule of its own) are allowed as the allow list's verbs are,
-  `reply record` (`cardedVerbs`) leaves the allow list, and every other one is the mode's card. In Plan only `jason Campaign Set-Send-Mode` is refused as
+  `reply record` (`cardedVerbs`) leaves the allow list, and every other one is the mode's: where the hook rides an Ask
+  first or Auto-edit turn it runs with no card but the four of `askingCardedVerbs`, below the floor it is a card, and
+  Full access runs it. In Plan only `jason Campaign Set-Send-Mode` is refused as
   `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
   sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
   its lower-case spelling already was.
