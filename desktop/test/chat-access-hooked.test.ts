@@ -433,6 +433,35 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('PowerShell reads ${env:NAME} as one variable and a home spelling, a provider-qualified path as its path, and an en dash, an em dash or a horizontal bar as a dash: each spelling of the home folder and of a settings file is refused as the plain one', () => {
+    for (const [command, sentence] of [
+        ['Get-ChildItem ${env:USERPROFILE} -Recurse', searchRefusal],
+        ['Get-ChildItem ${env:HOME} -Recurse', searchRefusal],
+        ['Get-ChildItem $env:HOME -Recurse', searchRefusal],
+        ['Get-ChildItem "$env:HOMEDRIVE$env:HOMEPATH" -Recurse', searchRefusal],
+        ['Get-ChildItem "${env:HOMEDRIVE}${env:HOMEPATH}" -Recurse', searchRefusal],
+        ['Get-Content ${env:USERPROFILE}\\.jason\\config\\settings.json', settingsRefusal],
+        ['Get-Content "$env:HOMEDRIVE$env:HOMEPATH\\.jason\\config\\settings.json"', settingsRefusal],
+        ['Get-Content FileSystem::C:\\Users\\someone\\.jason\\config\\settings.json', settingsRefusal],
+        ['Get-Content Microsoft.PowerShell.Core\\FileSystem::C:\\Users\\someone\\.jason\\config\\settings.json', settingsRefusal],
+        ['Get-ChildItem Microsoft.PowerShell.Core\\FileSystem::C:\\Users\\someone -Recurse', searchRefusal],
+        ['Get-ChildItem FileSystem::C:\\ -Recurse', searchRefusal],
+        ['Get-ChildItem ~ \u2013Recurse', searchRefusal],
+        ['Get-ChildItem ~ \u2014Recurse', searchRefusal],
+        ['Get-ChildItem ~ \u2015Recurse', searchRefusal],
+        ['Get-ChildItem \u2013Path ~ \u2013Recurse', searchRefusal],
+    ] as const) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: sentence }, command);
+        for (const judged of both('PowerShell', { command }, windows)) assert.notEqual(judged.verdict, 'allow', command);
+    }
+    for (const command of ['cmd /c type %HOMEDRIVE%%HOMEPATH%\\.jason\\config\\settings.json', 'cat $HOMEDRIVE$HOMEPATH/.jason/config/settings.json', 'cat ${HOMEDRIVE}${HOMEPATH}/.jason/config/settings.json']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), { outcome: 'refused', message: settingsRefusal }, command);
+    }
+    for (const command of ['Get-ChildItem ${env:USERPROFILE}\\Downloads', 'Get-Content FileSystem::C:\\Users\\someone\\Desktop\\notes.txt', 'Get-ChildItem ~']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'runs' }, command);
+    }
+});
+
 test('a brace group outside quotes is read over the words it expands into: a hidden option, a hidden folder, a hidden program and a hidden --files0-from are refused as written out; a group of plain names reads as before', () => {
     for (const scope of scopes) {
         for (const [command, sentence] of [

@@ -314,10 +314,13 @@ function shorten(text: string): string {
 
 /**
  * The home folder's spellings a path may begin with, each followed by a separator or nothing: `~` and the variables a
- * shell reads it from, in the spelling of each shell the chat may run (Git Bash, PowerShell, the command prompt). On
- * Windows a variable's name is read in any case, as Windows reads it.
+ * shell reads it from, in the spelling of each shell the chat may run (Git Bash, PowerShell, the command prompt), the
+ * profile's drive and path joined among them. On Windows a variable's name is read in any case, as Windows reads it.
  */
-const homeSpellings = ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}'];
+const homeSpellings = [
+    '~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '${env:USERPROFILE}', '$USERPROFILE', '${USERPROFILE}', '$env:HOME', '${env:HOME}',
+    '$HOMEDRIVE$HOMEPATH', '${HOMEDRIVE}${HOMEPATH}', '$env:HOMEDRIVE$env:HOMEPATH', '${env:HOMEDRIVE}${env:HOMEPATH}', '%HOMEDRIVE%%HOMEPATH%',
+];
 
 /** A path with a leading home spelling (`homeSpellings`) replaced by the home folder; any other path as it is. */
 function homeExpanded(value: string, scope: ChatScope): string {
@@ -366,7 +369,7 @@ const dataVolume = '/system/volumes/data';
  *   change sets for the commands after it).
  */
 function spelled(value: string, scope: ChatScope): string {
-    let text = urlPath(homeExpanded(value, scope), scope.platform);
+    let text = urlPath(homeExpanded(scope.platform === 'win32' ? value.replace(providerPrefix, '') : value, scope), scope.platform);
     if (scope.platform === 'win32') {
         text = longPrefixed(text.replace(/\//g, '\\'));
         if (/^\\\\[?.]\\UNC\\/i.test(text)) text = `\\\\${text.slice(8)}`;
@@ -383,6 +386,9 @@ function spelled(value: string, scope: ChatScope): string {
     }
     return volumeFolded(scope.platform, path);
 }
+
+/** PowerShell's file system provider named before a path, which PowerShell opens as the path itself. */
+const providerPrefix = /^(?:microsoft\.powershell\.core\\)?filesystem::/i;
 
 /**
  * On Windows, a path in the object manager's own prefix form, which Windows opens as it opens the long-path form, in the
@@ -1350,8 +1356,22 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
             at++;
             continue;
         }
+        if (powershell && c === '$' && text[at + 1] === '{') {
+            // PowerShell's `${name}` is one variable, whatever its braces hold.
+            let end = at + 2;
+            while (end < text.length && text[end] !== '}') end += text[end] === '`' ? 2 : 1;
+            append(text.slice(at, end + 1), true, false, true);
+            at = end + 1;
+            continue;
+        }
         if (c === '$') {
             append('$', true);
+            at++;
+            continue;
+        }
+        // PowerShell reads an en dash, an em dash and a horizontal bar that begins a word as a dash.
+        if (powershell && !inWord() && (c === '\u2013' || c === '\u2014' || c === '\u2015')) {
+            append('-');
             at++;
             continue;
         }
@@ -2360,7 +2380,7 @@ function namesFolder(command: string, scope: ChatScope, folder: string, except: 
     const home = pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '');
     const name = named.startsWith(`${home}/`) ? named.slice(home.length + 1) : null;
     if (name !== null && name !== '' && !name.includes('/') && (homeName === null || name === keyOf(scope.platform, homeName))) {
-        for (const variable of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${variable}/${name}`));
+        for (const variable of homeSpellings) spellings.push(pathText(scope.platform, `${variable}/${name}`));
     }
     for (const spelling of spellings) {
         for (let at = text.indexOf(spelling); at >= 0; at = text.indexOf(spelling, at + 1)) {
