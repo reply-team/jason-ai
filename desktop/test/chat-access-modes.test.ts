@@ -1058,9 +1058,10 @@ test('a forked start that fails before it names a session, with no word of the b
     r.b.env.STUB_FAIL_START = 'Error: something else went wrong';
     const said = await r.turn(id, 'again', claude);
     delete r.b.env.STUB_FAIL_START;
+    assert.equal(r.hosts().length, 3, 'the first turn, the forked start and its fresh fallback');
     const [forked, fallback] = r.hosts().slice(1);
     assert.ok(forked?.args.includes('--fork-session'));
-    assert.ok(!(fallback?.args ?? []).includes('--resume'), 'the failed resume falls to a fresh session');
+    assert.ok(fallback !== undefined && !fallback.args.includes('--resume'), 'the failed resume falls to a fresh session');
     assert.notEqual(done(said)?.kind === 'done' ? (done(said) as { error: string | null }).error : null, null, 'the turn ends in its error');
     assert.equal(keptRecord(r, id).sessions.claude, 'stub-session-1', 'the record keeps its session');
     await r.turn(id, 'once more', claude);
