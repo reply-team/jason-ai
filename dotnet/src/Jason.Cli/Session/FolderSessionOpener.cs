@@ -124,7 +124,7 @@ public static class FolderSessionOpener
         var terminals = env.Terminals;
         var terminal = terminals is null
             ? null
-            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory);
+            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory, terminals.AliasTarget);
         var what = hostWord ?? "a shell";
         if (terminals is null || terminal is null)
         {

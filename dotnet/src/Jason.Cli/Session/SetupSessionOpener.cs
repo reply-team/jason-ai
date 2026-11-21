@@ -81,7 +81,7 @@ public static class SetupSessionOpener
         var terminals = env.Terminals;
         var terminal = terminals is null
             ? null
-            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory);
+            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory, terminals.AliasTarget);
         if (terminals is null || terminal is null)
         {
             return SessionOpener.Refuse(

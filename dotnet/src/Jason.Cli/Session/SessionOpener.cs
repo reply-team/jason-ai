@@ -116,7 +116,7 @@ public static class SessionOpener
         var terminals = env.Terminals;
         var terminal = terminals is null
             ? null
-            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, Variable(env, "TERMINAL"), SearchPath(env), terminals.WindowsAppsDirectory);
+            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, Variable(env, "TERMINAL"), SearchPath(env), terminals.WindowsAppsDirectory, terminals.AliasTarget);
         if (terminals is null || terminal is null)
         {
             env.Error.WriteLine($"No terminal was found to start {hostWord} in. In a terminal of your own, at {shown}, run `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` and give the brief to your host.");

@@ -382,8 +382,8 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
 
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([wt, "-w", "new", "new-tab", "-d", _run.CampaignFolder, "--", claude], launch.Argv.Take(8));
-        Assert.Equal(9, launch.Argv.Count);
+        Assert.Equal([wt, "-w", "new", "new-tab", "--inheritEnvironment", "-d", _run.CampaignFolder, "--", claude], launch.Argv.Take(9));
+        Assert.Equal(10, launch.Argv.Count);
         Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
         Assert.Equal(_run.WindowsVariables, launch.Variables);
         Assert.Equal("Windows Terminal", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);
@@ -392,6 +392,20 @@ public sealed class SessionOpenerTests : IDisposable
         _run.Output.GetStringBuilder().Clear();
         Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1", "--human"));
         Assert.Equal("Started claude_code in Windows Terminal at " + _run.CampaignFolder + ".", _run.Output.ToString().TrimEnd());
+    }
+
+    /// <summary>A Windows Terminal older than the floor, 1.18.2681.0, is passed over for the console host, as before.</summary>
+    [Fact]
+    public async Task On_windows_a_windows_terminal_below_the_floor_is_passed_over_for_the_console_host()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        _run.WithWindowsTerminal("1.17.11461.0");
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+
+        Assert.Equal([_run.ConsoleHost, "--", claude], Assert.Single(_run.Terminals.Launches).Argv.Take(3));
+        Assert.Equal("conhost", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);
+        Assert.Empty(_run.Error.ToString());
     }
 
     /// <summary>
@@ -908,13 +922,14 @@ public sealed class SessionOpenerTests : IDisposable
         public string DataDirectory => _dir.Paths.Root;
 
         /// <summary>Puts a stand-in of Windows Terminal's program in a WindowsApps folder the recorder names, and returns its path.</summary>
-        public string WithWindowsTerminal()
+        public string WithWindowsTerminal(string version = "1.24.12741.0")
         {
             var apps = Path.Combine(_dir.Paths.Root, "WindowsApps");
             Directory.CreateDirectory(apps);
             var wt = Path.Combine(apps, "wt.exe");
             File.WriteAllBytes(wt, []);
             Terminals.WindowsAppsDirectory = apps;
+            Terminals.AliasTargets[wt] = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_" + version + @"_x64__8wekyb3d8bbwe\wt.exe";
             return wt;
         }
 
@@ -1068,6 +1083,11 @@ public sealed class SessionOpenerTests : IDisposable
         public string? SystemDirectory { get; set; }
 
         public string? WindowsAppsDirectory { get; set; }
+
+        /// <summary>The program each alias stands for, by its path; an alias not named reads as none.</summary>
+        public Dictionary<string, string> AliasTargets { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public string? AliasTarget(string path) => AliasTargets.GetValueOrDefault(path);
 
         public string? Refusal { get; set; }
 

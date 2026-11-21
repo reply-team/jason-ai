@@ -23,6 +23,9 @@ public interface ITerminalStarter
     /// <summary>The account's WindowsApps folder, where Windows keeps Windows Terminal's program; null elsewhere, and in a test that names none.</summary>
     string? WindowsAppsDirectory => null;
 
+    /// <summary>The program the App Execution Alias at a path stands for, read without starting it; null where it cannot be read, and in a test that names none.</summary>
+    string? AliasTarget(string path) => null;
+
     /// <summary>True when the terminal process started; false with a problem worded to follow "did not start".</summary>
     bool Start(TerminalLaunch launch, out string? problem);
 }
@@ -54,6 +57,8 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
     public string? WindowsAppsDirectory { get; } = OperatingSystem.IsWindows() && Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) is { Length: > 0 } local
         ? Path.Combine(local, "Microsoft", "WindowsApps")
         : null;
+
+    public string? AliasTarget(string path) => ExecutionAlias.Target(path);
 
     /// <summary>How long macOS's opener is waited for: it exits once Terminal has the script, and a hang is not a refusal.</summary>
     private static readonly TimeSpan OpenerWait = TimeSpan.FromSeconds(10);

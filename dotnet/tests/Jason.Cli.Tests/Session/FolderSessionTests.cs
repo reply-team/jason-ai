@@ -282,7 +282,7 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--shell"));
 
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([wt, "-w", "new", "new-tab", "-d", launch.WorkingDirectory, "--", shell], launch.Argv);
+        Assert.Equal([wt, "-w", "new", "new-tab", "--inheritEnvironment", "-d", launch.WorkingDirectory, "--", shell], launch.Argv);
         Assert.Equal([_run.ConsoleHost, "--", shell], launch.Fallback!.Argv);
         Assert.Equal("Windows Terminal", (string?)Answer()["terminal"]);
     }

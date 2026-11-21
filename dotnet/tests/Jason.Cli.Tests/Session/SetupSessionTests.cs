@@ -62,7 +62,7 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--setup"));
 
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([wt, "-w", "new", "new-tab", "-d", _setup.RoleSkillsDirectory, "--", claude], launch.Argv.Take(8));
+        Assert.Equal([wt, "-w", "new", "new-tab", "--inheritEnvironment", "-d", _setup.RoleSkillsDirectory, "--", claude], launch.Argv.Take(9));
         Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: true), "--add-dir", _setup.PluginsDirectory], launch.Fallback!.Argv);
         Assert.Equal(_run.WindowsVariables, launch.Variables);
         Assert.Equal("Windows Terminal", (string?)Answer()["terminal"]);
