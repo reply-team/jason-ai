@@ -433,6 +433,17 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('a value joined to a one-dash option is no folder to the walk but a folder change\'s and a copy\'s target; a look at a path runs on such a folder; a copy or a move into one stays refused', () => {
+    for (const scope of scopes) {
+        for (const command of ["awk -F/ '{print $1}' notes.txt", "awk -F, '{print $NF}' data.csv", "python3 -c 'import os; print(os.environ[\"X\"])'", 'column -s/ -t notes.txt', 'cut -d/ -f2 notes.txt', 'realpath ~', 'stat ~', 'stat /', 'basename ~', 'dirname ~/notes.txt', 'df -h ~']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+        for (const command of ['tar -C/ -cf x.tar .', 'git -C/ archive -o x.zip HEAD', 'cp -t/ notes.txt', 'cp notes.txt ~', 'mv notes.txt ~/', 'cp -r notes ~']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: searchRefusal }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('a script the agent writes is walked as its lines would run: a walk of a folder that holds the data directory in it, and a program its lines run in one, are refused as the command would be; a script of plain forms is written', () => {
     for (const scope of scopes) {
         for (const [input, sentence] of [

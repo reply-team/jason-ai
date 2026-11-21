@@ -733,6 +733,8 @@ const runsAnother = new Set(
         + 'alacritty gdb lldb').split(' '),
 );
 const interpreterStem = /^(python|pythonw|node|nodejs|ruby|perl|php)[0-9.]*$/;
+/** The programs whose text is a shell's own: the shells, `eval`, and those that hand a text to one. */
+const shellPrograms: ReadonlySet<string> = new Set('cmd sh bash zsh dash ksh mksh ash yash fish csh tcsh busybox pwsh powershell eval watch su ssh script'.split(' '));
 
 /**
  * True when a program's name, without a folder or an executable's extension, is one that runs another program or a script,
@@ -1129,7 +1131,7 @@ function hookedNoCard(tool: string, command: string, places: readonly string[], 
  * (`echo`, `printf`), change or say the folder the shell runs in (`cd`, `pushd`, `popd`, `pwd`), or look at a path and no
  * further (`test`, `[`, `[[`).
  */
-const neverWalks: ReadonlySet<string> = new Set(['echo', 'printf', 'cd', 'chdir', 'pushd', 'popd', 'pwd', 'test', '[', '[[']);
+const neverWalks: ReadonlySet<string> = new Set(['echo', 'printf', 'cd', 'chdir', 'pushd', 'popd', 'pwd', 'test', '[', '[[', 'realpath', 'stat', 'basename', 'dirname', 'df']);
 /** PowerShell's kinds of `neverWalks`. */
 const powerShellNeverWalks: ReadonlySet<string> = new Set([
     'set-location', 'sl', 'cd', 'chdir', 'push-location', 'pushd', 'pop-location', 'popd', 'get-location', 'gl', 'pwd', 'write-output', 'write', 'echo',
@@ -1578,6 +1580,8 @@ interface WalkReading extends ShellReading {
     candidates?: () => readonly string[];
     /** The literal values the text gives its own variables (`assignedValues`). */
     assigned?: ReadonlyMap<string, readonly string[]>;
+    /** The text is another program's, read as commands for what it names: its variables are that program's own. */
+    foreign?: boolean;
 }
 
 /**
@@ -1675,11 +1679,15 @@ function walkSpellings(word: WrittenWord, place: WalkPlace, reading: WalkReading
  * reads them, in PowerShell a parameter's value joined by a colon (`-Path:~`) among them, or, read as written, a word the
  * shell builds that may name one (`builtRoot`).
  */
-function wordNamesRoot(text: string, cwd: string, reading: WalkReading, literal: boolean): boolean {
+function wordNamesRoot(text: string, cwd: string, reading: WalkReading, literal: boolean, program: string | null = null): boolean {
     const at = { ...reading.scope, cwd };
     const joined = reading.powershell ? /^-[A-Za-z][\w-]*:(.+)$/.exec(text) : null;
     const words = joined === null ? [text] : [text, joined[1] as string];
-    if (placesOfWords(words, at, literal).some((place) => isRoot(place, reading.scope))) return true;
+    // A value joined to a one-dash option is a separator, a format or a count, and no folder, but the folder a program's
+    // `-C` works in and the folder a copy's `-t` puts its files in.
+    const folderOption = (piece: string) =>
+        program !== null && ((piece.startsWith('-C') && directoryPrograms.has(program)) || (piece.startsWith('-t') && copyPrograms.has(program)));
+    if (placesOfWords(words, at, literal, folderOption).some((place) => isRoot(place, reading.scope))) return true;
     return !literal && words.some((word) => word.split(/[=@,]/).some((piece) => builtRoot(piece, at)));
 }
 
@@ -1779,7 +1787,7 @@ function namesAnyRoot(text: string, reading: WalkReading, depth: number): boolea
     return commands.some((each) => {
         const slashes = scope.platform === 'win32' && each.program !== null && slashPrograms.has(each.program);
         const options = new Set(slashes ? each.args.filter((arg) => optionWord(arg.text, scope.platform)) : []);
-        if (each.command.words.some((word) => !options.has(word) && wordNamesRoot(word.text, cwd, reading, false))) return true;
+        if (each.command.words.some((word) => !options.has(word) && wordNamesRoot(word.text, cwd, reading, false, each.program))) return true;
         const change = each.program !== null && (powershell ? powerShellChanges : posixChanges).has(each.program);
         if (change && each.args.every((arg) => arg.text.startsWith('-')) && isRoot(located(scope.home, scope), scope)) return true;
         return readAgain(each, false, powershell).some((inner) => namesAnyRoot(inner, reading, depth + 1));
@@ -1906,11 +1914,11 @@ function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): 
     const { scope, powershell } = reading;
     const program = each.program ?? '';
     const slashes = scope.platform === 'win32' && slashPrograms.has(program);
-    const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && walkSpellings(arg, place, reading).some((text) => place.folders.some((folder) => wordNamesRoot(text, folder, reading, false))));
+    const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && walkSpellings(arg, place, reading).some((text) => place.folders.some((folder) => wordNamesRoot(text, folder, reading, false, program))));
     if (named) return 'walk';
     if (place.folders.some((folder) => isRoot(folder, scope))) return 'in';
     // A word that begins with a variable the reading does not know may name any folder, such a one among them.
-    if (each.args.some((arg) => unfixedVariable(arg, place, reading))) return 'walk';
+    if (reading.foreign !== true && each.args.some((arg) => unfixedVariable(arg, place, reading))) return 'walk';
     if (!reading.named) return null;
     if (place.unknown) return 'in';
     const walks = inputRunners.has(program)
@@ -1943,8 +1951,12 @@ function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth:
             const walks = plain ? null : walksThere(each, place, reading);
             if (walks !== null) return { walks, place };
         }
+        // A text a shell runs is read as the shell's own; another program's, an awk or a Python program's say, only for
+        // what it names (`WalkReading.foreign`).
+        const shell = each.command.words.some((word) => shellPrograms.has(programKey(scope.platform, word.text, powershell)));
         for (const inner of readAgain(each, pure, powershell)) {
-            const read = walkedFrom(inner, place, reading, depth + 1);
+            const foreign = reading.foreign === true || (!shell && !each.command.inner.includes(inner));
+            const read = walkedFrom(inner, place, foreign ? { ...reading, foreign } : reading, depth + 1);
             if (read.walks !== null) return { walks: read.walks, place };
             if (each.program === 'eval') place = read.place;
         }
@@ -1992,7 +2004,7 @@ function walksRoot(tool: string, command: string, scope: ChatScope): WalkKind | 
         const program = programKey(scope.platform, word, powershell);
         if (!reading.redefined && !/[\\/]/.test(word) && plainWalkForm(program, args, powershell, () => false)) continue;
         const slashes = scope.platform === 'win32' && slashPrograms.has(program);
-        if (args.some((arg) => !(slashes && optionWord(arg, scope.platform)) && wordNamesRoot(arg, at, reading, true))) return 'walk';
+        if (args.some((arg) => !(slashes && optionWord(arg, scope.platform)) && wordNamesRoot(arg, at, reading, true, program))) return 'walk';
         if (isRoot(at, scope)) return 'in';
     }
     return null;
@@ -2555,6 +2567,8 @@ function commandPlaces(words: readonly string[], scope: ChatScope, literal: bool
 
 /** The programs whose own option names the folder the words after it are read from: `-C` and `--directory`. */
 const directoryPrograms: ReadonlySet<string> = new Set(['tar', 'bsdtar', 'gtar', 'git', 'make', 'gmake', 'ninja']);
+/** The programs whose `-t` names the folder they copy, move or link their files into. */
+const copyPrograms: ReadonlySet<string> = new Set(['cp', 'mv', 'install', 'ln']);
 
 /**
  * The places a program's words name when its own option sets the folder they are read from (`tar -C`, `git -C`,
@@ -2599,11 +2613,11 @@ function linkPlaces(words: readonly string[], scope: ChatScope, literal: boolean
  * The places words name, located as `placesOf` locates them. Resolved words (`literal`) are what the shell passes on, so
  * none of them is left to a variable's name or a `~`.
  */
-function placesOfWords(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+function placesOfWords(words: readonly string[], scope: ChatScope, literal: boolean, joined: (piece: string) => boolean = () => true): string[] {
     const places: string[] = [];
     for (const word of words) {
         const pieces = new Set([word, ...word.split(/[=@,]/)]);
-        for (const piece of [...pieces]) if (/^-[A-Za-z]/.test(piece)) pieces.add(piece.slice(2));
+        for (const piece of [...pieces]) if (/^-[A-Za-z]/.test(piece) && joined(piece)) pieces.add(piece.slice(2));
         for (const value of pieces) {
             if (value === '' || value.length > pathLimit(scope.platform)) continue;
             if (!literal && /^~|[$%]/.test(homeExpanded(value, scope))) {
