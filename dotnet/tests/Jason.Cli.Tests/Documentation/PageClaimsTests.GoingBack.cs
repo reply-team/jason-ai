@@ -26,7 +26,7 @@ public partial class PageClaimsTests
     [
         ("journal-forwarder", "1.7.0 sha256:81e778ca4083860bbf6b203348963f5fa3f4745cc47dcafd93fd94962b73fae8"),
         ("ntfy", "1.0.3 sha256:d50982cc87d84c724eab1ae6bc216daed0d11055b0bd5e4592a88e8870f5d87f"),
-        ("reply", "0.19.0 sha256:4cf0b393e585ce886e284ec865f08c76b6b09f7d8fe1649397789ea725dff9a8"),
+        ("reply", "0.19.0 sha256:c1e8d3f3b4c6df785547e2d002f2bee102ee2207e727df8bb0d09ecc3a75d5e7"),
         ("slack", "1.0.0 sha256:cba4bc14aa70fd27feceb24ebdb608149fe4648ff35fde4940927c2133e448c9"),
         ("telegram", "1.0.0 sha256:808fcbbd7cc58860ed128a6ed98d348ad2dbf1b6c11d5e89fcba6a12376cdaa9"),
     ];
