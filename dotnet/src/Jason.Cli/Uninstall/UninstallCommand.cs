@@ -184,8 +184,10 @@ public static class UninstallCommand
             appimage.json, and ai.jasonharness.desktop there (jason install's record of the profiles it created).
             --keep-application keeps all of it.
           - with the data kept: run/start-owed.json, the note that a start is owed, since with this
-            installation taken off none is; and desktop/machine-setup.json, the record of the set-up Jason
-            Desktop's start ran, since what it set up is taken off and the next start sets the machine up
+            installation taken off none is; autostart/off.json, the record that you turned the start at logon
+            off, and autostart/default.json, the record that an update turned it on, since a later install
+            begins afresh; and desktop/machine-setup.json, the record of the set-up
+            Jason Desktop's start ran, since what it set up is taken off and the next start sets the machine up
             again.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted; one
             Homebrew's cask placed, its record standing under Caskroom/jason in a Homebrew prefix, is left to

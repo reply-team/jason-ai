@@ -109,10 +109,19 @@ public static class InstallCommand
              named; one whose files equal this jason's, byte for byte, is one an earlier deployment wrote
              before its record, and is adopted.
           5. With --roles, the role skills into the data directory, as `jason skills install --roles-only`.
+          6. The runtime's start at logon, registered naming this jason and this data directory, as
+             `jason runtime autostart enable` from it registers it: where the data directory holds an installation
+             or the run is --roles, nothing is registered, and you have not turned it off with
+             `jason runtime autostart disable` (autostart/off.json, or launchd's record of the label as disabled on
+             macOS). Once per installation: autostart/default.json records it, and no later run registers it again.
+             A registration already standing is left; a system that refuses is said under left, never a problem.
+             Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from
+             `jason runtime start`; on macOS the LaunchAgent is written and not loaded.
 
-        Written under the data directory: nothing without --roles, so an application's first start still opens
-        on the Demo; only an install being retired, which has data already, may have its runtime stopped, the
-        note that a start is owed written, and its logon registration made again.
+        Written under the data directory: nothing without --roles where it holds no installation, so an
+        application's first start still opens on the Demo; only an install being retired, which has data
+        already, may have its runtime stopped, the note that a start is owed written, and its logon
+        registration made again, and an installation already there has its start at logon registered once.
 
         Callers: the Windows installer, at every install and update, silent or not, with no flags; the agent's
         install script on macOS, once the application is in place, with --roles and no --terminal-path; the
@@ -135,7 +144,8 @@ public static class InstallCommand
         false; false where finds is null)}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
-        problems (sentences); completed.
+        problems (sentences); completed; logon (registered, already, off, left, no_installation, refused,
+        unsupported: what became of the start at logon).
 
         One at a time with an update: where the data directory has an update folder, the setup holds the
         update's lock, <data>/update/update.lock, while it runs, and names itself beside it. While an update,

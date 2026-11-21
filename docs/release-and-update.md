@@ -5,9 +5,9 @@ contract for it: what a release is, what it publishes, how a running runtime lea
 how a person asks the same question by hand, and what `jason update apply` does to this machine when they say
 yes.
 
-**Nothing starts itself unless you asked.** Nothing is registered with the machine until
-`jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
-registration working, and whatever you wrote yourself, for the reason §7 gives.
+**The runtime starts at logon by default, and nothing else starts itself.** The machine set-up an install ends in
+registers the runtime to start at logon (§8), and `jason runtime autostart disable` turns that off for good. An update
+keeps that registration working, and whatever you wrote yourself, for the reason §7 gives.
 
 **The macOS executable is signed with Reply's Developer ID and notarized by Apple, and the Windows executable with a
 certificate issued to Reply through Azure Artifact Signing, timestamped; the Linux executable is not signed.**
@@ -546,6 +546,8 @@ install script is the way:
 ```sh
 brew install --cask reply-team/tap/jason
 ```
+
+If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again. If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.
 
 It places `Jason.app` in `/Applications` from the release's `jason-desktop-macos-arm64.zip`, the file the application's
 own updater downloads, held to the release's `checksums.txt`, and links the `jason` the application carries as `jason`
@@ -1584,14 +1586,34 @@ that update replaced over 0.48.7. Run neither until you want 0.49 again.
 
 ## 8. Starting at logon
 
-Nothing is registered until you ask. `jason runtime autostart enable` registers **the runtime itself** to start
-when this account logs on; `disable` takes that registration away, and `status` says what is registered:
+The machine set-up registers **the runtime itself** to start when this account logs on, as
+`jason runtime autostart enable` registers it; `disable` takes that registration away and records that you turned it
+off, `enable` registers it again, and `status` says what is registered:
 
 ```sh
 jason runtime autostart enable
 jason runtime autostart status
 jason runtime autostart disable
 ```
+
+**Where set-up registers it.** `jason install` registers the start, naming the `jason` the application carries and
+this data directory, where the data directory already holds an installation or the run is `--roles`, as `install.sh`
+and `install.ps1` run it. Jason Desktop's first start on a new installation runs it with no flags and registers nothing,
+so the Demo opens with nothing written in the data directory; once Live has brought the installation up, the desktop runs
+the set-up once more, and that run registers. The report says what became of it under `logon`: `registered`, `already`
+(it names this `jason`), `off` (you turned it off), `left` (it names another program or data directory, said by name),
+`no_installation`, or `refused` (the system would not register it, said in `left`; never a problem, and the run still
+ends 0).
+
+**An update turns it on once.** An installation set up before this default gets the start at logon from the first
+set-up of a version that has it, the Desktop's first start of that version or a terminal's update, unless you turned it
+off: `<data>/autostart/off.json`, or on macOS launchd's record of the label as disabled. That set-up writes
+`<data>/autostart/default.json`, and no later one turns the start on again; one you took off by other means than
+`disable` stays off and is said under `left`. On Windows and Linux a `disable` made before this default left no record, so
+such an installation is turned on once too; `disable` again turns it off for good. The set-up starts nothing now: the
+runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`; on macOS it writes the LaunchAgent
+without loading it. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
+does.
 
 One registration per operating system and per account, in the account's own scope, and **none of the three needs
 elevation**. On Windows it is a task the Task Scheduler accepts from an ordinary prompt; on macOS and Linux it is
@@ -1609,8 +1631,20 @@ registration carries — and nothing watches it afterwards: a runtime that stops
 starts it. There is no restart policy, no `KeepAlive`, and no second process whose job is to keep the first one
 alive.
 
-**`enable` starts nothing now, and `disable` stops nothing.** They change what happens at the *next* logon.
-Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`. On macOS `disable`, and
+**`enable` also starts the runtime now, where none answers, and `disable` stops nothing.** On macOS the load starts it,
+since the LaunchAgent carries `RunAtLoad`, and `enable` waits up to thirty seconds for that runtime's endpoint before it
+starts one itself; on Windows and Linux it is started as `jason runtime start` starts it. The outcome is one sentence on
+stderr, and a start that fails leaves the registration in place. Stopping a runtime today is still `jason runtime stop`,
+and where the runtime is registered the stop says on stderr that it holds until the next logon, which starts it again.
+
+**`disable` is recorded as your word.** It writes `<data>/autostart/off.json`, the moment and the version that wrote it,
+so that nothing which turns the start at logon on by default turns it on again; on macOS launchd's own record of the label
+as disabled, which `disable` leaves, counts as the same word. `enable` removes the file, `autostart status` says
+`turned_off`, and `jason status`'s optional `autostart` check says the start was turned off by you. `disable` says on
+stderr that after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.
+`jason uninstall` removes
+`off.json`, and `default.json` beside it, also where it keeps the data, and `jason export` carries neither: an import is a
+new machine, where the default holds. On macOS `disable`, and
 `jason uninstall` with it, take the job out of launchd before its file goes — `launchctl unload -w` on the file where it is
 there, then `launchctl remove ai.jason.runtime` by its label, which holds for a job whose file is gone already, each
 waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` records

@@ -319,12 +319,13 @@ export class RuntimeAutostart {
     }
 
     /**
-     * Registers or unregisters it, on the person's word; what the CLI says is there afterwards. An answer that does not
-     * say is followed by a read of what is registered, so the menu shows the system's state rather than an unknown.
+     * Takes it off, for Remove What Jason Placed: `jason runtime autostart disable`, which records the turn-off, so the
+     * start stays off until `jason runtime autostart enable`. What the CLI says is there afterwards; an answer that does
+     * not say is followed by a read of what is registered.
      */
-    async set(on: boolean): Promise<boolean | null> {
-        const result = await this.deps.cli.run(['runtime', 'autostart', on ? 'enable' : 'disable']);
-        this.deps.log.info('autostart_set', { On: on, Exit: result.exit });
+    async disable(): Promise<boolean | null> {
+        const result = await this.deps.cli.run(['runtime', 'autostart', 'disable']);
+        this.deps.log.info('autostart_disabled', { Exit: result.exit });
         const said = result.exit === 0 ? registeredIn(result.stdout) : null;
         return said ?? (await this.registered());
     }

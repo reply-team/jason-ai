@@ -595,16 +595,21 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// The two verbs that do nothing to a runtime that is running now. Somebody who reads `enable` as "start
-    /// it" and `disable` as "stop it" will type one of them and watch nothing happen.
+    /// What the two verbs do now: `enable` starts the runtime where none answers, and `disable` stops nothing but is
+    /// recorded as the person's word, with the restart it means said. Somebody who reads `disable` as "stop it" will type
+    /// it and watch nothing happen, and somebody who turned the start off must not find it turned on again by default.
     /// </summary>
     [Fact]
-    public void The_page_says_enable_starts_nothing_now()
+    public void The_page_says_enable_starts_the_runtime_now_and_disable_is_recorded()
     {
         var page = Read();
 
-        Assert.Contains("`enable` starts nothing now", page, StringComparison.Ordinal);
-        Assert.Contains("jason runtime start", page, StringComparison.Ordinal);
+        Assert.Contains("**`enable` also starts the runtime now, where none answers, and `disable` stops nothing.**", page, StringComparison.Ordinal);
+        Assert.Contains("`RunAtLoad`", page, StringComparison.Ordinal);
+        Assert.Contains("holds until the next logon", page, StringComparison.Ordinal);
+        Assert.Contains("`<data>/autostart/off.json`", page, StringComparison.Ordinal);
+        Assert.Contains("after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop", page, StringComparison.Ordinal);
+        Assert.Contains("`jason export` carries neither: an import is a", page, StringComparison.Ordinal);
         Assert.Contains("jason runtime stop", page, StringComparison.Ordinal);
     }
 
@@ -1154,6 +1159,31 @@ public class ReleaseAndUpdateDocTests
             "| DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |",
             architecture[start..end],
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Installing's cask paragraph says, conditionally, what to do where Homebrew says the tap is not trusted: whether a
+    /// fully qualified install trusts the tap by itself is not yet seen, so the page claims neither.
+    /// </summary>
+    [Fact]
+    public void Installing_says_what_to_do_where_Homebrew_says_the_tap_is_not_trusted()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+
+        Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.", installing, StringComparison.Ordinal);
+        Assert.DoesNotContain("trusts the tap by itself", installing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Installing's cask paragraph says what to do where Homebrew stops at the Xcode licence, a state of the Mac and not of
+    /// Jason: Homebrew does nothing on a Mac running macOS 27 until the licence is accepted.
+    /// </summary>
+    [Fact]
+    public void Installing_says_what_to_do_where_Homebrew_stops_at_the_Xcode_licence()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+
+        Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", installing, StringComparison.Ordinal);
     }
 
     /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>

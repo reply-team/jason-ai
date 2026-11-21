@@ -488,8 +488,7 @@ test('each act of the desk’s menu writes what it names and nothing else: under
     await act('Open Jason at login, on, Windows', () => login('win32').set(true), []);
     await act('Open Jason at login, off, Windows', () => login('win32').set(false), []);
     await act('Start the runtime at logon, read', () => autostart.registered(), []);
-    await act('Start the runtime at logon, on', () => autostart.set(true), []);
-    await act('Start the runtime at logon, off', () => autostart.set(false), []);
+    await act('Start the runtime at logon, off', () => autostart.disable(), []);
 
     // The PATH command's folders, injected under the test's home: %LOCALAPPDATA%\Microsoft\WindowsApps (the shim and its
     // Git Bash wrapper) and ~/.local/bin.
@@ -510,7 +509,7 @@ test('each act of the desk’s menu writes what it names and nothing else: under
     await act('The PATH command and its PATH lines, removed, macOS', async () => withLines().remove(), ['.local/bin/jason', '.zprofile', '.zshrc']);
 
     assert.deepEqual(registered, [{ openAtLogin: true, args: [loginFlag] }, { openAtLogin: false, args: [loginFlag] }]);
-    assert.deepEqual(b.record().map((run) => run.args), [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);
+    assert.deepEqual(b.record().map((run) => run.args), [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'disable']]);
     assert.deepEqual(outside(), outsideBefore, 'nothing is written beside <data> and the home');
 });
 

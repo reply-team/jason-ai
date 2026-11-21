@@ -144,7 +144,7 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - **The hand-over.** The install prompt's "Ready" is `jason status` answering with `ready` true in its body. When it
   is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's
   files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying
-  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and,
+  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now:
   where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question
   about what comes next: its question goes in a message of its own. The last line of that first message names Jason
   Desktop once, as part of what was just installed, the window onto this installation with its
@@ -381,7 +381,7 @@ install script is the way:
 brew install --cask reply-team/tap/jason
 ```
 
-Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
+If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again. If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
 and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and
 the harness root stay. Homebrew's older formula is the command line alone, without Jason Desktop: where it is
 installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the
@@ -753,13 +753,13 @@ after a backup.
 
 Nothing is registered until you ask.
 
-**Not done at install.** An agent that installs Jason does not register this: it says at the end that the runtime can
-start when the person logs on, gives the command, and runs it only on the person's word. To have the runtime start
-when you log on:
+**Done at install.** The set-up an install ends in registers the runtime to start when you log on, and starts nothing
+now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`. A person who does not want it turns it off for good, and turns it on again:
 
 ```sh
-jason runtime autostart enable
 jason runtime autostart status
+jason runtime autostart disable
+jason runtime autostart enable
 ```
 
 The registration carries the data directory it was made under, and nothing supervises it afterwards: a
@@ -980,7 +980,8 @@ written), when the runtime did not start (the files are in place; start it with 
 project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
 one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
 `jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
-not register it, and `jason status`.
+not register it, and `jason status`. A turn-off made with `jason runtime autostart disable` does not travel: the archive
+leaves `data/autostart/` out, and an import is a new machine, where the default holds.
 
 ---
 

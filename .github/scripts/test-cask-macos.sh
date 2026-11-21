@@ -6,9 +6,12 @@
 #   test-cask-macos.sh <step> [arguments]
 #
 #   taps <feed> <version>          the tap jasonproof/audit, holding the cask as the real tap renders it, and the tap
-#                                  jasonproof/test, holding it with its url naming the feed's zip on this machine
-#   audit                          brew style and brew audit --strict on the cask as the real tap renders it; what
-#                                  Homebrew says about trusting the tap is printed
+#                                  jasonproof/test, holding it with its url naming the feed's zip on this machine; each
+#                                  test tap is trusted by brew trust right after brew tap-new makes it, a brew with no
+#                                  brew trust fails the step, and brew info must resolve the cask in both
+#   audit                          brew style on the cask's file, one file inspected, and brew audit --strict on the cask
+#                                  as the real tap renders it; a word of Homebrew's that a tap is not trusted or ignored
+#                                  fails it
 #   render <zip> <version>         jasonproof/test's cask rendered again, at <version>, for <zip>
 #   install <version>              brew install --cask: the application in /Applications names Jason Desktop's identifier
 #                                  at <version>, the link in Homebrew's bin leads into it and answers --version before any
@@ -106,23 +109,51 @@ trusted() {
     return "$status"
 }
 
+# Homebrew's word that a tap is not trusted, or that it ignores what a tap holds, in a command's output fails the step: a
+# command that read nothing of the cask must not pass for one that read it.
+ignored() {
+    if grep -qiE 'not trusted|ignoring (formulae|casks)|tap trust is required' "$1"; then
+        fail "$2 says a tap is not trusted or ignored: $(grep -iE 'not trusted|ignoring (formulae|casks)|tap trust is required' "$1" | head -n 2 | tr '\n' ' ')"
+    fi
+}
+
 case "$step" in
 taps)
     feed="$1"; version="$2"
     zip="$feed/$ZIP_NAME"
     [ -f "$zip" ] || fail "no $ZIP_NAME in $feed"
+    say "$(brew --version | head -n 1)"
     for tap in "$AUDIT_TAP" "$TEST_TAP"; do
         brew tap-new --no-git "$tap" > /dev/null
+        # A tap brew tap-new makes is not trusted: Homebrew ignores its casks and formulae until it is (rc.3's dry run said
+        # so, and brew style then read the cask as an untrusted tap's). Each test tap is trusted whole, before style, audit
+        # and install, and what Homebrew answers is printed.
+        brew help trust > /dev/null 2>&1 || fail "this runner's brew has no brew trust, so the test tap $tap cannot be trusted: $(brew --version | head -n 1)"
+        status=0
+        brew trust "$tap" > "$OUT/cask-trust-${tap//\//-}.txt" 2>&1 || status=$?
+        cat "$OUT/cask-trust-${tap//\//-}.txt"
+        [ "$status" = 0 ] || fail "brew trust $tap exited $status: $(tr '\n' ' ' < "$OUT/cask-trust-${tap//\//-}.txt")"
+        say "brew trust $tap: $(tr '\n' ' ' < "$OUT/cask-trust-${tap//\//-}.txt" | cut -c1-200)"
     done
     render "$version" "$(sha_of "$zip")" "" "$(tap_dir "$AUDIT_TAP")/Casks/$TOKEN.rb"
     render "$version" "$(sha_of "$zip")" "file://$zip" "$(tap_dir "$TEST_TAP")/Casks/$TOKEN.rb"
-    say "the taps $AUDIT_TAP and $TEST_TAP made in this job, the cask rendered from .github/cask/jason.rb.template at $version; never the real tap"
+    for tap in "$AUDIT_TAP" "$TEST_TAP"; do
+        status=0
+        brew info --cask "$tap/$TOKEN" > "$OUT/cask-info-${tap//\//-}.txt" 2>&1 || status=$?
+        cat "$OUT/cask-info-${tap//\//-}.txt"
+        [ "$status" = 0 ] || fail "brew info --cask $tap/$TOKEN does not resolve the cask (exit $status): $(tr '\n' ' ' < "$OUT/cask-info-${tap//\//-}.txt" | cut -c1-300)"
+        ignored "$OUT/cask-info-${tap//\//-}.txt" "brew info --cask $tap/$TOKEN"
+    done
+    say "the taps $AUDIT_TAP and $TEST_TAP made in this job, the cask rendered from .github/cask/jason.rb.template at $version and resolved by brew info in both; never the real tap"
     cat "$(tap_dir "$AUDIT_TAP")/Casks/$TOKEN.rb"
     ;;
 
 audit)
-    brew style "$AUDIT_TAP" 2>&1 | tee "$OUT/cask-style.txt" || fail "brew style refuses the cask: $(tr '\n' ' ' < "$OUT/cask-style.txt")"
+    brew style "$(tap_dir "$AUDIT_TAP")/Casks/$TOKEN.rb" 2>&1 | tee "$OUT/cask-style.txt" || fail "brew style refuses the cask: $(tr '\n' ' ' < "$OUT/cask-style.txt")"
+    ignored "$OUT/cask-style.txt" "brew style"
+    grep -qE '(^|[^0-9])1 file inspected' "$OUT/cask-style.txt" || fail "brew style did not inspect the cask's one file: $(grep -E 'inspected' "$OUT/cask-style.txt" || echo 'it said nothing of what it inspected')"
     trusted "$OUT/cask-audit.txt" --cask "$AUDIT_TAP/$TOKEN" brew audit --strict --cask "$AUDIT_TAP/$TOKEN" || fail "brew audit --strict refuses the cask: $(tr '\n' ' ' < "$OUT/cask-audit.txt")"
+    ignored "$OUT/cask-audit.txt" "brew audit --strict"
     trust="$(grep -iE 'trust' "$OUT/cask-audit.txt" "$OUT/cask-style.txt" || true)"
     say "brew style and brew audit --strict accept the cask as the real tap renders it; what they say of trust: ${trust:-nothing}"
     ;;
@@ -140,6 +171,7 @@ install)
     status=0
     trusted "$OUT/cask-install.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" || status=$?
     [ "$status" = 0 ] || fail "brew install --cask exited $status: $(tail -n 5 "$OUT/cask-install.txt" | tr '\n' ' ')"
+    ignored "$OUT/cask-install.txt" "brew install --cask"
     trust="$(grep -iE 'trust' "$OUT/cask-install.txt" || true)"
     say "brew install --cask $TEST_TAP/$TOKEN exited 0; what it says of trust: ${trust:-nothing}"
     [ -d "$APP" ] || fail "no application at $APP after the cask's install"
