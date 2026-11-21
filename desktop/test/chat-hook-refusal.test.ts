@@ -436,6 +436,44 @@ test('on Windows Full access reads this computer\'s own drive shares and the lon
     assert.deepEqual(fullAccessJudgement('Read', { file_path: `\\\\server\\C$\\${below}` }, named), runs, 'another computer\'s share');
 });
 
+test('on Windows the host names of the Linux subsystem\'s share are this computer, through a share whose end is not read: refused in Full access by the sentence that says it could not be placed, which Ask first refuses too', () => {
+    const named = homeScope('win32', 'C:\\Users\\someone', { machine: ['DESKTOP-1'] });
+    for (const host of ['wsl$', 'wsl.localhost', 'WSL.LocalHost']) {
+        for (const path of [
+            `\\\\${host}\\Ubuntu\\mnt\\c\\Users\\someone\\notes.md`,
+            `\\\\${host}\\Ubuntu\\home\\someone\\notes.md`,
+            `\\\\${host}\\C$\\Users\\someone\\notes.md`,
+            `\\\\?\\UNC\\${host}\\Ubuntu\\mnt\\c\\Users\\someone\\notes.md`,
+            `//${host}/Ubuntu/mnt/c/Users/someone/notes.md`,
+        ]) {
+            for (const [tool, input] of [['Read', { file_path: path }], ['Write', { file_path: path, content: 'x' }], ['Grep', { pattern: 'x', path }], ['Bash', { command: `cat '${path}'` }], ['PowerShell', { command: `Get-Content '${path}'` }]] as const) {
+                assert.deepEqual(fullAccessJudgement(tool, input, named), refused(unplacedRefusal), `${tool} ${path}`);
+                if (tool !== 'PowerShell') assert.equal(judge(tool, input, named).verdict, 'deny', `Ask first: ${tool} ${path}`);
+            }
+        }
+        const command = `cat //${host}/Ubuntu/mnt/c/Users/someone/notes.md`;
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, named), refused(unplacedRefusal), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\wsl-box\\Ubuntu\\notes.md' }, named), runs, 'another computer\'s share');
+});
+
+test('on Windows the object manager\'s own prefix of a path is read as the long-path prefix is, by the hook and by Ask first: a drive\'s path as that drive\'s, a network path as one, any other as a device\'s', () => {
+    const named = homeScope('win32', 'C:\\Users\\someone', { machine: ['DESKTOP-1'] });
+    for (const [path, sentence] of [
+        ['\\??\\C:\\Users\\someone\\.jason\\config\\settings.json', settingsRefusal],
+        ['\\??\\c:\\Users\\someone\\.jason\\run\\runtime.json', settingsRefusal],
+        ['\\??\\C:\\Users\\someone\\.jason\\logs\\desktop.log', dataRefusal],
+        ['\\??\\UNC\\localhost\\C$\\Users\\someone\\.jason\\config\\settings.json', settingsRefusal],
+        ['\\??\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\notes.md', unplacedRefusal],
+    ] as const) {
+        for (const [tool, input] of [['Read', { file_path: path }], ['Write', { file_path: path, content: 'x' }], ['Bash', { command: `cat '${path}'` }], ['PowerShell', { command: `Get-Content '${path}'` }]] as const) {
+            assert.deepEqual(fullAccessJudgement(tool, input, named), refused(sentence), `${tool} ${path}`);
+            if (tool !== 'PowerShell') assert.equal(judge(tool, input, named).verdict, 'deny', `Ask first: ${tool} ${path}`);
+        }
+    }
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\??\\C:\\Users\\someone\\notes.md' }, named), runs, 'a file of no kind, by its drive\'s path');
+});
+
 test('in Full access a verb of the deny list, a jason that starts with an option and a word that begins with @ are refused where they name one of the three kinds, and run where they do not', () => {
     const settings = '/home/someone/.jason/config/settings.json';
     const record = '/home/someone/.jason/desktop/conversations/c2.json';

@@ -335,9 +335,10 @@ const dataVolume = '/system/volumes/data';
  * directly or through `located`:
  * - a leading home spelling (`homeExpanded`) is the home folder, at any depth below it;
  * - a `file:` URL is its path (`urlPath`);
- * - on Windows, slashes are backslashes, a `\\?\` or `\\.\` form of a drive's path is the plain path, `\\?\UNC\` is a
- *   network path, any other `\\?\` or `\\.\` form is a device path, kept as it is spelled (`device`), and each component
- *   is read as Windows opens it: without a stream after a colon and without trailing dots and spaces;
+ * - on Windows, slashes are backslashes, the object manager's own prefix is read as the long-path one (`longPrefixed`), a
+ *   `\\?\` or `\\.\` form of a drive's path is the plain path, `\\?\UNC\` is a network path, any other `\\?\` or `\\.\`
+ *   form is a device path, kept as it is spelled (`device`), and each component is read as Windows opens it: without a
+ *   stream after a colon and without trailing dots and spaces;
  * - on macOS, a path under the data volume's prefix is the same path without it;
  * - `..` and a relative path are settled against the folder the path is read in (`scope.cwd`, which a literal directory
  *   change sets for the commands after it).
@@ -345,7 +346,7 @@ const dataVolume = '/system/volumes/data';
 function spelled(value: string, scope: ChatScope): string {
     let text = urlPath(homeExpanded(value, scope), scope.platform);
     if (scope.platform === 'win32') {
-        text = text.replace(/\//g, '\\');
+        text = longPrefixed(text.replace(/\//g, '\\'));
         if (/^\\\\[?.]\\UNC\\/i.test(text)) text = `\\\\${text.slice(8)}`;
         else if (/^\\\\[?.]\\[a-z]:\\/i.test(text)) text = text.slice(4);
         // A device's or a volume's namespace names no folder this resolves: the path is kept as spelled, a device path.
@@ -359,6 +360,14 @@ function spelled(value: string, scope: ChatScope): string {
         path = `${root}${parts.join('\\')}`;
     }
     return volumeFolded(scope.platform, path);
+}
+
+/**
+ * On Windows, a path in the object manager's own prefix form, which Windows opens as it opens the long-path form, in the
+ * long-path form; any other path as it is. Its slashes are backslashes already.
+ */
+function longPrefixed(text: string): string {
+    return /^\\\?\?\\/.test(text) ? `\\\\?\\${text.slice(4)}` : text;
 }
 
 /** On macOS, a path under the data volume's prefix as the same path without it (`dataVolume`); any other as it is. */
@@ -527,15 +536,15 @@ function judgeWrite(scope: ChatScope, path: string): Judgement {
 /**
  * What the spelling alone says, before anything is looked up; null when the path may be looked up. A path too long for
  * the platform is refused. One that begins with `~` is a card, since the shell and the host may expand it where this
- * cannot follow. On Windows, after `\\?\` or `\\.\` only a drive or `UNC\` may follow: any other device form is refused.
- * A component that ends in a dot or a space, or carries a colon (a stream), is a card wherever it lies, since Windows
- * reads it as another name than the one spelled.
+ * cannot follow. On Windows, after `\\?\` or `\\.\`, or the object manager's own prefix (`longPrefixed`), only a drive or
+ * `UNC\` may follow: any other device form is refused. A component that ends in a dot or a space, or carries a colon (a
+ * stream), is a card wherever it lies, since Windows reads it as another name than the one spelled.
  */
 function judgeSpelling(value: string, scope: ChatScope): Judgement | null {
     if (value.length > pathLimit(scope.platform)) return { verdict: 'deny', message: lengthRefusal };
     if (value.startsWith('~')) return { verdict: 'ask', title: 'Use a path that begins with ~', detail: shorten(value), remember: null };
     if (scope.platform !== 'win32') return null;
-    let rest = value.replace(/\//g, '\\');
+    let rest = longPrefixed(value.replace(/\//g, '\\'));
     if (/^\\\\[?.]\\/.test(rest)) {
         rest = rest.slice(4);
         if (!/^[a-z]:\\/i.test(rest) && !/^unc\\/i.test(rest)) return { verdict: 'deny', message: deviceRefusal };
@@ -2096,9 +2105,10 @@ function placesOfWords(words: readonly string[], scope: ChatScope, literal: bool
             if (value === '' || value.length > pathLimit(scope.platform)) continue;
             if (!literal && /^~|[$%]/.test(homeExpanded(value, scope))) {
                 // A path names its host before anything the shell expands after it: such a word is that host's, whatever
-                // the rest becomes.
+                // the rest becomes. A host name of the Linux subsystem's share is that host whatever signs it holds.
                 const path = spelled(nativeSpelling(value, scope), scope);
-                if (network(scope.platform, path) && !/[$%`~]/.test(computerOf(scope.platform, path))) places.push(path);
+                const computer = computerOf(scope.platform, path);
+                if (network(scope.platform, path) && (subsystemHosts.includes(computer.toLowerCase()) || !/[$%`~]/.test(computer))) places.push(path);
                 continue;
             }
             places.push(located(nativeSpelling(value, scope), scope));
@@ -2734,10 +2744,19 @@ function thisComputerNames(scope: ChatScope): string[] {
     return ['localhost', '127.0.0.1', '::1', '[::1]', '0--1.ipv6-literal.net', ...(scope.machine ?? [])].map((name) => name.toLowerCase());
 }
 
-/** Whether a network path's computer is this one: one of its names, any loopback address, or its own name with a domain after it. */
+/**
+ * The host names under which Windows shows the Linux subsystem's files. A path through them can name this computer's own
+ * disks as another computer would, so each is this computer, through a share whose end is not read (`hookPlace`).
+ */
+const subsystemHosts: readonly string[] = ['wsl$', 'wsl.localhost'];
+
+/**
+ * Whether a network path's computer is this one: one of its names, any loopback address, its own name with a domain after
+ * it, or a host name of the Linux subsystem's share (`subsystemHosts`).
+ */
 function thisComputer(computer: string, scope: ChatScope): boolean {
     const name = computer.toLowerCase();
-    if (/^127(\.\d{1,3}){3}$/.test(name)) return true;
+    if (/^127(\.\d{1,3}){3}$/.test(name) || subsystemHosts.includes(name)) return true;
     const names = thisComputerNames(scope);
     return names.includes(name) || (scope.machine ?? []).some((own) => !own.includes('.') && name.startsWith(`${own.toLowerCase()}.`));
 }
@@ -2745,8 +2764,9 @@ function thisComputer(computer: string, scope: ChatScope): boolean {
 /**
  * On Windows, where a located path the hook reads leads, by Ask first's reading of it (`spelled`): one that names this
  * computer as another computer would (`thisComputer`), through a drive's administrative share (`C$`), is that drive's
- * path, located again; one through any other share of this computer, and one in a device's or a volume's namespace
- * (`device`), is null, since where it leads is not read. Any other path, another computer's among them, as it is.
+ * path, located again; one through any other share of this computer, any share of the Linux subsystem's host names
+ * (`subsystemHosts`), and one in a device's or a volume's namespace (`device`), is null, since where it leads is not
+ * read. Any other path, another computer's among them, as it is.
  */
 function hookPlace(path: string, scope: ChatScope): string | null {
     if (scope.platform !== 'win32') return path;
@@ -2755,7 +2775,7 @@ function hookPlace(path: string, scope: ChatScope): string | null {
     if (!network(scope.platform, path)) return path;
     const [computer = '', share = '', ...rest] = path.slice(2).split('\\');
     if (!thisComputer(computer, scope)) return path;
-    const drive = /^([a-z])\$$/i.exec(share);
+    const drive = subsystemHosts.includes(computer.toLowerCase()) ? null : /^([a-z])\$$/i.exec(share);
     return drive === null ? null : located(`${drive[1]}:\\${rest.join('\\')}`, scope);
 }
 
