@@ -1014,6 +1014,12 @@ test('the version known and not installed lasts from the look that found it to t
     await refusing.updates.download();
     await refusing.updates.install();
     assert.equal(refusing.updates.known, '0.35.0');
+    // A terminal's request for an older version than the one running is downloaded, and not marked.
+    const older = updaterOn(scratch(t), fakeUpdater({ latest: '0.33.0' }));
+    const outcome = await older.updates.take({ to: '0.33.0', feed: null }, { install: false }, () => undefined);
+    assert.equal(outcome.state, 'refused');
+    assert.deepEqual(older.updates.current, { step: 'downloaded', version: '0.33.0' });
+    assert.equal(older.updates.known, null);
 });
 
 test('the update item’s key is named only where the item can act', () => {

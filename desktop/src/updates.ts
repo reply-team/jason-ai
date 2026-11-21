@@ -794,7 +794,8 @@ export class Updater {
     /** The item's next step: a line said at another step is cleared; a look under way (`checking`) keeps it. */
     private show(state: UpdateState): void {
         this.state = state;
-        if ('version' in state) this.knownVersion = state.version;
+        // Only a version newer than the one running is one to mark: a terminal's request for an older one is not.
+        if ('version' in state) this.knownVersion = compareVersions(state.version, this.deps.version) > 0 ? state.version : null;
         else if (state.step === 'idle') this.knownVersion = null;
         if (this.line !== null && state.step !== 'checking' && !sameState(state, this.line.at)) this.line = null;
         this.deps.changed(state);
