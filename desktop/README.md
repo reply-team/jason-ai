@@ -706,8 +706,12 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   `window.open` that leaves it goes to the system browser only when it is `https:`.
 - `contextIsolation` on, `nodeIntegration` off, `sandbox` on; no webview attached, and of the permissions a page asks
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
-- The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
-  of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- The preload exposes `window.jasonDesktop` and nothing else. Every call but one is answered only when it comes from the
+  top frame of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+  The one is `chat.pathOf`, a dropped file's path, which the preload answers itself, with no channel to the main process
+  and so with no check of the origin. That is safe because Electron reads a path only from a `File`, and a page holds a
+  `File` only when the person dropped it there or picked it: a page learns the path of no file it was not given. The
+  preload answers it only for a page served over `http:`, as the runtime's is, and with an empty path for any other.
 - On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
   of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
   window is dragged by that band and by the console's top strip, every control on them excepted. So that the window

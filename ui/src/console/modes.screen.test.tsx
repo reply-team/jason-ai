@@ -187,7 +187,7 @@ describe('a chat’s access mode', () => {
         choose('ask_first');
         await waitFor(() => expect(note()).not.toBeNull());
         expect(note()!.textContent).toBe(
-            'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.',
+            'In this mode the chat does not read your Codex config.toml; Full access does. A provider or profile set there is not used here; connect a key on the Connect card.',
         );
         chooseHost('claude');
         await waitFor(() => expect(note()).toBeNull());

@@ -14,6 +14,7 @@ import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
 import { begin, placeGates } from './conversation-acts';
 import { conversationItems, type MenuItem } from './conversation-items';
+import { openFolder } from './open-folder';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { chats, conversations } from './state';
 
@@ -54,7 +55,7 @@ function ConversationMenu({ agent }: { agent: string }) {
     const { chat, kept } = conversationOf(agent);
     const id = kept ?? chat?.id;
     const items = conversationItems(
-        { kept, id, running: chat?.running === true, removing: chat?.removing === true },
+        { kept, id, campaignId: agent, running: chat?.running === true, removing: chat?.removing === true },
         placeGates(),
     );
     useEffect(() => {
@@ -81,6 +82,7 @@ function ConversationMenu({ agent }: { agent: string }) {
         close(false);
         if (item.kind === 'rename' || item.kind === 'remove') void begin(kept!, item.kind, show);
         else if (item.kind === 'fresh') void restartChat(id!);
+        else if (item.kind === 'folder') void openFolder(agent);
     };
     return (
         <div className="agent-more-wrap" onKeyDown={keys}>

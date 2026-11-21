@@ -437,6 +437,106 @@ describe('the desktop’s conversations', () => {
         );
     });
 
+    it('closes a notice by its control, and what a turn said as the next answer begins, while the line under the composer still says why', async () => {
+        const status = structuredClone(setupFound);
+        // A Full access chat's next turn runs in Ask first on this computer, and the line under the composer says why.
+        const why = 'Full access is held on this computer for a minute.';
+        status.hosts.find((each) => each.id === 'claude')!.runs.window.full_access = { mode: 'ask_first', why };
+        const { desktop } = renderConsole(chatDesktop(status));
+        const id = await send(desktop, 'Go');
+        flush(() => {
+            desktop.emit(id, { kind: 'notice', text: 'This turn runs in Ask first.' });
+            desktop.emit(id, { kind: 'text', text: 'Done.' });
+            desktop.emit(id, { kind: 'notice', text: 'A folder was left out of the chat.' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => screen.getByText('A folder was left out of the chat.'));
+        const note = (text: string) => screen.getByText(text).closest<HTMLElement>('.chat-note')!;
+        expect(within(note('This turn runs in Ask first.')).getByRole('button', { name: 'Close' })).toBeTruthy();
+        fireEvent.click(within(note('A folder was left out of the chat.')).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(screen.queryByText('A folder was left out of the chat.')).toBeNull());
+        expect(screen.getByText('This turn runs in Ask first.')).toBeTruthy();
+        // The next message is sent: the notice stays until its answer begins, and then goes.
+        await send(desktop, 'And now?');
+        expect(screen.getByText('This turn runs in Ask first.')).toBeTruthy();
+        flush(() => desktop.emit(id, { kind: 'text', text: 'Here.' }));
+        await waitFor(() => expect(screen.queryByText('This turn runs in Ask first.')).toBeNull());
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(why);
+    });
+
+    it('puts the path of each file dropped on the box in at the caret, quoted, says one it could not read, and goes nowhere', async () => {
+        const { desktop } = renderConsole();
+        const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }) as HTMLTextAreaElement);
+        fireEvent.change(box, { target: { value: 'add these lines to ' } });
+        box.setSelectionRange(19, 19);
+        const notes = new File(['x'], '1.txt');
+        const plan = new File(['y'], 'plan.md');
+        const desk = 'C:\\Users\\Ана Ли\\Desktop\\';
+        desktop.paths.set(notes, `${desk}1.txt`);
+        desktop.paths.set(plan, `${desk}plan.md`);
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        // The box takes the drop, so the window never goes to the file.
+        expect(fireEvent.dragOver(box, carrying(notes))).toBe(false);
+        expect(fireEvent.drop(box, carrying(notes, plan))).toBe(false);
+        const both = `add these lines to "${desk}1.txt" "${desk}plan.md" `;
+        await waitFor(() => expect(box.value).toBe(both));
+        expect(box.selectionStart).toBe(both.length);
+        expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['1.txt'], ['plan.md']]);
+        expect(screen.queryByText(unread)).toBeNull();
+        // A file that is not on this computer puts nothing in, and the box says so, until a word is typed.
+        expect(fireEvent.drop(box, carrying(new File(['z'], 'made.txt')))).toBe(false);
+        await waitFor(() => screen.getByText(unread));
+        expect(box.value).toBe(both);
+        fireEvent.change(box, { target: { value: `${both}please` } });
+        await waitFor(() => expect(screen.queryByText(unread)).toBeNull());
+        // Words dragged from a page are the box's own to take.
+        expect(fireEvent.drop(box, { dataTransfer: { files: [], types: ['text/plain'] } })).toBe(true);
+    });
+
+    it('says what a drop could not read until the message goes, and never in another conversation drawn in its place', async () => {
+        const desktop = chatDesktop();
+        const one = 'conv_01JDKEPT0000000000000000D1';
+        const other = 'conv_01JDKEPT0000000000000000D2';
+        desktop.keep({ id: one, campaignId: 'cmp_1', title: 'Spring', entries: [{ kind: 'user', text: 'Hello' }] });
+        desktop.keep({ id: other, campaignId: 'cmp_2', title: 'Autumn', entries: [{ kind: 'user', text: 'Later' }] });
+        const { fake } = renderConsole(desktop);
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        // Both chats are held by opening them from the sidebar, as a person does.
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Autumn' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Autumn' }));
+        await waitFor(() => screen.getByText('Later'));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => screen.getByText('Hello'));
+        const panel = () => document.querySelector<HTMLElement>(`[data-pane="chat:${one}"]`)!;
+        const box = within(panel()).getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: 'Read this' } });
+        fireEvent.drop(box, carrying(new File(['z'], 'made.txt')));
+        await waitFor(() => within(panel()).getByText(unread));
+        // The message goes with no word typed after the drop: what the box said of the drop goes with it.
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        await waitFor(() => expect(within(panel()).queryByText(unread)).toBeNull());
+        // One panel, drawn with one chat and then given the other at the same place, as the console does where a
+        // pane's chat changes under it: the other conversation's box says nothing of this one's drop.
+        const view = render(
+            <ApiProvider api={fake}>
+                <ChatPanel chatId={other} headed />
+            </ApiProvider>,
+        );
+        const drawn = within(view.container).getByRole('textbox', { name: 'Your message' });
+        fireEvent.drop(drawn, carrying(new File(['z'], 'made.txt')));
+        await waitFor(() => within(view.container).getByText(unread));
+        view.rerender(
+            <ApiProvider api={fake}>
+                <ChatPanel chatId={one} headed />
+            </ApiProvider>,
+        );
+        await waitFor(() => within(view.container).getByText('Hello'));
+        expect(within(view.container).queryByText(unread)).toBeNull();
+    });
+
     it('draws Rename, Start fresh and Remove as icons that keep their names and say what they do', async () => {
         const { desktop } = renderConsole();
         const id = await send(desktop, 'Go');

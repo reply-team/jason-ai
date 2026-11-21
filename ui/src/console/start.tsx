@@ -8,6 +8,7 @@ import { ChatNotes, hostOf, isRefusal, newChatMode, sendTurn, startChat, tabLock
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
+import { useDroppedPaths } from './dropped-paths';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
@@ -219,6 +220,8 @@ function StartChat() {
     // unread it is there for the reason it could not be read.
     const card = connected === false || (unread && setupError.value !== null);
     const box = useRef<HTMLTextAreaElement>(null);
+    // A file dropped on the box puts its path in at the caret, as in a chat (`dropped-paths.ts`).
+    const drop = useDroppedPaths(box, 'start', startDraft.value, (next) => (startDraft.value = next));
     const held = waiting !== null || making !== null;
     // The note about name and tone waits for a first message, in Live only, and for a read that holds neither.
     const askable = mode.value === 'live' && !voiceNoteClosed.value && messageWasSent();
@@ -244,6 +247,8 @@ function StartChat() {
     useFit(box, startDraft.value);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
+        // What the box said of a drop goes with the words it was said beside.
+        drop.reset();
         submitStart(startDraft.value);
     };
     const enter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -296,6 +301,11 @@ function StartChat() {
                 )}
                 <form className="cform" onSubmit={send} aria-label="Start">
                     <div className="composer">
+                        {drop.said !== null && (
+                            <div className="note am" role="status">
+                                {drop.said}
+                            </div>
+                        )}
                         <textarea
                             ref={box}
                             rows={2}
@@ -303,8 +313,13 @@ function StartChat() {
                             aria-label="Who do you want to reach?"
                             value={startDraft.value}
                             disabled={held}
-                            onChange={(event) => (startDraft.value = event.target.value)}
+                            onChange={(event) => {
+                                drop.reset();
+                                startDraft.value = event.target.value;
+                            }}
                             onKeyDown={enter}
+                            onDragOver={drop.draggedOver}
+                            onDrop={drop.dropped}
                         />
                         <div className="crow">
                             <AccessButton
