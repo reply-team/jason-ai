@@ -69,7 +69,7 @@ public static class RouteCommands
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel));
 
-            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), parseResult.GetValue(human), cancellationToken).ConfigureAwait(false) is { } refused)
             {
                 return refused;
             }
@@ -144,7 +144,7 @@ public static class RouteCommands
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "route set", "the CLI will not put this account's name on a change of route by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
-            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), parseResult.GetValue(human), cancellationToken).ConfigureAwait(false) is { } refused)
             {
                 return refused;
             }
@@ -181,7 +181,7 @@ public static class RouteCommands
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
             ActorOption.Named(body, "route unset", "the CLI will not put this account's name on taking a route away by itself", $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
-            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), parseResult.GetValue(human), cancellationToken).ConfigureAwait(false) is { } refused)
             {
                 return refused;
             }
@@ -202,14 +202,14 @@ public static class RouteCommands
     /// is told to restart or update the runtime. A runtime that cannot be reached at all is reported as every verb reports
     /// it. A request that names no channel asks nothing first. Null is clear to send. A runtime restarted between the read and the request is not covered; nothing short of a member the server checks would cover it.
     /// </summary>
-    internal static async Task<int?> RefusedForAnOlderRuntimeAsync(CliEnvironment env, string? channel, CancellationToken cancellationToken)
+    internal static async Task<int?> RefusedForAnOlderRuntimeAsync(CliEnvironment env, string? channel, bool human, CancellationToken cancellationToken)
     {
         if (channel is null)
         {
             return null;
         }
 
-        var (exit, response) = await OperationRunner.SendAsync(env, Operations.SystemInfo, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, Operations.SystemInfo, RequestBody.Empty(), human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exit;
@@ -222,7 +222,7 @@ public static class RouteCommands
         }
 
         var running = info is null ? "The runtime that is running could not be asked what it knows" : $"The runtime that is running ({info.RuntimeVersion}) does not know channel routes";
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, CliErrors.Serialize(
             CliErrors.RuntimeTooOld,
             $"{running}, so it would ignore --channel and answer or change the operation's own route instead. Nothing was sent. Restart the runtime if it was updated without a restart, or update Jason.",
             retryable: false));

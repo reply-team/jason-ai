@@ -80,7 +80,7 @@ public static class RuntimeAutostartCommands
         }
         catch (AutostartException refusal)
         {
-            return Fail(env, refusal);
+            return Fail(env, human, refusal);
         }
     }
 
@@ -104,7 +104,7 @@ public static class RuntimeAutostartCommands
         }
         catch (AutostartException refusal)
         {
-            return Fail(env, refusal);
+            return Fail(env, human, refusal);
         }
     }
 
@@ -118,7 +118,7 @@ public static class RuntimeAutostartCommands
         }
         catch (AutostartException refusal)
         {
-            return Fail(env, refusal);
+            return Fail(env, human, refusal);
         }
     }
 
@@ -185,9 +185,9 @@ public static class RuntimeAutostartCommands
         return ExitCodes.Success;
     }
 
-    private static int Fail(CliEnvironment env, AutostartException refusal)
+    private static int Fail(CliEnvironment env, bool human, AutostartException refusal)
     {
-        env.Out.WriteLine(CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
+        CliErrors.Print(env.Out, human, CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
         return ExitCodes.ApiError;
     }
 

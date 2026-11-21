@@ -62,7 +62,7 @@ public static class RuntimeStartCommand
             // and a port that refuses or answers as someone else all leave a stale descriptor, replaced below.
             if (answer == Answer.PublishedButSilent && Refusal(env, descriptor, processes) is { } refusal)
             {
-                return Fail(env, refusal, retryable: true);
+                return Fail(env, human, refusal, retryable: true);
             }
         }
 
@@ -75,7 +75,7 @@ public static class RuntimeStartCommand
             if (unfinished.Replacing)
             {
                 var (code, message) = unfinished.Refusal("Nothing was started.");
-                env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+                CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable: false));
                 return ExitCodes.ApiError;
             }
 
@@ -141,7 +141,7 @@ public static class RuntimeStartCommand
                 // to find it out, and an agent and the desktop branch on the code, never on the words around it.
                 if (NewerData(said) is { } newer)
                 {
-                    env.Out.WriteLine(CliErrors.Serialize(DataNewer.Code, newer, retryable: false));
+                    CliErrors.Print(env.Out, human, CliErrors.Serialize(DataNewer.Code, newer, retryable: false));
                     return ExitCodes.ApiError;
                 }
 
@@ -150,6 +150,7 @@ public static class RuntimeStartCommand
                     : $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. ";
                 return Fail(
                     env,
+                    human,
                     exited
                     + (said.Length > 0 ? $"It said: {said} " : string.Empty)
                     + Evidence(env, earlierLogs, exited: true, said: said.Length > 0),
@@ -169,7 +170,7 @@ public static class RuntimeStartCommand
                     : string.Create(
                         System.Globalization.CultureInfo.InvariantCulture,
                         $"The runtime process {child.Id} published an endpoint descriptor at {seen.Descriptor.BaseUrl}, and {Observed(seen.Answer, seconds)}; it is still running. 'jason runtime status' answers once it does; if it never does, end process {child.Id}. ");
-                return Fail(env, message + Evidence(env, earlierLogs, exited: false, said: false), retryable: true);
+                return Fail(env, human, message + Evidence(env, earlierLogs, exited: false, said: false), retryable: true);
             }
 
             await Task.Delay(poll ?? DefaultPoll, cancellationToken).ConfigureAwait(false);
@@ -453,9 +454,9 @@ public static class RuntimeStartCommand
         }
     }
 
-    private static int Fail(CliEnvironment env, string message, bool retryable)
+    private static int Fail(CliEnvironment env, bool human, string message, bool retryable)
     {
-        env.Out.WriteLine(CliErrors.Serialize(CliErrors.RuntimeStartFailed, message, retryable));
+        CliErrors.Print(env.Out, human, CliErrors.Serialize(CliErrors.RuntimeStartFailed, message, retryable));
         return ExitCodes.ApiError;
     }
 }

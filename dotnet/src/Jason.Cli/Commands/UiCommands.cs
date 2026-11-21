@@ -121,7 +121,7 @@ public static class UiCommands
     /// </summary>
     internal static async Task<int> RunOpenAsync(CliEnvironment env, JsonObject body, bool noOpen, bool human, CancellationToken cancellationToken)
     {
-        var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exit;
@@ -129,7 +129,7 @@ public static class UiCommands
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
