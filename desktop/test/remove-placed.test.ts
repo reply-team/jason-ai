@@ -288,6 +288,17 @@ test('a start at logon that runs another jason is left and named; on an AppImage
     assert.ok(!beside.acts.includes('autostart disable'));
 });
 
+test('the act takes the runtime’s start at logon off and leaves the record of that turn-off, so the next set-up registers nothing again', async (t) => {
+    const b = bench(t, 'macos');
+    ownStart(b);
+    const off = `${b.home}/.jason/autostart/off.json`;
+    mkdirSync(dirname(off), { recursive: true });
+    writeFileSync(off, '{"since":"2026-11-21T10:00:00Z","version":"0.0.0"}');
+    await uninstall(b.deps);
+    assert.ok(b.acts.includes('autostart disable'));
+    assert.ok(existsSync(off), 'the act left the installation and its data, so the turn-off stays until jason runtime autostart enable');
+});
+
 test('with the data directory reached through a link, the start at logon a copy runs is its own, and copies a process runs from stay', async (t) => {
     const b = bench(t, 'appimage', { linkedData: true });
     assert.ok(b.realBundles !== null && b.bundles !== null && b.realBundles !== b.bundles);
@@ -355,7 +366,7 @@ test('on an AppImage a runtime started from any copy of its jason is this applic
         version: '0.35.0',
         paths,
         command: { status: () => ({ state: 'unsupported', executable: current }), remove: () => ({ state: 'unsupported', executable: current }) },
-        autostart: { registration: async () => ({ registered: false, executable: null }), set: async () => false },
+        autostart: { registration: async () => ({ registered: false, executable: null }), disable: async () => false },
         makeCommand: () => assert.fail('the start offers a command'),
         makeAutostart: () => assert.fail('the start offers a start at logon'),
         login: { isOn: () => false, set: async () => undefined },
@@ -700,7 +711,7 @@ test('a start that offers neither the PATH command nor the start at logon still 
         command: null,
         autostart: null,
         makeCommand: () => (made.push('command'), { status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => (made.push('command remove'), { state: 'unsupported' as const, executable: '' }) }),
-        makeAutostart: () => (made.push('autostart'), { registration: async () => ({ registered: true, executable: `${paths.bundle}/0.34.0/jason` }), set: async (on: boolean) => (made.push(`autostart ${on}`), false) }),
+        makeAutostart: () => (made.push('autostart'), { registration: async () => ({ registered: true, executable: `${paths.bundle}/0.34.0/jason` }), disable: async () => (made.push('autostart false'), false) }),
         login: { isOn: () => false, set: async () => undefined },
         stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
         stopDemo: async (): Promise<StopOutcome> => ({ kind: 'none' }),
@@ -816,7 +827,7 @@ test('the act takes off the demo beside the person’s installation, worked out 
         command: null,
         autostart: null,
         makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => ({ state: 'unsupported' as const, executable: '' }) }),
-        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), disable: async () => false }),
         login: { isOn: () => false, set: async () => undefined },
         stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
         stopDemo: async (): Promise<StopOutcome> => (stopped.push('demo'), { kind: 'stopped' }),
@@ -853,7 +864,7 @@ test('the act takes off a copy a start over left beside the demo, only when it c
         command: null,
         autostart: null,
         makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => ({ state: 'unsupported' as const, executable: '' }) }),
-        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), disable: async () => false }),
         login: { isOn: () => false, set: async () => undefined },
         stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
         stopDemo: async (): Promise<StopOutcome> => ({ kind: 'stopped' }),
@@ -891,7 +902,7 @@ test('a demo runtime that does not stop refuses the whole removal before anythin
         command: null,
         autostart: null,
         makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => (acts.push('command'), { state: 'unsupported' as const, executable: '' }) }),
-        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), disable: async () => false }),
         login: { isOn: () => false, set: async () => (acts.push('login'), undefined) },
         stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
         stopDemo: async (): Promise<StopOutcome> => ({ kind: 'failed', exit: 1 }),

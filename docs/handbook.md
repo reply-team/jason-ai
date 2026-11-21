@@ -414,8 +414,8 @@ jason runtime autostart disable
 jason runtime autostart enable
 ```
 
-An install registers it by default, and starts nothing now; `disable` turns it off for good, and `enable` turns it on
-again.
+An install registers it by default and starts nothing now: the runtime runs from the next logon, from Jason Desktop, or
+from `jason runtime start`. `disable` turns it off for good, and `enable` turns it on again.
 
 Campaigns, the people in them, and the work to be done about them are managed with one verb per
 API operation:

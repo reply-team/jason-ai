@@ -743,7 +743,7 @@ after a backup.
 Nothing is registered until you ask.
 
 **Done at install.** The set-up an install ends in registers the runtime to start when you log on, and starts nothing
-now: the next logon starts it. A person who does not want it turns it off for good, and turns it on again:
+now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`. A person who does not want it turns it off for good, and turns it on again:
 
 ```sh
 jason runtime autostart status

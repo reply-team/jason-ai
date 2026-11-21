@@ -90,7 +90,7 @@ export interface SetupReport {
     completed: boolean;
     /**
      * What became of the runtime's start at logon, in the routine's word (`registered`, `already`, `off`, `left`,
-     * `no_installation`, `refused`, `unsupported`); absent where the routine said none, as one before 0.49.4.
+     * `no_installation`, `refused`, `unsupported`); absent where the routine said none, as one of a version before it.
      * `no_installation` is what Live's bringing up of a new installation runs the routine again for (`afterLive`).
      */
     logon?: string;

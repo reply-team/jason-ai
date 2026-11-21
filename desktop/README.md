@@ -1077,7 +1077,9 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   uninstall` on its own with `--wait-for` this process's id, and quits. For the deb the verb takes the package
   `jason-desktop` off first, once the runtime has stopped, purged by apt through the system's own password dialog, and
   removes nothing of the account's when that is refused; for an AppImage it removes its menu entry, its icons, the copies
-  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system.
+  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system;
+  it leaves the installation and its data, and takes the runtime's start at logon off with `jason runtime autostart
+  disable`, which records the turn-off, so the start stays off until `jason runtime autostart enable`.
   The system's own removal leaves the account's files, and what they start is made harmless: the autostart entry and
   the AppImage's menu entry name the file they start as `TryExec=` (`autostartEntry` in `src/login-item.ts`), and the
   runtime's systemd user unit carries `ConditionPathExists=`. When Jason will not start, take off by hand what it placed.

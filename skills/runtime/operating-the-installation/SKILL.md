@@ -127,7 +127,8 @@ jason runtime autostart disable
 ```
 
 An install registers the start at logon by default: the machine set-up does it, once there is an installation to
-start, and starts nothing now. A person who does not want it turns it off for good with `disable`. `enable` registers
+start, and starts nothing now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.
+A person who does not want it turns it off for good with `disable`. `enable` registers
 **the runtime itself** to start when this account logs on: a logon task on Windows, a
 LaunchAgent on macOS, a `systemd --user` unit on Linux. `disable` takes that registration away, and `status`
 says what is registered and whether the executable it names is still on disk. On macOS the registration also

@@ -1583,10 +1583,10 @@ ends 0).
 set-up of a version that has it, the Desktop's first start of that version or a terminal's update, unless you turned it
 off: `<data>/autostart/off.json`, or on macOS launchd's record of the label as disabled. That set-up writes
 `<data>/autostart/default.json`, and no later one turns the start on again; one you took off by other means than
-`disable` stays off and is said under `left`. On Windows and Linux a `disable` made before 0.49.4 left no record, so
-such an installation is turned on once too; `disable` again turns it off for good. The set-up starts nothing: on
-macOS it writes the LaunchAgent without loading it, so the next login starts the runtime, as it does on Windows and
-Linux. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
+`disable` stays off and is said under `left`. On Windows and Linux a `disable` made before this default left no record, so
+such an installation is turned on once too; `disable` again turns it off for good. The set-up starts nothing now: the
+runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`; on macOS it writes the LaunchAgent
+without loading it. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
 does.
 
 One registration per operating system and per account, in the account's own scope, and **none of the three needs

@@ -198,10 +198,18 @@ echo "The deb placed Jason's source, its key and /usr/bin/jason; a new login she
 if grep -qF '"registered":true' "$work/autostart.json"; then
   grep -qF '"executable":"/opt/Jason/resources/bundle/jason"' "$work/autostart.json"     || fail "The start at logon names another jason than the package's: $(cat "$work/autostart.json")"
   echo "The set-up registered the start at logon, the user unit naming /opt/Jason/resources/bundle/jason."
-elif grep -qF 'The start at logon could not be registered' "$work/install.out"; then
-  echo "The runner has no systemd user manager to register with, and the set-up said so in its report and ended 0."
+elif ! "${person[@]}" systemctl --user is-system-running > "$work/user-manager.txt" 2>&1; then
+  # Only a runner with no systemd user manager may end without the unit: the set-up's sentence names systemctl and what
+  # it could not reach, and nothing is registered.
+  said=$(grep -oE 'The start at logon could not be registered[^"]*' "$work/install.out" || true)
+  case "$said" in *systemctl*) ;; *) said="" ;; esac
+  printf '%s' "$said" | grep -qiE 'bus|manager' \
+    || { cat "$work/install.out" "$work/user-manager.txt"; fail "The runner has no systemd user manager, and the set-up did not say systemctl could not reach it: '$said'"; }
+  grep -qF '"registered":false' "$work/autostart.json" \
+    || { cat "$work/autostart.json" "$work/autostart.err"; fail "With no systemd user manager, jason runtime autostart status does not say registered false."; }
+  echo "The runner has no systemd user manager ($(head -n 1 "$work/user-manager.txt")), and the set-up said so in its report, registered nothing and ended 0."
 else
-  cat "$work/autostart.json" "$work/autostart.err"; fail "The set-up registered no start at logon and said nothing of why."
+  cat "$work/autostart.json" "$work/autostart.err" "$work/install.out"; fail "The runner has a systemd user manager, and the set-up registered no start at logon."
 fi
 
 # The repository's key, which the package placed, stands for the leg's from here on.
@@ -222,6 +230,8 @@ apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { ap
 # Only what apt asks from here on counts: the install line fetched the same deb through the same hops above.
 asked=$(wc -l < "$work/served.log")
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
+grep -qxF 'Open Jason Desktop to start Jason.' "$work/reinstall.log"   || { cat "$work/reinstall.log"; fail "The deb installed by apt did not end with its one line, Open Jason Desktop to start Jason."; }
+echo "The deb installed by apt ends with its line: Open Jason Desktop to start Jason."
 tail -n "+$((asked + 1))" "$work/served.log" \
   | grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"agent\": \"Debian APT[^\"]*\", \"served\": \"v$release/jason-desktop-linux-x64.deb\"" \
   || { cat "$work/served.log"; fail "apt's own download of the deb did not come through the chain from the release's asset address."; }

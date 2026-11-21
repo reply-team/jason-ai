@@ -202,11 +202,12 @@ first, naming the version, since installing stops the runtime, which ends a runn
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
 reaches.
-The Jason menu carries Open Jason at Login, Command Line, the update item, and Uninstall Jason… on macOS and Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
-acts for the installation. The tray counts what waits for you, approvals and questions, read through
-`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
-notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
-them on.
+The Jason menu carries Open Jason at Login, Command Line, the update item, and Uninstall Jason… on macOS and Linux. The
+tray's menu opens the window, a new chat and what needs you, and carries the same acts for the installation. The tray
+counts what waits for you, approvals and questions, read through `jason approval list` and `jason decision list` no more
+often than every 30 seconds while a runtime answers; a system notification carries the counts alone, never a name or the
+words of a question. Open Jason at Login is off until you turn it on; the runtime's start at logon is the machine
+set-up's, and no item of the menu's.
 
 ## Its own files
 

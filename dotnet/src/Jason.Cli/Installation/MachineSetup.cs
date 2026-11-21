@@ -998,15 +998,16 @@ public static class MachineSetup
                     return LogonStates.Already;
                 }
 
-                // Turned on once: a new installation, or the first set-up of an installation made before this default. One
-                // the default turned on already, and that is not registered now, was taken off by other means and is left so.
-                if (!RegistersFor(hadInstallation) && File.Exists(env.Paths.AutostartDefaultFile))
+                // Turned on once per installation, whatever else says it is new: one the default turned on already, and
+                // that is not registered now, was taken off by other means and is left so, a desktop record that still
+                // says it found no installation included.
+                if (File.Exists(env.Paths.AutostartDefaultFile))
                 {
                     Left.Add("The start at logon was turned on once already and is not registered now, so it was left off; `jason runtime autostart enable` registers it.");
                     return LogonStates.Left;
                 }
 
-                Register(registrar);
+                Register(registrar, RegistersFor(hadInstallation));
                 RecordTurnedOn();
                 return LogonStates.Registered;
             }
@@ -1099,19 +1100,20 @@ public static class MachineSetup
         /// this run was told, and starting nothing: on macOS the LaunchAgent is written and not loaded, since loading it would
         /// start a runtime (<c>RunAtLoad</c>), and this routine starts no process that outlives it.
         /// </summary>
-        private void Register(IAutostartRegistrar registrar)
+        private void Register(IAutostartRegistrar registrar, bool newInstallation)
         {
+            var once = newInstallation ? string.Empty : " It was turned on once, for an installation set up before the runtime started at logon by default; `jason runtime autostart disable` turns it off for good.";
             var told = string.IsNullOrEmpty(options.TerminalPath) ? env.SearchPath : options.TerminalPath;
             var registration = RuntimeAutostartCommands.Registration(env with { InstallPath = carried.Executable, SearchPath = told }, registrar.Platform);
             if (registrar.Platform is AutostartPlatform.MacOs)
             {
                 registrar.Apply(registration with { Apply = [], Remove = [] });
-                Done.Add($"Registered the runtime to start at login, naming {carried.Executable}; launchd starts it at the next login, and nothing was started now.");
+                Done.Add($"Registered the runtime to start at login, naming {carried.Executable}, with the LaunchAgent written and not loaded. Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.{once}");
                 return;
             }
 
             registrar.Apply(registration);
-            Done.Add($"Registered the runtime to start at logon, naming {carried.Executable}; it starts at the next logon, and nothing was started now.");
+            Done.Add($"Registered the runtime to start at logon, naming {carried.Executable}. Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.{once}");
         }
 
         // --- the skills --------------------------------------------------------------------------------------

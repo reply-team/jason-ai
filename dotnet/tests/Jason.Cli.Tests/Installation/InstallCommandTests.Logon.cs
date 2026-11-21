@@ -58,7 +58,7 @@ public sealed partial class InstallCommandTests
         Assert.Contains(_data.Paths.Root, applied.Run);
         var report = Report(output);
         Assert.Equal("registered", report.GetProperty("logon").GetString());
-        Assert.Contains(report.GetProperty("done").EnumerateArray(), said => said.GetString()!.Contains("nothing was started now", StringComparison.Ordinal));
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), said => said.GetString()!.Contains("Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.", StringComparison.Ordinal));
     }
 
     /// <summary>On macOS the LaunchAgent is written and not loaded: a load would start a runtime now (RunAtLoad), and set-up starts none.</summary>
@@ -194,6 +194,24 @@ public sealed partial class InstallCommandTests
         var report = Report(output);
         Assert.Equal("left", report.GetProperty("logon").GetString());
         Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("turned on once already", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Once is once even where the desktop's record still says it found no installation: a start the default turned on and
+    /// that was taken off by hand is not registered again.
+    /// </summary>
+    [Fact]
+    public async Task A_desktop_record_saying_no_installation_does_not_beat_the_once()
+    {
+        PlantInstallation();
+        PlantDesktopRecord("no_installation");
+        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Empty(Registrar(env).Applied);
+        Assert.Equal("left", Report(output).GetProperty("logon").GetString());
     }
 
     /// <summary>An update honours the person's turn-off: nothing registered, and no record that the default turned it on.</summary>
