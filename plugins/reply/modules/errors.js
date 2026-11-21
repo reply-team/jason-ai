@@ -214,7 +214,7 @@ export const COMMANDS = {
 //
 // `reply_code:<code>` is a refusal read by Reply's own code alone, before any other key, on every refusal the CLI explains,
 // whatever its status and whatever code the CLI gave it: under `message.send`, Reply's two limits on a direct email, which
-// reply-cli from 0.20.0 prints as `rate_limited` and may give a word of its own later. An answer at 500 or above is the
+// reply-cli from 0.22.0 prints as `email.limit_reached` and earlier ones as `rate_limited`. An answer at 500 or above is the
 // lost answer whatever code it carries, read by `cli.js` before any row is. The two are named nowhere else.
 //
 // `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live

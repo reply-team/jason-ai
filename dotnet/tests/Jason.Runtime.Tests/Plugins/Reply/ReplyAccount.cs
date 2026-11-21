@@ -503,7 +503,8 @@ public sealed class ReplyAccount : IDisposable
         string? address,
         int? owner = Caller,
         string? status = null,
-        string? limit = null)
+        string? limit = null,
+        int? retryAfter = null)
     {
         var senders = ReadArray(SendersFile);
         foreach (var existing in senders.ToList())
@@ -526,6 +527,11 @@ public sealed class ReplyAccount : IDisposable
         if (limit is not null)
         {
             sender["_limit"] = limit;
+        }
+
+        if (retryAfter is not null)
+        {
+            sender["_retry_after"] = retryAfter;
         }
 
         senders.Add(sender);
@@ -853,13 +859,16 @@ public sealed class ReplyAccount : IDisposable
     /// subject names the rendered body beside it, a failure's code is printed only where one is given, and so is the
     /// moment Reply expects to send a send waiting for its schedule. Whether it bounced, with its kind and moment, is
     /// printed only where <paramref name="bounced"/> is given, as a reply-cli that prints the three passes them on.
+    /// <paramref name="reply"/> names members of Reply's record as Reply spells them, set last and as given, null included,
+    /// for a test of how the CLI passes a member on.
     /// </summary>
     public ReplyAccount WithDirectSend(
         string reference, string state, string? sendAfter = null, string? sentAt = null, string? messageId = null,
         string? failureReason = null, string? cancelledAt = null, string? renderedSubject = null, string? renderedBody = null,
         string? failureCode = null,
         string? estimatedSendAt = null,
-        JsonNode? bounced = null, string? bounceType = null, string? bouncedAt = null)
+        JsonNode? bounced = null, string? bounceType = null, string? bouncedAt = null,
+        JsonObject? reply = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         var sends = ReadArray(DirectSendsFile);
@@ -896,6 +905,23 @@ public sealed class ReplyAccount : IDisposable
             record["bounced"] = bounced.DeepClone();
             record["bounceType"] = bounceType;
             record["bouncedAt"] = bouncedAt;
+        }
+        else
+        {
+            if (bounceType is not null)
+            {
+                record["bounceType"] = bounceType;
+            }
+
+            if (bouncedAt is not null)
+            {
+                record["bouncedAt"] = bouncedAt;
+            }
+        }
+
+        foreach (var (name, value) in reply ?? [])
+        {
+            record[name] = value?.DeepClone();
         }
 
         sends.Add(record);

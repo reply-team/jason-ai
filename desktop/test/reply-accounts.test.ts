@@ -609,11 +609,11 @@ test('the opener is the only way out: with none, or one that fails, the page is 
 });
 
 test('below the Reply CLI the acts need, the card says to update it and offers nothing: no list is read and no act runs', async (t) => {
-    const b = bench(t, { programs: ['reply'], env: { ...listed, STUB_REPLY_VERSION: '0.20.0', STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn) } });
+    const b = bench(t, { programs: ['reply'], env: { ...listed, STUB_REPLY_VERSION: '0.21.0', STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn) } });
     const h = harness(b);
     const { reply } = await h.setup.status();
     assert.equal(reply.belowMinimum, belowMinimumSentence(replyMinimumVersion));
-    assert.equal(reply.belowMinimum, 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.');
+    assert.equal(reply.belowMinimum, 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.');
     assert.deepEqual([reply.accounts, reply.pending], [[], []]);
     assert.deepEqual(await h.setup.replyConnect('linkedin', { name: 'x' }), { refused: reply.belowMinimum, code: null, offer: null, reread: false });
     assert.deepEqual(await h.setup.replyDelete('email', '12'), { refused: said.badId, code: null, offer: null, reread: false }, 'nothing listed, so nothing to name');
@@ -652,7 +652,7 @@ test('an act clicked while the list is being read again names the accounts the l
 
 test('below the minimum the Reply CLI’s version is read again at each read, so an update made elsewhere is seen', async (t) => {
     const b = bench(t, { programs: ['reply'], env: listed });
-    let version = '0.20.0';
+    let version = '0.21.0';
     let asked = 0;
     const programs: Programs = {
         find: (name) => b.programs.find(name),
@@ -668,7 +668,7 @@ test('below the minimum the Reply CLI’s version is read again at each read, so
     assert.notEqual((await h.setup.status()).reply.belowMinimum, null);
     assert.notEqual((await h.setup.status()).reply.belowMinimum, null);
     assert.equal(asked, 2, 'read again while below');
-    version = '0.21.0';
+    version = '0.22.0';
     const { reply } = await h.setup.status();
     assert.equal(reply.belowMinimum, null);
     assert.equal(reply.accounts.length, 2);
