@@ -54,16 +54,23 @@ voice.
   read as the drive it shares. Everything else runs. From Claude Code 2.1.322 on, Ask first and Auto-edit carry the same
   check; below it, a plain `jason` command that ran with no card still does, and one fed the settings or the run file is
   refused.
-- **The chat reaches the files you name.** <!-- pending A1 --> In Full access it reads and writes any file on this
-  computer you point it to, wherever it is, with no card. In Ask first and Auto-edit it reads such a file with no card,
-  and a change to a file outside the chat's folders is one card, "Change a file outside the chat's folders", for a new
-  file and for an addition to an existing one alike. When something is closed to it, the chat says exactly what and why
-  in one sentence, and gives the path to open yourself.
-- **`jason` commands run on your word, with a card only where it matters.** <!-- pending A1 --> In Ask first and
-  Auto-edit, the chat runs `jason` commands with no card, naming you as `human:<account>` where the act is yours and
-  giving its reason in its own words. Only four keep a card: `jason uninstall`, `jason import`, `jason update rollback`
-  and `jason plugin grant`. Help and reads never ask: `jason --help`, `jason <noun> --help`, `jason runtime status`,
-  `jason update check` and the rest, and a pipeline of such commands with a plain filter such as `jq`.
+- **The chat reaches the files you name.** In Full access it reads and writes any file on this computer you point it
+  to, wherever it is, with no card. In Ask first and Auto-edit it reads such a file with no card, and a change to a file
+  outside the chat's folders is one card, "Change a file outside the chat's folders", for a new file and for an addition
+  to an existing one alike. In Full access the chat refuses three kinds: the installation's settings and run files,
+  Jason's data directory outside the chat's own folder, and what Jason sets for the turn. A command that would pass
+  through a folder holding Jason's data, such as the home folder or the top of a drive, is refused and asks for a
+  narrower folder; in Ask first and Auto-edit such a walk is refused too, not asked. When something is closed to it, the
+  chat says exactly what and why in one sentence, and gives the path to open yourself.
+- **`jason` commands run on your word, with a card only where it matters.** In Ask first and Auto-edit, a `jason`
+  command that changes the installation runs with no card in its plain form, which takes the release's own, and keeps a
+  card in a form that names another source, place, ref or version. The commands that keep a card are `jason uninstall`,
+  `jason import`, `jason export`, `jason update rollback`, `jason update apply` with `--version` or `--feed`,
+  `jason plugin grant`, `jason plugin install` with `--feed` or `--replace`, `jason skills install` and
+  `jason skills update` with `--source`, `--feed`, `--root` or `--ref`, and `jason ui install --feed`. Every help runs
+  with no card, and so do the reads, such as `jason runtime status` and `jason update check`, and a pipeline of such
+  commands with a plain filter such as `jq`. Where the act is yours, the chat names you as `human:<account>` and gives
+  its reason in its own words; an account or a reason in letters outside ASCII is put in single quotes.
 - **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
   waits for you, answers a decision, starts, pauses or archives a campaign, takes back a standing approval, and sets the
   sender's name or tone of voice, with no card; each is recorded under the person the command names, as it would be from
@@ -71,7 +78,7 @@ voice.
 - **A message the chat writes follows its campaign's send mode.** Outside Plan only, a message the chat writes is
   treated as one written from a terminal: it follows its campaign's send mode, and under "every message" it still waits
   for your approval.
-- **It asks in words before what cannot be undone.** <!-- pending A2 --> A direct command is done at once, with no
+- **It asks in words before what cannot be undone.** A direct command is done at once, with no
   "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "delete all my campaigns"
   say, it says in a sentence or two what will happen, how many and that it cannot be undone, and asks once; your answer
   in the chat is the word, and on "yes" it does all of it. Where you spelled the act and its reach, "archive all
@@ -87,13 +94,13 @@ voice.
   skills no longer say the chat cannot do what it now does on your word.
 - **Your own Claude Code configuration is loaded in a Full access chat.** <!-- pending C1 --> As in a terminal, a Full
   access turn on Claude Code loads your own skills, hooks and MCP servers.
-- **Notices go by themselves.** <!-- pending U1 --> A blue notice goes when the next answer of that conversation
+- **Notices go by themselves.** A blue notice goes when the next answer of that conversation
   begins, and has a close control; none stays until a restart. The line under the composer still says why a mode fell
   back.
-- **Open folder.** <!-- pending U1 --> An agent's "..." menu and its row's menu carry **Open folder**, which opens the
+- **Open folder.** An agent's "..." menu and its row's menu carry **Open folder**, which opens the
   agent's folder in the system's file manager, File Explorer on Windows and Finder on a Mac. A chat of no agent and a
   browser tab have none.
-- **A file dropped on the message box puts its path in the text.** <!-- pending U1 --> The path is quoted and set at
+- **A file dropped on the message box puts its path in the text.** The path is quoted and set at
   the caret, as a terminal does; several files put several paths.
 - **A right-click on an agent's row opens its menu.** In the console's left column, the row of an agent offers the
   actions its own "..." menu offers, among them Open and Archive.
@@ -117,7 +124,7 @@ voice.
   starts in Full access as the menu says.
 - **A question is no longer answered as if you asked it twice.** A conversation resumed after a restart, whose first
   turn had to be started again, holds your message once.
-- **Recent leaves out a conversation whose agent is archived.** <!-- pending B1 -->
+- **Recent leaves out a conversation whose agent is archived.** Recent no longer lists it.
 - **The chat keeps the end of the conversation in view** when the cards under it, or the message box, change height,
   and the Reply card no longer goes away and comes back at a chat's first send.
 - **`jason status` says that its send modes are the installation's**, which every campaign follows unless it sets its
@@ -164,6 +171,7 @@ voice.
 ## Known issues
 
 - Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet. <!-- goes with C1 -->
+- No screen lists the archived agents yet.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
 - An agent has one conversation: there is no second chat for the same agent yet.
 - **Archive** from an agent's row menu does not offer to pause the provider's campaign first; the same dialog from
