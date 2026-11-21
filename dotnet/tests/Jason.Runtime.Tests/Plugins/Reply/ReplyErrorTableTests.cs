@@ -473,7 +473,8 @@ public partial class ReplyErrorTableTests
     /// <summary>
     /// Reply's two refusals of a direct email for a limit it counts are read by Reply's own code, on <c>message.send</c>
     /// alone, whatever reply-cli calls them: each is the mailbox's block for its limit, which keeps nothing of the record a
-    /// refusal may name. The daily limit clears at the next midnight UTC, when Reply counts a new day; the active contacts
+    /// refusal may name. A third refusal is read the same way, a mailbox that cannot send direct emails at all
+    /// (<c>contact.emailAccountSendingDisabled</c>), held by its own test below. The daily limit clears at the next midnight UTC, when Reply counts a new day; the active contacts
     /// say no moment. A command that ran from no sending account ends in the contract's word for a spent allowance.
     /// </summary>
     [Fact]

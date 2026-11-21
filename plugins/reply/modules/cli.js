@@ -394,7 +394,8 @@ function lostTrackOf(said) {
 // Whether the CLI's verdict carries an answer of Reply's at a status of 400 to 499 about the send: Reply answered the call
 // with a failure. A 409 is the key still held by the first request, or one Reply released with nothing sent, and a 429
 // under any code of Reply's but its two limits on a direct email is refused before the key is touched, so both are repeated
-// under it. Those two limits never reach this test: their rows are the mailbox's block, never the lost answer.
+// under it. Those two limits, and a mailbox Reply says cannot send direct emails at all (`contact.emailAccountSendingDisabled`,
+// at 403), never reach this test: their rows are the mailbox's block, never the lost answer.
 function answeredAFailure(said) {
   return said !== null && Number.isInteger(said.status) && said.status >= 400 && said.status <= 499
     && said.status !== 409 && said.status !== 429;
