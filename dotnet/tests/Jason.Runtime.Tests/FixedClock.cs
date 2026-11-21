@@ -24,6 +24,14 @@ public sealed class FixedClock(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => _now;
 
     /// <summary>
+    /// The zone this clock's computer keeps, UTC unless a test names one, so nothing the runtime reads in local time — a
+    /// campaign folder's leaf — depends on the zone of the machine the tests run on.
+    /// </summary>
+    public TimeZoneInfo Zone { get; set; } = TimeZoneInfo.Utc;
+
+    public override TimeZoneInfo LocalTimeZone => Zone;
+
+    /// <summary>
     /// How many timers are waiting for a moment this clock has not reached. A service between two waits holds
     /// none, which is how a test knows the next wait is armed before it moves time into it.
     /// </summary>
