@@ -74,7 +74,7 @@ import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permiss
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
-import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
+import { entryOf, identityOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
@@ -1959,6 +1959,10 @@ export class Chat {
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
+                // A hook rides the turn in Full access, and in Ask first and Auto-edit from Claude Code's floor of Full
+                // access on, and the permission model then judges by what the hook refuses (`ChatScope.hooked`).
+                const hookedMode = running.mode === 'plan_only' ? null : running.mode;
+                hooked = hookedMode !== null && (hookedMode === 'full_access' || fullAccessSentence(version) === null);
                 const scope: ChatScope = {
                     platform: this.#platform,
                     cwd: folder,
@@ -1979,14 +1983,14 @@ export class Chat {
                     // The host's allow rules of Ask first and Auto-edit, whose plain forms the model runs with no card where
                     // the host is given no rule for them (`withoutRequestFiles`).
                     ...(running.mode === 'ask_first' || running.mode === 'auto_edit' ? { allowed: fence.allowed } : {}),
+                    hooked,
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,
+                    identity: identityOf,
                 };
                 this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();
-                const hookedMode = running.mode === 'plan_only' ? null : running.mode;
-                hooked = hookedMode !== null && (hookedMode === 'full_access' || fullAccessSentence(version) === null);
                 endpoint = await openEndpoint({
                     secret,
                     decide: (tool, input, signal) => {

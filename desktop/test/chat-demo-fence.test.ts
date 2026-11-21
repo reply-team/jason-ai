@@ -70,7 +70,7 @@ function liveMac(personsRoot?: string): ChatScope {
 }
 
 const persons = /person's own installation, and this chat runs in the demo/;
-const ownData = /installation's own data/;
+const ownData = /Jason's own data/;
 
 const made: PermissionBroker[] = [];
 afterEach(() => {
@@ -338,7 +338,7 @@ for (const mode of modes) {
         for (const [scope, sentence] of [[demoMac(), persons], [liveMac(), ownData]] as const) {
             await refusedIn(mode, scope, 'Read', { file_path: '/System/Volumes/Data/Users/someone/.jason/config/settings.json' }, sentence);
             await refusedIn(mode, scope, 'Bash', { command: 'cat /System/Volumes/Data/Users/someone/.jason/run/runtime.json' }, sentence);
-            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '/system/volumes/data/Users/someone/.jason' }, /installation/);
+            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '/system/volumes/data/Users/someone/.jason' }, /installation|Jason's own data/);
         }
         await refusedIn(mode, demoMac(), 'Write', { file_path: '/System/Volumes/Data/Users/someone/Jason/Northwind/notes.md', content: 'x' }, persons);
         for (const [scope, sentence] of [[demoWindows(), persons], [liveWindows(), ownData]] as const) {
@@ -673,7 +673,9 @@ test('the text an edit is judged by is the file on disk, read only when it is a 
     writeFileSync(large, Buffer.alloc(textLimit + 1, 0x61));
     assert.equal(textOf(large), null);
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
-    const scope: ChatScope = { platform, cwd: root, chat: root, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
+    // The turn runs in a folder of its own, as a chat's does: the home folder holds the data directory.
+    const chat = join(root, 'chat');
+    const scope: ChatScope = { platform, cwd: chat, chat, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
     const judged = fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, scope);
     assert.equal(judged.outcome, 'refused', JSON.stringify(judged));
     assert.deepEqual(fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, { ...scope, text: () => null }), { outcome: 'runs' }, 'the replacement alone names nothing');

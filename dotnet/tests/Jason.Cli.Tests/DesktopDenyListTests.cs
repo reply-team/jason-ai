@@ -184,6 +184,46 @@ public class DesktopDenyListTests
         Assert.Equal(expected, declared);
     }
 
+    /// <summary>
+    /// The CLI's command tree as the desktop holds it (<c>cliCommandTree</c> in <c>desktop/src/chat-deny.ts</c>): every verb
+    /// of the tree but a hidden one, each by its words after <c>jason</c>. Where the hook rides an Ask first or Auto-edit
+    /// turn, a jason whose words do not begin with one of them, or with a noun's help, is a card, so a word before the noun
+    /// that the parser takes (below) and a mode of the executable that is no verb never run unasked there. A verb added to
+    /// the CLI is red here until the desktop names it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_holds_the_cli_s_command_tree()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var expected = Verbs(root, []).Order(StringComparer.Ordinal).ToList();
+
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-deny.ts"));
+        var declaration = Regex.Match(source, @"^export const cliCommandTree: readonly string\[\] = \[(?<body>[^\]]*)\];", RegexOptions.Multiline);
+        Assert.True(declaration.Success, $"desktop/src/chat-deny.ts declares no cliCommandTree; the CLI's tree is {string.Join(", ", expected.Select(verb => $"'{verb}'"))}");
+        var declared = Regex.Matches(declaration.Groups["body"].Value, "'(?<verb>[^']*)'").Select(match => match.Groups["verb"].Value).Order(StringComparer.Ordinal).ToList();
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, declared);
+    }
+
+    /// <summary>
+    /// What the CLI's parser takes before the noun, which is why the desktop judges a jason by the tree it holds
+    /// (<c>cliCommandTree</c>) and not by the word in the noun's place: a first word that is the root command's own name,
+    /// alone or as a file's name in a folder, and a word in square brackets, a directive, are both taken, and the noun is
+    /// the word after them. The root is named for the executable that runs it, jason in a release and the test host here.
+    /// </summary>
+    [Fact]
+    public void The_cli_s_parser_takes_its_own_name_and_a_directive_before_the_noun()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+
+        Assert.Equal("uninstall", root.Parse([root.Name, "uninstall"]).CommandResult.Command.Name);
+        Assert.Equal("uninstall", root.Parse([Path.Combine("folder", root.Name), "uninstall"]).CommandResult.Command.Name);
+        Assert.Equal("uninstall", root.Parse(["[a]", "uninstall"]).CommandResult.Command.Name);
+    }
+
     private static Command LeafOf(Command root, string verb) =>
         verb.Split(' ').Aggregate(root, (command, word) => command.Subcommands.Single(sub => sub.Name == word));
 

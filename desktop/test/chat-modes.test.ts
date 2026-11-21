@@ -16,7 +16,7 @@ import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSe
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
-import { confinedRefusal, fullAccessJudgement, judge, type ChatScope } from '../src/chat-permission-model.ts';
+import { confinedRefusal, fullAccessJudgement, judge, searchRefusal, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
 import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
@@ -95,7 +95,10 @@ test('Ask first starts Claude Code in its default mode, named, with the settings
     const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
     const hooked = claudeArguments({ ...base, mode: 'ask_first', settingsFile });
     assert.equal(after(hooked, '--settings'), settingsFile);
-    assert.deepEqual(values(hooked, '--disallowedTools'), values(asked, '--disallowedTools'), 'the same rules as without the hook');
+    // The host's refusal of a jason that starts with an option aside: where the hook rides, the model judges that, and
+    // runs jason's own help and version.
+    assert.deepEqual(values(hooked, '--disallowedTools'), values(asked, '--disallowedTools').filter((rule) => rule !== 'Bash(jason -*)'), 'the same rules as without the hook');
+    assert.ok(values(asked, '--disallowedTools').includes('Bash(jason -*)'));
 });
 
 test('Plan only starts Claude Code in plan mode, with the classifier kept out, the plan list in place of the allow list and no way out of planning', () => {
@@ -118,8 +121,9 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     const args = claudeArguments({ ...base, mode: 'full_access', settingsFile });
     assert.equal(after(args, '--permission-mode'), 'bypassPermissions');
     assert.equal(after(args, '--settings'), settingsFile);
-    const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell');
+    const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell' && rule !== 'Bash(jason -*)');
     assert.deepEqual(others(values(args, '--disallowedTools')), others(values(claudeArguments(base), '--disallowedTools')));
+    assert.ok(!values(args, '--disallowedTools').includes('Bash(jason -*)'), 'the hook rides the turn, and a jason that starts with an option is none of its three kinds');
     assert.ok(!values(args, '--disallowedTools').includes('PowerShell') && values(args, '--disallowedTools').includes('Monitor'));
     for (const kept of ['--strict-mcp-config', '--permission-prompt-tool']) assert.ok(args.includes(kept), kept);
     assert.equal(after(args, '--setting-sources'), 'project');
@@ -127,13 +131,12 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the settings of a turn the hook rides: reads outside the folders still blocked, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
+test('the settings of a turn the hook rides: no block of reads outside the folders, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
     const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
     for (const mode of ['ask_first', 'auto_edit'] as const) {
-        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { ...settings, permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] } }, mode);
+        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { permissions: { ask: ['WebFetch(domain:*)'] }, ...settings }, mode);
     }
     assert.deepEqual(settings, {
-        permissions: { blockReadsOutsideWorkingDirectories: true },
         disableSkillShellExecution: true,
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],
@@ -439,9 +442,9 @@ test('under Full access the hook refuses a read of the turns folder and of the k
     const desktop = join(w.root, 'desktop');
     for (const folder of ['turns', 'claude-keyed', 'codex-keyed', 'provider-keys']) {
         const path = join(desktop, folder, 'held.json');
-        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /installation's own data/, `Read ${folder}`);
-        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /installation's own data/, `cat ${folder}`);
-        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /installation's own data/, `Grep ${folder}`);
+        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /Jason's own data/, `Read ${folder}`);
+        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /Jason's own data/, `cat ${folder}`);
+        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /Jason's own data/, `Grep ${folder}`);
     }
 });
 
@@ -659,9 +662,14 @@ test('every tool the host allows without asking runs under Full access, the hook
     for (const tool of claudeAllowedTools.filter((rule) => !rule.includes('('))) assert.deepEqual(fullAccessJudgement(tool, {}, scope), { outcome: 'runs' }, tool);
 });
 
-test('what Claude Code still asks under Full access is a card titled for Full access: a command and a deletion are cards, never refused unasked', async (t) => {
+test('what Claude Code still asks under Full access is a card titled for Full access: a command and a deletion are cards, never refused unasked, but for a deletion of a folder that holds the data directory, which is refused by the walk\'s sentence as the hook refuses it', async (t) => {
     const w = await wired(t, 'full_access');
-    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf /', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
+    const deletion = w.broker.ask(w.id, 'Bash', { command: 'rm -rf /' });
+    assert.deepEqual(w.cards, [], 'a deletion of the drive\'s top is no card');
+    const answered = await deletion;
+    assert.equal(answered.behavior === 'deny' ? answered.message : answered.behavior, searchRefusal);
+    assert.equal(await hooked(w, 'Bash', { command: 'rm -rf /' }), searchRefusal);
+    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf build', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
     const answers = commands.map((command) => w.broker.ask(w.id, 'Bash', { command }));
     assert.deepEqual((w.cards as BrokerEvent[]).map((each) => (each.kind === 'permission' ? each.detail : each.kind)), commands);
     assert.ok((w.cards as BrokerEvent[]).every((each) => each.kind === 'permission' && each.title === 'Full access asks about this one'));
