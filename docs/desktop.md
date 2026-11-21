@@ -993,11 +993,12 @@ asks only about a change and about a few of Jason's own commands:
 - **A change to a file outside the chat's folders is one card,** "Change a file outside the chat's folders", for a new
   file and for an edit alike, lines added at the end of a file among them; inside the chat's folders, as before.
 - **Every `jason` command runs with no card but these,** which keep a card in every form and spelling, in a compound
-  too: `jason uninstall`, `jason import`, `jason export` and `jason update rollback`; `jason update apply` with
-  `--version`; `jason plugin grant`; `jason plugin install` with `--feed` or `--replace`; and `jason skills install` and
-  `jason skills update` with `--source`, `--feed` or `--root`. `jason update apply`, `jason plugin install` of a plugin
-  the release publishes, and `jason skills install` and `jason skills update` of the release's own skills run with no
-  card. An act of your word is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the
+  too: `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, in every
+  form; and a verb that changes the installation in a form that names another source, place, ref or version, while its
+  plain form, which takes the release's own, runs with no card: `jason update apply` with `--version` or `--feed`;
+  `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with
+  `--source`, `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire` or
+  `--terminal-path`. An act of your word is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the
   agent's own words, each in single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`,
   `jason --version` and the help of any noun or verb run with no card, those of the commands above included; any other
   `jason` that starts with an option is refused, with the words to put the verb first.
@@ -1054,9 +1055,9 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   above names run with no card; every other one, a standing approval, another preference and a campaign's send mode
   among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason` command
   that no allowed verb begins does; from 2.1.322 on, in Ask first and Auto-edit every `jason` command runs with no card
-  but these: `jason uninstall`, `jason import`, `jason export`, `jason update rollback`, `jason update apply` with
-  `--version`, `jason plugin grant`, `jason plugin install` with `--feed` or `--replace`, and `jason skills install` and
-  `jason skills update` with `--source`, `--feed` or `--root`. Pausing an agent, adding
+  but `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, and a form of a
+  verb that changes the installation that names another source, place, ref or version, each named above; the plain
+  form of such a verb, which takes the release's own, runs with no card. Pausing an agent, adding
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
   a verdict on a reply is a card in Ask first and Auto-edit on an older Claude Code, and runs with no card from 2.1.322
   on and in Full access: a verdict of yours can lift the lock

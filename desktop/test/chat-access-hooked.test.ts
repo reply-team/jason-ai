@@ -7,7 +7,7 @@
 // nothing changes. Every path here is made up or a temporary one, every command a neutral one or a made-up one.
 
 import assert from 'node:assert/strict';
-import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
@@ -182,6 +182,11 @@ const noCard = [
     'jason runtime stop',
     'jason update apply',
     'jason update apply --drain-seconds 30',
+    'jason update apply --finish',
+    'jason update check --feed https://example.com/manifest.json',
+    'jason ui install',
+    'jason install',
+    'jason install --roles',
     'jason skills install',
     'jason skills install --host claude --pack business',
     'jason skills update',
@@ -227,19 +232,31 @@ const carded = [
     'jason skills update --feed https://example.com/manifest.json',
     'jason skills update --root harness',
     'jason skills update --source packs',
+    'jason update apply --feed https://example.com/manifest.json',
+    'jason update apply --feed=https://example.com/manifest.json',
+    'jason update apply --finish --feed https://example.com/manifest.json',
+    'jason skills install --ref v0.40.0',
+    'jason skills install --ref=v0.40.0',
+    'jason skills update --ref v0.40.0',
+    'jason ui install --feed https://example.com/manifest.json',
+    'jason ui install --feed=https://example.com/manifest.json',
+    'jason install --retire /opt/jason/jason',
+    'jason install --terminal-path /usr/bin',
 ];
 
-test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but the carded forms: uninstall, import, export and update rollback in every form, update apply with --version, plugin grant, plugin install with --feed or --replace, and skills install and skills update with --source, --feed or --root', () => {
+test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but the carded forms: uninstall, import, export, update rollback and plugin grant in every form, and a verb that changes the installation in a form that names another source, place, ref or version, its plain form running with no card', () => {
     assert.deepEqual(askingCardedForms.map(({ verb, options }) => [verb, [...(options ?? [])]]), [
         ['uninstall', []],
         ['import', []],
         ['export', []],
         ['update rollback', []],
-        ['update apply', ['--version']],
+        ['update apply', ['--version', '--feed']],
         ['plugin grant', []],
         ['plugin install', ['--feed', '--replace']],
-        ['skills install', ['--source', '--feed', '--root']],
-        ['skills update', ['--source', '--feed', '--root']],
+        ['skills install', ['--source', '--feed', '--root', '--ref']],
+        ['skills update', ['--source', '--feed', '--root', '--ref']],
+        ['ui install', ['--feed']],
+        ['install', ['--retire', '--terminal-path']],
     ]);
     for (const scope of scopes) {
         for (const command of noCard) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
@@ -258,6 +275,15 @@ test('the carded forms keep their card whatever their spelling and in any compou
         'jason plugin install reply --replace=true',
         'jason skills --verbose install --source packs',
         'jason skills install --root=harness',
+        'jason update apply --FEED https://example.com/manifest.json',
+        'jason update apply --feed:https://example.com/manifest.json',
+        'jason update --verbose apply --finish --feed https://example.com/manifest.json',
+        'jason skills install --REF v0.40.0',
+        'jason skills install --ref:v0.40.0',
+        'jason skills update --Ref=v0.40.0',
+        'jason ui install --FEED=https://example.com/manifest.json',
+        'jason status && jason ui install --feed https://example.com/manifest.json',
+        'jason install --Retire=/opt/jason/jason',
         'echo y | jason skills update --feed https://example.com/manifest.json',
         'jason update apply --version 0.40.0 -- --help',
         'jason export -- --help',
@@ -285,6 +311,20 @@ test('the carded forms keep their card whatever their spelling and in any compou
     for (const scope of scopes) {
         for (const command of spellings) {
             for (const judged of both('Bash', { command }, scope)) assert.notDeepEqual(judged, allow, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
+test('every form of askingCardedForms is named in rule 11 of the chat\'s instructions, in desktop/README.md and in docs/desktop.md, each with every option that cards it', () => {
+    const desktop = join(import.meta.dirname, '..');
+    const rule = readFileSync(join(desktop, 'chat-instructions.md'), 'utf8').split('\n').find((line) => line.startsWith('11. ')) ?? '';
+    for (const [name, text] of [['rule 11', rule], ['desktop/README.md', readFileSync(join(desktop, 'README.md'), 'utf8')], ['docs/desktop.md', readFileSync(join(desktop, '..', 'docs', 'desktop.md'), 'utf8')]] as const) {
+        const flat = text.replace(/\s+/g, ' ');
+        for (const { verb, options } of askingCardedForms) {
+            const mentions = [...flat.matchAll(new RegExp(`\`(?:jason )?${verb}\``, 'g'))].map((match) => match.index);
+            assert.ok(mentions.length > 0, `${name} names ${verb}`);
+            const segments = mentions.map((at) => flat.slice(at).split(/; |\. /)[0] as string);
+            assert.ok(options === undefined || segments.some((segment) => options.every((option) => segment.includes(`\`${option}\``))), `${name} names ${verb} with ${(options ?? []).join(', ')}`);
         }
     }
 });

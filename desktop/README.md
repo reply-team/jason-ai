@@ -365,11 +365,14 @@ applies to the turns a person starts by sending, from the next one on.
     grant, where the permission model is asked about it;
   - a change outside the chat's folders is one card, "Change a file outside the chat's folders", for Write and Edit
     alike, an append among them, a `~` of the home folder taken as the file tools take it; inside them as before;
-  - every `jason` verb runs with no card but the forms of `askingCardedForms`: `uninstall`, `import`, `export` and
-    `update rollback` in every form, `update apply` with `--version`, `plugin grant`, `plugin install` with `--feed` or
-    `--replace`, and `skills install` and `skills update` with `--source`, `--feed` or `--root`; each is a card, its
-    words told in any letter case and with anything between them (`holdsEntry`), its option anywhere among them, with
-    its value after `=` or `:` too, and in a compound; the help of one of them, a `--help` or `-h` before any `--`, runs;
+  - every `jason` verb runs with no card but the forms of `askingCardedForms`: `uninstall`, `import`, `export`,
+    `update rollback` and `plugin grant` in every form, and a verb that changes the installation in a form that names
+    another source, place, ref or version, while its plain form, which takes the release's own, runs with no card:
+    `update apply` with `--version` or `--feed`; `plugin install` with `--feed` or `--replace`; `skills install` and
+    `skills update` with `--source`, `--feed`, `--root` or `--ref`; `ui install` with `--feed`; and `install` with
+    `--retire` or `--terminal-path`. Each is a card, its words told in any letter case and with anything between them
+    (`holdsEntry`), its option anywhere among them, with its value after `=` or `:` too, and in a compound; the help of
+    one of them, a `--help` or `-h` before any `--`, runs;
   - jason's own `--help`, `-h` and `--version`, each alone, and any noun's or verb's help run with no card; any other
     option before the verb is refused (`optionRefusal`);
   - a pipeline or a sequence whose every part is such a `jason` or a program of `noCardFilters` (`jq`, `grep`, `head`,

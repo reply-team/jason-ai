@@ -189,23 +189,27 @@ export interface CardedForm {
 /**
  * The forms that keep a card in Ask first and Auto-edit where the turn's hook rides them, from Claude Code's floor of Full
  * access on: taking the installation off the machine, placing an archive over it, writing it into an archive, putting
- * back the executable an update replaced or placing a version named, granting a plugin what it may reach, placing a
- * plugin package from another feed or over the one there, and placing skills from another source, feed or root. The
- * plain forms run with no card: `update apply`, `plugin install` of a package the release publishes, and `skills
- * install` and `skills update` of the release's own skills. Every other jason verb runs there with no card
- * (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each written as the chat's instructions write a
- * person's word; below the floor nothing changed, and Plan only runs none of them.
+ * back the executable an update replaced and granting a plugin what it may reach, in every form; and every verb that
+ * changes the installation in a form that names another source, place, ref or version, by one rule: the plain form,
+ * which takes the release's own, runs with no card, and a form that names another keeps one. So `update apply` with a
+ * version or a feed, `plugin install` from another feed or over the package there, `skills install` and `skills update`
+ * from another source, feed, root or ref, `ui install` from another feed, and `install` told an executable to retire or
+ * the search path a terminal has. Every other jason verb runs there with no card (`ChatScope.hooked`), the deny list's
+ * and `cardedVerbs` among them, each written as the chat's instructions write a person's word; below the floor nothing
+ * changed, and Plan only runs none of them.
  */
 export const askingCardedForms: readonly CardedForm[] = [
     { verb: 'uninstall' },
     { verb: 'import' },
     { verb: 'export' },
     { verb: 'update rollback' },
-    { verb: 'update apply', options: ['--version'] },
+    { verb: 'update apply', options: ['--version', '--feed'] },
     { verb: 'plugin grant' },
     { verb: 'plugin install', options: ['--feed', '--replace'] },
-    { verb: 'skills install', options: ['--source', '--feed', '--root'] },
-    { verb: 'skills update', options: ['--source', '--feed', '--root'] },
+    { verb: 'skills install', options: ['--source', '--feed', '--root', '--ref'] },
+    { verb: 'skills update', options: ['--source', '--feed', '--root', '--ref'] },
+    { verb: 'ui install', options: ['--feed'] },
+    { verb: 'install', options: ['--retire', '--terminal-path'] },
 ];
 
 /**
