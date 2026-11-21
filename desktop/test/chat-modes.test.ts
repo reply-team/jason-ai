@@ -16,7 +16,7 @@ import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSe
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
-import { confinedRefusal, fullAccessJudgement, judge, type ChatScope } from '../src/chat-permission-model.ts';
+import { confinedRefusal, fullAccessJudgement, judge, searchRefusal, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
 import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
@@ -662,9 +662,14 @@ test('every tool the host allows without asking runs under Full access, the hook
     for (const tool of claudeAllowedTools.filter((rule) => !rule.includes('('))) assert.deepEqual(fullAccessJudgement(tool, {}, scope), { outcome: 'runs' }, tool);
 });
 
-test('what Claude Code still asks under Full access is a card titled for Full access: a command and a deletion are cards, never refused unasked', async (t) => {
+test('what Claude Code still asks under Full access is a card titled for Full access: a command and a deletion are cards, never refused unasked, but for a deletion of a folder that holds the data directory, which is refused by the walk\'s sentence as the hook refuses it', async (t) => {
     const w = await wired(t, 'full_access');
-    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf /', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
+    const deletion = w.broker.ask(w.id, 'Bash', { command: 'rm -rf /' });
+    assert.deepEqual(w.cards, [], 'a deletion of the drive\'s top is no card');
+    const answered = await deletion;
+    assert.equal(answered.behavior === 'deny' ? answered.message : answered.behavior, searchRefusal);
+    assert.equal(await hooked(w, 'Bash', { command: 'rm -rf /' }), searchRefusal);
+    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf build', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
     const answers = commands.map((command) => w.broker.ask(w.id, 'Bash', { command }));
     assert.deepEqual((w.cards as BrokerEvent[]).map((each) => (each.kind === 'permission' ? each.detail : each.kind)), commands);
     assert.ok((w.cards as BrokerEvent[]).every((each) => each.kind === 'permission' && each.title === 'Full access asks about this one'));
