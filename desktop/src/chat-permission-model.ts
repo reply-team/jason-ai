@@ -1574,6 +1574,8 @@ interface WalkReading extends ShellReading {
     redefined: boolean;
     /** Some word of the command names a folder that holds the data directory, or may (`wordNamesRoot`). */
     named: boolean;
+    /** The folders a change the reading cannot follow may lead to, besides those the shell has been in (`unfollowedFolders`). */
+    candidates?: () => readonly string[];
 }
 
 /**
@@ -1729,10 +1731,65 @@ function namesAnyRoot(text: string, reading: WalkReading, depth: number): boolea
     });
 }
 
+/** The most folders a change the reading cannot follow is read to lead to. */
+const candidateLimit = 64;
+
+/**
+ * The folders a change of folder the reading cannot follow may lead to, besides those the shell has been in: every place
+ * a word of the text names, read from the folder the turn runs in, and each folder of a search path the text gives the
+ * shell (`CDPATH`) with every word of the text joined to it.
+ */
+function unfollowedFolders(command: string, reading: ShellReading): () => readonly string[] {
+    let found: string[] | null = null;
+    return () => {
+        if (found !== null) return found;
+        const { scope } = reading;
+        const paths = pathsOf(scope.platform);
+        const words = [...new Set(everyCommand(command, reading, 0).flat().map((word) => word.text))].filter((word) => word !== '' && !word.startsWith('-'));
+        const parts = (value: string): string[] => {
+            const pieces = value.split(':');
+            const out: string[] = [];
+            for (let at = 0; at < pieces.length; at++) {
+                const piece = pieces[at] as string;
+                // A drive's letter and its path are one folder of a Windows search path.
+                if (scope.platform === 'win32' && /^[A-Za-z]$/.test(piece) && /^[\/]/.test(pieces[at + 1] ?? '')) {
+                    out.push(`${piece}:${pieces[at + 1] as string}`);
+                    at++;
+                } else if (piece !== '') {
+                    out.push(piece);
+                }
+            }
+            return out;
+        };
+        const searched = [...(assignedValues(command, reading).get(reading.powershell ? 'cdpath' : 'CDPATH') ?? [])]
+            .flatMap(parts)
+            .map((folder) => located(nativeSpelling(homeExpanded(folder, scope), scope), scope));
+        const joined = searched.flatMap((folder) => words.filter((word) => !paths.isAbsolute(word)).map((word) => located(nativeSpelling(word, scope), { ...scope, cwd: folder })));
+        found = [...new Set([...placesOfWords(words, scope, false), ...searched, ...joined])].slice(0, candidateLimit);
+        return found;
+    };
+}
+
+/** True when a text sets what a shell's change of folder may do that the reading does not follow: a shell option, or a search path. */
+function optionsLead(command: string): boolean {
+    return /(?<![\w-])(?:shopt|setopt|CDPATH)(?![\w-])/.test(command);
+}
+
+/**
+ * A place the reading cannot follow: any folder the shell has been in, any it may be in, those given and the folders a
+ * change may lead to (`WalkReading.candidates`).
+ */
+function unfollowed(place: WalkPlace, reading: WalkReading, also: readonly string[] = []): WalkPlace {
+    const folders = [...new Set([...place.folders, ...place.seen, ...also, ...(reading.candidates?.() ?? [])])];
+    return { folders, seen: folders, unknown: true };
+}
+
 /**
  * Where a folder change of the shell's own leads: its target, read as `placesOfWords` reads it from each folder the shell
  * may be in; with none, the home folder, and `-`, `+`, `popd` and `Pop-Location` any folder it has been in. A target the
- * shell builds while it runs leads below the folders it is fixed to (`fixedPart`), and where it leads is not followed.
+ * shell builds while it runs leads below the folders it is fixed to (`fixedPart`), and where it leads is not followed;
+ * nor is a place on the folder stack (`+1`, `-1`), a change with two operands, a file sourced into the shell (`.`,
+ * `source`), nor, from where the reading cannot follow, a relative target (`unfollowed`).
  */
 function changedPlace(program: string, args: readonly string[], place: WalkPlace, reading: WalkReading): WalkPlace {
     const { scope, powershell } = reading;
@@ -1740,8 +1797,14 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
     const name = runner ? programKey(scope.platform, args[0] as string, powershell) : program;
     const words = runner ? args.slice(1) : args;
     const back = (): WalkPlace => ({ ...place, folders: [...place.seen] });
+    if (!powershell && (name === '.' || name === 'source')) return unfollowed(place, reading);
     if (goesBack.has(name)) return back();
     if (!(powershell ? powerShellChanges : posixChanges).has(name)) return place;
+    if (!powershell) {
+        const operands = words.filter((word) => word !== '--' && !word.startsWith('-') && !/^\+\d+$/.test(word));
+        if (words.some((word) => /^[+-]\d+$/.test(word))) return unfollowed(place, reading);
+        if (operands.length > 1) return unfollowed(place, reading, place.folders.flatMap((folder) => operands.map((word) => located(nativeSpelling(homeExpanded(word, scope), scope), { ...scope, cwd: folder }))));
+    }
     let target: string | undefined;
     for (let at = 0; at < words.length; at++) {
         const word = words[at] as string;
@@ -1771,7 +1834,9 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
     const fixed = /^~/.test(value) ? '' : fixedPart(value, scope.platform);
     if (fixed !== null) return moved(fixed === '' ? place.folders : place.folders.map((folder) => located(fixed, { ...scope, cwd: folder })), true);
     const absolute = pathsOf(scope.platform).isAbsolute(value);
-    return moved(place.folders.map((folder) => located(value, { ...scope, cwd: folder })), place.unknown && !absolute);
+    const joined = place.folders.map((folder) => located(value, { ...scope, cwd: folder }));
+    // From where the reading cannot follow, a relative target may lead into any folder a change may lead to.
+    return moved(place.unknown && !absolute ? [...new Set([...joined, ...(reading.candidates?.() ?? [])])] : joined, place.unknown && !absolute);
 }
 
 /**
@@ -1793,6 +1858,7 @@ function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): 
     if (place.unknown) return 'in';
     const walks = inputRunners.has(program)
         || runsAnotherProgram(program)
+        || (!powershell && (program === '.' || program === 'source'))
         || each.args.some((arg) => unknownWord(arg, scope))
         || (powershell && each.command.piped && !powerShellPrints.has(program));
     return walks ? 'walk' : null;
@@ -1848,10 +1914,11 @@ function optionWord(word: string, platform: Platform): boolean {
  */
 function walksRoot(tool: string, command: string, scope: ChatScope): WalkKind | null {
     const powershell = tool === 'PowerShell';
-    const base = { scope, powershell, redefined: redefines(command, powershell), named: false };
+    const base = { scope, powershell, redefined: redefines(command, powershell), named: false, candidates: unfollowedFolders(command, { scope, powershell }) };
     const reading: WalkReading = { ...base, named: namesAnyRoot(command, base, 0) };
     const start = located(scope.cwd, scope);
-    const walked = walkedFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).walks;
+    const first: WalkPlace = { folders: [start], seen: [start], unknown: false };
+    const walked = walkedFrom(command, optionsLead(command) ? unfollowed(first, reading) : first, reading, 0).walks;
     if (walked !== null) return walked;
     const literal = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
     if (literal.held) return null;
@@ -2170,10 +2237,12 @@ function readKinds(tool: string, command: string, scope: ChatScope): string | nu
         powershell,
         redefined: false,
         named: false,
+        candidates: unfollowedFolders(command, { scope, powershell }),
         assigned: assignedValues(command, { scope, powershell }),
         dotted: powershell || /dotglob|globdots|glob_dots|GLOBIGNORE/i.test(command),
     };
-    return kindsFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).kind;
+    const first: WalkPlace = { folders: [start], seen: [start], unknown: false };
+    return kindsFrom(command, optionsLead(command) ? unfollowed(first, reading) : first, reading, 0).kind;
 }
 
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */

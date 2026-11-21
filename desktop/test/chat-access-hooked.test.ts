@@ -433,6 +433,31 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('a folder change the reading cannot follow, by a place on the folder stack, two operands, an option the shell sets, a search path of its own or a sourced file, leaves the shell in any folder it has been in or the text names: a walk, a program run there and a read from there are refused', () => {
+    for (const scope of scopes) {
+        for (const [command, sentence] of [
+            ['pushd ~ && pushd /tmp && pushd +1 && du -sh .', searchRefusal],
+            ['pushd ~ && pushd /tmp && pushd -1 && frobnicate', inRootRefusal],
+            ['cd ~ && cd /tmp && cd +1 && cat .jason/config/settings.json', settingsRefusal],
+            ['cd /tmp ~ && du -sh .', searchRefusal],
+            ['shopt -s autocd; ~; du -sh .', inRootRefusal],
+            ['setopt auto_cd; ~; du -sh .', inRootRefusal],
+            ['CDPATH=~ cd .jason && cat config/settings.json', dataRefusal],
+            ['export CDPATH=~; cd .jason; cat run/runtime.json', dataRefusal],
+            ['cd ~ && cd /tmp && source ./env.sh && frobnicate', searchRefusal],
+            ['cd ~ && cd /tmp && . ./env.sh && frobnicate', searchRefusal],
+            ['echo ~ | source /dev/stdin', searchRefusal],
+            ['cd ~ && cd /tmp && source ./env.sh && cat .jason/config/settings.json', settingsRefusal],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cd /tmp && source ./env.sh && make', 'pushd /tmp && pushd +1 && ls']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('PowerShell reads ${env:NAME} as one variable and a home spelling, a provider-qualified path as its path, and an en dash, an em dash or a horizontal bar as a dash: each spelling of the home folder and of a settings file is refused as the plain one', () => {
     for (const [command, sentence] of [
         ['Get-ChildItem ${env:USERPROFILE} -Recurse', searchRefusal],
