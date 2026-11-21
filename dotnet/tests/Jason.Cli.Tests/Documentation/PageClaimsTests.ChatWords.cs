@@ -31,4 +31,23 @@ public partial class PageClaimsTests
         Assert.Contains("it sends only to a chat in Ask first, Plan only or Full access, a turn it sends to a chat in Full access running in Ask first, says of a permission card or a plan card that it is answered in Jason Desktop", ui, StringComparison.Ordinal);
         Assert.DoesNotContain("it sends only to a chat in Ask first or Plan only", ui, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The two skills that teach the chat how to see whether Jason runs teach <c>jason status</c>, which the chat runs with
+    /// no card and which never exits 3; <c>jason runtime status</c> stays named for what the runtime says about itself. A
+    /// chat taught the other answered "is Jason running?" with a card in Ask first, or with a verb it said it did not know.
+    /// </summary>
+    [Fact]
+    public void The_skills_check_whether_jason_runs_with_jason_status()
+    {
+        var managed = Page("skills", "runtime", "managed-campaign-work", "SKILL.md");
+        Assert.Contains("```\njason status\njason plugin list\n```", managed, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason runtime status\njason plugin list", managed, StringComparison.Ordinal);
+
+        var operating = Page("skills", "runtime", "operating-the-installation", "SKILL.md");
+        Assert.Contains("## Is it running\n\n```\njason status --human\n```\n", operating, StringComparison.Ordinal);
+        var flat = Flat(operating);
+        Assert.Contains("It exits 0 or 1 and never 3, so read `ready` in its body.", flat, StringComparison.Ordinal);
+        Assert.Contains("ask it with `jason runtime status --human`, which exits 3 when nothing answers.", flat, StringComparison.Ordinal);
+    }
 }

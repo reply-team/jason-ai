@@ -245,6 +245,51 @@ public partial class ChatWordsTests
     }
 
     /// <summary>
+    /// What the chat is taught to do with the person's word and with what it may read, one rule each: a plain command is
+    /// done at once; an act that cannot be undone, or reaches many, is said and asked once only where the person did not
+    /// spell it; a campaign's conversation reaches the campaigns the person names, or all; what waits is read fresh; the
+    /// one-word verbs that say whether Jason runs; a file the person names is read wherever it is, with Jason's own files
+    /// still refused; and a refusal is said exactly, with its path, and never worked around. Without them a chat asks
+    /// "shall I?" after a plain command, archives in silence what the person did not spell, pauses one campaign of "all",
+    /// says from memory what waits, says it does not know <c>jason status</c>, or answers that it works only in its folder.
+    /// </summary>
+    [Theory]
+    [InlineData("a plain command", "20. When the person tells you plainly to do something, in their own words in this message, do it at once. Do not ask whether you should, do not send them to Settings for it, and do not run `--help` first for a verb these rules give. Rule 21 is the one exception.")]
+    [InlineData("an act not spelled", "21. Before an act that cannot be undone, or one that reaches many items, which the person did not spell out, say in one or two sentences what will happen: how many, which, and that it cannot be undone. Then ask once; their answer in this chat is their word.")]
+    [InlineData("an act spelled", "Where they spelled the act and its reach, as in \"archive all campaigns except X\", that is their word already: do all of it, one after another, and report once at the end.")]
+    [InlineData("campaigns named", "Work on that campaign only, unless the person names others or says all: then pausing, starting and archiving alike reach what they named.")]
+    [InlineData("what waits", "Never say from memory what waits: run `jason approval list` and `jason decision list` first, each time.")]
+    [InlineData("whether Jason runs", "Two verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, and `jason logs` reads its log files.")]
+    [InlineData("a file named", "22. A file the person names is theirs to have read, wherever it is on their computer. In Full access, read it and write it as they ask. In Ask first and Auto-edit, read it; a change to it outside this chat's folders is shown to them once first. In Plan only, read it and change nothing. Never answer that this chat works only in its folder.")]
+    [InlineData("Jason's own files", "Jason's own settings, run files and data are not the person's files: they stay refused in every mode.")]
+    [InlineData("a refusal", "23. When something is refused, say in one sentence exactly what was refused and why, and give the path in a code block. Where opening a folder would help, name Open folder, in the menu of the agent's row and of its header. Never try another way around a refusal.")]
+    public void The_instructions_hold_the_rule_for(string rule, string sentence)
+    {
+        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "chat-instructions.md"));
+        Assert.True(
+            text.Contains(sentence, StringComparison.Ordinal),
+            $"The chat's instructions do not hold the rule for {rule}: \"{sentence}\"");
+    }
+
+    /// <summary>
+    /// The verbs the instructions give as standing alone are commands the CLI has, and the archive the managed skill
+    /// teaches asks once only where the person did not spell which campaigns, as the instructions' rule 12 says.
+    /// </summary>
+    [Fact]
+    public void The_verbs_given_alone_are_the_clis_and_the_skill_archives_what_was_spelled_and_asks_once_for_a_bare_all()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var commands = Commands(root, []).ToHashSet(StringComparer.Ordinal);
+        Assert.Contains("status", commands);
+        Assert.Contains("logs", commands);
+
+        var skill = File.ReadAllText(Path.Combine(RepositoryRoot(), "skills", "runtime", "managed-campaign-work", "SKILL.md"));
+        var flat = System.Text.RegularExpressions.Regex.Replace(skill, @"\s+", " ");
+        Assert.Contains("When they tell you to archive campaigns and spell which, by naming them, by saying all of these about a list you showed them, or by saying all but those they name, archive each with `jason campaign archive`, one after another, without asking first. When they say all or everything and nothing more, say which campaigns that takes, how many, and that an archive cannot be undone, and ask once: their answer is their word.", flat, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing plain to cover", flat, StringComparison.Ordinal);
+    }
+    /// <summary>
     /// A page's sentences, outside its fenced blocks: each paragraph's lines joined, then cut where a sentence ends and
     /// the next begins with a capital, after any mark that opens it.
     /// </summary>
