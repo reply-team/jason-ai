@@ -175,13 +175,16 @@ test('the nouns whose help runs are the first words of the verbs of two words or
     }
 });
 
-test('rule 18 of the chat\'s instructions names exactly the nouns whose help runs, in their order, and says that root help is refused', () => {
+test('rule 18 of the chat\'s instructions names exactly the nouns whose help runs, in their order, gives a verb\'s help and the root\'s, and a noun\'s alone where the mode only reads', () => {
     const fence = readFence(desktop);
     const rule = (fence.instructions ?? '').split(/\r?\n/).find((line) => line.startsWith('18. ')) ?? '';
     const listed = /with one of these nouns: ([^.]+)\./.exec(rule)?.[1] ?? '';
     assert.deepEqual([...listed.matchAll(/`([a-z-]+)`/g)].map((match) => match[1]), helpNouns(fence.allowed, fence.reads));
-    assert.match(rule, /run `jason <noun> --help`, exactly those three words with nothing after them/);
-    assert.match(rule, /`jason --help` itself is refused\./);
+    assert.match(rule, /run `jason <noun> --help` with one of these nouns/);
+    assert.match(rule, /A verb's own options are in `jason <noun> <verb> --help`, and `jason --help` lists the nouns;/);
+    // Plan only keeps the nouns' exact help rules (`helpRules`) and refuses root help, so the rule gives it the noun's alone.
+    assert.match(rule, /where this mode only reads and proposes, read only `jason <noun> --help`\./);
+    assert.doesNotMatch(rule, /refused|exactly those three words/);
 });
 
 test('the person\'s word runs with no card outside Plan only in five verbs and two preference keys, each verb on the deny list and none on the allow list or the plan list', () => {

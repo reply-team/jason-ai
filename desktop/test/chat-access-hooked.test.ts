@@ -135,6 +135,23 @@ test('a change outside the chat\'s folders is one card in Ask first and Auto-edi
     }
 });
 
+test('a memory file of the person\'s is shown first in Ask first and Auto-edit, each time, in a campaign\'s folder the turn works in and outside it alike, and Full access writes it', () => {
+    // The client's file at the harness root, which no turn works in, and a campaign's in its folder, which a campaign's
+    // conversation adds to the turn.
+    const campaign = '/home/someone/Jason/projects/p/campaigns/c';
+    const inCampaign = { ...linux, added: [campaign] };
+    const files = ['/home/someone/Jason/AGENTS.md', `${campaign}/AGENTS.md`];
+    for (const file of files) {
+        for (const [tool, input] of [['Write', { file_path: file, content: '- Write in a short way.\n' }], ['Edit', { file_path: file, old_string: 'end', new_string: 'end\n- Write in a short way.' }]] as const) {
+            const where = `${tool} ${file}`;
+            for (const judged of both(tool, input, inCampaign)) {
+                assert.ok(judged.verdict === 'ask' && judged.title === 'Change instructions the AI reads' && judged.remember === null, `${where}: ${JSON.stringify(judged)}`);
+            }
+            assert.deepEqual(fullAccessJudgement(tool, input, inCampaign), { outcome: 'runs' }, `Full access: ${where}`);
+        }
+    }
+});
+
 /** Jason's verbs that run with no card in Ask first and Auto-edit where the hook rides: its reads, its help, and its acts. */
 const noCard = [
     'jason status',

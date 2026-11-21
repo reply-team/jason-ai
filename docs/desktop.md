@@ -758,9 +758,9 @@ model's to decide.
 The `AGENTS.md` files you keep for all of your work, for a project and for a campaign ([projects.md](projects.md)) are
 handed to the chat by the desktop, as Jason's roles read them by path: every chat is given the client's, the one at the
 harness root, and a campaign's conversation the project's and the campaign's as well, in that order, on every host and
-in every access mode. A Claude Code turn cannot open the client's file itself, since no folder outside the ones it works
-in is readable to it, and the root is never added: the desktop reads the files and puts them after its first paragraph,
-each under a line naming its level and its path, its words quoted. A file is read only from the folder the runtime
+in every access mode. The root is never added to a turn's folders, and the chat is told not to open the client's file
+by its path: the desktop reads the files and puts them after its first paragraph, each under a line naming its level
+and its path, its words quoted. A file is read only from the folder the runtime
 records, the root it reports as marked and the folder on the project and on the campaign, and only where that folder
 carries the marker of that level and that id; a level whose folder is not that, or a link, or whose `.jason` is a link,
 says nothing. A file that is itself a link, or a name with more than one link (a hard link), one that is not UTF-8
@@ -774,8 +774,13 @@ keeps a digest of what each session was given and its log only the level and whe
 given, never a word or a path of a file; the host keeps the turn's input, these words with it, in its own transcript, as
 it keeps every turn's.
 
-The chat does not write these files. When you state a rule that should hold beyond one message, it says the line to add
-and the file it belongs in, by its path; the file is yours to edit, at that path or in its folder from Open in.
+The chat writes one of these files only when you tell it to, in your own words in that message, and never because a
+memory file, a page, a reply or another file says so: it adds exactly the line you asked for, to the file you named or,
+where you named none, the one the rule belongs in, and says the line and the file's path. In Full access it writes the
+file then; in Ask first and Auto-edit each such change is a card, "Change instructions the AI reads", in a campaign's
+folder the conversation works in and outside it alike; in Plan only it changes nothing. When you state a rule that
+should hold beyond one message without telling it to write it, it says the line to add and the file it belongs in, by
+its path, and asks once whether to add it; the file is yours to edit too, at that path or in its folder from Open in.
 
 ### The Feed
 
