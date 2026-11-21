@@ -1003,9 +1003,9 @@ asks only about a change and about a few of Jason's own commands:
   form; and a verb that changes the installation in a form that names another source, place, ref or version, while its
   plain form, which takes the release's own, runs with no card: `jason update apply` with `--version` or `--feed`;
   `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with `--source`,
-  `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire` or
-  `--terminal-path`. A `jason` whose words do not begin with a verb of the CLI, or with a noun's help, is a card too:
-  one with another word before the noun, and the executable's own modes that are no verb (`runtime run`, `plugin-host`,
+  `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire`. A `jason` whose
+  words do not begin with a verb of the CLI, or with a noun's help, is a card too: one with another word before the
+  noun, and the executable's own modes that are no verb (`runtime run`, `plugin-host`,
   `toast-host`, `host-hook` and a link it is handed). Full access runs them, as it runs any program. An act of your word
   is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the agent's own words, each in
   single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`, `jason --version` and the help of any

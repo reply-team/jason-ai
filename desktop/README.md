@@ -370,7 +370,7 @@ applies to the turns a person starts by sending, from the next one on.
     another source, place, ref or version, while its plain form, which takes the release's own, runs with no card:
     `update apply` with `--version` or `--feed`; `plugin install` with `--feed` or `--replace`; `skills install` and
     `skills update` with `--source`, `--feed`, `--root` or `--ref`; `ui install` with `--feed`; and `install` with
-    `--retire` or `--terminal-path`. Each is a card, its words told in any letter case and with anything between them
+    `--retire`. Each is a card, its words told in any letter case and with anything between them
     (`holdsEntry`), its option anywhere among them, with its value after `=` or `:` too, and in a compound; the help of
     one of them, a `--help` or `-h` before any `--`, runs;
   - a `jason` whose words do not begin with a verb of `cliCommandTree`, the CLI's own tree held to

@@ -193,10 +193,11 @@ export interface CardedForm {
  * changes the installation in a form that names another source, place, ref or version, by one rule: the plain form,
  * which takes the release's own, runs with no card, and a form that names another keeps one. So `update apply` with a
  * version or a feed, `plugin install` from another feed or over the package there, `skills install` and `skills update`
- * from another source, feed, root or ref, `ui install` from another feed, and `install` told an executable to retire or
- * the search path a terminal has. Every other jason verb runs there with no card (`ChatScope.hooked`), the deny list's
- * and `cardedVerbs` among them, each written as the chat's instructions write a person's word; below the floor nothing
- * changed, and Plan only runs none of them.
+ * from another source, feed, root or ref, `ui install` from another feed, and `install` told an executable to retire;
+ * the search path a terminal has, which `install --terminal-path` gives, names no source and runs with no card. Every
+ * other jason verb runs there with no card (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each
+ * written as the chat's instructions write a person's word; below the floor nothing changed, and Plan only runs none of
+ * them.
  */
 export const askingCardedForms: readonly CardedForm[] = [
     { verb: 'uninstall' },
@@ -209,7 +210,7 @@ export const askingCardedForms: readonly CardedForm[] = [
     { verb: 'skills install', options: ['--source', '--feed', '--root', '--ref'] },
     { verb: 'skills update', options: ['--source', '--feed', '--root', '--ref'] },
     { verb: 'ui install', options: ['--feed'] },
-    { verb: 'install', options: ['--retire', '--terminal-path'] },
+    { verb: 'install', options: ['--retire'] },
 ];
 
 /**

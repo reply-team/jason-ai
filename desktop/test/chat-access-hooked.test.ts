@@ -189,6 +189,9 @@ const noCard = [
     'jason ui install',
     'jason install',
     'jason install --roles',
+    "jason install --terminal-path ''",
+    "jason install --terminal-path=''",
+    "jason install --roles --terminal-path ''",
     'jason skills install',
     'jason skills install --host claude --pack business',
     'jason skills update',
@@ -243,7 +246,7 @@ const carded = [
     'jason ui install --feed https://example.com/manifest.json',
     'jason ui install --feed=https://example.com/manifest.json',
     'jason install --retire /opt/jason/jason',
-    'jason install --terminal-path /usr/bin',
+    'jason install --terminal-path /usr/bin --retire /opt/jason/jason',
 ];
 
 test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but the carded forms: uninstall, import, export, update rollback and plugin grant in every form, and a verb that changes the installation in a form that names another source, place, ref or version, its plain form running with no card', () => {
@@ -258,10 +261,14 @@ test('in Ask first and Auto-edit every jason verb runs with no card, its help an
         ['skills install', ['--source', '--feed', '--root', '--ref']],
         ['skills update', ['--source', '--feed', '--root', '--ref']],
         ['ui install', ['--feed']],
-        ['install', ['--retire', '--terminal-path']],
+        ['install', ['--retire']],
     ]);
     for (const scope of scopes) {
-        for (const command of noCard) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+        // The search path a terminal has names no source: `install --terminal-path` runs with no card, in a spelling of the platform's own.
+        const terminalPaths = scope.platform === 'win32'
+            ? ["jason install --terminal-path 'C:\\Windows\\System32'", "jason install --terminal-path='C:\\Windows\\System32;C:\\Windows'"]
+            : ['jason install --terminal-path /usr/bin:/bin', 'jason install --terminal-path=/usr/local/bin:/usr/bin'];
+        for (const command of [...noCard, ...terminalPaths]) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
         for (const command of carded) assert.deepEqual(both('Bash', { command }, scope).map(asked), ['Run a command', 'Run a command'], `${scope.platform}: ${command}`);
     }
 });
@@ -343,7 +350,7 @@ test('a jason whose words do not begin with a verb of the CLI\'s own tree, or a 
     }
 });
 
-test('every form of askingCardedForms is named in rule 11 of the chat\'s instructions, in desktop/README.md and in docs/desktop.md, each with every option that cards it', () => {
+test('every form of askingCardedForms is named in rule 11 of the chat\'s instructions, in desktop/README.md and in docs/desktop.md, each with every option that cards it and with no other', () => {
     const desktop = join(import.meta.dirname, '..');
     const rule = readFileSync(join(desktop, 'chat-instructions.md'), 'utf8').split('\n').find((line) => line.startsWith('11. ')) ?? '';
     for (const [name, text] of [['rule 11', rule], ['desktop/README.md', readFileSync(join(desktop, 'README.md'), 'utf8')], ['docs/desktop.md', readFileSync(join(desktop, '..', 'docs', 'desktop.md'), 'utf8')]] as const) {
@@ -352,7 +359,11 @@ test('every form of askingCardedForms is named in rule 11 of the chat\'s instruc
             const mentions = [...flat.matchAll(new RegExp(`\`(?:jason )?${verb}\``, 'g'))].map((match) => match.index);
             assert.ok(mentions.length > 0, `${name} names ${verb}`);
             const segments = mentions.map((at) => flat.slice(at).split(/; |\. /)[0] as string);
-            assert.ok(options === undefined || segments.some((segment) => options.every((option) => segment.includes(`\`${option}\``))), `${name} names ${verb} with ${(options ?? []).join(', ')}`);
+            const named = (segment: string) => [...segment.matchAll(/`(--[a-z][a-z-]*)`/g)].map((match) => match[1] as string);
+            assert.ok(
+                options === undefined || segments.some((segment) => options.every((option) => segment.includes(`\`${option}\``)) && named(segment).every((option) => options.includes(option))),
+                `${name} names ${verb} with ${(options ?? []).join(', ')} and no other option`,
+            );
         }
     }
 });
