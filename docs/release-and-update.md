@@ -1576,8 +1576,15 @@ and `install.ps1` run it. Jason Desktop's first start on a new installation runs
 so the Demo opens with nothing written in the data directory; once Live has brought the installation up, the desktop runs
 the set-up once more, and that run registers. The report says what became of it under `logon`: `registered`, `already`
 (it names this `jason`), `off` (you turned it off), `left` (it names another program or data directory, said by name),
-`existing` (an installation set up before this default, which keeps what it had), `no_installation`, or `refused` (the
-system would not register it, said in `left`; never a problem, and the run still ends 0). The set-up starts nothing: on
+`no_installation`, or `refused` (the system would not register it, said in `left`; never a problem, and the run still
+ends 0).
+
+**An update turns it on once.** An installation set up before this default gets the start at logon from the first
+set-up of a version that has it, the Desktop's first start of that version or a terminal's update, unless you turned it
+off: `<data>/autostart/off.json`, or on macOS launchd's record of the label as disabled. That set-up writes
+`<data>/autostart/default.json`, and no later one turns the start on again; one you took off by other means than
+`disable` stays off and is said under `left`. On Windows and Linux a `disable` made before 0.49.4 left no record, so
+such an installation is turned on once too; `disable` again turns it off for good. The set-up starts nothing: on
 macOS it writes the LaunchAgent without loading it, so the next login starts the runtime, as it does on Windows and
 Linux. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
 does.

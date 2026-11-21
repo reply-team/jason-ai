@@ -2275,8 +2275,16 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
         [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = true ] || fail "the previous release had its start at login, and after the swap none is registered: $(cat "$OUT/bundle-swap-autostart.json")"
         [ "$(read_field "$OUT/bundle-swap-autostart.json" executable)" = "$carried" ] || fail "the start at login names $(read_field "$OUT/bundle-swap-autostart.json" executable), not $carried"
         say "the previous release had its start at login, and it now names $carried"
+    elif [ -f "$DATA/state/jason.db" ]; then
+        # An installation the previous release set up, with no start at login: this build's first set-up turns it on once.
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = true ] || fail "the previous release had no start at login, and this build's first set-up did not turn it on once: $(cat "$OUT/bundle-swap-autostart.json")"
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" executable)" = "$carried" ] || fail "the start at login turned on once names $(read_field "$OUT/bundle-swap-autostart.json" executable), not $carried"
+        [ -f "$DATA/autostart/default.json" ] || fail "the set-up turned the start at login on once and wrote no $DATA/autostart/default.json"
+        say "the previous release had no start at login; this build's first set-up turned it on once, naming $carried, and recorded that in autostart/default.json"
     else
-        say "the previous release had no start at login; after the swap it is registered: $(read_field "$OUT/bundle-swap-autostart.json" registered)"
+        # No installation in the data directory yet (the Demo): nothing to start, so nothing is registered.
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = false ] || fail "the data directory holds no installation, and a start at login was registered: $(cat "$OUT/bundle-swap-autostart.json")"
+        say "the previous release had no start at login and the data directory holds no installation, so none is registered"
     fi
 
     if [ "$mode" = running-cli ]; then

@@ -55,6 +55,45 @@ internal static class AutostartOff
         }
     }
 
+    /// <summary>
+    /// Writes the record that set-up turned the start at logon on once for this installation,
+    /// <c>{"turned_on_by":"&lt;version&gt;","since":"&lt;ISO-8601 UTC&gt;"}</c>, replacing one already there.
+    /// </summary>
+    public static void WriteDefault(JasonPaths paths, DateTimeOffset moment, string version)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        Directory.CreateDirectory(paths.AutostartDirectory);
+        var temporary = Path.Combine(paths.AutostartDirectory, $".default.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("turned_on_by", version);
+                writer.WriteString("since", moment.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+                writer.WriteEndObject();
+            }
+
+            File.Move(temporary, paths.AutostartDefaultFile, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception left) when (left is IOException or UnauthorizedAccessException)
+            {
+                // A temporary file of a dot name, which nothing reads, is all that is left.
+            }
+
+            throw;
+        }
+    }
+
     /// <summary>Whether the record stands in the data directory.</summary>
     public static bool Recorded(JasonPaths paths)
     {

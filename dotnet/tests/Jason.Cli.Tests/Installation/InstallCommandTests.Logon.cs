@@ -159,4 +159,70 @@ public sealed partial class InstallCommandTests
         Assert.DoesNotContain(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("logon", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("could not reach the user manager", StringComparison.Ordinal));
     }
+    /// <summary>
+    /// An update of an installation set up before this default: its first set-up turns the start on once, from Jason
+    /// Desktop's start (no flags) and from a terminal's (<c>--roles</c>) alike, and records that in
+    /// <c>autostart/default.json</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_update_turns_the_start_on_once_and_records_it(bool roles)
+    {
+        PlantInstallation();
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, roles, null), Ct);
+
+        Assert.Single(Registrar(env).Applied);
+        Assert.Equal("registered", Report(output).GetProperty("logon").GetString());
+        using var record = JsonDocument.Parse(File.ReadAllText(_data.Paths.AutostartDefaultFile));
+        Assert.False(string.IsNullOrEmpty(record.RootElement.GetProperty("turned_on_by").GetString()));
+    }
+
+    /// <summary>Once is once: a start the default turned on and that is gone now was taken off by other means, and is left off.</summary>
+    [Fact]
+    public async Task A_start_turned_on_once_and_gone_is_not_turned_on_again()
+    {
+        PlantInstallation();
+        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Empty(Registrar(env).Applied);
+        var report = Report(output);
+        Assert.Equal("left", report.GetProperty("logon").GetString());
+        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("turned on once already", StringComparison.Ordinal));
+    }
+
+    /// <summary>An update honours the person's turn-off: nothing registered, and no record that the default turned it on.</summary>
+    [Fact]
+    public async Task An_update_leaves_a_turn_off_and_records_nothing()
+    {
+        PlantInstallation();
+        AutostartOff.Write(_data.Paths, DateTimeOffset.UtcNow, "0.49.3");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Empty(Registrar(env).Applied);
+        Assert.Equal("off", Report(output).GetProperty("logon").GetString());
+        Assert.False(File.Exists(_data.Paths.AutostartDefaultFile));
+    }
+
+    /// <summary>A registration the person made already counts as the default's once: the record is written, and nothing is registered again.</summary>
+    [Fact]
+    public async Task A_standing_registration_of_this_jason_is_recorded_as_the_once()
+    {
+        PlantInstallation();
+        var executable = Carried();
+        var (env, _) = Environment(MacPlaces(), executable);
+        Registrar(env).State = new AutostartState(true, [executable, "runtime", "run", "--detached", "--data-dir", _data.Paths.Root], null);
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Empty(Registrar(env).Applied);
+        Assert.True(File.Exists(_data.Paths.AutostartDefaultFile));
+    }
 }

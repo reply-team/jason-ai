@@ -1166,7 +1166,7 @@ test('Live brought up on a new installation runs the routine once more, where th
 });
 
 test('Live brought up runs nothing more where the start’s run registered, or left, the runtime’s start at logon', async () => {
-    for (const logon of ['registered', 'already', 'off', 'left', 'refused', undefined]) {
+    for (const logon of ['registered', 'already', 'off', 'left', 'refused', 'unsupported', undefined]) {
         const data = join(folder(), '.jason');
         const cli = fakeCli(printed(report(logon === undefined ? {} : { logon })));
         const { setup } = setupOn(data, cli);

@@ -90,9 +90,9 @@ public sealed record InstallRetired(string Executable, string? Aside, IReadOnlyL
 /// <param name="Logon">
 /// What became of the runtime's start at logon (<see cref="MachineSetup.LogonStates"/>): <c>registered</c> by this run,
 /// <c>already</c> registered naming this jason, <c>off</c> where the person turned it off, <c>left</c> where a registration
-/// names another program or data directory, <c>existing</c> for an installation set up before the start became the
-/// default, <c>no_installation</c> where the data directory holds none yet, <c>refused</c> where the system would not
-/// register it, and <c>unsupported</c> where this environment names no registrar. Never a problem: a start at logon that
+/// names another program or data directory, or where the start was turned on once already and is gone now,
+/// <c>no_installation</c> where the data directory holds none yet, <c>refused</c> where the system would not register it,
+/// and <c>unsupported</c> where this environment names no registrar. Never a problem: a start at logon that
 /// could not be made is said in <paramref name="Left"/> and never fails the run.
 /// </param>
 public sealed record InstallReport(
@@ -136,6 +136,8 @@ public sealed record InstallReport(
 /// holds an installation, or with <c>--roles</c>, which writes there anyway. Jason Desktop, which runs it with no flags at
 /// its first start, runs it once more right after it brings Live up on a new installation; the report's <c>logon</c> says
 /// <c>no_installation</c> until then. A start the person turned off with <c>jason runtime autostart disable</c> is left off.
+/// An installation set up before this default is turned on once, by the first set-up of a version that has it, and
+/// <c>autostart/default.json</c> records that, so no later set-up turns it on again.
 /// It starts nothing now: on Windows and Linux the next logon starts the runtime, and on macOS the LaunchAgent is written
 /// and not loaded, so its <c>RunAtLoad</c> starts nothing before the next login either.
 /// </para>
@@ -279,7 +281,6 @@ public static class MachineSetup
         public const string Already = "already";
         public const string Off = "off";
         public const string Left = "left";
-        public const string Existing = "existing";
         public const string NoInstallation = "no_installation";
         public const string Refused = "refused";
         public const string Unsupported = "unsupported";
@@ -988,22 +989,52 @@ public static class MachineSetup
                 var state = registrar.Read();
                 if (state.Registered)
                 {
-                    return Registers(state) ? LogonStates.Already : LeftStanding(state);
+                    if (!Registers(state))
+                    {
+                        return LeftStanding(state);
+                    }
+
+                    RecordTurnedOn();
+                    return LogonStates.Already;
                 }
 
-                if (!RegistersFor(hadInstallation))
+                // Turned on once: a new installation, or the first set-up of an installation made before this default. One
+                // the default turned on already, and that is not registered now, was taken off by other means and is left so.
+                if (!RegistersFor(hadInstallation) && File.Exists(env.Paths.AutostartDefaultFile))
                 {
-                    Left.Add("This installation was set up before the runtime started at logon by default, so no start at logon was registered; `jason runtime autostart enable` registers it.");
-                    return LogonStates.Existing;
+                    Left.Add("The start at logon was turned on once already and is not registered now, so it was left off; `jason runtime autostart enable` registers it.");
+                    return LogonStates.Left;
                 }
 
                 Register(registrar);
+                RecordTurnedOn();
                 return LogonStates.Registered;
             }
             catch (AutostartException refused)
             {
                 Left.Add($"The start at logon could not be registered: {refused.Message} `jason runtime autostart enable` tries again.");
                 return LogonStates.Refused;
+            }
+        }
+
+        /// <summary>
+        /// The record that the default has turned the start at logon on for this installation, so that no later set-up turns
+        /// it on again (<c>autostart/default.json</c>). One that cannot be written is said; the start stands either way.
+        /// </summary>
+        private void RecordTurnedOn()
+        {
+            if (File.Exists(env.Paths.AutostartDefaultFile))
+            {
+                return;
+            }
+
+            try
+            {
+                AutostartOff.WriteDefault(env.Paths, DateTimeOffset.UtcNow, carried.Version);
+            }
+            catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
+            {
+                Left.Add($"The record that the start at logon was turned on once could not be written at {env.Paths.AutostartDefaultFile} ({unwritten.GetType().Name}), so a later set-up may register it again.");
             }
         }
 
