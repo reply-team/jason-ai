@@ -528,34 +528,33 @@ export interface DesktopReplyPending {
 /**
  * A link the Reply CLI made, opened in the person's browser by the desktop's main process. The page learns that it was
  * opened, when it stops working and its pending entry, where the CLI said; never the link, which is the person's secret.
- * A `shared_page` link is the account's shared mailbox page, which does not expire.
  */
 export interface DesktopReplyOpened {
     opened: true;
     channel: DesktopReplyChannel;
     kind: 'connect' | 'reconnect';
-    linkKind: 'connection_link' | 'shared_page';
+    linkKind: 'connection_link';
     expiresAt: string | null;
     pendingId: number | null;
 }
 
 /**
  * An act on a Reply account that ended without its effect: the desktop's sentence; the Reply CLI's code where it gave
- * one, which an unknown code carries in the sentence too; what the card may offer next (the shared mailbox page after
- * `email_link.not_available`, a forced delete after `linkedin.account_in_use`, Reconnect after
- * `linkedin.invalid_cookie`); and whether the card reads the list again to show where things stand.
+ * one, which an unknown code carries in the sentence too; what the card may offer next (a forced delete after
+ * `linkedin.account_in_use`, Reconnect after `linkedin.invalid_cookie`); and whether the card reads the list again to
+ * show where things stand.
  */
 export interface DesktopReplyRefusal {
     refused: string;
     code: string | null;
-    offer: 'shared_page' | 'force' | 'reconnect' | null;
+    offer: 'force' | 'reconnect' | null;
     reread: boolean;
 }
 
 /**
  * A link the Reply CLI made that expires and connects one account, written to the clipboard by the desktop's main process
  * for the person to hand on to whoever owns the account. The page learns that it was copied, when it stops working and
- * its pending entry; never the link. The shared mailbox page is never copied.
+ * its pending entry; never the link.
  */
 export interface DesktopReplyCopied {
     copied: true;
@@ -959,23 +958,20 @@ export interface JasonDesktop {
         disconnectPlugin(pluginId: string): Promise<void>;
         /**
          * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
-         * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `sharedPage`
-         * asks for the account's shared mailbox page instead, and only after this ask answered the offer
-         * `shared_page`; the desktop then asks the person in a box of its own, with the CLI's warning, first.
-         * `copy` asks the desktop to put a link that expires on the clipboard instead of opening it, for the person to
-         * hand on; the shared mailbox page is never copied, whatever the page asks.
+         * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `copy` asks the
+         * desktop to put the link on the clipboard instead of opening it, for the person to hand on.
          */
         replyConnect(
             channel: DesktopReplyChannel,
-            options: ({ name: string } | { provider: 'gmail' | 'office365'; sharedPage?: boolean }) & {
+            options: ({ name: string } | { provider: 'gmail' | 'office365' }) & {
                 copy?: boolean;
             },
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
-        /** Reconnects an account `accounts` lists, the same way; `sharedPage` for a mailbox only, and `copy`, as above. */
+        /** Reconnects an account `accounts` lists, the same way, with `copy` as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
             accountId: string,
-            options?: { sharedPage?: boolean; copy?: boolean },
+            options?: { copy?: boolean },
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /**
          * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's

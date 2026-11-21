@@ -21,7 +21,6 @@ import {
     refusalOf,
     replyAccountSentences as said,
     replyActLimitMs,
-    sharedPageBox,
     type ReplyBox,
 } from '../src/reply-accounts.ts';
 import {
@@ -37,14 +36,13 @@ import {
     reconnectArguments,
     replyCliCodes,
     replyCliEnding,
-    replyCliSharedPageWarning,
     stateArguments,
     unblockArguments,
 } from '../src/reply-cli-account.ts';
 import { replyMinimumVersion } from '../src/setup-model.ts';
 import { Setup } from '../src/setup.ts';
 import { bench, fakeBox, memoryLog, snapshot, type Bench } from './harness.ts';
-import { cliCodes, fixtureLinks, printed, sharedPageWarning } from './reply-cli-account-fixture.ts';
+import { cliCodes, fixtureLinks, printed } from './reply-cli-account-fixture.ts';
 
 // ---- The bench ------------------------------------------------------------------------------------------------------
 
@@ -120,16 +118,13 @@ async function listedHarness(t: Parameters<typeof bench>[0], env: Record<string,
 
 // ---- The CLI's contract, held to what the CLI's own tests print -----------------------------------------------------
 
-test('each verb is started with its own arguments: a name as one argument, the shared page and the force only when asked', () => {
+test('each verb is started with its own arguments: a name as one argument, the force only when asked', () => {
     assert.deepEqual(connectArguments({ channel: 'linkedin', name: 'Made-up Ada' }), ['account', 'connect', '--channel', 'linkedin', '--name=Made-up Ada', '--json']);
     assert.deepEqual(connectArguments({ channel: 'linkedin', name: '--yes' }), ['account', 'connect', '--channel', 'linkedin', '--name=--yes', '--json'], 'a name is never read as an option');
-    assert.deepEqual(connectArguments({ channel: 'email', provider: 'gmail', allowSharedPage: false }), ['account', 'connect', '--channel', 'email', '--provider', 'gmail', '--json']);
-    assert.deepEqual(connectArguments({ channel: 'email', provider: 'office365', allowSharedPage: true }), [
-        'account', 'connect', '--channel', 'email', '--provider', 'office365', '--allow-shared-page', '--json',
-    ]);
-    assert.deepEqual(reconnectArguments('email', '12', false), ['account', 'reconnect', '12', '--channel', 'email', '--json']);
-    assert.deepEqual(reconnectArguments('email', '12', true), ['account', 'reconnect', '12', '--channel', 'email', '--allow-shared-page', '--json']);
-    assert.deepEqual(reconnectArguments('linkedin', '34', true), ['account', 'reconnect', '34', '--channel', 'linkedin', '--json'], 'never for LinkedIn');
+    assert.deepEqual(connectArguments({ channel: 'email', provider: 'gmail' }), ['account', 'connect', '--channel', 'email', '--provider', 'gmail', '--json']);
+    assert.deepEqual(connectArguments({ channel: 'email', provider: 'office365' }), ['account', 'connect', '--channel', 'email', '--provider', 'office365', '--json']);
+    assert.deepEqual(reconnectArguments('email', '12'), ['account', 'reconnect', '12', '--channel', 'email', '--json']);
+    assert.deepEqual(reconnectArguments('linkedin', '34'), ['account', 'reconnect', '34', '--channel', 'linkedin', '--json']);
     assert.deepEqual(pendingArguments('linkedin'), ['account', 'pending', '--channel', 'linkedin', '--json']);
     assert.deepEqual(limitsArguments('12'), ['account', 'limits', '12', '--channel', 'email', '--json']);
     assert.deepEqual(limitsArguments('12', 0), ['account', 'limits', '12', '--channel', 'email', '--daily', '0', '--json']);
@@ -144,12 +139,10 @@ test('each verb is started with its own arguments: a name as one argument, the s
 test('the prints the CLI’s own tests pin are read, and a print of any other shape is not', () => {
     const json = (value: unknown) => JSON.stringify(value);
     assert.deepEqual(readLink(json(printed.connectEmail)), { channel: 'email', link: fixtureLinks.emailConnect, expiresAt: '2026-11-18T12:00:00Z', pendingId: 50, kind: 'connect', linkKind: 'connection_link' });
-    assert.deepEqual(readLink(json(printed.connectEmailShared)), { channel: 'email', link: fixtureLinks.sharedGmail, expiresAt: null, pendingId: null, kind: 'connect', linkKind: 'shared_page' });
     assert.deepEqual(readLink(json(printed.connectLinkedIn))?.pendingId, 51);
     assert.deepEqual(readLink(json(printed.reconnectEmail))?.kind, 'reconnect');
-    assert.deepEqual(readLink(json(printed.reconnectEmailShared))?.linkKind, 'shared_page');
     assert.deepEqual(readLink(json(printed.reconnectLinkedIn))?.channel, 'linkedin');
-    for (const bad of ['', 'not json', '[1]', json({ ...printed.connectLinkedIn, link: '' }), json({ ...printed.connectLinkedIn, kind: 'other' }), json({ ...printed.connectLinkedIn, link_kind: 'x' }), json({ ...printed.connectLinkedIn, channel: 'sms' })]) {
+    for (const bad of ['', 'not json', '[1]', json({ ...printed.connectLinkedIn, link: '' }), json({ ...printed.connectLinkedIn, kind: 'other' }), json({ ...printed.connectLinkedIn, link_kind: 'x' }), json({ ...printed.connectLinkedIn, link_kind: 'shared_page' }), json({ ...printed.connectLinkedIn, channel: 'sms' })]) {
         assert.equal(readLink(bad), null, bad);
     }
     assert.deepEqual(readPending(json(printed.pending)), [
@@ -185,10 +178,9 @@ test('an ending is read from the exit and the code of the last JSON line on stde
     for (const exit of [-1, 4, 7]) assert.deepEqual(replyCliEnding({ exit, stdout: '', stderr: line('reply.refused') }), { kind: 'unreached' });
 });
 
-test('the codes the desktop acts on are the CLI’s, and the shared page’s warning is the CLI’s own words', () => {
+test('the codes the desktop acts on are the CLI’s', () => {
     const known = new Set<string>([...cliCodes.account, ...cliCodes.common]);
     for (const code of Object.values(replyCliCodes)) assert.ok(known.has(code), code);
-    assert.equal(replyCliSharedPageWarning, sharedPageWarning);
 });
 
 // ---- What each code does ---------------------------------------------------------------------------------------------
@@ -198,11 +190,11 @@ test('each code the card acts on is handled as ruled, and every other code, know
     const remove = { verb: 'delete' as const, channel: 'linkedin' as const, write: true };
     const pause = { verb: 'pause' as const, channel: 'linkedin' as const, write: true };
     const code = (value: string) => ({ kind: 'refused' as const, code: value });
-    // The shared page: offered after not_available on an email link asked without it, and never on the shared page's own.
-    assert.deepEqual(refusalOf(code('email_link.not_available'), connect), { refused: said.sharedPageOffer, code: 'email_link.not_available', offer: 'shared_page', reread: false });
-    assert.equal(refusalOf(code('email_link.not_available'), { ...connect, verb: 'reconnect' }).offer, 'shared_page');
-    assert.equal(refusalOf(code('email_link.not_available'), { ...connect, sharedPage: true }).offer, null);
-    assert.equal(refusalOf(code('email_link.not_available'), { ...connect, channel: 'linkedin' }).offer, null);
+    // A Reply that makes no one-mailbox link: the plain refusal, which carries the code and offers nothing.
+    for (const act of [connect, { ...connect, verb: 'reconnect' as const }, { ...connect, channel: 'linkedin' as const }]) {
+        assert.deepEqual(refusalOf(code('email_link.not_available'), act), { refused: otherRefusal('email_link.not_available'), code: 'email_link.not_available', offer: null, reread: false });
+    }
+    assert.equal(otherRefusal('email_link.not_available'), 'Reply did not do it: the Reply CLI answered email_link.not_available.');
     // A signed-out LinkedIn account offers Reconnect.
     assert.deepEqual(refusalOf(code('linkedin.invalid_cookie'), pause), { refused: said.signedOut, code: 'linkedin.invalid_cookie', offer: 'reconnect', reread: false });
     assert.equal(refusalOf(code('linkedin.invalid_cookie'), remove).offer, 'reconnect');
@@ -229,7 +221,6 @@ test('each code the card acts on is handled as ruled, and every other code, know
         ['email_account.no_free_mailbox_slots', said.mailboxSeat],
         ['linkedin.account_limit_reached', said.linkedInLimit],
         ['access.feature_unavailable', said.notInPlan],
-        ['shared_page.not_enabled', said.sharedPageOff],
     ] as const) {
         assert.deepEqual(refusalOf(code(value), connect), { refused: sentence, code: value, offer: null, reread: false }, value);
     }
@@ -245,7 +236,7 @@ test('each code the card acts on is handled as ruled, and every other code, know
 });
 
 test('a link is handed to the opener only as https on a host name, with no user, port or anything but printable ASCII', () => {
-    for (const good of [fixtureLinks.emailConnect, fixtureLinks.linkedinConnect, fixtureLinks.sharedGmail, 'https://auth.linkedin.reply.io/hosted/x?state=y']) {
+    for (const good of [fixtureLinks.emailConnect, fixtureLinks.linkedinConnect, 'https://auth.linkedin.reply.io/hosted/x?state=y']) {
         assert.equal(isOpenableLink(good), true, good);
     }
     for (const bad of [
@@ -292,18 +283,17 @@ test('the boxes are the main process’s own: they name the account as the list 
     assert.equal(actBox('limits', mailbox, 200).message, 'Set the daily limit of the mailbox Made-up Sales (sales@example.test) to 200?');
     assert.match(actBox('force', linkedin).detail, /Sequences use this LinkedIn account/);
     assert.deepEqual(actBox('force', linkedin).buttons, ['Delete anyway', 'Cancel']);
-    assert.ok(sharedPageBox().detail.includes(replyCliSharedPageWarning), 'the shared page’s box carries the CLI’s warning');
-    for (const each of [sharedPageBox(), actBox('delete', mailbox), actBox('force', linkedin)]) {
+    for (const each of [actBox('delete', mailbox), actBox('force', linkedin)]) {
         assert.equal(each.defaultId, 1);
         assert.equal(each.cancelId, 1);
         assert.equal(each.buttons[1], 'Cancel');
     }
     const shown: unknown[] = [];
     const answering = (response: number) => (window: string, options: ReplyBox) => (shown.push([window, options]), Promise.resolve({ response }));
-    assert.equal(await askBox('window', answering(0), sharedPageBox()), true);
-    for (const response of [1, 2, -1]) assert.equal(await askBox('window', answering(response), sharedPageBox()), false);
+    assert.equal(await askBox('window', answering(0), actBox('delete', mailbox)), true);
+    for (const response of [1, 2, -1]) assert.equal(await askBox('window', answering(response), actBox('delete', mailbox)), false);
     const before = shown.length;
-    assert.equal(await askBox(null, answering(0), sharedPageBox()), false);
+    assert.equal(await askBox(null, answering(0), actBox('delete', mailbox)), false);
     assert.equal(shown.length, before, 'no window: nothing is shown, and the answer is no');
 
     // A window hidden or closed closes its box, and that is a no whatever the box answered; the listeners go with it.
@@ -312,14 +302,14 @@ test('the boxes are the main process’s own: they name the account as the list 
     const waiting = askBox(
         'window',
         (_window, _options, signal) => new Promise<{ response: number }>((resolve) => signal.addEventListener('abort', () => resolve({ response: 0 }))),
-        sharedPageBox(),
+        actBox('delete', mailbox),
         gone,
     );
     assert.equal(listening.size, 1);
     for (const abort of listening) abort();
     assert.equal(await waiting, false);
     assert.equal(listening.size, 0);
-    assert.equal(await askBox('window', answering(0), sharedPageBox(), gone), true, 'a box answered while its window stays is the answer');
+    assert.equal(await askBox('window', answering(0), actBox('delete', mailbox), gone), true, 'a box answered while its window stays is the answer');
     assert.equal(listening.size, 0);
 });
 
@@ -359,7 +349,11 @@ test('an act names only an account the list gave, by channel and id, and anythin
     assert.deepEqual(await h.setup.replyReconnect('email', '34'), no(said.badId), 'a LinkedIn id named as a mailbox');
     assert.deepEqual(await h.setup.replyReconnect('linkedin', '99'), no(said.badId));
     assert.deepEqual(await h.setup.replyReconnect('sms', '12'), no(said.badRequest));
-    assert.deepEqual(await h.setup.replyReconnect('linkedin', '34', { sharedPage: true }), no(said.badRequest));
+    for (const sharedPage of [true, false]) {
+        assert.deepEqual(await h.setup.replyReconnect('linkedin', '34', { sharedPage }), no(said.badRequest), 'the shared page is no option any more');
+        assert.deepEqual(await h.setup.replyReconnect('email', '12', { sharedPage }), no(said.badRequest));
+        assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail', sharedPage }), no(said.badRequest));
+    }
     assert.deepEqual(await h.setup.replyPause('12'), no(said.badId), 'a mailbox has no pause');
     assert.deepEqual(await h.setup.replyResume('12/../x'), no(said.badId));
     assert.deepEqual(await h.setup.replyUnblock('34'), no(said.badId), 'a LinkedIn account has no unblock');
@@ -424,48 +418,19 @@ test('pause, resume, unblock, limits and delete each ask the person first: no ye
     assert.deepEqual(yes.verbs().at(-1), ['account', 'limits', '12', '--channel', 'email', '--json']);
 });
 
-test('the shared page is the one door email_link.not_available opens: offered then, behind the CLI’s warning, never by default', async (t) => {
-    let yes = false;
-    const h = await listedHarness(
-        t,
-        {
-            STUB_REPLY_ACCOUNT_CONNECT: refused('email_link.not_available', { error: { hint: `With --allow-shared-page ...; ${sharedPageWarning}.` } }),
-            STUB_REPLY_ACCOUNT_CONNECT_SHARED: print(printed.connectEmailShared),
-            STUB_REPLY_ACCOUNT_RECONNECT: refused('email_link.not_available'),
-            STUB_REPLY_ACCOUNT_RECONNECT_SHARED: print(printed.reconnectEmailShared),
-        },
-        { yes: () => yes },
-    );
-    // Asked before the CLI said so, it is refused, and nothing is asked of the person or of Reply.
-    assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true }), { refused: said.notOffered, code: null, offer: null, reread: false });
-    assert.deepEqual(h.verbs(), []);
-    assert.equal(h.boxes.length, 0);
-    // The first try never passes it; its refusal offers the page.
-    assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail' }), { refused: said.sharedPageOffer, code: 'email_link.not_available', offer: 'shared_page', reread: false });
-    assert.deepEqual(h.opened, []);
-    // A no in the box asks nothing; the offer stays.
-    assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true }), { refused: said.notConfirmed, code: null, offer: null, reread: false });
-    assert.deepEqual(h.boxes, [sharedPageBox()]);
-    assert.equal(h.verbs().length, 1);
-    // A yes repeats the same ask with --allow-shared-page, once.
-    yes = true;
-    assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true }), { opened: true, channel: 'email', kind: 'connect', linkKind: 'shared_page', expiresAt: null, pendingId: null });
-    assert.deepEqual(h.opened, [fixtureLinks.sharedGmail]);
+test('a Reply that makes no one-mailbox link is the plain refusal: it carries the code, offers nothing and asks nothing more', async (t) => {
+    const h = await listedHarness(t, {
+        STUB_REPLY_ACCOUNT_CONNECT: refused('email_link.not_available'),
+        STUB_REPLY_ACCOUNT_RECONNECT: refused('email_link.not_available'),
+    });
+    const plain = { refused: 'Reply did not do it: the Reply CLI answered email_link.not_available.', code: 'email_link.not_available', offer: null, reread: false };
+    assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail' }), plain);
+    assert.deepEqual(await h.setup.replyReconnect('email', '12'), plain);
     assert.deepEqual(h.verbs(), [
         ['account', 'connect', '--channel', 'email', '--provider', 'gmail', '--json'],
-        ['account', 'connect', '--channel', 'email', '--provider', 'gmail', '--allow-shared-page', '--json'],
-    ]);
-    assert.deepEqual(why(await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true })).refused, said.notOffered, 'the door closes once gone through');
-    // The door is the ask's own: Outlook's is not opened by Gmail's.
-    assert.deepEqual(why(await h.setup.replyConnect('email', { provider: 'office365', sharedPage: true })).refused, said.notOffered);
-    // A reconnect has its own, by the account.
-    assert.equal(why(await h.setup.replyReconnect('email', '12')).offer, 'shared_page');
-    assert.equal(((await h.setup.replyReconnect('email', '12', { sharedPage: true })) as { linkKind: string }).linkKind, 'shared_page');
-    assert.deepEqual(h.verbs().slice(2), [
         ['account', 'reconnect', '12', '--channel', 'email', '--json'],
-        ['account', 'reconnect', '12', '--channel', 'email', '--allow-shared-page', '--json'],
     ]);
-    assert.ok(h.boxes.every((each) => each.detail.includes(replyCliSharedPageWarning)));
+    assert.deepEqual([h.opened, h.copied, h.boxes], [[], [], []]);
 });
 
 test('a LinkedIn account in use is the one door to --force: a box of its own, and never forced on the first try', async (t) => {
@@ -527,8 +492,6 @@ test('the link is a secret: no log line, no file, no refusal and no answer to th
             ...listed,
             STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn),
             STUB_REPLY_ACCOUNT_RECONNECT: print(printed.reconnectLinkedIn),
-            // A refusal whose words carry the token, as no CLI should: the desktop reads its code and nothing else.
-            STUB_REPLY_ACCOUNT_CONNECT_SHARED: JSON.stringify({ code: 'reply.unavailable', error: { detail: fixtureLinks.sharedIndex } }),
         },
     });
     const log = fileLogger(b.paths.logs);
@@ -582,19 +545,15 @@ test('a link that expires is copied instead of opened where the page asks, and t
     assert.deepEqual([none.copied, none.opened], [[], []]);
 });
 
-test('the shared mailbox page is never copied, whatever the page asks, nor opened in its place', async (t) => {
-    const h = await listedHarness(t, {
-        STUB_REPLY_ACCOUNT_CONNECT: refused('email_link.not_available'),
-        STUB_REPLY_ACCOUNT_CONNECT_SHARED: print(printed.connectEmailShared),
-        // A shared page printed where none was asked for is held to the same rule.
-        STUB_REPLY_ACCOUNT_RECONNECT: print(printed.reconnectEmailShared),
-    });
-    await h.setup.replyConnect('email', { provider: 'gmail', copy: true });
+test('a shared mailbox page an older Reply CLI prints is neither opened nor copied: the desktop reads it as no link', async (t) => {
+    const shared = { ...printed.reconnectEmail, link_kind: 'shared_page', expires_at: null, pending_id: null };
+    const h = await listedHarness(t, { STUB_REPLY_ACCOUNT_RECONNECT: print(shared), STUB_REPLY_ACCOUNT_CONNECT: print({ ...shared, kind: 'connect' }) });
     const answers = [
-        await h.setup.replyConnect('email', { provider: 'gmail', sharedPage: true, copy: true }),
+        await h.setup.replyReconnect('email', '12'),
         await h.setup.replyReconnect('email', '12', { copy: true }),
+        await h.setup.replyConnect('email', { provider: 'gmail' }),
     ];
-    for (const answer of answers) assert.deepEqual(answer, { refused: said.sharedPageNotCopied, code: null, offer: null, reread: false });
+    for (const answer of answers) assert.deepEqual(answer, { refused: said.outcomeUnknown, code: null, offer: null, reread: true });
     assert.deepEqual([h.copied, h.opened], [[], []]);
     assert.equal(JSON.stringify(answers).includes(fixtureLinks.token), false);
 });
