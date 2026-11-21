@@ -1576,6 +1576,8 @@ interface WalkReading extends ShellReading {
     named: boolean;
     /** The folders a change the reading cannot follow may lead to, besides those the shell has been in (`unfollowedFolders`). */
     candidates?: () => readonly string[];
+    /** The literal values the text gives its own variables (`assignedValues`). */
+    assigned?: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -1609,10 +1611,63 @@ function fixedPart(value: string, platform: Platform): string | null {
  * such a folder, its home spelling taken (`homeExpanded`), read from the folder it is read in.
  */
 function builtRoot(word: string, scope: ChatScope): boolean {
-    const value = nativeSpelling(homeExpanded(word, scope), scope);
+    if (profileCall.test(word)) return true;
+    const drive = driveSpelled(word, scope);
+    // A drive a variable names alone may be read as its top.
+    if (drive !== word && /^[A-Za-z]:$/.test(drive)) return true;
+    const value = nativeSpelling(homeExpanded(drive, scope), scope);
     if (/^~[^\\/]/.test(value)) return true;
     const fixed = fixedPart(value, scope.platform);
     return fixed !== null && fixed !== '' && isRoot(located(fixed, scope), scope);
+}
+
+/** PowerShell's call for a folder of the account's, which may be its profile's: a spelling of a folder that holds the data directory. */
+const profileCall = /\[(?:System\.)?Environment\]::GetFolderPath\(/i;
+
+/** A variable of the profile's drive or path, or of the system's drive, in every spelling the chat's shells take. */
+const driveVariable = /^(?:\$\{(?:env:)?(HOMEDRIVE|HOMEPATH|SystemDrive)\}|\$(?:env:)?(HOMEDRIVE|HOMEPATH|SystemDrive)(?![\w])|%(HOMEDRIVE|HOMEPATH|SystemDrive)%)/i;
+
+/**
+ * On Windows, a word whose leading variable is the profile's drive, the profile's path or the system's drive with that
+ * value put in (`knownVariable`); any other word as it is.
+ */
+function driveSpelled(word: string, scope: ChatScope): string {
+    if (scope.platform !== 'win32') return word;
+    const match = driveVariable.exec(word);
+    if (match === null) return word;
+    const value = knownVariable((match[1] ?? match[2] ?? match[3]) as string, scope, [])?.[0];
+    return value === undefined ? word : `${value}${word.slice(match[0].length)}`;
+}
+
+/** The variables whose value is never a path: a status, a count, a process's id, the shell's flags, PowerShell's constants. */
+const valueVariables = /^\$(?:[?#$!-]|\{[?#$!-]\}|(?:true|false|null)(?![\w:]))/i;
+/** A variable a word begins with: `$name`, `${name}`, `$env:name`, and on Windows `%name%`. */
+const leadingVariable = /^(?:\$\{(?:env:)?([A-Za-z_]\w*)[^}]*\}|\$(?:env:)?([A-Za-z_]\w*|\d|[@*])|%([A-Za-z_]\w*)%)/i;
+
+/**
+ * True when a word, or a piece of it after `=`, `@` or `,`, begins with a variable the reading does not know, so that
+ * nothing fixes where it leads before the shell builds it: a home spelling, a variable of the profile or the system
+ * (`knownVariable`), one the text gives literal values (`assignedValues`) and one whose value is never a path
+ * (`valueVariables`) aside.
+ */
+function unfixedVariable(word: WrittenWord, place: WalkPlace, reading: WalkReading): boolean {
+    if (!word.built) return false;
+    const { scope, powershell } = reading;
+    return word.text.split(/[=@,]/).some((piece) => {
+        if (valueVariables.test(piece) || homeExpanded(piece, scope) !== piece) return false;
+        const match = leadingVariable.exec(piece);
+        if (match === null || (match[3] !== undefined && scope.platform !== 'win32')) return false;
+        const name = (match[1] ?? match[2] ?? match[3]) as string;
+        return (reading.assigned?.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders)) === null;
+    });
+}
+
+/** A word's spellings for the walk: as written, and with the variables the reading knows put in (`resolvedSpellings`). */
+function walkSpellings(word: WrittenWord, place: WalkPlace, reading: WalkReading): string[] {
+    const { scope, powershell } = reading;
+    if (!word.built || reading.assigned === undefined) return [word.text];
+    const values = (name: string) => reading.assigned?.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
+    return [word.text, ...(resolvedSpellings(word, values, scope) ?? [])];
 }
 
 /**
@@ -1851,9 +1906,11 @@ function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): 
     const { scope, powershell } = reading;
     const program = each.program ?? '';
     const slashes = scope.platform === 'win32' && slashPrograms.has(program);
-    const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && place.folders.some((folder) => wordNamesRoot(arg.text, folder, reading, false)));
+    const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && walkSpellings(arg, place, reading).some((text) => place.folders.some((folder) => wordNamesRoot(text, folder, reading, false))));
     if (named) return 'walk';
     if (place.folders.some((folder) => isRoot(folder, scope))) return 'in';
+    // A word that begins with a variable the reading does not know may name any folder, such a one among them.
+    if (each.args.some((arg) => unfixedVariable(arg, place, reading))) return 'walk';
     if (!reading.named) return null;
     if (place.unknown) return 'in';
     const walks = inputRunners.has(program)
@@ -1914,7 +1971,14 @@ function optionWord(word: string, platform: Platform): boolean {
  */
 function walksRoot(tool: string, command: string, scope: ChatScope): WalkKind | null {
     const powershell = tool === 'PowerShell';
-    const base = { scope, powershell, redefined: redefines(command, powershell), named: false, candidates: unfollowedFolders(command, { scope, powershell }) };
+    const base = {
+        scope,
+        powershell,
+        redefined: redefines(command, powershell),
+        named: false,
+        candidates: unfollowedFolders(command, { scope, powershell }),
+        assigned: assignedValues(command, { scope, powershell }),
+    };
     const reading: WalkReading = { ...base, named: namesAnyRoot(command, base, 0) };
     const start = located(scope.cwd, scope);
     const first: WalkPlace = { folders: [start], seen: [start], unknown: false };

@@ -929,9 +929,10 @@ search or a walk of a folder that holds the data directory, your home folder or 
 tool or by a command (a recursive search, a finder, a size, a tree, a recursive listing, a copy, an archive or a removal
 of it, or any other command on such a folder but a listing of its names, a search or a read of a file it names, a look
 at a path, a print or a change of folder, an option those do not take included), would reach that data without naming
-it, so it is refused with the words to name a narrower folder, Documents or Desktop say; any other program run in such
-a folder is refused with the words to run it in a narrower folder or to name the folder it should work on. A listing of
-such a folder's names runs. A `jq` program
+it, so it is refused with the words to name a narrower folder, Documents or Desktop say, and so is such a command on a
+folder a variable names that the check does not know; any other program run in such a folder is refused with the words
+to run it in a narrower folder or to name the folder it should work on. A listing of such a folder's names runs. A `jq`
+program
 that reads the environment or a file by its own words (`env`, `$ENV`, `import`, `include`, a program from a file), and a
 command told on its input which files to read (`--files0-from`), are refused too. A Glob pattern is read where it can lead, and one whose brace group
 can name another folder is refused. On

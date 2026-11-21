@@ -433,6 +433,36 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('a word that begins with a variable the reading does not know is refused in a form that descends or copies, and runs in a plain one; a variable the text gives a literal value is read as that value; the profile\'s drive, its path, the system drive and the folder PowerShell is asked for name a folder that holds the data directory', () => {
+    for (const scope of scopes) {
+        for (const command of ['grep -r api_key "$X"', 'du -sh "$X"', 'rsync -a "$X" /tmp/copy', 'ls -R $X', 'cp -r ${X} copy', 'zip -r x.zip "${X:-.}"', 'for d in ~ /; do du -sh "$d"; done', 'd=~; tar -cf x.tar "$d"', 'ls "$X"', 'grep api_key "$X"']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: searchRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cat "$X"', 'echo "$X"', 'head -n 5 "$X"', 'd=~/Documents; du -sh "$d"', 'for f in a.txt b.txt; do wc -l "$f"; done', 'test -d "$X" && echo $?', 'd=~/Documents; ls "$d"']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+    for (const command of [
+        'Get-ChildItem $env:SystemDrive -Recurse',
+        'Get-ChildItem $env:SystemDrive\\ -Recurse',
+        'Get-ChildItem "$env:HOMEDRIVE\\" -Recurse',
+        'Get-ChildItem $env:HOMEPATH -Recurse',
+        'Get-ChildItem ([Environment]::GetFolderPath(\'UserProfile\')) -Recurse',
+        'Get-ChildItem -Path ([System.Environment]::GetFolderPath("Desktop")) -Recurse',
+        'Get-ChildItem $x -Recurse',
+        'Remove-Item $x -Recurse',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
+    }
+    for (const command of ['du -sh "$SYSTEMDRIVE/"', 'du -sh $HOMEDRIVE/']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
+    }
+    for (const command of ['Get-ChildItem $x', 'Write-Output $x', 'Get-ChildItem $env:SystemDrive\\Users\\someone\\Documents']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'runs' }, command);
+    }
+});
+
 test('a folder change the reading cannot follow, by a place on the folder stack, two operands, an option the shell sets, a search path of its own or a sourced file, leaves the shell in any folder it has been in or the text names: a walk, a program run there and a read from there are refused', () => {
     for (const scope of scopes) {
         for (const [command, sentence] of [
