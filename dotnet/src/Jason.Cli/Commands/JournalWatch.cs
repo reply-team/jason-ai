@@ -50,7 +50,7 @@ public static class JournalWatch
         var look = reader.Look();
         if (look.Descriptor is not { } descriptor)
         {
-            return Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
+            return Fail(env, human, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
         }
 
         var path = string.IsNullOrEmpty(after)
@@ -69,11 +69,11 @@ public static class JournalWatch
         }
         catch (HttpRequestException ex)
         {
-            return Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not open the journal's stream ({ex.Message}). The descriptor may be stale.");
+            return Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not open the journal's stream ({ex.Message}). The descriptor may be stale.");
         }
         catch (TaskCanceledException)
         {
-            return Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time.");
+            return Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time.");
         }
 
         using (stream)
@@ -82,10 +82,10 @@ public static class JournalWatch
             {
                 if (refusal.StatusCode == 401)
                 {
-                    return Fail(env, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale.");
+                    return Fail(env, human, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale.");
                 }
 
-                env.Out.WriteLine(OperationRunner.ErrorText(refusal));
+                CliErrors.Print(env.Out, human, OperationRunner.ErrorText(refusal));
                 return ExitCodes.ApiError;
             }
 
@@ -117,15 +117,15 @@ public static class JournalWatch
             }
             catch (WebSocketException ex)
             {
-                return Fail(env, CliErrors.RuntimeUnreachable, $"The journal's stream from the runtime at {baseUrl} broke off ({ex.Message}).");
+                return Fail(env, human, CliErrors.RuntimeUnreachable, $"The journal's stream from the runtime at {baseUrl} broke off ({ex.Message}).");
             }
 
             if (received.MessageType == WebSocketMessageType.Close)
             {
                 await CloseAsync(socket).ConfigureAwait(false);
                 return received.CloseStatus == WebSocketCloseStatus.PolicyViolation
-                    ? Fail(env, CliErrors.Unauthorized, $"The runtime ended the journal's stream: {received.CloseStatusDescription}")
-                    : Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {baseUrl} ended the journal's stream: {received.CloseStatusDescription}");
+                    ? Fail(env, human, CliErrors.Unauthorized, $"The runtime ended the journal's stream: {received.CloseStatusDescription}")
+                    : Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {baseUrl} ended the journal's stream: {received.CloseStatusDescription}");
             }
 
             // A frame may arrive in parts, and a character may straddle two of them: the text is read once it is whole.
@@ -159,9 +159,9 @@ public static class JournalWatch
         }
     }
 
-    private static int Fail(CliEnvironment env, string code, string message, bool retryable = true)
+    private static int Fail(CliEnvironment env, bool human, string code, string message, bool retryable = true)
     {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
+        CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 

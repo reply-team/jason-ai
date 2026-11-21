@@ -25,7 +25,7 @@ public static class RuntimeStatusCommand
         var look = reader.Look();
         if (look.Descriptor is not { } descriptor)
         {
-            return Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
+            return Fail(env, human, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
         }
 
         using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock, confined: env.Confined());
@@ -36,21 +36,21 @@ public static class RuntimeStatusCommand
         }
         catch (HttpRequestException ex)
         {
-            return Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer ({ex.Message}). The descriptor may be stale.", retryable: true);
+            return Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer ({ex.Message}). The descriptor may be stale.", retryable: true);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time.", retryable: true);
+            return Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time.", retryable: true);
         }
 
         if (response.StatusCode == 401)
         {
-            return Fail(env, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale.", retryable: true);
+            return Fail(env, human, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale.", retryable: true);
         }
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -66,7 +66,7 @@ public static class RuntimeStatusCommand
 
         if (info is null || !string.Equals(info.InstanceId, descriptor.InstanceId, StringComparison.Ordinal))
         {
-            return Fail(env, CliErrors.StaleDescriptor, $"The descriptor names instance '{descriptor.InstanceId}' but the runtime answering at {descriptor.BaseUrl} is '{info?.InstanceId ?? "unknown"}'.", retryable: true);
+            return Fail(env, human, CliErrors.StaleDescriptor, $"The descriptor names instance '{descriptor.InstanceId}' but the runtime answering at {descriptor.BaseUrl} is '{info?.InstanceId ?? "unknown"}'.", retryable: true);
         }
 
         if (human)
@@ -81,9 +81,9 @@ public static class RuntimeStatusCommand
         return ExitCodes.Success;
     }
 
-    private static int Fail(CliEnvironment env, string code, string message, bool retryable)
+    private static int Fail(CliEnvironment env, bool human, string code, string message, bool retryable)
     {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
+        CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 
