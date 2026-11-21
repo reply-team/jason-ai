@@ -492,10 +492,12 @@ applies to the turns a person starts by sending, from the next one on.
     run another link to the person's own settings file or run file as the person's own (`linksPersonsOwn`). With no
     read blocked, a walk of a folder that
     holds the data directory (the home folder, a drive's top, the data directory's parents) is the data's kind: a search
-    of it by the Grep or Glob tool (`walkKind`), and a command that names such a folder, runs in one after a folder
-    change, or takes a word the shell builds from one, in any form but the few known not to descend (`plainWalkForm`: a
-    listing or a search with only its table's options, a read of a file, a print, a folder change), are refused by the
-    sentence that says to name a narrower folder (`searchRefusal`, `walksRoot`). So is a command that reads what no word
+    of it by the Grep or Glob tool (`walkKind`), and a command that names such a folder or takes a word the shell builds
+    from one, in any form but the few known not to descend (`plainWalkForm`: a listing or a search with only its table's
+    options, a read of a file, a look at a path, a print, a folder change), a removal among them, are refused by the
+    sentence that says to name a narrower folder (`searchRefusal`, `walksRoot`); a command in any other form that runs in
+    such a folder, or where a change led that the walk did not follow, by the sentence that says to run it in a narrower
+    folder or name the folder it should work on (`inRootRefusal`). So is a command that reads what no word
     of it shows (`unseenReadRefusal`): a jq program that holds `env`, `$ENV`, `import`, `include` or `modulemeta`, takes
     its program from a file or is given a word the shell builds (`jqRefusal`), and `sort`, `wc`, `du` or `find` told the
     files it reads by `--files0-from` (`filesFromRefusal`). A plain listing of such a folder runs. A Glob pattern is read where it can lead, its fixed folders climbed once for each `..` after

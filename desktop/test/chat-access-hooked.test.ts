@@ -31,6 +31,7 @@ import {
     ownToolRefusal,
     personsRefusal,
     rootHelpRefusal,
+    inRootRefusal,
     searchRefusal,
     settingsRefusal,
     type ChatScope,
@@ -413,6 +414,22 @@ test('the host\'s read-only commands read anywhere with no card in Ask first and
     }
 });
 
+test('a command that removes or descends from a folder that holds the data directory is refused with the walk\'s sentence, and another program run in such a folder with the sentence that says to run it in a narrower folder or name the folder it should work on; a plain form there runs', () => {
+    for (const scope of scopes) {
+        for (const command of ['du -sh ~', 'rm -rf ~/', 'rm -r ~', 'cd ~ && rm -rf .', 'cd / && grep -r api_key .']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: searchRefusal }, `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cd ~ && git status', 'cd ~ && frobnicate', 'cd /; make', 'cd ~ && npm test']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: inRootRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.equal(judged.verdict, 'ask', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cd ~ && ls', 'cd ~ && cat Desktop/notes.txt', 'cd ~ && pwd', 'cd ~ && echo done']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'cd ~; git status' }, windows), { outcome: 'refused', message: inRootRefusal });
+});
+
 test('a folder that holds the data directory is walked in no form but those the chat knows do not descend: any other option, an abbreviated long one among them, any -d value, and a program that descends or copies is refused by the hook and the model\'s card each time', () => {
     for (const scope of scopes) {
         const root = scope.platform === 'win32' ? '/c/Users/someone' : scope.home;
@@ -727,6 +744,12 @@ test('the settings and the data refusals say what is closed, that it is Jason\'s
     assert.match(dataRefusal, /`jason campaign list`/);
     assert.match(searchRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
     assert.match(searchRefusal, /Name a narrower folder that does not hold it/);
+    assert.match(searchRefusal, /search, walk, copy, archive or remove/);
+    assert.match(searchRefusal, /On such a folder the chat runs a listing of its names, a read or a search of a file named in it, a look at a path/);
+    assert.match(inRootRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
+    assert.match(inRootRefusal, /Run it in a narrower folder/);
+    assert.match(inRootRefusal, /name in the command the folder it should work on/);
+    assert.notEqual(inRootRefusal, searchRefusal);
     for (const sentence of [confinedRefusal, attemptRefusal, lookupRefusal]) assert.match(sentence, /Jason's own (?:variables? )?(?:for this turn )?and not the person's/, sentence);
     assert.match(ownToolRefusal, /Jason's own, set for this turn/);
     // A walk of such a folder would pass through Jason's own data, and the sentence names the narrower folder to use.

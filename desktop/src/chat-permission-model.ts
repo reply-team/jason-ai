@@ -240,9 +240,18 @@ export const ownToolRefusal =
  * (`dataRefusal`).
  */
 export const searchRefusal =
-    'That folder holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, so a search, a walk, a copy or an archive of '
-    + 'it would pass through Jason\'s own data: the chat does not take it, and runs on such a folder only a plain listing, such as `ls ~`. Name a narrower '
-    + 'folder that does not hold it, such as Documents or Desktop. Nothing was done.';
+    'That would search, walk, copy, archive or remove a folder that holds Jason\'s data directory, the installation\'s own data and not one of the person\'s '
+    + 'files, or one the chat cannot tell from such a folder, so it would pass through Jason\'s own data: the chat does not take it. On such a folder the chat '
+    + 'runs a listing of its names, a read or a search of a file named in it, a look at a path, a print and a change of folder. Name a narrower folder that '
+    + 'does not hold it, written out, such as Documents or Desktop. Nothing was done.';
+/**
+ * Where the hook rides the turn, the refusal of a program that is no plain form run in a folder that holds the data
+ * directory, or in one the walk could not follow (`walksRoot`), whatever it names.
+ */
+export const inRootRefusal =
+    'That would run a program in a folder that holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, or in one the '
+    + 'chat could not follow, where it may read through Jason\'s own data: the chat does not take it. Run it in a narrower folder, written out, such as '
+    + 'Documents or Desktop, or name in the command the folder it should work on. Nothing was done.';
 /**
  * Where the hook rides the turn, the refusal of a jq program that reads what its input does not hold: the environment
  * (`env`, `$ENV`), a module or a data file by its own words (`import`, `include`), or a program from a file (`-f`).
@@ -1720,26 +1729,27 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
 }
 
 /**
- * True when a command walks a folder that holds the data directory: it names one as a word, read from each folder the
- * shell may be in, or runs in one; or, where some word of the whole command names one, it runs where a change led that
- * the walk did not follow, takes a word the shell builds, takes words from its standard input (`inputRunners`), runs
- * another program (`runsAnotherProgram`), a shell that reads a pipe among them, or in PowerShell is a command a pipe feeds
- * paths to that does not only print them (`powerShellPrints`).
+ * How a command walks a folder that holds the data directory: `walk` where it names one as a word, read from each folder
+ * the shell may be in, or, where some word of the whole command names one, takes a word the shell builds, takes words
+ * from its standard input (`inputRunners`), runs another program (`runsAnotherProgram`), a shell that reads a pipe among
+ * them, or in PowerShell is a command a pipe feeds paths to that does not only print them (`powerShellPrints`); `in`
+ * where it runs in one, or, where some word of the whole command names one, where a change led that the walk did not
+ * follow. Null when it walks none.
  */
-function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): boolean {
+function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): WalkKind | null {
     const { scope, powershell } = reading;
     const program = each.program ?? '';
     const slashes = scope.platform === 'win32' && slashPrograms.has(program);
     const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && place.folders.some((folder) => wordNamesRoot(arg.text, folder, reading, false)));
-    if (named || place.folders.some((folder) => isRoot(folder, scope))) return true;
-    if (!reading.named) return false;
-    return (
-        place.unknown
-        || inputRunners.has(program)
+    if (named) return 'walk';
+    if (place.folders.some((folder) => isRoot(folder, scope))) return 'in';
+    if (!reading.named) return null;
+    if (place.unknown) return 'in';
+    const walks = inputRunners.has(program)
         || runsAnotherProgram(program)
         || each.args.some((arg) => unknownWord(arg, scope))
-        || (powershell && each.command.piped && !powerShellPrints.has(program))
-    );
+        || (powershell && each.command.piped && !powerShellPrints.has(program));
+    return walks ? 'walk' : null;
 }
 
 /**
@@ -1751,9 +1761,9 @@ function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): 
  * them, which reads more than runs where a group or a pipe keeps the change to itself; `eval` keeps the change its words
  * make. Read deeper than `walkDepth`, a text walks where the command names such a folder.
  */
-function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth: number): { walks: boolean; place: WalkPlace } {
+function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth: number): { walks: WalkKind | null; place: WalkPlace } {
     const { scope, powershell } = reading;
-    if (depth > walkDepth) return { walks: reading.named || start.unknown || start.folders.some((folder) => isRoot(folder, scope)), place: start };
+    if (depth > walkDepth) return { walks: reading.named ? 'walk' : start.unknown || start.folders.some((folder) => isRoot(folder, scope)) ? 'in' : null, place: start };
     const { commands, pure } = readCommands(text, reading);
     let place = start;
     for (const each of commands) {
@@ -1761,17 +1771,21 @@ function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth:
             const args = each.args.map((arg) => arg.text);
             const unknown = (at: number) => unknownWord(each.args[at] as WrittenWord, scope);
             const plain = !reading.redefined && !each.assigned && !/[\\/]/.test(each.word) && plainWalkForm(each.program, args, powershell, unknown);
-            if (!plain && walksThere(each, place, reading)) return { walks: true, place };
+            const walks = plain ? null : walksThere(each, place, reading);
+            if (walks !== null) return { walks, place };
         }
         for (const inner of readAgain(each, pure, powershell)) {
             const read = walkedFrom(inner, place, reading, depth + 1);
-            if (read.walks) return { walks: true, place };
+            if (read.walks !== null) return { walks: read.walks, place };
             if (each.program === 'eval') place = read.place;
         }
         if (each.program !== null) place = changedPlace(each.program, each.args.map((arg) => arg.text), place, reading);
     }
-    return { walks: false, place };
+    return { walks: null, place };
 }
+
+/** How a command walks a folder that holds the data directory: from it, or in it (`walksThere`). */
+type WalkKind = 'walk' | 'in';
 
 /** A word that is an option and no folder: one that begins with a dash, or on Windows a short slash option (`/s`). */
 function optionWord(word: string, platform: Platform): boolean {
@@ -1786,22 +1800,30 @@ function optionWord(word: string, platform: Platform): boolean {
  * search of what it names alone, a print, a folder change. The commands are read as their shell splits them
  * (`walkedFrom`), and again from the literal reading, each from the folder a literal directory change sets for it.
  */
-function walksRoot(tool: string, command: string, scope: ChatScope): boolean {
+function walksRoot(tool: string, command: string, scope: ChatScope): WalkKind | null {
     const powershell = tool === 'PowerShell';
     const base = { scope, powershell, redefined: redefines(command, powershell), named: false };
     const reading: WalkReading = { ...base, named: namesAnyRoot(command, base, 0) };
     const start = located(scope.cwd, scope);
-    if (walkedFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).walks) return true;
+    const walked = walkedFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).walks;
+    if (walked !== null) return walked;
     const literal = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
-    if (literal.held) return false;
-    return literal.commands.some(({ words, cwd }) => {
+    if (literal.held) return null;
+    for (const { words, cwd } of literal.commands) {
         const at = cwd === null ? start : located(nativeSpelling(cwd, scope), scope);
         const [word = '', ...args] = words;
         const program = programKey(scope.platform, word, powershell);
-        if (!reading.redefined && !/[\\/]/.test(word) && plainWalkForm(program, args, powershell, () => false)) return false;
+        if (!reading.redefined && !/[\\/]/.test(word) && plainWalkForm(program, args, powershell, () => false)) continue;
         const slashes = scope.platform === 'win32' && slashPrograms.has(program);
-        return isRoot(at, scope) || args.some((arg) => !(slashes && optionWord(arg, scope.platform)) && wordNamesRoot(arg, at, reading, true));
-    });
+        if (args.some((arg) => !(slashes && optionWord(arg, scope.platform)) && wordNamesRoot(arg, at, reading, true))) return 'walk';
+        if (isRoot(at, scope)) return 'in';
+    }
+    return null;
+}
+
+/** The sentence a walk of a folder that holds the data directory is refused by, by how it walks it (`walksRoot`). */
+function walkRefusal(walks: WalkKind | null): string | null {
+    return walks === 'walk' ? searchRefusal : walks === 'in' ? inRootRefusal : null;
 }
 
 /** A word that names jq's environment, or reads a module or a data file by jq's own words. */
@@ -2510,7 +2532,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
         let walks: boolean;
         try {
             unseen = readKinds(tool, command, scope) ?? unseenReadRefusal(tool, command, scope);
-            walks = walksRoot(tool, command, scope);
+            walks = walksRoot(tool, command, scope) !== null;
         } catch {
             unseen = unreadRefusal;
             walks = false;
@@ -3201,7 +3223,7 @@ function commandKind(tool: string, command: string, scope: ChatScope): string | 
     // data, reach it without naming it: the data's kind too.
     const unseen = unseenReadRefusal(tool, command, scope);
     if (unseen !== null) return unseen;
-    return walksRoot(tool, command, scope) ? searchRefusal : null;
+    return walkRefusal(walksRoot(tool, command, scope));
 }
 
 /**
