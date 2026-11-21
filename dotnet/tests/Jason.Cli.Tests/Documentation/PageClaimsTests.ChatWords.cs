@@ -49,5 +49,11 @@ public partial class PageClaimsTests
         var flat = Flat(operating);
         Assert.Contains("It exits 0 or 1 and never 3, so read `ready` in its body.", flat, StringComparison.Ordinal);
         Assert.Contains("ask it with `jason runtime status --human`, which exits 3 when nothing answers.", flat, StringComparison.Ordinal);
+
+        // The troubleshooting skill's first reading, whether the runtime answers at all, is the same check.
+        var troubleshooting = Page("skills", "runtime", "troubleshooting-jason", "SKILL.md");
+        Assert.Contains("starts one where none does.\n\n```\njason status --human\n```\n", troubleshooting, StringComparison.Ordinal);
+        Assert.Contains("Its `runtime` check says whether a runtime answers, and the command that starts one where none does.", Flat(troubleshooting), StringComparison.Ordinal);
+        Assert.DoesNotContain("installation looks stuck for the same reason.\n\n```\njason runtime status --human\n```", troubleshooting, StringComparison.Ordinal);
     }
 }
