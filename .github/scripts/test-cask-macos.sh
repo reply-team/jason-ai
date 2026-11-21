@@ -28,7 +28,7 @@
 #   carried-uninstall              the carried jason uninstall: exit 0, the application, its link and its state under
 #                                  ~/Library kept, and brew uninstall --zap --cask jason named
 #   zap                            brew uninstall --zap --cask jason, with no --force: the application, the link,
-#                                  Homebrew's record, the wrapper and the starts at logon gone; the profile lines and
+#                                  Homebrew's record, the wrapper and both launch agents' files gone; the profile lines and
 #                                  the skills recorded, not held
 #   formula <tarball> <version>    jasonproof/test's formula, installing the command line of <tarball>, the older formula's
 #                                  release, installed and linked
@@ -259,6 +259,7 @@ carried-uninstall)
     there=()
     for place in "${state_places[@]}"; do [ -e "$place" ] && there+=("$place"); done
     printf '%s\n' "${there[@]:-}" > "$OUT/cask-state-before-carried-uninstall.txt"
+    [ "${#there[@]}" -gt 0 ] || fail "none of the application's state under ~/Library was there before the carried jason uninstall, though the leg opened the application"
     status=0
     "$CARRIED" uninstall > "$OUT/cask-carried-uninstall.json" 2>"$OUT/cask-carried-uninstall.err" || status=$?
     cat "$OUT/cask-carried-uninstall.json"
@@ -285,13 +286,10 @@ zap)
     [ ! -e "$HOME/.local/bin/jason" ] || fail "the wrapper $HOME/.local/bin/jason is still there after the zap"
     agents="$(ls "$HOME"/Library/LaunchAgents/ai.jason.runtime.plist "$HOME"/Library/LaunchAgents/$IDENTIFIER.plist 2>/dev/null || true)"
     [ -z "$agents" ] || fail "a start at logon is still there after the zap: $agents"
-    for label in ai.jason.runtime "$IDENTIFIER"; do
-        ! launchctl print "gui/$(id -u)/$label" > /dev/null 2>&1 || fail "the launchd job $label is still loaded after the zap"
-    done
     profiles="$(grep -l '\.local/bin' "$HOME"/.zprofile "$HOME"/.zshrc "$HOME"/.profile "$HOME"/.bashrc 2>/dev/null | tr '\n' ' ' || true)"
-    skills="$(ls -d "$HOME"/.claude/skills/* "$HOME"/.agents/skills/* 2>/dev/null | wc -l | tr -d ' ')"
+    skills="$( { find "$HOME/.claude/skills" -mindepth 1 -maxdepth 1 2>/dev/null || true; find "$HOME/.agents/skills" -mindepth 1 -maxdepth 1 2>/dev/null || true; } | wc -l | tr -d ' ')"
     say "recorded, not asserted: after the zap the profiles naming ~/.local/bin are '${profiles:-none}', and $skills skill folder(s) are under ~/.claude/skills and ~/.agents/skills"
-    say "brew uninstall --zap --cask jason, with no --force, took the application, its link, Homebrew's record, the wrapper and the starts at logon"
+    say "brew uninstall --zap --cask jason, with no --force, took the application, its link, Homebrew's record, the wrapper and both launch agents' files"
     ;;
 
 formula)

@@ -34,12 +34,10 @@ cask "jason" do
         args:         ["uninstall", "--keep-application"],
         must_succeed: false,
       },
-      launchctl: [
-        "ai.jason.runtime",
-        "ai.jasonharness.desktop",
-      ],
       delete:    [
         "~/.local/bin/jason",
+        "~/Library/LaunchAgents/ai.jason.runtime.plist",
+        "~/Library/LaunchAgents/ai.jasonharness.desktop.plist",
       ],
       trash:     [
         "~/Library/Application Support/ai.jasonharness.desktop",

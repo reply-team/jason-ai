@@ -128,15 +128,16 @@ public sealed partial class HomebrewCaskTests : IDisposable
 
     /// <summary>
     /// The zap takes off, with no application needed, the two things a plain uninstall leaves pointing at nothing: the
-    /// wrapper, by its path, and the start at logon, by the runtime's and the application's launchd labels.
+    /// wrapper and the start at logon, by deleting the wrapper and both launch agents' files. It asks launchd nothing, since
+    /// Homebrew's launchctl stanza also asks under sudo, which on a person's Mac would ask for a password.
     /// </summary>
     [Fact]
     public void The_casks_zap_takes_the_wrapper_and_the_starts_at_logon_without_the_application()
     {
         var zap = Between(Template(), "zap script:", "trash:");
 
-        Assert.Contains($"launchctl: [\n        \"{Jason.Cli.Autostart.AutostartArtifacts.Label}\",\n        \"{DesktopRemoval.Identifier}\",\n      ]", zap, StringComparison.Ordinal);
-        Assert.Contains("delete:    [\n        \"~/.local/bin/jason\",\n      ]", zap, StringComparison.Ordinal);
+        Assert.Contains($"delete:    [\n        \"~/.local/bin/jason\",\n        \"~/Library/LaunchAgents/{Jason.Cli.Autostart.AutostartArtifacts.Label}.plist\",\n        \"~/Library/LaunchAgents/{DesktopRemoval.Identifier}.plist\",\n      ]", zap, StringComparison.Ordinal);
+        Assert.DoesNotContain("launchctl", zap, StringComparison.Ordinal);
     }
 
     [Fact]
