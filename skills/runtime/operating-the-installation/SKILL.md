@@ -22,15 +22,15 @@ written a route.
 ## Is it running
 
 ```
-jason runtime status --human
+jason status --human
 ```
 
-That asks the runtime for `system.info` and prints what it says: the version, the data directory it is using,
-how long it has been up, the migrations applied, and — once the runtime has successfully asked the release
-feed — an `update` section saying whether a newer version exists.
-
-If nothing answers, the command exits 3 and says the runtime is unreachable. That is a runtime that is not
-running, not a runtime that is broken; start it. If it answers but reports a data directory you did not expect,
+That checks whether this installation can start work, and its `runtime` check says whether a runtime is running:
+its version, its process id and the data directory it is using, or that none answers and the command that starts
+one. It exits 0 or 1 and never 3, so read `ready` in its body. A runtime that does not answer is one that is not
+running, not one that is broken; start it. For what the runtime says about itself, how long it has been up, the
+migrations applied and, once it has asked the release feed, whether a newer version exists, ask it with
+`jason runtime status --human`, which exits 3 when nothing answers. If it answers but reports a data directory you did not expect,
 something is running under a different `JASON_DATA_DIR` than the one you are typing against, and the two will
 disagree about everything else you ask.
 
