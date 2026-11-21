@@ -194,10 +194,12 @@ export interface CardedForm {
  * which takes the release's own, runs with no card, and a form that names another keeps one. So `update apply` with a
  * version or a feed, `plugin install` from another feed or over the package there, `skills install` and `skills update`
  * from another source, feed, root or ref, `ui install` from another feed, and `install` told an executable to retire;
- * the search path a terminal has, which `install --terminal-path` gives, names no source and runs with no card. Every
- * other jason verb runs there with no card (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each
- * written as the chat's instructions write a person's word; below the floor nothing changed, and Plan only runs none of
- * them.
+ * the search path a terminal has, which `install --terminal-path` gives, names no source and runs with no card. A
+ * program a role will be run by is a source of code too: an option of `profile create` and `profile update` that names
+ * the program or the command a role will be run by keeps a card, and so does `--file`, whose body can name either.
+ * Every other jason verb runs there with no card (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them,
+ * each written as the chat's instructions write a person's word; below the floor nothing changed, and Plan only runs
+ * none of them.
  */
 export const askingCardedForms: readonly CardedForm[] = [
     { verb: 'uninstall' },
@@ -211,6 +213,8 @@ export const askingCardedForms: readonly CardedForm[] = [
     { verb: 'skills update', options: ['--source', '--feed', '--root', '--ref'] },
     { verb: 'ui install', options: ['--feed'] },
     { verb: 'install', options: ['--retire'] },
+    { verb: 'profile create', options: ['--program', '--cli-command', '--file'] },
+    { verb: 'profile update', options: ['--program', '--cli-command', '--file'] },
 ];
 
 /**

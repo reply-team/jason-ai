@@ -370,9 +370,10 @@ applies to the turns a person starts by sending, from the next one on.
     another source, place, ref or version, while its plain form, which takes the release's own, runs with no card:
     `update apply` with `--version` or `--feed`; `plugin install` with `--feed` or `--replace`; `skills install` and
     `skills update` with `--source`, `--feed`, `--root` or `--ref`; `ui install` with `--feed`; and `install` with
-    `--retire`. Each is a card, its words told in any letter case and with anything between them
-    (`holdsEntry`), its option anywhere among them, with its value after `=` or `:` too, and in a compound; the help of
-    one of them, a `--help` or `-h` before any `--`, runs;
+    `--retire`. The program or the command a role will be run by is such a source too: `profile create` and
+    `profile update` keep a card with `--program`, `--cli-command` or `--file`. Each is a card, its words told in any
+    letter case and with anything between them (`holdsEntry`), its option anywhere among them, with its value after `=`
+    or `:` too, and in a compound; the help of one of them, a `--help` or `-h` before any `--`, runs;
   - a `jason` whose words do not begin with a verb of `cliCommandTree`, the CLI's own tree held to
     `CliApp.BuildRootCommand` by DesktopDenyListTests, or with a noun's help, is a card (`namesCliVerb`): a word before
     the noun that the parser takes, the root's own name or a directive, and the executable's modes that are no verb

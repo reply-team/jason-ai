@@ -167,6 +167,10 @@ const noCard = [
     'jason update check',
     'jason profile list',
     'jason profile get default',
+    "jason profile create local-claude --host claude --description 'for the night runs' --tool web_search",
+    'jason profile update local-claude --arg --model --arg opus --deny Bash --tool web_search --host-version-verified 2.1.322',
+    "jason profile update local-claude --description 'for the night runs' --actor human:someone --reason 'as asked'",
+    'jason role set-profile researcher --execution-profile local-claude',
     'jason ui tokens',
     'jason doctor --dry-run',
     'jason doctor',
@@ -247,6 +251,14 @@ const carded = [
     'jason ui install --feed=https://example.com/manifest.json',
     'jason install --retire /opt/jason/jason',
     'jason install --terminal-path /usr/bin --retire /opt/jason/jason',
+    'jason profile create local-claude --host claude --program claude',
+    'jason profile create local-claude --program=claude',
+    'jason profile update local-claude --program claude',
+    'jason profile update local-claude --program:claude',
+    'jason profile create local-claude --host claude --cli-command jason',
+    'jason profile update local-claude --cli-command=jason',
+    'jason profile create local-claude --file profile.json',
+    'jason profile update local-claude --file=profile.json',
 ];
 
 test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but the carded forms: uninstall, import, export, update rollback and plugin grant in every form, and a verb that changes the installation in a form that names another source, place, ref or version, its plain form running with no card', () => {
@@ -262,6 +274,8 @@ test('in Ask first and Auto-edit every jason verb runs with no card, its help an
         ['skills update', ['--source', '--feed', '--root', '--ref']],
         ['ui install', ['--feed']],
         ['install', ['--retire']],
+        ['profile create', ['--program', '--cli-command', '--file']],
+        ['profile update', ['--program', '--cli-command', '--file']],
     ]);
     for (const scope of scopes) {
         // The search path a terminal has names no source: `install --terminal-path` runs with no card, in a spelling of the platform's own.
@@ -316,6 +330,16 @@ test('the carded forms keep their card whatever their spelling and in any compou
         'xargs jason uninstall',
         'jason.exe uninstall',
         '/usr/local/bin/jason uninstall',
+        'jason profile update local-claude --PROGRAM claude',
+        'jason profile update local-claude --Program=claude',
+        'jason profile create local-claude --PROGRAM:claude',
+        'jason PROFILE Create local-claude --program claude',
+        'jason profile --verbose update local-claude --program claude',
+        'jason status && jason profile update local-claude --program claude',
+        "jason profile create local-claude --description 'x' --program claude --reason 'as asked'",
+        'jason profile update local-claude --CLI-Command jason',
+        'jason profile create local-claude --File=profile.json',
+        "echo '{}' | jason profile create local-claude --file -",
     ];
     for (const scope of scopes) {
         for (const command of spellings) {
