@@ -47,7 +47,6 @@ import {
     refusalOf,
     replyAccountSentences as said,
     replyActLimitMs,
-    sharedPageBox,
     type ReplyAct,
     type ReplyBox,
     type ReplyRefusal,
@@ -189,15 +188,14 @@ export interface ReplyOpened {
     opened: true;
     channel: ReplyCliChannel;
     kind: 'connect' | 'reconnect';
-    linkKind: 'connection_link' | 'shared_page';
+    linkKind: 'connection_link';
     expiresAt: string | null;
     pendingId: number | null;
 }
 
 /**
  * A connection link the Reply CLI made, written to the clipboard by the main process for the person to hand on: what the
- * page learns of it. Only a link that expires and connects one account is copied, never the shared mailbox page, and the
- * link itself never reaches the page.
+ * page learns of it. The link itself never reaches the page.
  */
 export interface ReplyCopied {
     copied: true;
@@ -438,7 +436,7 @@ export class Setup {
     #acts = false;
     /** The accounts the last listing gave: an act names only one of them, and its box names it as the list does. */
     #listed: ReplyAccount[] = [];
-    /** The offers a refusal opened, each for the one ask it answered: the shared page, and a forced delete. */
+    /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
     #own: OwnServers;
@@ -762,20 +760,19 @@ export class Setup {
      * Runs one verb. The log says the act, the channel, the exit and the CLI's code, never what the verb printed or
      * wrote on stderr: a link's stdout is never logged, recorded or put into an error.
      */
-    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; sharedPage?: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
+    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
         const result = await this.#run('reply', `account ${act}`, args, { timeoutMs: replyActLimitMs });
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
         if (ending.kind === 'done') return { stdout: ending.stdout };
-        return refusalOf(ending, { verb: act, channel, write: options.write, sharedPage: options.sharedPage, force: options.force });
+        return refusalOf(ending, { verb: act, channel, write: options.write, force: options.force });
     }
 
     /**
-     * A link verb's ending: the link checked and handed to the system opener, or, where the person asked for a copy and
-     * the link is one that expires and connects one account, written to the clipboard; the page is told only which,
-     * when it expires and its pending entry. The shared mailbox page is never copied, whatever the page asked. The link
-     * is kept nowhere and logged nowhere.
+     * A link verb's ending: the link checked and handed to the system opener, or, where the person asked for a copy,
+     * written to the clipboard; the page is told only which, when it expires and its pending entry. The link is kept
+     * nowhere and logged nowhere.
      */
     async #open(answer: { stdout: string } | ReplyRefusal, copy: boolean): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         if ('refused' in answer) return answer;
@@ -783,7 +780,6 @@ export class Setup {
         if (printed === null) return refusal(said.outcomeUnknown, true);
         if (!isOpenableLink(printed.link)) return refusal(said.badLink, true);
         if (copy) {
-            if (printed.linkKind !== 'connection_link') return refusal(said.sharedPageNotCopied);
             if (this.#deps.copyLink === undefined) return refusal(said.notCopied, true);
             try {
                 this.#deps.copyLink(printed.link);
@@ -801,72 +797,40 @@ export class Setup {
         return { opened: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
     }
 
-    /**
-     * The shared page's door: open only after the CLI answered `email_link.not_available` to the same ask made without
-     * it, and gone through only on the person's yes to the box that carries the CLI's warning.
-     */
-    async #sharedPage(door: string): Promise<ReplyRefusal | null> {
-        if (!this.#doors.has(door)) return refusal(said.notOffered);
-        if (!(await this.#confirmed(sharedPageBox()))) return refusal(said.notConfirmed);
-        this.#doors.delete(door);
-        return null;
-    }
-
-    /** Keeps the door a refusal opened: the shared page after `not_available`, a forced delete after `account_in_use`. */
-    #keepDoor(door: string, answer: { stdout: string } | ReplyRefusal, offer: 'shared_page' | 'force'): void {
+    /** Keeps the door a refusal opened: a forced delete after `account_in_use`. */
+    #keepDoor(door: string, answer: { stdout: string } | ReplyRefusal, offer: 'force'): void {
         if ('refused' in answer && answer.offer === offer) this.#doors.add(door);
     }
 
     /**
      * Connects a new account by a link the CLI makes (`reply account connect`): LinkedIn under the name typed for it, a
-     * mailbox for its provider. With `sharedPage`, only after the CLI said one-mailbox links are not available here, and
-     * only on the person's yes, the same ask is made again with `--allow-shared-page`. With `copy`, the link is copied
-     * instead of opened, as `#open` says.
+     * mailbox for its provider. With `copy`, the link is copied instead of opened, as `#open` says. `sharedPage`, the
+     * shared mailbox page an earlier desktop offered, is no option any more and is refused.
      */
     replyConnect(channel: unknown, options: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
+        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
         if (channel === 'linkedin') {
             const problem = linkedInNameProblem(asked['name']);
             if (problem !== null) return Promise.resolve(refusal(problem));
-            if (asked['sharedPage'] === true || asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+            if (asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
             const name = (asked['name'] as string).trim();
             return this.#acting(async () => this.#open(await this.#verb('connect', 'linkedin', connectArguments({ channel: 'linkedin', name }), { write: true }), copy));
         }
         const provider = asked['provider'];
         if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
-        const shared = asked['sharedPage'] === true;
-        const door = `connect:email:${provider}`;
-        return this.#acting(async () => {
-            if (shared) {
-                const closed = await this.#sharedPage(door);
-                if (closed !== null) return closed;
-            }
-            const answer = await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider, allowSharedPage: shared }), { write: true, sharedPage: shared });
-            this.#keepDoor(door, answer, 'shared_page');
-            return this.#open(answer, copy);
-        });
+        return this.#acting(async () => this.#open(await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider }), { write: true }), copy));
     }
 
-    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; the shared page as above. */
+    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
     replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
-        const shared = asked['sharedPage'] === true;
-        if (shared && channel !== 'email') return Promise.resolve(refusal(said.badRequest));
+        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
         const account = this.#account(channel, accountId);
         if (account === null) return Promise.resolve(refusal(said.badId));
-        const door = `reconnect:email:${account.id}`;
-        return this.#acting(async () => {
-            if (shared) {
-                const closed = await this.#sharedPage(door);
-                if (closed !== null) return closed;
-            }
-            const answer = await this.#verb('reconnect', channel, reconnectArguments(channel, account.id, shared), { write: true, sharedPage: shared });
-            if (channel === 'email') this.#keepDoor(door, answer, 'shared_page');
-            return this.#open(answer, copy);
-        });
+        return this.#acting(async () => this.#open(await this.#verb('reconnect', channel, reconnectArguments(channel, account.id), { write: true }), copy));
     }
 
     /**

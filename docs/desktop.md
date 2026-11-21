@@ -606,16 +606,14 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   connects one account is copied. The desktop keeps the link nowhere, and the card says only that it was opened or
   copied and until when it connects an account. A limit's change, a pause, a resume, an unblock and a delete ask you
   first in a box of the desktop's own that names the account; with no window to ask in, or once the window is hidden or
-  closed, it does not act. Where Reply does not yet make a link for one mailbox, the card offers the account's shared
-  mailbox page instead, only on your click and after a box that warns that the address does not expire and lets whoever
-  holds it manage all of the user's mailboxes; it is always opened here, never copied. Where sequences use a LinkedIn
-  account, its delete is refused, and **Delete anyway** asks again in a box of its own. A signed-out LinkedIn account
-  offers **Reconnect**, and no pause or resume until it is reconnected. An answer that leaves the account's state unknown
-  reads the list again and shows what is; nothing is repeated by itself. The card lists the links made and not used yet
-  under their channel, with Waiting or Expired and their expiry; such a link is not shown again, so adding the account
-  again makes a new one. Finishing a connection happens on Reply's side, so the card learns of it by **Check now**,
-  **Check again** or a focus. Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply,
-  which the card links to.
+  closed, it does not act. Where Reply does not make a link for one mailbox, the card says the Reply CLI answered
+  `email_link.not_available`, and offers nothing else. Where sequences use a LinkedIn account, its delete is refused,
+  and **Delete anyway** asks again in a box of its own. A signed-out LinkedIn account offers **Reconnect**, and no pause
+  or resume until it is reconnected. An answer that leaves the account's state unknown reads the list again and shows
+  what is; nothing is repeated by itself. The card lists the links made and not used yet under their channel, with
+  Waiting or Expired and their expiry; such a link is not shown again, so adding the account again makes a new one.
+  Finishing a connection happens on Reply's side, so the card learns of it by **Check now**, **Check again** or a focus.
+  Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the card links to.
   The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
   only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
   `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the

@@ -164,15 +164,15 @@ const needsReconnect = (account: DesktopReplyAccount): boolean =>
 //
 // A link the Reply CLI makes for connecting or reconnecting an account goes from the desktop straight to the person's
 // browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a
-// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as do the shared mailbox
-// page and a forced delete; the card can only ask for the act.
+// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as does a forced delete;
+// the card can only ask for the act.
 
 /** Which of the card's places a dialog or a choice belongs to: the Connect panel's card, or the chat's. */
 type Place = string;
 
 type Channel = DesktopReplyChannel;
 
-/** What the card may do next after a refusal offered it: the same ask again with the shared page, or forced. */
+/** What the card may do next after a refusal offered it: the same ask again, forced. */
 type Again = () => Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal>;
 
 /** A link act's answer: opened in the browser, copied for the person to hand on, or refused. */
@@ -189,7 +189,7 @@ interface ActDialog {
     refused: DesktopReplyRefusal | null;
     /** The account the act was on, for a Reconnect a signed-out refusal offers; null for a new account. */
     account: { channel: Channel; id: string } | null;
-    /** The ask the refusal's offer makes: the shared page or the forced delete; null for none. */
+    /** The ask the refusal's offer makes: the forced delete; null for none. */
     again: Again | null;
 }
 
@@ -200,10 +200,7 @@ const adding = signal<Place | null>(null);
 const naming = signal<Place | null>(null);
 /** The mailbox whose daily limit is shown for a change, at its place; null when none is. */
 const limiting = signal<{ place: Place; id: string; daily: number | null } | null>(null);
-/**
- * Whether a new link is copied to hand on instead of opened here. The desktop copies only a link that expires, never the
- * shared mailbox page, which is always opened here.
- */
+/** Whether a new link is copied to hand on instead of opened here. */
 const copying = signal(false);
 /** The LinkedIn accounts the CLI said are signed out, by id: Pause and Resume are not offered while that stands. */
 const signedOut = signal<readonly string[]>([]);
@@ -320,24 +317,15 @@ async function ask(
     void reload();
 }
 
-/**
- * A link act: connect or reconnect, copied instead of opened where the person asked so, whose refusal may offer the
- * shared page, asked again with it only on a click and always to open: the shared page is never copied.
- */
+/** A link act: connect or reconnect, copied instead of opened where the person asked so. */
 function askLink(
     place: Place,
     title: string,
     account: ActDialog['account'],
-    run: (how: { sharedPage?: true; copy?: true }) => Promise<LinkAnswer>,
+    run: (how: { copy?: true }) => Promise<LinkAnswer>,
 ): Promise<void> {
     const copy = copying.value;
-    return ask(
-        place,
-        title,
-        account,
-        () => run(copy ? { copy } : {}),
-        (refusal) => (refusal.offer === 'shared_page' ? () => run({ sharedPage: true }) : null),
-    );
+    return ask(place, title, account, () => run(copy ? { copy } : {}));
 }
 
 define('connect.copyLinks', (_args, element) => {
@@ -386,7 +374,7 @@ defineReal('connect.reconnect', ([place, channel, id]) => {
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     signedOut.value = signedOut.value.filter((each) => each !== account.id);
     void askLink(place, `Reconnect ${accountTitle(account)}`, { channel, id: account.id }, (how) =>
-        here().desktop.setup.replyReconnect(channel, account.id, how.sharedPage || how.copy ? how : undefined),
+        here().desktop.setup.replyReconnect(channel, account.id, how.copy ? how : undefined),
     );
 });
 
@@ -484,7 +472,6 @@ function momentOf(text: string | null): string | null {
 }
 
 const offers: Record<NonNullable<DesktopReplyRefusal['offer']>, string> = {
-    shared_page: 'Open the shared mailbox page…',
     force: 'Delete anyway…',
     reconnect: 'Reconnect',
 };
@@ -518,13 +505,7 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
         ${
             opened !== null
                 ? html`<div class="meta" role="status">The link opened in your browser.</div>
-                      <p class="meta link-note">
-                          ${
-                              opened.linkKind === 'shared_page'
-                                  ? 'It is Reply’s shared mailbox page, which does not expire: close it once the mailbox is connected.'
-                                  : `It connects one account until ${until ?? 'it expires'}.`
-                          }
-                      </p>
+                      <p class="meta link-note">It connects one account until ${until ?? 'it expires'}.</p>
                       <div class="setrow">
                           <div class="grow meta">
                               The account appears in the list when the sign-in there is finished.

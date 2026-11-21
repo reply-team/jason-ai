@@ -473,31 +473,22 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
     });
 
-    it('offers the shared mailbox page only after the desktop said one-mailbox links are not available, and asks it on a click', async () => {
+    it('says the plain refusal where this Reply makes no one-mailbox link, and offers nothing after it', async () => {
         const desktop = renderConnect(withAccounts([]));
-        const sentence =
-            'This Reply does not make a link for one mailbox yet. Its shared mailbox page can be opened instead.';
-        desktop.actAnswers.set('setup.replyConnect', [
-            refusal(sentence, 'email_link.not_available', 'shared_page'),
-            {
-                opened: true,
-                channel: 'email',
-                kind: 'connect',
-                linkKind: 'shared_page',
-                expiresAt: null,
-                pendingId: null,
-            },
-        ]);
+        const sentence = 'Reply did not do it: the Reply CLI answered email_link.not_available.';
+        desktop.actAnswers.set('setup.replyConnect', refusal(sentence, 'email_link.not_available'));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         await addAccount(card, 'Gmail');
         const alert = await waitFor(() => within(dialogOf(card)).getByRole('alert'));
         expect(words(alert)).toBe(sentence);
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'email', { provider: 'gmail' }]]);
-        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Open the shared mailbox page…' }));
-        await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
-        expect(actCalls(desktop)[1]).toEqual(['setup.replyConnect', 'email', { provider: 'gmail', sharedPage: true }]);
-        expect(words(dialogOf(card))).toContain('shared mailbox page, which does not expire');
+        expect(
+            within(dialogOf(card))
+                .getAllByRole('button')
+                .map((button) => button.textContent?.trim()),
+        ).toEqual(['Close']);
+        expect(words(dialogOf(card))).not.toContain('shared mailbox page');
     });
 
     it('copies a new link instead of opening it where the person ticks so, and says until when it works', async () => {
@@ -530,33 +521,6 @@ describe('the Reply card, its acts', () => {
         expect(actCalls(desktop)).toEqual([
             ['setup.replyConnect', 'email', { provider: 'gmail', copy: true }],
             ['setup.replyReconnect', 'linkedin', '14', { copy: true }],
-        ]);
-    });
-
-    it('opens the shared mailbox page even where a copy was ticked, and never asks the desktop to copy it', async () => {
-        const desktop = renderConnect(withAccounts([]));
-        desktop.actAnswers.set('setup.replyConnect', [
-            refusal('Its shared mailbox page can be opened instead.', 'email_link.not_available', 'shared_page'),
-            {
-                opened: true,
-                channel: 'email',
-                kind: 'connect',
-                linkKind: 'shared_page',
-                expiresAt: null,
-                pendingId: null,
-            },
-        ]);
-        const connect = await openConnect();
-        const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('checkbox'));
-        await addAccount(card, 'Outlook');
-        fireEvent.click(
-            await waitFor(() => within(dialogOf(card)).getByRole('button', { name: 'Open the shared mailbox page…' })),
-        );
-        await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
-        expect(actCalls(desktop)).toEqual([
-            ['setup.replyConnect', 'email', { provider: 'office365', copy: true }],
-            ['setup.replyConnect', 'email', { provider: 'office365', sharedPage: true }],
         ]);
     });
 
