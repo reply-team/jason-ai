@@ -256,18 +256,34 @@ public class PluginCommandsTests
         Assert.Contains("\"activated\":false", cli.Text, StringComparison.Ordinal);
     }
 
+    private const string RejectedReload =
+        "{\"error\":{\"code\":\"plugin_reload_rejected\",\"message\":\"2 problems in 1 package.\",\"retryable\":false,"
+        + "\"details\":[{\"field\":\"broken/plugin.yaml#3:1\",\"code\":\"yaml_invalid\",\"message\":\"mapping values are not allowed here\"}]}}";
+
     [Fact]
     public async Task A_refused_reload_prints_the_error_body_and_exits_1()
     {
-        const string envelope =
-            "{\"error\":{\"code\":\"plugin_reload_rejected\",\"message\":\"2 problems in 1 package.\",\"retryable\":false,"
-            + "\"details\":[{\"field\":\"broken/plugin.yaml#3:1\",\"code\":\"yaml_invalid\",\"message\":\"mapping values are not allowed here\"}]}}";
-        using var cli = new CliRun(envelope, status: HttpStatusCode.Conflict);
+        using var cli = new CliRun(RejectedReload, status: HttpStatusCode.Conflict);
+
+        var exit = await cli.RunAsync("plugin", "reload");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(RejectedReload + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary>Under <c>--human</c> the same refusal is its sentence, each detail on a line of its own, and still exit 1.</summary>
+    [Fact]
+    public async Task A_refused_reload_under_human_is_its_sentence_and_exits_1()
+    {
+        using var cli = new CliRun(RejectedReload, status: HttpStatusCode.Conflict);
 
         var exit = await cli.RunAsync("plugin", "reload", "--human");
 
         Assert.Equal(ExitCodes.ApiError, exit);
-        Assert.Equal(envelope + Environment.NewLine, cli.Text);
+        Assert.Equal(
+            "Refused (plugin_reload_rejected): 2 problems in 1 package." + Environment.NewLine
+            + "  broken/plugin.yaml#3:1: yaml_invalid (mapping values are not allowed here)" + Environment.NewLine,
+            cli.Text);
     }
 
     /// <summary>

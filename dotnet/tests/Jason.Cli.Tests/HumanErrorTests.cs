@@ -48,6 +48,49 @@ public sealed class HumanErrorTests : IDisposable
     /// <summary>A path as the envelope's JSON spells it.</summary>
     private static string Json(string path) => path.Replace("\\", "\\\\", StringComparison.Ordinal);
 
+    // ---- without --human, nothing changed ----
+
+    /// <summary>
+    /// Without <c>--human</c>, the error on stdout is the JSON envelope as it was before the flag had sentences, byte for
+    /// byte, with its exit code, on each failure road: a business verb's refusal, the same with details (a refused plugin
+    /// reload), a business verb, <c>runtime status</c>, <c>runtime stop</c> and <c>journal watch</c> with no runtime. The
+    /// rows of this class and of <see cref="HumanErrorVerbTests"/> hold every road both ways; this one stands for them in
+    /// the critical tier.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R2, "without --human an error is the JSON envelope, byte for byte")]
+    public async Task Without_human_every_failure_road_prints_the_envelope_byte_for_byte()
+    {
+        const string Rejected =
+            "{\"error\":{\"code\":\"plugin_reload_rejected\",\"message\":\"2 problems in 1 package.\",\"retryable\":false,"
+            + "\"details\":[{\"field\":\"broken/plugin.yaml#3:1\",\"code\":\"yaml_invalid\",\"message\":\"mapping values are not allowed here\"}]}}";
+        var roads = new List<(string Road, Func<Task<(int Exit, string Out)>> Run, int Exit, string Envelope)>
+        {
+            ("campaign list, no runtime", () => Cli(Never, false, "campaign", "list"), ExitCodes.RuntimeUnavailable, NoDescriptor),
+            ("runtime status, no runtime", () => Status(Never, false), ExitCodes.RuntimeUnavailable, NoDescriptor),
+            ("runtime stop, no runtime", () => Stop(Never, false), ExitCodes.RuntimeUnavailable, NoDescriptor),
+            ("journal watch, no runtime", () => Cli(Never, false, "journal", "watch"), ExitCodes.RuntimeUnavailable, NoDescriptor),
+        };
+        foreach (var (road, run, exit, envelope) in roads)
+        {
+            var (code, printed) = await run();
+            Assert.Equal((road, exit), (road, code));
+            Assert.Equal((road, envelope + Environment.NewLine), (road, printed));
+        }
+
+        _dir.WriteDescriptor(Descriptor);
+        foreach (var (road, run, envelope) in new (string, Func<Task<(int Exit, string Out)>>, string)[]
+        {
+            ("campaign get, refused", () => Cli(Respond(HttpStatusCode.NotFound, NotFound), false, "campaign", "get", "cmp_X"), NotFound),
+            ("plugin reload, refused with details", () => Cli(Respond(HttpStatusCode.Conflict, Rejected), false, "plugin", "reload"), Rejected),
+        })
+        {
+            var (code, printed) = await run();
+            Assert.Equal((road, ExitCodes.ApiError), (road, code));
+            Assert.Equal((road, envelope + Environment.NewLine), (road, printed));
+        }
+    }
+
     // ---- the sentence ----
 
     [Fact]

@@ -860,6 +860,31 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Null(ExecutionAlias.TargetOf([]));
     }
 
+    /// <summary>
+    /// The program's path is judged full by Windows' own rules on every system, since it is a Windows path whichever system
+    /// reads the bytes: a drive letter and a separator, or a UNC, device or NT start. A drive with no separator, a rooted
+    /// path with no drive and a relative one are none.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Program Files\WindowsApps\wt.exe", true)]
+    [InlineData(@"d:/Apps/wt.exe", true)]
+    [InlineData(@"\\server\share\wt.exe", true)]
+    [InlineData(@"\\?\C:\Apps\wt.exe", true)]
+    [InlineData(@"\\.\C:\Apps\wt.exe", true)]
+    [InlineData(@"\??\C:\x", true)]
+    [InlineData(@"C:foo\wt.exe", false)]
+    [InlineData(@"C:", false)]
+    [InlineData(@"\Apps\wt.exe", false)]
+    [InlineData(@"Apps\wt.exe", false)]
+    [InlineData(@"/usr/bin/wt", false)]
+    [InlineData(@"1:\Apps\wt.exe", false)]
+    public void An_alias_s_program_is_full_by_windows_rules_on_every_system(string program, bool full)
+    {
+        string[] strings = ["Microsoft.WindowsTerminal_8wekyb3d8bbwe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", program, "0"];
+
+        Assert.Equal(full ? program : null, ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, strings)));
+    }
+
     private static byte[] Reparse(uint tag, uint version, string[] strings)
     {
         var text = System.Text.Encoding.Unicode.GetBytes(string.Concat(strings.Select(each => each + "\0")));

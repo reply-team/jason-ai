@@ -37,8 +37,18 @@ public static class ExecutionAlias
         }
 
         var strings = Encoding.Unicode.GetString(data[12..(8 + length)]).Split('\0');
-        return strings.Length >= 3 && strings[2] is { Length: > 0 } target && Path.IsPathFullyQualified(target) ? target : null;
+        return strings.Length >= 3 && strings[2] is { Length: > 0 } target && IsFullWindowsPath(target) ? target : null;
     }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> is a full path by Windows' own rules, whichever system reads it: a drive letter, its
+    /// colon and a separator (<c>C:\</c>), or a separator followed by a second one or by <c>?</c>: a UNC start
+    /// (<c>\\</c>), a device path (<c>\\?\</c>, <c>\\.\</c>) or an NT path (<c>\??\</c>). The host's
+    /// <see cref="Path.IsPathFullyQualified(string)"/> is not asked, since off Windows it reads no drive letter.
+    /// </summary>
+    internal static bool IsFullWindowsPath(string path) =>
+        (path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/')
+        || (path.Length >= 2 && path[0] is '\\' or '/' && path[1] is '\\' or '/' or '?');
 
     /// <summary>
     /// The program the alias at <paramref name="path"/> stands for, or null where it is no such alias or cannot be read: the
