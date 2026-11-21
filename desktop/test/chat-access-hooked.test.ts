@@ -493,15 +493,75 @@ test('a script the agent writes is walked as its lines would run: a walk of a fo
     }
 });
 
-test('a word that begins with a variable the reading does not know is refused in a form that descends or copies, and runs in a plain one; a variable the text gives a literal value is read as that value; the profile\'s drive, its path, the system drive and the folder PowerShell is asked for name a folder that holds the data directory', () => {
+test('a word that begins with a variable the reading does not know is refused by the hook in every mode it rides in a form known to descend, remove or copy a tree, each positional spelling alike, and runs in any other form; a variable the text gives a literal value is read as that value; the profile\'s drive, its path, the system drive and the folder PowerShell is asked for name a folder that holds the data directory', () => {
     for (const scope of scopes) {
-        for (const command of ['grep -r api_key "$X"', 'du -sh "$X"', 'rsync -a "$X" /tmp/copy', 'ls -R $X', 'cp -r ${X} copy', 'zip -r x.zip "${X:-.}"', 'for d in ~ /; do du -sh "$d"; done', 'd=~; tar -cf x.tar "$d"', 'ls "$X"', 'grep api_key "$X"']) {
+        const trees = [
+            'grep -r api_key "$X"',
+            'grep -r k "$X"',
+            'du -sh "$X"',
+            'rsync -a "$X" /tmp/copy',
+            'ls -R $X',
+            'cp -r ${X} copy',
+            'cp -r "$X" y',
+            'rm -rf "$X"',
+            'zip -r x.zip "${X:-.}"',
+            'find "$X" -name settings.json',
+            'tar -czf x.tgz "$X"',
+            'chmod -R 700 "$X"',
+            'for d in ~ /; do du -sh "$d"; done',
+            'd=~; tar -cf x.tar "$d"',
+            'rm -rf "$1"',
+            'rm -rf "${1}"',
+            'rm -rf "$@"',
+            'rm -rf "${@}"',
+            'rm -rf "$*"',
+            'rm -rf "${*}"',
+        ];
+        for (const command of trees) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: searchRefusal }, `${scope.platform}: ${command}`);
             for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
         }
-        for (const command of ['cat "$X"', 'echo "$X"', 'head -n 5 "$X"', 'd=~/Documents; du -sh "$d"', 'for f in a.txt b.txt; do wc -l "$f"; done', 'test -d "$X" && echo $?', 'd=~/Documents; ls "$d"']) {
+        const runs = [
+            'ls "$X"',
+            'cat "$X"',
+            'grep api_key "$X"',
+            'grep -n TODO "$f"',
+            'git commit -m "$MSG"',
+            'git push origin "$BRANCH"',
+            'curl "$URL/x"',
+            'curl -d "$BODY" http://127.0.0.1:4011/v1/campaign.list',
+            'mkdir -p "$TMPDIR/x"',
+            'eval "$CMD"',
+            'echo "$X"',
+            'head -n 5 "$X"',
+            'd=~/Documents; du -sh "$d"',
+            'for f in a.txt b.txt; do wc -l "$f"; done',
+            'test -d "$X" && echo $?',
+            'd=~/Documents; ls "$d"',
+            'for f in $(git ls-files); do git log -1 "$f"; done',
+            'git log -1 "$1"',
+            'git log -1 "${1}"',
+            'git add "$@"',
+            'git add "${@}"',
+            'git add "$*"',
+            'git add "${*}"',
+        ];
+        for (const command of runs) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'deny', `${scope.platform}: ${command}`);
         }
+        // The jason loops of acceptance line 10, the ids taken from a capture and from a pipe: run, never refused.
+        for (const command of [
+            "ID=$(jason campaign create --name 'Spring' | jq -r .id); jason campaign start \"$ID\" --actor human:someone --reason 'as asked'",
+            "jason campaign list | jq -r '.items[].id' | while read id; do jason campaign archive \"$id\" --actor human:someone --reason 'as asked'; done",
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'deny', `${scope.platform}: ${command}`);
+        }
+        // A script the agent writes that passes a variable to a program that descends no tree is written; one that removes a tree a variable names is not.
+        const script = '#!/bin/sh\ngit commit -m "$1"\ngit push origin "${BRANCH}"\ncurl "$URL/x"\n';
+        assert.deepEqual(fullAccessJudgement('Write', { file_path: 'go.sh', content: script }, scope), { outcome: 'runs' }, scope.platform);
+        assert.deepEqual(fullAccessJudgement('Write', { file_path: 'go.sh', content: '#!/bin/sh\nrm -rf "$1"\n' }, scope), { outcome: 'refused', message: searchRefusal }, scope.platform);
     }
     for (const command of [
         'Get-ChildItem $env:SystemDrive -Recurse',
@@ -511,15 +571,28 @@ test('a word that begins with a variable the reading does not know is refused in
         'Get-ChildItem ([Environment]::GetFolderPath(\'UserProfile\')) -Recurse',
         'Get-ChildItem -Path ([System.Environment]::GetFolderPath("Desktop")) -Recurse',
         'Get-ChildItem $x -Recurse',
+        'Get-ChildItem $x -Depth 2',
         'Remove-Item $x -Recurse',
+        'Copy-Item $x C:\\Users\\someone\\Documents\\copy -Recurse',
+        '$files | ForEach-Object { Remove-Item $_ -Recurse }',
     ]) {
         assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
     }
     for (const command of ['du -sh "$SYSTEMDRIVE/"', 'du -sh $HOMEDRIVE/']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
     }
-    for (const command of ['Get-ChildItem $x', 'Write-Output $x', 'Get-ChildItem $env:SystemDrive\\Users\\someone\\Documents']) {
+    for (const command of [
+        'Get-ChildItem $x',
+        'Write-Output $x',
+        'Get-ChildItem $env:SystemDrive\\Users\\someone\\Documents',
+        '$files | ForEach-Object { Remove-Item $_ }',
+        'foreach ($f in $files) { Copy-Item $f C:\\Users\\someone\\Documents\\copy }',
+        'Copy-Item x "$env:TEMP\\y"',
+        'Invoke-RestMethod "$base/v1/campaign.list"',
+        '$x | ConvertTo-Json -Depth 5',
+    ]) {
         assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'runs' }, command);
+        for (const judged of both('PowerShell', { command }, windows)) assert.notEqual(judged.verdict, 'deny', command);
     }
 });
 

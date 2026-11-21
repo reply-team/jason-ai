@@ -1181,6 +1181,81 @@ function plainWalkForm(program: string, args: readonly string[], powershell: boo
 }
 
 /**
+ * The programs that descend, remove or copy a tree they are given in every form: a finder, a search that recurses by
+ * itself, a size, a tree and an archive.
+ */
+const treeWalkers: ReadonlySet<string> = new Set([
+    'find', 'gfind', 'fd', 'fdfind', 'rg', 'ag', 'ack', 'du', 'gdu', 'tree', 'tar', 'bsdtar', 'gtar', 'pax', 'cpio', 'bsdcpio', '7z', '7za', '7zr', '7zz',
+    'compress-archive',
+]);
+
+/** The programs that descend, remove or copy a tree when an option tells them to: its short letters and its long names. */
+const treeOptions: Readonly<Record<string, { letters: string; names: readonly string[] }>> = (() => {
+    const search = { letters: 'rR', names: ['--recursive', '--dereference-recursive'] };
+    const listing = { letters: 'R', names: ['--recursive'] };
+    const copy = { letters: 'rRa', names: ['--recursive', '--archive'] };
+    const removal = { letters: 'rR', names: ['--recursive'] };
+    const mode = { letters: 'R', names: ['--recursive'] };
+    const difference = { letters: 'r', names: ['--recursive'] };
+    return {
+        grep: search, egrep: search, fgrep: search, ggrep: search,
+        ls: listing, gls: listing,
+        cp: copy, gcp: copy, rsync: { letters: 'ra', names: ['--recursive', '--archive'] }, scp: { letters: 'r', names: [] },
+        rm: removal, grm: removal,
+        chmod: mode, chown: mode, chgrp: mode, setfacl: mode,
+        zip: { letters: 'rR', names: ['--recurse-paths', '--recurse-patterns'] },
+        diff: difference, gdiff: difference,
+    };
+})();
+
+/** The programs of Windows that descend, remove or copy a tree when a slash option tells them to. */
+const slashTreeOptions: Readonly<Record<string, RegExp>> = {
+    robocopy: /^\/{1,2}(?:e|s|mir|move)$/i,
+    xcopy: /^\/{1,2}[se]$/i,
+    findstr: /^\/{1,2}s$/i,
+    where: /^\/{1,2}r$/i,
+    rd: /^\/{1,2}s$/i,
+    rmdir: /^\/{1,2}s$/i,
+    del: /^\/{1,2}s$/i,
+    erase: /^\/{1,2}s$/i,
+};
+
+/** PowerShell's listing, whose `-Depth` descends as `-Recurse` does. */
+const powerShellDepth: ReadonlySet<string> = new Set(['get-childitem', 'gci', 'ls', 'dir']);
+
+/**
+ * True when a command is a form the reading knows to descend, remove or copy a tree: a program that does in every form
+ * (`treeWalkers`); one told to by an option of its own (`treeOptions`), among the letters of a cluster or by a long name
+ * or the start of one, and grep told to recurse by `-d` or `--directories`; a program of Windows told to by a slash
+ * option (`slashTreeOptions`); and in PowerShell a command given `-Recurse`, or a listing given `-Depth`, each by its
+ * name or the start of one, a value joined after a colon included.
+ */
+function treeForm(program: string, args: readonly string[], powershell: boolean): boolean {
+    if (treeWalkers.has(program)) return true;
+    const slash = slashTreeOptions[program];
+    if (slash !== undefined && args.some((arg) => slash.test(arg))) return true;
+    if (powershell) {
+        const names = args.map((arg) => (arg.toLowerCase().split(':')[0] as string));
+        if (names.some((name) => name.length >= 2 && '-recurse'.startsWith(name))) return true;
+        if (powerShellDepth.has(program) && names.some((name) => name.length >= 3 && '-depth'.startsWith(name))) return true;
+    }
+    const table = treeOptions[program];
+    if (table === undefined) return false;
+    return args.some((arg, at) => {
+        if (/^-[A-Za-z0-9]+$/.test(arg)) return [...arg.slice(1)].some((letter) => table.letters.includes(letter)) || (table === treeOptions.grep && arg === '-d' && recurses(args[at + 1]));
+        if (!arg.startsWith('--') || arg === '--') return false;
+        const [name = '', value] = arg.toLowerCase().split(/=(.*)/s);
+        if (name.length > 2 && table.names.some((each) => each.startsWith(name))) return true;
+        return table === treeOptions.grep && name.length > 2 && '--directories'.startsWith(name) && recurses(value ?? args[at + 1]);
+    });
+}
+
+/** True when a value of grep's `-d` or `--directories` is `recurse` or the start of it. */
+function recurses(value: string | undefined): boolean {
+    return value !== undefined && value !== '' && 'recurse'.startsWith(value.toLowerCase());
+}
+
+/**
  * True when a command's text could make a program of the plain forms another one: an alias, a function, `hash` or
  * `enable` in a shell, and the variable BSD grep reads its options from; an alias, a function, a filter or a default
  * parameter in PowerShell. Such a command has no plain form.
@@ -1645,19 +1720,22 @@ function driveSpelled(word: string, scope: ChatScope): string {
 
 /** The variables whose value is never a path: a status, a count, a process's id, the shell's flags, PowerShell's constants. */
 const valueVariables = /^\$(?:[?#$!-]|\{[?#$!-]\}|(?:true|false|null)(?![\w:]))/i;
-/** A variable a word begins with: `$name`, `${name}`, `$env:name`, and on Windows `%name%`. */
-const leadingVariable = /^(?:\$\{(?:env:)?([A-Za-z_]\w*)[^}]*\}|\$(?:env:)?([A-Za-z_]\w*|\d|[@*])|%([A-Za-z_]\w*)%)/i;
+/**
+ * A variable a word begins with: `$name`, `${name}`, `$env:name`, a positional parameter and the list of them (`$1`,
+ * `${1}`, `$@`, `${@}`, `$*`, `${*}`) and an indirect one (`${!name}`) alike, and on Windows `%name%`.
+ */
+const leadingVariable = /^(?:\$\{!?(?:env:)?([A-Za-z_]\w*|\d+|[@*])[^}]*\}|\$(?:env:)?([A-Za-z_]\w*|\d|[@*])|%([A-Za-z_]\w*)%)/i;
 
 /**
- * True when a word, or a piece of it after `=`, `@` or `,`, begins with a variable the reading does not know, so that
- * nothing fixes where it leads before the shell builds it: a home spelling, a variable of the profile or the system
- * (`knownVariable`), one the text gives literal values (`assignedValues`) and one whose value is never a path
- * (`valueVariables`) aside.
+ * True when a word, or a piece of it after `=`, `,` or an `@` that is no parameter's, begins with a variable the reading
+ * does not know, so that nothing fixes where it leads before the shell builds it: a home spelling, a variable of the
+ * profile or the system (`knownVariable`), one the text gives literal values (`assignedValues`) and one whose value is
+ * never a path (`valueVariables`) aside.
  */
 function unfixedVariable(word: WrittenWord, place: WalkPlace, reading: WalkReading): boolean {
     if (!word.built) return false;
     const { scope, powershell } = reading;
-    return word.text.split(/[=@,]/).some((piece) => {
+    return word.text.split(/=|,|(?<![${])@/).some((piece) => {
         if (valueVariables.test(piece) || homeExpanded(piece, scope) !== piece) return false;
         const match = leadingVariable.exec(piece);
         if (match === null || (match[3] !== undefined && scope.platform !== 'win32')) return false;
@@ -1904,11 +1982,12 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
 
 /**
  * How a command walks a folder that holds the data directory: `walk` where it names one as a word, read from each folder
- * the shell may be in, or, where some word of the whole command names one, takes a word the shell builds, takes words
- * from its standard input (`inputRunners`), runs another program (`runsAnotherProgram`), a shell that reads a pipe among
- * them, or in PowerShell is a command a pipe feeds paths to that does not only print them (`powerShellPrints`); `in`
- * where it runs in one, or, where some word of the whole command names one, where a change led that the walk did not
- * follow. Null when it walks none.
+ * the shell may be in, where it is a form known to descend, remove or copy a tree (`treeForm`) and takes a word that
+ * begins with a variable the reading does not know (`unfixedVariable`), or, where some word of the whole command names
+ * one, takes a word the shell builds, takes words from its standard input (`inputRunners`), runs another program
+ * (`runsAnotherProgram`), a shell that reads a pipe among them, or in PowerShell is a command a pipe feeds paths to that
+ * does not only print them (`powerShellPrints`); `in` where it runs in one, or, where some word of the whole command
+ * names one, where a change led that the walk did not follow. Null when it walks none.
  */
 function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): WalkKind | null {
     const { scope, powershell } = reading;
@@ -1917,8 +1996,9 @@ function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): 
     const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && walkSpellings(arg, place, reading).some((text) => place.folders.some((folder) => wordNamesRoot(text, folder, reading, false, program))));
     if (named) return 'walk';
     if (place.folders.some((folder) => isRoot(folder, scope))) return 'in';
-    // A word that begins with a variable the reading does not know may name any folder, such a one among them.
-    if (reading.foreign !== true && each.args.some((arg) => unfixedVariable(arg, place, reading))) return 'walk';
+    // A word that begins with a variable the reading does not know may name any folder, such a one among them: a form
+    // known to descend, remove or copy a tree walks it. Any other form is read only where the text names such a folder.
+    if (reading.foreign !== true && treeForm(program, each.args.map((arg) => arg.text), powershell) && each.args.some((arg) => unfixedVariable(arg, place, reading))) return 'walk';
     if (!reading.named) return null;
     if (place.unknown) return 'in';
     const walks = inputRunners.has(program)

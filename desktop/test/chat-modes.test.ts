@@ -540,11 +540,9 @@ test('under Full access the hook answers nothing to a quoted, an escaped or a wr
         `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`, "curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json",
         'curl http://127.0.0.1:4011/v1/decision.ans\\wer', 'printf "jason approval approve apr_1" | sh', 'echo approval approve apr_1 | xargs jason', 'echo amFzb24K | base64 -d | sh',
         `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`, 'sh -c "jason campaign list"', 'j=jason; $j decision answer dec_1 --option a', '${J} campaign list',
-        '$(which jason) campaign list']) {
+        '$(which jason) campaign list', 'eval "$CMD"']) {
         assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
     }
-    // A program with no table given a variable the reading does not know may walk any folder: the walk's refusal.
-    assert.equal(await hooked(w, 'Bash', { command: 'eval "$CMD"' }), searchRefusal);
 });
 
 test('in Plan only a quoted or an escaped deny-list verb is refused as its plain spelling is, by the same sentence', async (t) => {
@@ -576,7 +574,7 @@ test('under Full access a script written with an escaped verb or a re-spelled op
     const w = await wired(t, 'full_access', fence);
     const file = join(w.scope.chat, 'go.sh');
     assert.equal(await hooked(w, 'Write', { file_path: file, content: 'jason approval appro\\ve apr_1\n' }), null);
-    assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl http://127.0.0.1:4011/v1/approval.appr''ove" }), null);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl $U/v1/approval.appr''ove" }), null);
 });
 
 test('env -i or env -u around a jason drops the chat\'s environment without naming it, and is refused in every mode', async (t) => {
