@@ -651,6 +651,26 @@ test('the folder stack\'s tildes are read as the folders the shell is in or has 
     }
 });
 
+test('a tilde after =, @ or , inside an argument is read through the same tildes as the word\'s start, a text\'s own HOME and OLDPWD and the folder stack\'s: each that reaches the settings file is refused by the hook in every mode it rides', () => {
+    for (const scope of scopes) {
+        const parent = scope.platform === 'win32' ? '/c/Users' : posix.dirname(scope.home);
+        const account = scope.platform === 'win32' ? win32.basename(scope.home) : posix.basename(scope.home);
+        for (const command of [
+            `HOME=${parent}; dd if=~/${account}/.jason/config/settings.json`,
+            `HOME=${parent}; frobnicate --files=notes.md,~/${account}/.jason/config/settings.json`,
+            `HOME=${parent}; frobnicate user@~/${account}/.jason/config/settings.json`,
+            'cd ~ && dd if=~+/.jason/config/settings.json',
+            'cd ~ && cd /tmp && dd if=~-/.jason/config/settings.json',
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: settingsRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of [`HOME=${parent}; dd if=~/notes.md of=copy.md`, 'HOME=/tmp; frobnicate --files=a.md,~/b.md', 'HOME=/tmp; dd if=~/notes.md of=copy.md']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('a PowerShell value is a literal only when it is quoted or a number: a command\'s output kept in a variable is a variable the reading does not know, and a walk of it is refused by the hook in every mode it rides', () => {
     for (const command of [
         'cd ~\\Documents; $d = Split-Path -Parent (Get-Location); Get-ChildItem $d -Recurse -Filter settings.json | Get-Content',

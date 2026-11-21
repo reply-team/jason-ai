@@ -2533,21 +2533,28 @@ function stackTilde(text: string): { current: boolean; rest: string } | null {
 }
 
 /**
+ * Where a text's leading tilde leads: a `~` of the home's own account name to the home folder, and where the place is
+ * given a POSIX shell's every tilde where it leads from it (`Tildes`); with none given, a home spelling to the home
+ * folder (`homeExpanded`); any other text as it is.
+ */
+function tildeSpellings(text: string, scope: ChatScope, tildes?: Tildes): string[] {
+    const account = pathsOf(scope.platform).basename(scope.home);
+    const stack = tildes === undefined ? null : stackTilde(text);
+    if (tildes !== undefined && stack !== null) return (stack.current ? tildes.current : tildes.previous).map((folder) => `${folder}${stack.rest}`);
+    const named = /^~([^\\/]+)(?=[\\/]|$)/.exec(text);
+    if (named !== null && keyOf(scope.platform, named[1] as string) === keyOf(scope.platform, account)) return [`${scope.home}${text.slice(named[0].length)}`];
+    if (tildes !== undefined && homeTilde(text)) return tildes.home.map((home) => `${home}${text.slice(1)}`);
+    return [homeExpanded(text, scope)];
+}
+
+/**
  * The spellings a word holds once the variables the reading knows are put in (`knownVariable`, and the text's own
  * values, `assignedValues`), and a `~` of the home folder, by itself or by the home's own account name, is the home
  * folder, and where the place is given a POSIX shell's every tilde leads where it leads from it (`Tildes`); null where
  * any other part of it is built while the shell runs, a variable the reading does not know among them.
  */
 function resolvedSpellings(word: WrittenWord, values: (name: string) => readonly string[] | null, scope: ChatScope, tildes?: Tildes): string[] | null {
-    const tilded = (text: string): string[] => {
-        const account = pathsOf(scope.platform).basename(scope.home);
-        const stack = tildes === undefined ? null : stackTilde(text);
-        if (tildes !== undefined && stack !== null) return (stack.current ? tildes.current : tildes.previous).map((folder) => `${folder}${stack.rest}`);
-        const named = /^~([^\\/]+)(?=[\\/]|$)/.exec(text);
-        if (named !== null && keyOf(scope.platform, named[1] as string) === keyOf(scope.platform, account)) return [`${scope.home}${text.slice(named[0].length)}`];
-        if (tildes !== undefined && homeTilde(text)) return tildes.home.map((home) => `${home}${text.slice(1)}`);
-        return [homeExpanded(text, scope)];
-    };
+    const tilded = (text: string): string[] => tildeSpellings(text, scope, tildes);
     const text = word.text.replace(profileFolder, () => scope.home);
     if (!word.built) return tilded(text);
     let spellings = [''];
@@ -2646,16 +2653,19 @@ function wordsKind(each: ReadCommand, place: WalkPlace, reading: KindsReading): 
                 const joined = powershell ? /^-[A-Za-z][\w-]*:(.+)$/.exec(plain) : null;
                 for (const piece of new Set([plain, ...plain.split(/[=@,]/), ...(joined === null ? [] : [joined[1] as string])])) {
                     if (piece === '' || piece.length > pathLimit(scope.platform)) continue;
-                    const value = nativeSpelling(homeExpanded(piece, scope), scope);
-                    const wild = /[*?[]/.test(value) && (powershell || word.glob === true);
-                    for (const folder of place.folders) {
-                        const path = located(value, { ...scope, cwd: folder });
-                        if (!wild) {
-                            places.push(path);
-                            continue;
+                    // A piece after `=`, `@` or `,` is read through the same tildes as the word's start.
+                    for (const spelled of tildeSpellings(piece, scope, tildes)) {
+                        const value = nativeSpelling(homeExpanded(spelled, scope), scope);
+                        const wild = /[*?[]/.test(value) && (powershell || word.glob === true);
+                        for (const folder of place.folders) {
+                            const path = located(value, { ...scope, cwd: folder });
+                            if (!wild) {
+                                places.push(path);
+                                continue;
+                            }
+                            const kind = patternKind(path, scope, dotted);
+                            if (kind !== null) return kind;
                         }
-                        const kind = patternKind(path, scope, dotted);
-                        if (kind !== null) return kind;
                     }
                 }
             }
