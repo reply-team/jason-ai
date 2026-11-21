@@ -506,7 +506,7 @@ test('every turn of a new conversation runs in its own folder beside the chat fo
     assert.equal(existsSync(join(r.b.paths.chat, id)), false, 'nothing of it is made inside the chat folder');
 });
 
-test('Ask first, then Full access, then Ask first again: each turn runs in the one folder, and the second and the third resume the one session', async (t) => {
+test('Ask first, then Full access, then Ask first again: each turn runs in the one folder, the second resumes the first\'s session as the run\'s first Full access start, forked, and the third resumes the fork', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     const own = ownFolder(r, id);
@@ -519,7 +519,8 @@ test('Ask first, then Full access, then Ask first again: each turn runs in the o
     const turns = r.hosts();
     assert.equal(turns.length, 3);
     for (const [at, turn] of turns.entries()) assert.ok(same(turn.cwd, own), `turn ${at + 1} ran in ${turn.cwd}`);
-    assert.deepEqual(turns.map((turn) => flag(turn.args, '--resume')), [undefined, 'stub-session-1', 'stub-session-1']);
+    assert.deepEqual(turns.map((turn) => flag(turn.args, '--resume')), [undefined, 'stub-session-1', 'stub-session-1-fork']);
+    assert.deepEqual(turns.map((turn) => turn.args.includes('--fork-session')), [false, true, false]);
     assert.deepEqual(r.started, ['ask_first', 'full_access', 'ask_first']);
 });
 
@@ -683,7 +684,7 @@ test('a conversations\' folders place that is a link: nothing it names is moved 
     assert.equal(r.hosts().length, 2, 'no host is started for it');
 });
 
-test('a conversation an earlier desktop made, whose record names no folder, keeps running in the shared chat folder in every mode and resumes its session there', async (t) => {
+test('a conversation an earlier desktop made, whose record names no folder, keeps running in the shared chat folder in every mode and resumes its session there, the run\'s first Full access start forking it', async (t) => {
     const r = rig(t);
     const id = earlierRecord(r, { sessions: { claude: 'session-made-before' } });
     const chat = r.restart();
@@ -695,7 +696,8 @@ test('a conversation an earlier desktop made, whose record names no folder, keep
     assert.ok(same(full?.cwd, r.b.paths.chat), `Full access ran in ${full?.cwd}`);
     assert.ok(same(asked?.cwd, r.b.paths.chat), `Ask first ran in ${asked?.cwd}`);
     assert.equal(flag(full?.args ?? [], '--resume'), 'session-made-before');
-    assert.equal(flag(asked?.args ?? [], '--resume'), 'session-made-before');
+    assert.ok(full?.args.includes('--fork-session'), 'the run\'s first Full access start forks');
+    assert.equal(flag(asked?.args ?? [], '--resume'), 'session-made-before-fork');
     assert.deepEqual(r.started, ['full_access', 'ask_first']);
     assert.equal(existsSync(ownFolder(r, id)), false, 'no folder of its own is made for it');
 });
