@@ -38,7 +38,6 @@ const report = (channels: NotificationChannel[], enabled = true, lastAt: string 
     last_at: lastAt,
 });
 
-/** The recorded system.info with the notification section a test states; the recordings hold the toast alone. */
 /** The page's clock in the rows that read a time: noon, and a notification two hours before it. */
 const noon = '2026-10-01T12:00:00Z';
 const tenOClock = '2026-10-01T10:00:00Z';
@@ -46,6 +45,7 @@ const tenOClock = '2026-10-01T10:00:00Z';
 const toastChannel = (fields: Partial<NotificationChannel>): NotificationChannel =>
     channel({ channel: 'toast', kind: 'toast', presence: 'available', ...fields });
 
+/** The recorded system.info with the notification section a test states; the recordings hold the toast alone. */
 class Reporting extends FakeApi {
     /** What the runtime says of the channels; a test changes it to see the page read it again. */
     constructor(public notifications: NotificationsInfo | null) {
@@ -575,5 +575,27 @@ describe('Notifications in Settings inside the desktop', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(fake.infoReads).toBe(before + 1);
         expect(toast().getAttribute('aria-checked')).toBe('false');
+    });
+});
+
+describe('The page’s system.info', () => {
+    it('keeps the last answer when a load fails, and drops a load a switch’s answer overtook', async () => {
+        const fake = new Reporting(report([toastChannel({ outcome: 'delivered', at: noon })]));
+        await shell.load(fake);
+        expect(shell.info.value?.notifications?.channels[0]?.outcome).toBe('delivered');
+
+        fake.infoGone = true;
+        await shell.load(fake);
+        expect(shell.info.value?.notifications?.channels[0]?.outcome).toBe('delivered');
+
+        fake.infoGone = false;
+        fake.notifications = report([toastChannel({ outcome: 'silenced', reason: 'disabled_for_user', at: noon })]);
+        const held = gate();
+        fake.infoHeld = held.promise;
+        const loading = shell.load(fake);
+        shell.patchNotifications(report([toastChannel({ on: false })]));
+        held.open();
+        await loading;
+        expect(shell.info.value?.notifications?.channels[0]).toMatchObject({ on: false, outcome: null });
     });
 });
