@@ -53,8 +53,9 @@ voice.
   computer is read as the drive it shares. Everything else runs. From Claude Code 2.1.322 on, Ask first and Auto-edit carry the same
   check; below it, a plain `jason` command that ran with no card still does, and one fed the settings or the run file is
   refused.
-- **Your own Claude Code configuration in a Full access chat.** A Full access turn on Claude Code loads your own
-  skills, hooks and MCP servers, as in a terminal; a PATH or variable in your own settings does not apply to it.
+- **Your own Claude Code configuration in a Full access chat.** A Full access chat that runs on your own Claude Code
+  sign-in loads your own skills, hooks and MCP servers, as in a terminal; one on a key set in Jason does not. A PATH set
+  under `env` in your own Claude Code settings does not apply in the chat, nor does a variable Jason sets for the turn.
 - **The chat reaches the files you name.** In Full access it reads and writes any file on this computer you point it
   to, wherever it is, with no card. From Claude Code 2.1.322 on, in Ask first and Auto-edit it reads such a file with no
   card, and a change to a file outside the chat's folders is one card, "Change a file outside the chat's folders", for
@@ -172,6 +173,8 @@ voice.
 
 ## Known issues
 
+- Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
+  turn that runs in Ask first, Auto-edit or Plan only.
 - No screen lists the archived agents yet.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
 - An agent has one conversation: there is no second chat for the same agent yet.

@@ -646,8 +646,8 @@ Claude Code.
   works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn that does not run in Full access also passes `--no-chrome`, the first version whose changelog
   names the flag; below it that turn's settings alone keep the browser out.
-- **In Full access the chat loads your own Claude Code configuration: your skills, hooks, MCP servers and rules; in the
-  other modes it does not.** A turn that runs in Full access uses them as a terminal does, with your claude.ai
+- **In Full access on your own Claude Code sign-in the chat loads your own Claude Code configuration: your skills,
+  hooks, MCP servers and rules; on a provider's key set in Jason, and in the other modes, it does not.** A turn that runs in Full access uses them as a terminal does, with your claude.ai
   connectors, the browser integration and the commands your skills run. The chat names Full access to Claude Code every
   time, so your `defaultMode` never decides the mode; your deny and ask rules still work, an ask being a card, and your
   hooks run beside Jason's check, which still sees every tool the AI asks for; a hook of yours that rewrites a tool's
@@ -659,7 +659,7 @@ Claude Code.
   folder first. Nor does a value there of another variable Jason Desktop sets for the turn; your other variables there
   apply. Your configuration comes from where your own Claude Code keeps it: Jason puts the chat's own folder back as it placed it before each turn, a `.mcp.json` there included,
   and touches no other. A turn of a Full access chat that Jason starts in Ask first (see Full access) loads none of it,
-  and neither does a turn on a provider's key, which in Full access too runs sealed as the other modes do, with Jason
+  and neither does a Full access turn on a provider's key set in Jason: it runs sealed as the other modes do, with Jason
   Desktop's own Claude Code folder.
 - **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn outside Full access leaves your
   `config.toml` unread (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that

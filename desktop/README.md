@@ -87,8 +87,9 @@ config.toml plus `-c` while the turn leaves that file unread, since `codex sandb
 the desktop does not read the file to say what in it would differ. A set-up chat's naming run on Windows names no
 sandbox kind and gets no check: its shell tool is off, and it is held by the read-only sandbox and those settings alone.
 
-**In Full access a Claude Code turn uses the person's own Claude Code configuration, as a terminal does: their skills,
-hooks, MCP servers and rules; in the other modes it uses none of it.** A turn that runs in Full access passes no
+**In Full access a Claude Code turn on the person's own Claude Code sign-in uses the person's own Claude Code
+configuration, as a terminal does: their skills, hooks, MCP servers and rules; on a provider's key set in Jason, and in
+the other modes, it uses none of it.** A turn that runs in Full access passes no
 `--setting-sources`, `--strict-mcp-config` or `--no-chrome`, and its settings carry no server defences
 (`claudeArguments`, `hookedSettings`), so the person's own settings with their rules and hooks, their skills, the shell
 commands a skill carries included, their MCP servers, their claude.ai connectors and the browser integration work in
