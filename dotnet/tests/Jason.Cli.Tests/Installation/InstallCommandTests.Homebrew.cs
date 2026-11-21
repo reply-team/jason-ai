@@ -87,7 +87,7 @@ public sealed partial class InstallCommandTests
         else
         {
             // daemon-reload, then enable: the unit is registered again, and nothing is started.
-            Assert.Equal(["--user daemon-reload", "--user enable"], applied.Apply.Select(command => string.Join(' ', command.Skip(1).Take(2))));
+            Assert.Equal(["--user daemon-reload", $"--user enable {AutostartArtifacts.UnitName}"], applied.Apply.Select(command => string.Join(' ', command.Skip(1))));
         }
 
         var moved = Assert.Single(report.Done, line => line.StartsWith("Registered the runtime's logon start again", StringComparison.Ordinal));
