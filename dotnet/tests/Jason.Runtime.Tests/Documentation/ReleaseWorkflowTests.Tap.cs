@@ -32,6 +32,10 @@ public partial class ReleaseWorkflowTests
         Assert.DoesNotContain("|| true", taps, StringComparison.Ordinal);
         Assert.Equal(1, CountOf(script, "brew tap-new --no-git"));
 
+        // Homebrew's words that it ignores an untrusted tap's casks fail the proof, and no wider pattern, so a harmless
+        // warning that says "ignoring" of something else does not.
+        Assert.Contains("grep -qiE 'not trusted|ignoring (formulae|casks)|tap trust is required'", script, StringComparison.Ordinal);
+
         // In the workflow the taps are made, and so trusted, before the audit and before the first install.
         var workflow = Read([".github", "workflows", "release.yml"]);
         var tapsStep = workflow.IndexOf("test-cask-macos.sh taps", StringComparison.Ordinal);

@@ -112,8 +112,8 @@ trusted() {
 # Homebrew's word that a tap is not trusted, or that it ignores what a tap holds, in a command's output fails the step: a
 # command that read nothing of the cask must not pass for one that read it.
 ignored() {
-    if grep -qiE 'not trusted|ignoring' "$1"; then
-        fail "$2 says a tap is not trusted or ignored: $(grep -iE 'not trusted|ignoring' "$1" | head -n 2 | tr '\n' ' ')"
+    if grep -qiE 'not trusted|ignoring (formulae|casks)|tap trust is required' "$1"; then
+        fail "$2 says a tap is not trusted or ignored: $(grep -iE 'not trusted|ignoring (formulae|casks)|tap trust is required' "$1" | head -n 2 | tr '\n' ' ')"
     fi
 }
 
