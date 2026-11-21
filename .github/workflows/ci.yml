@@ -2610,6 +2610,23 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-cli-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The same with no start at login registered by the previous release: this build's first set-up turns it on once for
+      # the installation that was there, naming the carried jason, and records that in autostart/default.json.
+      - name: The previous release's running command-line Jason with no start at login, the bundle replaced by this build's, the start at login turned on once
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "The previous release's running command-line Jason with no start at login, the bundle replaced by this build's, the start at login turned on once"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh bundle-swap "$PREVIOUS" desktop/dist/mac-arm64/Jason.app "$VERSION" running-cli-no-login
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal account-shell
+          bash .github/scripts/test-installation-macos.sh listing after-bundle-swap-once-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-bundle-swap-once-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
       # Opened from its disk image: this build's application in a read-only image, its jason install refused with
       # install_vanishing_place, the application opened from the image and quit, the image ejected; nothing set up, and the
       # listing held to the machine before, with the two things an application that ran leaves named as expected: its

@@ -11,7 +11,7 @@ import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
 import { bindingsFor, itemKeys, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
-import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
+import { bringForward, type LoginItem } from './login-item.ts';
 import { putBackQuestion, putBackTold, setupMenuOf, type MachineSetup } from './machine-setup.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
@@ -30,8 +30,6 @@ export interface DeskDeps {
     reload(): void;
     /** Open Jason at login: offered only by a packaged application, whose executable is the one to start. */
     login: LoginItem;
-    /** Start the runtime at logon, through the CLI; offered once the CLI has said what is registered. */
-    autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
     /** The deb: the version the system installed under this window, where its version.json names another than runs; else null. */
@@ -61,7 +59,7 @@ export interface DeskDeps {
     /** Uninstall Jason…, on macOS, offered by an installed build only; null where it is not offered. */
     uninstall?: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'> | null;
     /**
-     * In a demo run, the way back (`demoMenu`), and nothing where the update, the start at logon, the jason command and
+     * In a demo run, the way back (`demoMenu`), and nothing where the update, the jason command and
      * Remove What Jason Placed would be; null in Live.
      */
     demo: DemoMenu | null;
@@ -95,7 +93,6 @@ export class Desk {
     private readonly deps: DeskDeps;
     private tray: Tray | null = null;
     private attention: Attention;
-    private autostartOn: boolean | null = null;
     private readonly removal: RemovalAct | null;
     private readonly watcher: AttentionWatcher;
     private readonly demo: DemoMenu | null;
@@ -163,15 +160,12 @@ export class Desk {
         this.renderMenu();
     }
 
-    /** Reads what the CLI says is registered to start at logon, and shows it in the menu. */
-    async readAutostart(): Promise<void> {
-        if (this.deps.autostart === null) return;
-        this.autostartOn = await this.deps.autostart.registered();
-        this.renderMenu();
-    }
-
+    /**
+     * Open Jason at Login, the desktop's own. The runtime's start at logon is no item of the menu's: the machine set-up
+     * registers it by default, and `jason runtime autostart disable` and `enable` in a terminal turn it off and on.
+     */
     private loginItems(): MenuItemConstructorOptions[] {
-        const { login, autostart } = this.deps;
+        const { login } = this.deps;
         const opens = login.supported && app.isPackaged;
         return [
             { type: 'separator' },
@@ -182,21 +176,6 @@ export class Desk {
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
-            ...(this.demo !== null
-                ? []
-                : [
-                      {
-                          label: 'Start the Runtime at Logon',
-                          type: 'checkbox' as const,
-                          enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
-                          checked: this.autostartOn === true,
-                          click: (item: Electron.MenuItem) =>
-                              void autostart?.set(item.checked).then((now) => {
-                                  this.autostartOn = now;
-                                  this.renderMenu();
-                              }),
-                      },
-                  ]),
         ];
     }
 
@@ -403,7 +382,6 @@ export class Desk {
         } catch (error) {
             dialog.showErrorBox(windowTitle, error instanceof Error ? error.message : String(error));
         }
-        await this.readAutostart().catch(() => undefined);
         this.renderMenu();
     }
 

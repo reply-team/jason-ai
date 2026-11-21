@@ -240,19 +240,16 @@ function autostartCli(registered: () => boolean, exit = 0): Cli & { asked: strin
     };
 }
 
-test('Start the runtime at logon is read and set through jason runtime autostart, and the desktop writes nothing for it', async () => {
-    const cli = autostartCli(() => false);
+test('the runtime’s start at logon is read and taken off through jason runtime autostart, and the desktop writes nothing for it', async () => {
+    const cli = autostartCli(() => true);
     const log = memoryLog();
     const autostart = new RuntimeAutostart({ cli, log });
-    assert.equal(await autostart.registered(), false);
-    assert.equal(await autostart.set(true), true);
-    assert.equal(await autostart.set(false), false);
-    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);
-    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
-        ['autostart_set', { On: true, Exit: 0 }],
-        ['autostart_set', { On: false, Exit: 0 }],
-    ]);
-    assert.equal(verbOf(['runtime', 'autostart', 'enable']), 'runtime autostart', 'the log names the verb');
+    assert.equal(await autostart.registered(), true);
+    assert.equal(await autostart.disable(), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'disable']]);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_disabled', { Exit: 0 }]]);
+    assert.equal(verbOf(['runtime', 'autostart', 'disable']), 'runtime autostart', 'the log names the verb');
+    assert.equal('set' in autostart, false, 'nothing turns it on from the desktop: the machine set-up registers it');
 });
 
 test('an autostart the CLI refused or did not answer is unknown, and logged by its exit alone', async () => {
@@ -260,14 +257,14 @@ test('an autostart the CLI refused or did not answer is unknown, and logged by i
     const refusing = autostartCli(() => true, 1);
     const autostart = new RuntimeAutostart({ cli: refusing, log });
     assert.equal(await autostart.registered(), null);
-    assert.equal(await autostart.set(true), null);
-    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_set', { On: true, Exit: 1 }]]);
-    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']], 'a set that said nothing is followed by a read');
+    assert.equal(await autostart.disable(), null);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_disabled', { Exit: 1 }]]);
+    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'disable'], ['runtime', 'autostart', 'status']], 'a disable that said nothing is followed by a read');
     const garbled: Cli = { run: async () => ({ exit: 0, stdout: 'not json', stderr: '' }) };
     assert.equal(await new RuntimeAutostart({ cli: garbled, log: memoryLog() }).registered(), null);
 });
 
-test('a set the CLI answered without saying what is registered is followed by a read of what is', async () => {
+test('a disable the CLI answered without saying what is registered is followed by a read of what is', async () => {
     const asked: string[][] = [];
     const cli: Cli = {
         async run(args) {
@@ -276,8 +273,8 @@ test('a set the CLI answered without saying what is registered is followed by a 
             return { exit: 0, stdout: 'done\n', stderr: '' };
         },
     };
-    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).set(true), true);
-    assert.deepEqual(asked, [['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']]);
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).disable(), true);
+    assert.deepEqual(asked, [['runtime', 'autostart', 'disable'], ['runtime', 'autostart', 'status']]);
 });
 
 test('the login items’ log lines, read back, carry the setting and the platform, never a path the CLI printed', async (t) => {
@@ -286,10 +283,10 @@ test('the login items’ log lines, read back, carry the setting and the platfor
     const log = fileLogger(logs);
     await new LoginItem({ platform: 'darwin', home: join(root, 'home'), executable: '/planted-exe/Jason', electron: electronLogin(), pathRead, log }).set(true);
     const autostart = new RuntimeAutostart({ cli: autostartCli(() => false), log });
-    await autostart.set(true);
+    await autostart.disable();
     const text = readdirSync(logs).map((name) => readFileSync(join(logs, name), 'utf8')).join('');
     assert.equal(text.includes('planted'), false, 'a path reached the log');
-    assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_set']);
+    assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_disabled']);
 });
 
 /** A CLI whose `runtime autostart status` names `executable` when registered, and whose enable registers its own jason. */

@@ -245,20 +245,36 @@ public static class AutostartRegistrars
     {
         ArgumentNullException.ThrowIfNull(ask);
 
-        var directory = Path.GetDirectoryName(path);
-        var hadDirectory = string.IsNullOrEmpty(directory) || Directory.Exists(directory);
+        var made = Missing(Path.GetDirectoryName(path));
         var before = Existing(path);
 
-        Write(path, artifact, encoding);
+        // The write is inside: one that made the directories and then could not write the document (permissions, a full
+        // disk) takes them away again too.
         try
         {
+            Write(path, artifact, encoding);
             ask();
         }
         catch
         {
-            PutBack(path, before, directory, hadDirectory);
+            PutBack(path, before, made);
             throw;
         }
+    }
+
+    /// <summary>
+    /// The directories a write to a file in <paramref name="directory"/> makes: it and each parent that is not there, the
+    /// deepest first, as a user unit's <c>~/.config/systemd/user</c> makes <c>~/.config</c> on a home that has none.
+    /// </summary>
+    private static List<string> Missing(string? directory)
+    {
+        var missing = new List<string>();
+        for (var at = directory; !string.IsNullOrEmpty(at) && !Directory.Exists(at); at = Path.GetDirectoryName(at))
+        {
+            missing.Add(at);
+        }
+
+        return missing;
     }
 
     /// <summary>What is at the path already, or nothing where there is nothing.</summary>
@@ -274,8 +290,11 @@ public static class AutostartRegistrars
         }
     }
 
-    /// <summary>The directory as it was: what was there back, what was not gone, and nothing else touched.</summary>
-    private static void PutBack(string path, byte[]? before, string? directory, bool hadDirectory)
+    /// <summary>
+    /// The directory as it was: what was there back, what was not gone, and nothing else touched. Each directory the write
+    /// made goes again, the deepest first, and only while it is empty.
+    /// </summary>
+    private static void PutBack(string path, byte[]? before, List<string> made)
     {
         try
         {
@@ -285,12 +304,20 @@ public static class AutostartRegistrars
                 return;
             }
 
-            File.Delete(path);
-            if (!hadDirectory
-                && directory is { Length: > 0 }
-                && Directory.Exists(directory)
-                && !Directory.EnumerateFileSystemEntries(directory).Any())
+            // A write that never made the document leaves nothing to delete, and a name the file system refused would
+            // refuse the delete too, before the directories it made are taken away.
+            if (File.Exists(path))
             {
+                File.Delete(path);
+            }
+
+            foreach (var directory in made)
+            {
+                if (!Directory.Exists(directory) || Directory.EnumerateFileSystemEntries(directory).Any())
+                {
+                    break;
+                }
+
                 Directory.Delete(directory);
             }
         }

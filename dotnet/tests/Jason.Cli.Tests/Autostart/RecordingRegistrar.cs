@@ -24,6 +24,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
     /// <summary>Something for the next call to throw, for the tests about a tool that refuses.</summary>
     public AutostartException? Refuses { get; set; }
 
+    /// <summary>Something for each apply to throw while reads still answer, as a manager that cannot see the unit refuses its enable.</summary>
+    public AutostartException? RefusesApply { get; set; }
+
     /// <summary>What a removal reports taking away, where a test says; otherwise whatever this machine held.</summary>
     public AutostartRemoval? Removes { get; set; }
 
@@ -36,9 +39,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
 
     public void Apply(AutostartRegistration registration)
     {
-        if (Refuses is not null)
+        if ((Refuses ?? RefusesApply) is { } refused)
         {
-            throw Refuses;
+            throw refused;
         }
 
         ArgumentNullException.ThrowIfNull(registration);
