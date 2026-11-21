@@ -298,7 +298,7 @@ describe('the start screen', () => {
         // The box takes the drop, so the window never goes to the file.
         expect(fireEvent.dragOver(box(), carrying(list))).toBe(false);
         expect(fireEvent.drop(box(), carrying(list))).toBe(false);
-        const put = `people like those in "${path}" please`;
+        const put = `people like those in '${path}' please`;
         await waitFor(() => expect(box().value).toBe(put));
         expect(box().selectionStart).toBe(put.length - ' please'.length);
         expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['leads.csv']]);

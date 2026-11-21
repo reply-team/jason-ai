@@ -777,11 +777,15 @@ export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text
 
 /**
  * A path quoted so that a shell reads it back whole: on macOS and Linux, a path from the root, in single quotes, inside
- * which every sign is taken as it is, a quote written as one closed, escaped and opened again; on Windows in double
- * quotes, since no name there holds one.
+ * which every sign is taken as it is, a quote written as one closed, escaped and opened again; on Windows in single
+ * quotes as PowerShell, the system's shell, reads them, inside which no `$` or backtick is expanded, each quote of the
+ * name doubled, the typographic ones among them, which PowerShell takes as a quote too. Double quotes would serve cmd,
+ * but PowerShell expands `$` and a backtick inside them, and both are legal in a Windows name; no one form serves both.
  */
 const quotedPath = (path: string): string =>
-    path.startsWith('/') ? `'${path.split("'").join("'\\''")}'` : `"${path}"`;
+    path.startsWith('/')
+        ? `'${path.split("'").join("'\\''")}'`
+        : `'${path.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&')}'`;
 
 /**
  * The box's text with the paths of files dropped on it put in at the caret, or over the words selected, as a terminal

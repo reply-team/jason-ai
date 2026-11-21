@@ -143,7 +143,7 @@ describe('a chat as the page keeps it', () => {
 
         it('go in at the caret, each quoted, with a space after them, as a terminal puts them', () => {
             expect(withPaths('', 0, 0, [windows])).toEqual({
-                text: `"${windows}" `,
+                text: `'${windows}' `,
                 caret: windows.length + 3,
             });
             expect(withPaths('add these lines to ', 19, 19, ['/Users/ana/1.txt'])).toEqual({
@@ -186,11 +186,28 @@ describe('a chat as the page keeps it', () => {
             expect(dropCaretAt(null, 'conv_1', 'see ')).toBeNull();
         });
 
-        it('on Windows keep double quotes, which no name there holds, and every other sign as it is', () => {
-            const signs = "C:\\Users\\ana\\$x `date` hi! it's.txt";
-            expect(put(signs)).toBe(`"${signs}" `);
+        it('on Windows go in PowerShell single quotes, where no sign is expanded, each quote of a name doubled', () => {
+            const dir = 'C:\\Users\\ana\\';
+            expect(put(`${dir}a b.txt`)).toBe(`'${dir}a b.txt' `);
+            expect(put(`${dir}$x.txt`)).toBe(`'${dir}$x.txt' `);
+            expect(put(`${dir}\`date\`.txt`)).toBe(`'${dir}\`date\`.txt' `);
+            expect(put(`${dir}100% a&b;c hi!.txt`)).toBe(`'${dir}100% a&b;c hi!.txt' `);
+            expect(put(`${dir}it's.txt`)).toBe(`'${dir}it''s.txt' `);
+            expect(put(windows)).toBe(`'${windows}' `);
             const shared = '\\\\server\\share\\a.txt';
-            expect(put(shared)).toBe(`"${shared}" `);
+            expect(put(shared)).toBe(`'${shared}' `);
+        });
+
+        it('on Windows double the typographic quotes too, which PowerShell also takes as a single quote', () => {
+            expect(put('C:\\Ана\u2019s \u2018q\u2019 \u201az\u201b.txt')).toBe(
+                "'C:\\Ана\u2019\u2019s \u2018\u2018q\u2019\u2019 \u201a\u201az\u201b\u201b.txt' ",
+            );
+        });
+
+        it('on macOS and Linux keep every other sign as it is, a trailing space and a name in another script among them', () => {
+            expect(put('/Users/ana/100% a&b;c.txt')).toBe(`'/Users/ana/100% a&b;c.txt' `);
+            expect(put('/Users/ana/Ана Ли/note ')).toBe(`'/Users/ana/Ана Ли/note ' `);
+            expect(put('/Users/ana/\u2019q.txt')).toBe("'/Users/ana/\u2019q.txt' ");
         });
     });
 
