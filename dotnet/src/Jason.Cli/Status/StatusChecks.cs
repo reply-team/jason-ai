@@ -2602,12 +2602,15 @@ internal static partial class StatusChecks
             }
             else if (outcome == ChannelResults.Silenced)
             {
-                asides.Add(channel.Reason switch
+                // What Windows answered when the toast was last sent, dated: the switches could not be read now, or the
+                // answer was the manifest's, which no switch a person reads in Settings changes.
+                var answered = $"When the toast was last sent, at {When(channel.At)}, Windows answered that ";
+                asides.Add(answered + channel.Reason switch
                 {
-                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), " + TwoEntries,
-                    SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
-                    SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
-                    _ => "Windows has notifications switched off for every app.",
+                    SilencedReasons.DisabledForApplication => "Jason's notifications were switched off (Settings > System > Notifications > Jason), " + TwoEntries,
+                    SilencedReasons.DisabledByGroupPolicy => "a group policy on this machine switched its notifications off; an administrator sets it.",
+                    SilencedReasons.DisabledByManifest => "this program's own manifest switched its notifications off.",
+                    _ => "notifications were switched off for every app.",
                 });
             }
             else

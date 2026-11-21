@@ -146,10 +146,10 @@ public sealed class NotificationsCheckTests
     }
 
     [Theory]
-    [InlineData("disabled_for_application", "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.")]
-    [InlineData("disabled_for_user", "Windows has notifications switched off for every app.")]
-    [InlineData("disabled_by_group_policy", "A group policy on this machine switches Windows' notifications off; an administrator sets it.")]
-    [InlineData("disabled_by_manifest", "Windows says this program's own manifest switches its notifications off.")]
+    [InlineData("disabled_for_application", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that Jason's notifications were switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.")]
+    [InlineData("disabled_for_user", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that notifications were switched off for every app.")]
+    [InlineData("disabled_by_group_policy", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that a group policy on this machine switched its notifications off; an administrator sets it.")]
+    [InlineData("disabled_by_manifest", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that this program's own manifest switched its notifications off.")]
     public async Task A_toast_the_person_switched_off_is_absent(string reason, string fact) =>
         Is(await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason)], "ntf_01K", NineOhSix)), CheckState.Absent, fact);
 
@@ -303,7 +303,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy()], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; none has reached you yet. "
-            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
+            + "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that Jason's notifications were switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
 
     /// <summary>A toast switched off beside a plugin that delivers still reaches the person, through the plugin.</summary>
     [Fact]
@@ -312,7 +312,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy("delivered")], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; the last one was delivered at 2026-10-01 09:06 UTC. "
-            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
+            + "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that Jason's notifications were switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
 
     /// <summary>An optional check never fails readiness, whatever its state.</summary>
     [Fact]
@@ -479,7 +479,7 @@ public sealed class NotificationsCheckTests
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_by_manifest")], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(ToastSwitch.NotOff)),
             CheckState.Absent,
-            "Windows says this program's own manifest switches its notifications off.");
+            "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that this program's own manifest switched its notifications off.");
 
     /// <summary>Switches that cannot be read, or no reader (any system but Windows), leave today's words exactly.</summary>
     [Fact]
@@ -490,7 +490,7 @@ public sealed class NotificationsCheckTests
             Is(
                 await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application")], "ntf_01K", NineOhSix), toastSetting: reader),
                 CheckState.Absent,
-                "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
+                "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that Jason's notifications were switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
             Is(
                 await CheckAsync(new NotificationsInfo(true, [Toast("delivered")], "ntf_01K", NineOhSix), toastSetting: reader),
                 CheckState.Ok,
