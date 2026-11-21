@@ -28,6 +28,14 @@
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
+// STUB_INIT_MODE is the mode Claude Code's init line names; without it the line names none. STUB_FORCED_DEFAULT has Claude
+// Code force its default mode and say so on stderr, as 2.1.329 does under CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1: "scrub"
+// where the start's environment sets that, "always" on every start that asks for another mode. STUB_BYPASS "refused"
+// refuses the bypass mode before anything starts; STUB_BYPASS_HOLD holds that refusal until its file exists, so a test
+// decides when it comes.
+// STUB_SESSIONS names a folder where Claude Code keeps what each session was given: every start that is not refused writes
+// the turn it was given to <folder>/<session> as it starts, before its init line, so a start stopped at that line has
+// kept the person's message all the same, as Claude Code does; a start with no resume opens a session of a new id there.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
 // session other than the one asked for and goes on as a turn would.
@@ -43,7 +51,7 @@
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { decide } = require('./mcp-http.cjs');
 
@@ -145,17 +153,35 @@ async function claude(args, stdin) {
         process.stderr.write(`No conversation found with session ID: ${asked}\n`);
         process.exit(1);
     }
-    const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
+    const store = process.env.STUB_SESSIONS || null;
+    const opened = store === null ? 'stub-session-1' : `stub-session-${readdirSync(store).length + 1}`;
+    const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || opened);
     const config = args[args.indexOf('--mcp-config') + 1];
-    // The bypass mode as Claude Code answers it: refused before anything starts in its restricted mode or under a policy,
-    // and turned off by a settings file with no word of it, the init line naming the default mode (seen on 2.1.329).
-    const askedMode = permissionMode(args);
-    if (askedMode === 'bypassPermissions' && process.env.STUB_BYPASS === 'refused') {
+    // The bypass mode refused before anything starts, in Claude Code's restricted mode or under a policy (seen on 2.1.329).
+    if (permissionMode(args) === 'bypassPermissions' && process.env.STUB_BYPASS === 'refused') {
+        const hold = process.env.STUB_BYPASS_HOLD;
+        if (hold) while (!existsSync(hold)) await new Promise((resolve) => setTimeout(resolve, 20));
         process.stderr.write('Error: bypassPermissions not supported in restricted mode\n');
         process.exit(1);
     }
-    const mode = askedMode === 'bypassPermissions' && process.env.STUB_BYPASS === 'off' ? 'default' : askedMode;
-    print({ type: 'system', subtype: 'init', session_id: session, permissionMode: mode, ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+    // Claude Code 2.1.329 starts in its default mode, whatever mode the start asked for, while CLAUDE_CODE_SUBPROCESS_ENV_SCRUB
+    // is set, and says so on standard error before its init line (seen with a scratch configuration directory):
+    // STUB_FORCED_DEFAULT "scrub" does that where the start's environment sets the variable to 1, "always" on every start
+    // that asks for another mode than the default.
+    const scrubbed = Object.entries(process.env).some(([name, value]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' && value === '1');
+    const forcing = process.env.STUB_FORCED_DEFAULT;
+    const forced = permissionMode(args) !== 'default' && (forcing === 'always' || (forcing === 'scrub' && scrubbed));
+    if (forced) {
+        process.stderr.write(
+            '⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.\n',
+        );
+    }
+    // Otherwise the mode the init line names is the row's to say (`STUB_INIT_MODE`), never an echo of the mode the start
+    // asked for: what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names
+    // none.
+    const named = forced ? 'default' : process.env.STUB_INIT_MODE;
+    if (store !== null) appendFileSync(join(store, session), stdin);
+    print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {

@@ -56,4 +56,29 @@ public partial class PageClaimsTests
         Assert.Contains("Its `runtime` check says whether a runtime answers, and the command that starts one where none does.", Flat(troubleshooting), StringComparison.Ordinal);
         Assert.DoesNotContain("installation looks stuck for the same reason.\n\n```\njason runtime status --human\n```", troubleshooting, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Both desktop pages say, where they describe the scrub, what a Full access turn carries without it, in the code's own
+    /// words; and they quote the chat's sentences for a bypass that is not available as the chat says them: "right now"
+    /// where the cause holds a minute, and "until Jason Desktop starts again" only where a tool ran that the check never saw.
+    /// </summary>
+    [Fact]
+    public void The_desktop_pages_say_what_a_full_access_turn_carries_and_how_long_a_bypass_not_available_holds()
+    {
+        const string carried = "a key and the credentials the turn carries reach the commands the agent runs";
+        var desktop = Flat(Page("docs", "desktop.md"));
+        var readme = Flat(Page("desktop", "README.md"));
+        Assert.Contains(carried, desktop, StringComparison.Ordinal);
+        Assert.Contains(carried, readme, StringComparison.Ordinal);
+
+        Assert.Contains("the cause after \"Full access is not available here right now\": Claude Code started the turn in another mode", desktop, StringComparison.Ordinal);
+        Assert.Contains("the chat says \"Full access is not available here until Jason Desktop starts again\" with that cause after it", desktop, StringComparison.Ordinal);
+        Assert.Contains("\"Full access is not available here right now: <why>\" where the cause holds a minute", readme, StringComparison.Ordinal);
+        Assert.Contains("\"Full access is not available here until Jason Desktop starts again: <why>\" where a tool ran that the hook never saw", readme, StringComparison.Ordinal);
+        foreach (var page in new[] { desktop, readme })
+        {
+            Assert.DoesNotContain("until Jason Desktop starts again: Claude Code", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Full access is not available here until Jason Desktop starts again\", with the cause after it, where Claude Code", page, StringComparison.Ordinal);
+        }
+    }
 }
