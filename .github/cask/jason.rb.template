@@ -1,0 +1,57 @@
+cask "jason" do
+  version "{{VERSION}}"
+  sha256 "{{SHA256_MACOS_ARM64_ZIP}}"
+
+  url "https://get.jasonharness.ai/releases/download/v#{version}/jason-desktop-macos-arm64.zip"
+  name "Jason"
+  desc "Local-first runtime for AI sales development work, driven by your own AI agent"
+  homepage "https://get.jasonharness.ai/"
+
+  livecheck do
+    url "https://get.jasonharness.ai/releases/latest/download/manifest.json"
+    strategy :json do |json|
+      json["version"]
+    end
+  end
+
+  auto_updates true
+  depends_on arch: :arm64
+  depends_on macos: ">= :ventura"
+
+  app "Jason.app"
+  binary "#{appdir}/Jason.app/Contents/Resources/bundle/jason"
+
+  uninstall quit:   "ai.jasonharness.desktop",
+            script: {
+              executable:   "#{appdir}/Jason.app/Contents/Resources/bundle/jason",
+              args:         ["runtime", "stop", "--start-owed"],
+              must_succeed: false,
+            }
+
+  zap script: {
+        executable:   "#{appdir}/Jason.app/Contents/Resources/bundle/jason",
+        args:         ["uninstall", "--keep-application"],
+        must_succeed: false,
+      },
+      trash:  [
+        "~/Library/Application Support/ai.jasonharness.desktop",
+        "~/Library/Caches/ai.jasonharness.desktop",
+        "~/Library/HTTPStorages/ai.jasonharness.desktop",
+        "~/Library/HTTPStorages/ai.jasonharness.desktop.binarycookies",
+        "~/Library/Preferences/ai.jasonharness.desktop.plist",
+        "~/Library/Saved Application State/ai.jasonharness.desktop.savedState",
+        "~/Library/WebKit/ai.jasonharness.desktop",
+      ]
+
+  caveats <<~EOS
+    Open Jason once from Applications: its first start sets up the jason command in your
+    terminal and the skills, as the disk image does. Jason updates itself.
+    If the older formula is installed, take it off first, or its jason stays in the way:
+      jason runtime stop
+      brew uninstall --formula jason
+    brew uninstall --cask jason takes off the application and its link, and leaves the jason
+    command's wrapper and the start at logon pointing at nothing;
+    brew uninstall --zap --cask jason takes them off too.
+    Your data in ~/.jason and your work in ~/Jason stay in both.
+  EOS
+end

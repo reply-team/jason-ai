@@ -164,7 +164,12 @@ public static class MachineSetup
         await run.Step("Looking for a command-line install", async () =>
         {
             old = run.FindCommandLineInstall();
-            if (old is null)
+            if (old is null && run.FormulaRuntime() is { } keg)
+            {
+                // A runtime started from Homebrew's older formula is stopped as a retired install's is, its keg untouched.
+                (runtime, _) = await run.StopOldRuntimeAsync(keg, cancellationToken).ConfigureAwait(false);
+            }
+            else if (old is null)
             {
                 runtime = run.RuntimeOutside();
             }
@@ -226,6 +231,12 @@ public static class MachineSetup
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
+
+        await run.Step("Looking for Homebrew's formula", () =>
+        {
+            run.FormulaBeside(command?.Finds);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
 
         await run.Step("Deploying the harness skills", async () => skills = await run.HarnessSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         if (options.Roles)
@@ -335,6 +346,48 @@ public static class MachineSetup
 
         /// <summary>The command-line install to retire, by the rule <see cref="CommandLineInstalls.Find"/> keeps for install and uninstall alike.</summary>
         public string? FindCommandLineInstall() => CommandLineInstalls.Find(env, places, options.Retire, Problems);
+
+        /// <summary>Homebrew's older formula, linked beside this jason, as this run first read it.</summary>
+        private HomebrewFormula? Formula { get; set; }
+
+        /// <summary>
+        /// The image a runtime on this data directory runs from, where it is Homebrew's older formula linked beside this jason
+        /// (its keg, or its link): stopped by the rule a retired install's runtime is, its keg's files never touched.
+        /// </summary>
+        public string? FormulaRuntime()
+        {
+            Formula = HomebrewFormula.Linked(env);
+            if (Formula is not { } formula
+                || DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is not { InstalledImage: { } image })
+            {
+                return null;
+            }
+
+            var full = Path.GetFullPath(image);
+            return string.Equals(full, Path.GetFullPath(formula.Owner.Executable), PathCase) || string.Equals(full, Path.GetFullPath(formula.Link), PathCase)
+                ? full
+                : null;
+        }
+
+        /// <summary>
+        /// Homebrew's older formula linked beside this jason: a problem naming it and what takes it off, unless a new terminal
+        /// finds it first, which <see cref="Finds"/> has said already. It is left as it is.
+        /// </summary>
+        public void FormulaBeside(string? finds)
+        {
+            if ((Formula ?? HomebrewFormula.Linked(env)) is not { } formula)
+            {
+                return;
+            }
+
+            var found = finds is null ? null : new FileInfo(finds).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? finds;
+            if (found is not null && string.Equals(Path.GetFullPath(found), Path.GetFullPath(formula.Owner.Executable), PathCase))
+            {
+                return;
+            }
+
+            Problems.Add(formula.Problem());
+        }
 
         /// <summary>What runs on this data directory, where nothing is retired: said, and left as it is.</summary>
         public string RuntimeOutside() =>
