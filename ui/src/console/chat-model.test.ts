@@ -40,6 +40,7 @@ import {
     afresh,
     noteClosed,
     withPaths,
+    dropCaretAt,
     codexPlanLine,
     choiceStops,
     livePlan,
@@ -146,24 +147,50 @@ describe('a chat as the page keeps it', () => {
                 caret: windows.length + 3,
             });
             expect(withPaths('add these lines to ', 19, 19, ['/Users/ana/1.txt'])).toEqual({
-                text: 'add these lines to "/Users/ana/1.txt" ',
+                text: "add these lines to '/Users/ana/1.txt' ",
                 caret: 38,
             });
         });
 
         it('stand apart from the words on each side, and several go in one after another', () => {
             expect(withPaths('readthat now', 4, 4, ['/a b', '/c'])).toEqual({
-                text: 'read "/a b" "/c" that now',
+                text: "read '/a b' '/c' that now",
                 caret: 17,
             });
-            expect(withPaths('compare  and', 8, 8, ['/x'])).toEqual({ text: 'compare "/x" and', caret: 12 });
+            expect(withPaths('compare  and', 8, 8, ['/x'])).toEqual({ text: "compare '/x' and", caret: 12 });
         });
 
         it('take the place of the words selected', () => {
             expect(withPaths('open FILE please', 5, 9, ['/d/e.txt'])).toEqual({
-                text: 'open "/d/e.txt" please',
+                text: "open '/d/e.txt' please",
                 caret: 15,
             });
+        });
+
+        const put = (path: string) => withPaths('', 0, 0, [path]).text;
+
+        it('on macOS and Linux go in single quotes, where a shell takes every sign as it is, closed around a quote', () => {
+            expect(put('/Users/ana/a"b.txt')).toBe(`'/Users/ana/a"b.txt' `);
+            expect(put('/Users/ana/$x.txt')).toBe(`'/Users/ana/$x.txt' `);
+            expect(put('/Users/ana/`date`.txt')).toBe("'/Users/ana/`date`.txt' ");
+            expect(put('/Users/ana/hi!.txt')).toBe(`'/Users/ana/hi!.txt' `);
+            expect(put("/Users/ana/it's.txt")).toBe(`'/Users/ana/it'\\''s.txt' `);
+        });
+
+        it('leave the caret after them once the box shows them, and nowhere for another conversation or a text they never reached', () => {
+            const left = { key: 'conv_1', text: "see '/a' ", at: 9 };
+            expect(dropCaretAt(left, 'conv_1', "see '/a' ")).toBe(9);
+            expect(dropCaretAt(left, 'conv_2', "see '/a' ")).toBeNull();
+            // A conversation gone before the paths went in: a later word typed in a box takes no caret meant for them.
+            expect(dropCaretAt(left, 'conv_1', 'see x')).toBeNull();
+            expect(dropCaretAt(null, 'conv_1', 'see ')).toBeNull();
+        });
+
+        it('on Windows keep double quotes, which no name there holds, and every other sign as it is', () => {
+            const signs = "C:\\Users\\ana\\$x `date` hi! it's.txt";
+            expect(put(signs)).toBe(`"${signs}" `);
+            const shared = '\\\\server\\share\\a.txt';
+            expect(put(shared)).toBe(`"${shared}" `);
         });
     });
 
@@ -204,6 +231,16 @@ describe('a chat as the page keeps it', () => {
 
         it('go at the end of the next turn even where it gave no answer', () => {
             expect(open(received(next(), { kind: 'done', error: 'The host stopped.' }))).toEqual([]);
+        });
+
+        it('go as well when the next turn ends with no end from the desktop: refused, or failed to start', () => {
+            expect(open(failed(next(), 'The desktop could not start the turn.'))).toEqual([]);
+        });
+
+        it('go when an export is refused, by the send or by its answer, which says its own refusal beside them', () => {
+            const exporting = { ...next(), exporting: '/export' };
+            expect(open(failed(exporting, 'Not written.'))).toEqual(['Not written.']);
+            expect(open(received(exporting, { kind: 'done', error: 'Not written.' }))).toEqual(['Not written.']);
         });
 
         it('are closed one by one by their close control, and nothing else is', () => {

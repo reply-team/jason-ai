@@ -65,13 +65,15 @@ interface Recorded {
     exposed: Map<string, unknown>;
     invoked: { channel: string; args: unknown[] }[];
     listening: string[];
+    /** The files whose path the preload asked Electron for, by name. */
+    paths: string[];
 }
 
-/** Runs the preload as Electron would, with an Electron that records what it is asked. */
-function runPreload(): Recorded {
+/** Runs the preload as Electron would, in a page of that protocol, with an Electron that records what it is asked. */
+function runPreload(protocol = 'http:'): Recorded {
     const source = readFileSync(join(root, 'src', 'preload.ts'), 'utf8');
     const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
-    const recorded: Recorded = { exposed: new Map(), invoked: [], listening: [] };
+    const recorded: Recorded = { exposed: new Map(), invoked: [], listening: [], paths: [] };
     const electron = {
         contextBridge: { exposeInMainWorld: (name: string, api: unknown) => void recorded.exposed.set(name, api) },
         ipcRenderer: {
@@ -82,13 +84,19 @@ function runPreload(): Recorded {
             on: (channel: string) => void recorded.listening.push(channel),
             removeListener: () => undefined,
         },
+        webUtils: {
+            getPathForFile: (file: { name: string }) => {
+                recorded.paths.push(file.name);
+                return `/dropped/${file.name}`;
+            },
+        },
     };
     const required = (name: string) => {
         if (name !== 'electron') throw new Error(`a sandboxed preload may require only electron, not ${name}`);
         return electron;
     };
     const module = { exports: {} };
-    new Function('require', 'module', 'exports', 'process', outputText)(required, module, module.exports, { platform: 'win32' });
+    new Function('require', 'module', 'exports', 'process', 'location', outputText)(required, module, module.exports, { platform: 'win32' }, { protocol });
     return recorded;
 }
 
@@ -151,6 +159,17 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             onChanged: 'function',
         },
     });
+});
+
+test('a dropped file’s path is read in the preload for a page served over http alone: any other page is told none', () => {
+    const asked = (protocol: string) => {
+        const recorded = runPreload(protocol);
+        const seam = recorded.exposed.get('jasonDesktop') as { chat: { pathOf(file: { name: string }): string } };
+        return { path: seam.chat.pathOf({ name: 'a.txt' }), read: recorded.paths, invoked: recorded.invoked };
+    };
+    assert.deepEqual(asked('http:'), { path: '/dropped/a.txt', read: ['a.txt'], invoked: [] });
+    for (const protocol of ['file:', 'https:', 'data:', 'about:', 'devtools:'])
+        assert.deepEqual(asked(protocol), { path: '', read: [], invoked: [] }, protocol);
 });
 
 test('each member of the seam calls the channel ipc.ts checks, with its own arguments only', () => {

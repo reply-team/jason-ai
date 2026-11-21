@@ -36,7 +36,11 @@ const desktop = {
         feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
         cardRefused: (chatId: string, kind: string, failure: string) => ipcRenderer.invoke('jason:chat.cardRefused', chatId, kind, failure),
         // Read here, from the file the page was given by a drop, and never through the main process: no channel carries it.
-        pathOf: (file: File) => webUtils.getPathForFile(file),
+        // The one member answered here rather than through a channel, and so with no check of the origin (`src/ipc.ts`):
+        // Electron reads a path only from a File, which a page holds only when the person dropped it there or picked it,
+        // so a page learns the path of no file it was not given. Only a page served over http, as the runtime's is, is
+        // answered at all; any other page the window holds is told none.
+        pathOf: (file: File) => (location.protocol === 'http:' ? webUtils.getPathForFile(file) : ''),
     },
     theme: {
         get: () => ipcRenderer.invoke('jason:theme.get'),

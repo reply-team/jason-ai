@@ -1659,7 +1659,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     }, [draftCampaignId]);
     useFit(messageBox, record?.draft ?? '');
     // A file dropped on the box puts its path in at the caret (`dropped-paths.ts`).
-    const drop = useDroppedPaths(messageBox, record?.draft ?? '', (next) =>
+    const drop = useDroppedPaths(messageBox, chatId, record?.draft ?? '', (next) =>
         changeChat(chatId, (each) => typed(each, next)),
     );
     // An agent's chat whose last choice may still be live reads, once while it is drawn, whether the person acted on the
@@ -1788,6 +1788,8 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         event?.preventDefault();
         const current = chats.value[chatId];
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
+        // What the box said of a drop goes with the words it was said beside.
+        drop.reset();
         // A message while the turn runs, or while the unmade chat's conversation is made, waits for it.
         if (current.running) {
             changeChat(chatId, kept);
@@ -2014,7 +2016,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         aria-label="Your message"
                         value={chat.draft}
                         onChange={(event) => {
-                            drop.typed();
+                            drop.reset();
                             changeChat(chatId, (each) => typed(each, event.target.value));
                         }}
                         onKeyDown={keys}

@@ -50,7 +50,7 @@ import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
 import { Painted } from './painted';
 import { Palette } from './palette';
-import { folderRefusal } from './open-folder';
+import { folderRefusal, readFileManager } from './open-folder';
 import { closeMark } from './icons';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
 import { closeMenus, sideView } from './side';
@@ -545,6 +545,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             followHistory(to);
         });
         const made = onChatMade(chatMade);
+        // The file manager's name, for the agent's Open folder, is the computer's: read once, as the console is drawn.
+        const fileManagerRead = readFileManager();
         // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
         const shadowed = effect(() => {
             void chats.value;
@@ -553,6 +555,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         });
         return () => {
             shadowed();
+            fileManagerRead();
             made();
             followed();
             unbound();

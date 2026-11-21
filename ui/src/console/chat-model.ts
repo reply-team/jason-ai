@@ -699,7 +699,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                 event.plan === true && !chat.main && last?.kind === 'text'
                     ? [...words.slice(0, -1), { ...last, plan: true as const }]
                     : words;
-            const over = expired(ended({ ...chat, entries, plan: null }));
+            const over = ended({ ...chat, entries, plan: null });
             if (event.error === null)
                 return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
             return givenBackAfterFailure(chat, {
@@ -712,8 +712,9 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
 
 /**
  * The notices and asides said before the person's last message, closed: what the next answer of the conversation does
- * as it begins, and its turn's end does where it gave none, so none outlives the turn after the one it spoke of. Each
- * stays in the thread, closed, and still locks a choice said before it.
+ * as it begins, and every end of its turn does where it gave none (`ended`), the desktop's, a turn it refused or failed
+ * to start, an export's, so none outlives the turn after the one it spoke of. Each stays in the thread, closed, and still
+ * locks a choice said before it.
  */
 function expired(chat: Chat): Chat {
     let last = -1;
@@ -775,8 +776,16 @@ function givenBackAfterFailure(before: Chat, after: Chat): Chat {
 export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text });
 
 /**
+ * A path quoted so that a shell reads it back whole: on macOS and Linux, a path from the root, in single quotes, inside
+ * which every sign is taken as it is, a quote written as one closed, escaped and opened again; on Windows in double
+ * quotes, since no name there holds one.
+ */
+const quotedPath = (path: string): string =>
+    path.startsWith('/') ? `'${path.split("'").join("'\\''")}'` : `"${path}"`;
+
+/**
  * The box's text with the paths of files dropped on it put in at the caret, or over the words selected, as a terminal
- * puts them: each in double quotes, a space between two, a space before them where a word ends at the caret and one
+ * puts them: each quoted (`quotedPath`), a space between two, a space before them where a word ends at the caret and one
  * after them where no space follows; and the caret's place, after them.
  */
 export function withPaths(
@@ -788,9 +797,24 @@ export function withPaths(
     const before = text.slice(0, start);
     const after = text.slice(end);
     const lead = before === '' || /\s$/.test(before) ? '' : ' ';
-    const put = lead + paths.map((each) => `"${each}"`).join(' ') + (/^\s/.test(after) ? '' : ' ');
+    const put = lead + paths.map(quotedPath).join(' ') + (/^\s/.test(after) ? '' : ' ');
     return { text: before + put + after, caret: before.length + put.length };
 }
+
+/** A caret a drop left to place: after the paths, in the box of the conversation `key`, once it shows `text`. */
+export interface DropCaret {
+    key: string;
+    text: string;
+    at: number;
+}
+
+/**
+ * Where the caret goes as the box of the conversation `key` shows `text`: after the dropped paths where it shows the text
+ * they were put in; nowhere for another conversation's box, nor for a text they never reached, as where the conversation
+ * was gone before they went in, so a later word typed takes no caret meant for them.
+ */
+export const dropCaretAt = (left: DropCaret | null, key: string, text: string): number | null =>
+    left !== null && left.key === key && left.text === text ? left.at : null;
 
 /** What the box says when no dropped file's path could be read, and when some could not. */
 export const noPathDropped = "A dropped file's path could not be read here; type or paste it instead.";
@@ -839,15 +863,16 @@ export const stopAsked = (chat: Chat): Chat => (chat.running ? everyWordBack({ .
 /** The page handed the turn's end's message to the desktop. */
 export const handed = (chat: Chat): Chat => ({ ...chat, outbox: null });
 
-/** A turn that ended: every request it still held is gone with it. */
+/** A turn that ended, by any road: every request it still held is gone with it, and so is what an earlier turn said. */
 function ended(chat: Chat): Chat {
+    const over = expired(chat);
     return {
-        ...chat,
+        ...over,
         running: false,
         stopping: false,
         resent: null,
         exporting: null,
-        entries: chat.entries.map((each) =>
+        entries: over.entries.map((each) =>
             each.kind === 'permission' && each.answer === null ? { ...each, answer: 'gone' } : each,
         ),
     };

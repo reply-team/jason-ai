@@ -59,8 +59,9 @@ function api(): FakeApi {
         .answerAnyRequest('system.info', 'system.info/with-ui');
 }
 
-async function renderConsole(): Promise<StubDesktop> {
+async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefined): Promise<StubDesktop> {
     const desktop = stubDesktop({ ...setupFound });
+    seed(desktop);
     desktop.keep({ id: spring, campaignId: 'cmp_1', title: 'Spring' });
     desktop.keep({ id: autumn, campaignId: 'cmp_2', title: 'Autumn' });
     desktop.keep({ id: winter, campaignId: 'cmp_4', title: 'Winter' });
@@ -235,6 +236,35 @@ describe('The menu on a row of Recent', () => {
         fireEvent.contextMenu(await row('Set-up'));
         await waitFor(() => menu()!);
         expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
+    });
+
+    it('offers the agent’s folder before Open in has read its places, by the page’s word for the file manager', async () => {
+        // The desktop has not answered which places this computer has, so Open in has drawn none.
+        await renderConsole((desktop) => (desktop.openIn.targets = () => new Promise(() => undefined)));
+        fireEvent.contextMenu(await row('Spring'));
+        await waitFor(() => menu()!);
+        expect(item(folder)).toBeTruthy();
+    });
+
+    it('keeps the agent’s folder in every agent’s menu, whatever place Open in read last', async () => {
+        const desktop = await renderConsole((desktop) => {
+            const all = desktop.openIn.targets;
+            // Autumn's place answers with no file manager among its places.
+            desktop.openIn.targets = async (campaignId, chatId) => {
+                const answer = await all(campaignId, chatId);
+                return campaignId !== 'cmp_2' || 'refused' in answer
+                    ? answer
+                    : { ...answer, places: answer.places.filter((each) => each.id !== 'files') };
+            };
+        });
+        fireEvent.click(await row('Autumn'));
+        await waitFor(() =>
+            expect(desktop.calls.some((each) => each.name === 'openIn.targets' && each.args[0] === 'cmp_2')).toBe(true),
+        );
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        fireEvent.contextMenu(await row('Spring'));
+        await waitFor(() => menu()!);
+        expect(item(folder)).toBeTruthy();
     });
 
     it('opens a move’s dialog named for the row’s agent, where another conversation is shown', async () => {

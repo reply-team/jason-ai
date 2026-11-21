@@ -290,14 +290,15 @@ conversation, and an approval or a question opening Needs you. A line carries no
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. An agent's header holds in **…** the agent's folder in the file
-manager, named as Open in names that place, except in a tab (the menu on the agent's row under **Recent** holds it right
-after **Open**), then its conversation's acts:
+manager, named as Open in names that place (the menu on the agent's row under **Recent** holds it right after **Open**),
+except in a tab, then its conversation's acts:
 **Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
 transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words.
 A file dropped on a chat's message box, or on the box of **Start**, puts its path there in quotes, where the cursor is,
-one for each file, as a terminal does; where a path cannot be read, in a tab or for a file dragged from a web page, the box says so. An agent's chat shows,
+one for each file, as a terminal does: in single quotes on macOS and Linux, which keep every sign of a name as it is, and
+in double quotes on Windows; where a path cannot be read, in a tab or for a file dragged from a web page, the box says so. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
 the account this conversation is in, which it does not name), on which channel, and the subject and text, or a search's
