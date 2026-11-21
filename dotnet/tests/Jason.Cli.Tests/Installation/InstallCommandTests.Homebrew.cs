@@ -57,14 +57,22 @@ public sealed partial class InstallCommandTests
     [InlineData("macos", "link")]
     [InlineData("linux", "link")]
     [InlineData("macos", "keg")]
+    [InlineData("linux", "keg")]
+    [InlineData("macos", "opt")]
+    [InlineData("macos", "older keg")]
     [Critical(Family.I4, "a logon start the formula registered moves to the carried jason")]
     public async Task A_logon_start_naming_the_formula_moves_to_the_carried_jason(string system, string names)
     {
         var places = system == "macos" ? MacPlaces() : LinuxPlaces();
         var executable = system == "macos" ? Carried() : Carried(under: Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "appimage-copy")).FullName, linux: "appimage");
         var (env, _, keg) = FormulaBeside(places, executable);
-        var named = names == "link" ? keg.Link : keg.Executable;
-        var version = HomebrewFormula.Linked(env)!.Version;
+        var (named, version) = names switch
+        {
+            "link" => (keg.Link, HomebrewFormula.Linked(env)!.Version),
+            "keg" => (keg.Executable, HomebrewFormula.Linked(env)!.Version),
+            "opt" => (Path.Combine(keg.Prefix, "opt", "jason", "bin", "jason"), HomebrewFormula.Linked(env)!.Version),
+            _ => (Path.Combine(keg.Prefix, "Cellar", "jason", "0.40.0", "bin", "jason"), "0.40.0"),
+        };
         var registrar = new RecordingRegistrar(system == "macos" ? AutostartPlatform.MacOs : AutostartPlatform.Linux) { State = new AutostartState(true, [named, "runtime", "run", "--detached"], null) };
         env = env with { Autostart = registrar };
 
@@ -76,8 +84,14 @@ public sealed partial class InstallCommandTests
         {
             Assert.Empty(applied.Apply);
         }
+        else
+        {
+            // daemon-reload, then enable: the unit is registered again, and nothing is started.
+            Assert.Equal(["--user daemon-reload", "--user enable"], applied.Apply.Select(command => string.Join(' ', command.Skip(1).Take(2))));
+        }
 
-        Assert.Contains(report.Done, line => line.StartsWith($"The logon start named Homebrew's formula jason {version} at {Path.GetFullPath(named)}", StringComparison.Ordinal));
+        var moved = Assert.Single(report.Done, line => line.StartsWith("Registered the runtime's logon start again", StringComparison.Ordinal));
+        Assert.StartsWith($"Registered the runtime's logon start again, naming {executable}: it named Homebrew's formula jason {version} at {Path.GetFullPath(named)}, which would have started that older Jason at every logon", moved, StringComparison.Ordinal);
         Assert.True(File.Exists(keg.Executable), "the keg's jason was touched");
         Assert.NotNull(new FileInfo(keg.Link).LinkTarget);
     }
@@ -98,7 +112,29 @@ public sealed partial class InstallCommandTests
         var report = await MachineSetup.RunAsync(env, CarriedExecutable.Of(executable)!, MacPlaces(), new InstallOptions(false, false, null), Ct);
 
         Assert.Empty(registrar.Applied);
-        Assert.DoesNotContain(report.Done, line => line.StartsWith("The logon start named Homebrew's formula", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Done, line => line.Contains("it named Homebrew's formula", StringComparison.Ordinal));
+        if (what == "another data directory")
+        {
+            Assert.Contains($"The logon registration names {Path.GetFullPath(keg.Link)} with the data directory {Path.Combine(_tree.Paths.Root, "other")}, not this one, so it was left as it is.", report.Left);
+        }
+    }
+
+    /// <summary>Windows has no Homebrew: a registration that names a formula's path there is not this step's, and nothing is applied.</summary>
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public async Task On_windows_a_logon_start_naming_a_formula_path_is_not_moved()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Set-up on Windows writes the Windows Path, which is Windows's.");
+        var places = WindowsPlaces(NoKey) with { AccountPath = new AccountPathInMemory(null) };
+        var executable = Carried("jason.exe");
+        var (env, _, keg) = FormulaBeside(places, executable);
+        var registrar = new RecordingRegistrar(AutostartPlatform.Windows) { State = new AutostartState(true, [keg.Link, "runtime", "run"], null) };
+        env = env with { Autostart = registrar };
+
+        var report = await MachineSetup.RunAsync(env, CarriedExecutable.Of(executable)!, places, new InstallOptions(false, false, null), Ct);
+
+        Assert.Empty(registrar.Applied);
+        Assert.DoesNotContain(report.Done, line => line.Contains("it named Homebrew's formula", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -113,7 +149,7 @@ public sealed partial class InstallCommandTests
         var report = await MachineSetup.RunAsync(env, CarriedExecutable.Of(executable)!, MacPlaces(), new InstallOptions(false, false, null), Ct);
 
         Assert.Empty(registrar.Applied);
-        Assert.DoesNotContain(report.Done, line => line.StartsWith("The logon start named Homebrew's formula", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Done, line => line.Contains("it named Homebrew's formula", StringComparison.Ordinal));
     }
 
     [Fact]
