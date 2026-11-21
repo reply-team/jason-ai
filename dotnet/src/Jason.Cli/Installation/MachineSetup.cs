@@ -87,6 +87,14 @@ public sealed record InstallRetired(string Executable, string? Aside, IReadOnlyL
 /// <param name="Done">What this run did, one sentence each.</param>
 /// <param name="Left">What it left, and why, one sentence each.</param>
 /// <param name="Problems">What it set out to do and did not; the run exits 1 when there is any.</param>
+/// <param name="Logon">
+/// What became of the runtime's start at logon (<see cref="MachineSetup.LogonStates"/>): <c>registered</c> by this run,
+/// <c>already</c> registered naming this jason, <c>off</c> where the person turned it off, <c>left</c> where a registration
+/// names another program or data directory, <c>existing</c> for an installation set up before the start became the
+/// default, <c>no_installation</c> where the data directory holds none yet, <c>refused</c> where the system would not
+/// register it, and <c>unsupported</c> where this environment names no registrar. Never a problem: a start at logon that
+/// could not be made is said in <paramref name="Left"/> and never fails the run.
+/// </param>
 public sealed record InstallReport(
     string Version,
     string Executable,
@@ -97,7 +105,8 @@ public sealed record InstallReport(
     string Runtime,
     IReadOnlyList<string> Done,
     IReadOnlyList<string> Left,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    string? Logon = null)
 {
     /// <summary>Whether everything it set out to do is done.</summary>
     public bool Completed => Problems.Count == 0;
@@ -121,6 +130,14 @@ public sealed record InstallReport(
 /// <b>Without <c>--roles</c> it writes nothing under the data directory</b>, so a person's first start of the application
 /// still finds a data directory that holds nothing and opens on the Demo. Only retiring an install that already has data — a
 /// runtime to stop, a logon registration to make again — touches it, and that data was there before.
+/// </para>
+/// <para>
+/// <b>It registers the runtime's start at logon</b>, the one place that does by default: where the data directory already
+/// holds an installation, or with <c>--roles</c>, which writes there anyway. Jason Desktop, which runs it with no flags at
+/// its first start, runs it once more right after it brings Live up on a new installation; the report's <c>logon</c> says
+/// <c>no_installation</c> until then. A start the person turned off with <c>jason runtime autostart disable</c> is left off.
+/// It starts nothing now: on Windows and Linux the next logon starts the runtime, and on macOS the LaunchAgent is written
+/// and not loaded, so its <c>RunAtLoad</c> starts nothing before the next login either.
 /// </para>
 /// </remarks>
 public static class MachineSetup
@@ -158,6 +175,10 @@ public static class MachineSetup
         InstallRetired? retired = null;
         IReadOnlyList<InstallSkillsOutcome> skills = [];
         InstallSkillsOutcome? roles = null;
+        string? logon = null;
+
+        // Read before anything of this run can write there: whether the data directory held an installation.
+        var hadInstallation = File.Exists(env.Paths.DatabaseFile);
 
         // Each step in its own guard, so a failure of any kind no step expected ends in the one document like any other
         // problem, with every step before it reported.
@@ -215,6 +236,14 @@ public static class MachineSetup
             }).ConfigureAwait(false);
         }
 
+        // The runtime's start at logon, once a retired install's registration has been moved: registered where it is wanted
+        // and nothing stands against it, and never a problem.
+        await run.Step("Registering the start at logon", () =>
+        {
+            logon = run.StartAtLogon(hadInstallation);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
         // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
         // wrapper being there is not yet that terminal finding this jason, where another file comes first.
         if (command is { Placed: true } placed)
@@ -240,7 +269,20 @@ public static class MachineSetup
             CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
         }
 
-        return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
+        return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems, logon);
+    }
+
+    /// <summary>The words the <c>logon</c> member takes.</summary>
+    public static class LogonStates
+    {
+        public const string Registered = "registered";
+        public const string Already = "already";
+        public const string Off = "off";
+        public const string Left = "left";
+        public const string Existing = "existing";
+        public const string NoInstallation = "no_installation";
+        public const string Refused = "refused";
+        public const string Unsupported = "unsupported";
     }
 
     /// <summary>The words the <c>runtime</c> member takes.</summary>
@@ -906,6 +948,139 @@ public static class MachineSetup
                 Problems.Add($"The logon registration names {old} and could not be registered again: {refused.Message}");
                 return false;
             }
+        }
+
+        // --- the start at logon -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The runtime's start at logon, registered naming this jason and this data directory where the installation is one
+        /// set-up registers for (<see cref="RegistersFor"/>), nothing is registered and the person has not turned it off;
+        /// everything else is left and said. A system that refuses is said too, and is never a problem.
+        /// </summary>
+        public string StartAtLogon(bool hadInstallation)
+        {
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return LogonStates.Unsupported;
+            }
+
+            // A new installation's first start keeps its Demo: nothing is written in a data directory that holds none.
+            if (!options.Roles && !hadInstallation)
+            {
+                return LogonStates.NoInstallation;
+            }
+
+            if (LayoutStamp.Refusal(env.Paths, SkillsSource.BuildVersion(env)) is { } layout)
+            {
+                Left.Add($"The start at logon was not registered: {layout.Message}");
+                return LogonStates.Left;
+            }
+
+            try
+            {
+                if (AutostartOff.Stands(env.Paths, registrar))
+                {
+                    Left.Add("You turned the start at logon off with `jason runtime autostart disable`, so it was left off; `jason runtime autostart enable` turns it on.");
+                    return LogonStates.Off;
+                }
+
+                var state = registrar.Read();
+                if (state.Registered)
+                {
+                    return Registers(state) ? LogonStates.Already : LeftStanding(state);
+                }
+
+                if (!RegistersFor(hadInstallation))
+                {
+                    Left.Add("This installation was set up before the runtime started at logon by default, so no start at logon was registered; `jason runtime autostart enable` registers it.");
+                    return LogonStates.Existing;
+                }
+
+                Register(registrar);
+                return LogonStates.Registered;
+            }
+            catch (AutostartException refused)
+            {
+                Left.Add($"The start at logon could not be registered: {refused.Message} `jason runtime autostart enable` tries again.");
+                return LogonStates.Refused;
+            }
+        }
+
+        /// <summary>
+        /// Whether the installation is a new one, which set-up registers for: with <c>--roles</c> a data directory that held
+        /// no installation before this run, or one whose last set-up by Jason Desktop found none there
+        /// (<c>desktop/machine-setup.json</c> saying <c>no_installation</c>), which the desktop runs again once it has
+        /// brought Live up on it.
+        /// </summary>
+        private bool RegistersFor(bool hadInstallation) => (options.Roles && !hadInstallation) || DesktopFoundNone();
+
+        /// <summary>Whether Jason Desktop's record of its last set-up says it found no installation in this data directory.</summary>
+        private bool DesktopFoundNone()
+        {
+            var record = DesktopRemoval.SetupRecordUnder(env.Paths.Root);
+            try
+            {
+                if (!File.Exists(record) || new FileInfo(record).Length > 1024 * 1024)
+                {
+                    return false;
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(record));
+                return document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("report", out var report)
+                    && report.ValueKind == JsonValueKind.Object
+                    && report.TryGetProperty("logon", out var logon)
+                    && logon.ValueKind == JsonValueKind.String
+                    && logon.GetString() == LogonStates.NoInstallation;
+            }
+            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether a standing registration is this one: it names this jason, and this data directory or none, which an
+        /// earlier version registered for the default one.
+        /// </summary>
+        private bool Registers(AutostartState state)
+        {
+            if (state.Run.Count == 0 || !string.Equals(Path.GetFullPath(state.Run[0]), carried.Executable, PathCase))
+            {
+                return false;
+            }
+
+            var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run);
+            return named is null || string.Equals(Path.GetFullPath(named), env.Paths.Root, PathCase);
+        }
+
+        private string LeftStanding(AutostartState state)
+        {
+            var named = state.Run.Count == 0 ? "another program" : state.Run[0];
+            var data = RuntimeAutostartCommands.DataDirectoryIn(state.Run) is { } directory ? $" on {directory}" : string.Empty;
+            Left.Add($"The start at logon is registered, starting {named}{data}, so it was left as it is; `jason runtime autostart enable` from this jason registers this one instead.");
+            return LogonStates.Left;
+        }
+
+        /// <summary>
+        /// The registration <c>jason runtime autostart enable</c> run from this jason makes, carrying the terminal's search path
+        /// this run was told, and starting nothing: on macOS the LaunchAgent is written and not loaded, since loading it would
+        /// start a runtime (<c>RunAtLoad</c>), and this routine starts no process that outlives it.
+        /// </summary>
+        private void Register(IAutostartRegistrar registrar)
+        {
+            var told = string.IsNullOrEmpty(options.TerminalPath) ? env.SearchPath : options.TerminalPath;
+            var registration = RuntimeAutostartCommands.Registration(env with { InstallPath = carried.Executable, SearchPath = told }, registrar.Platform);
+            if (registrar.Platform is AutostartPlatform.MacOs)
+            {
+                registrar.Apply(registration with { Apply = [], Remove = [] });
+                Done.Add($"Registered the runtime to start at login, naming {carried.Executable}; launchd starts it at the next login, and nothing was started now.");
+                return;
+            }
+
+            registrar.Apply(registration);
+            Done.Add($"Registered the runtime to start at logon, naming {carried.Executable}; it starts at the next logon, and nothing was started now.");
         }
 
         // --- the skills --------------------------------------------------------------------------------------

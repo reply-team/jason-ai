@@ -191,6 +191,19 @@ said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/u
 [ "${said%%+*}" = "$built" ] || fail "A new login shell's jason says '$said', and this run's build is $built."
 echo "The deb placed Jason's source, its key and /usr/bin/jason; a new login shell runs jason $said."
 
+# The start at logon, which the set-up the install line ends in registers: a user unit naming the jason the package
+# carries where the runner has a systemd user manager, and otherwise the set-up's own sentence that the system would not
+# register it, never a failed install.
+"${person[@]}" /usr/bin/jason runtime autostart status > "$work/autostart.json" 2> "$work/autostart.err" || true
+if grep -qF '"registered":true' "$work/autostart.json"; then
+  grep -qF '"executable":"/opt/Jason/resources/bundle/jason"' "$work/autostart.json"     || fail "The start at logon names another jason than the package's: $(cat "$work/autostart.json")"
+  echo "The set-up registered the start at logon, the user unit naming /opt/Jason/resources/bundle/jason."
+elif grep -qF 'The start at logon could not be registered' "$work/install.out"; then
+  echo "The runner has no systemd user manager to register with, and the set-up said so in its report and ended 0."
+else
+  cat "$work/autostart.json" "$work/autostart.err"; fail "The set-up registered no start at logon and said nothing of why."
+fi
+
 # The repository's key, which the package placed, stands for the leg's from here on.
 trust_the_leg() { $SUDO cp "$work/key.gpg" /usr/share/keyrings/jason-desktop.gpg; }
 trust_the_leg

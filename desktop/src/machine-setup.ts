@@ -88,6 +88,12 @@ export interface SetupReport {
     left: string[];
     problems: string[];
     completed: boolean;
+    /**
+     * What became of the runtime's start at logon, in the routine's word (`registered`, `already`, `off`, `left`,
+     * `existing`, `no_installation`, `refused`, `unsupported`); absent where the routine said none, as one before 0.49.4.
+     * `no_installation` is what Live's bringing up of a new installation runs the routine again for (`afterLive`).
+     */
+    logon?: string;
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string';
@@ -97,7 +103,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 /** Pure: the report a document says, or null for anything that is not one. */
 export function reportOf(raw: unknown): SetupReport | null {
     if (!isObject(raw)) return null;
-    const { version, executable, command, skills, runtime, done, left, problems, completed } = raw;
+    const { version, executable, command, skills, runtime, done, left, problems, completed, logon } = raw;
     const doneSaid = texts(done);
     const leftSaid = texts(left);
     const problemsSaid = texts(problems);
@@ -119,7 +125,7 @@ export function reportOf(raw: unknown): SetupReport | null {
         if (!isText(entry.root) || hosts === null || leftAlone === null || typeof entry.written !== 'number' || typeof entry.unchanged !== 'number') return null;
         roots.push({ root: entry.root, hosts, written: entry.written, unchanged: entry.unchanged, leftAlone });
     }
-    return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed };
+    return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed, ...(isText(logon) ? { logon } : {}) };
 }
 
 /**
@@ -403,6 +409,7 @@ export class MachineSetup {
     #state: SetupState;
     #running: Promise<SetupState> | null = null;
     #atStart: Promise<void> | null = null;
+    #afterLive: Promise<void> | null = null;
     #changed: (() => void)[] = [];
 
     constructor(deps: MachineSetupDeps) {
@@ -479,13 +486,29 @@ export class MachineSetup {
         }
     }
 
+    /**
+     * Once Live has brought up the installation: the routine once more, where the run this start shows found no
+     * installation in the data directory (`logon` `no_installation`), so that it registers the runtime's start at logon now
+     * that there is one to start. The registration is still the routine's alone; the desktop only runs it again. Once a
+     * start, after the run under way has ended; anything else runs nothing.
+     */
+    afterLive(): Promise<void> {
+        this.#afterLive ??= (async () => {
+            if (!this.#deps.offered || this.#deps.version === null) return;
+            await this.settled();
+            if (this.#running !== null) await this.#running;
+            if (this.#state.state === 'reported' && this.#state.report.logon === 'no_installation') await this.#run('live');
+        })();
+        return this.#afterLive;
+    }
+
     /** Put back, on the person's word: the routine run again, unless it is running already. */
     putBack(): Promise<SetupState> {
         if (!this.#deps.offered || this.#deps.version === null) return Promise.resolve(this.#state);
         return this.#run('put_back');
     }
 
-    #run(why: 'start' | 'put_back'): Promise<SetupState> {
+    #run(why: 'start' | 'put_back' | 'live'): Promise<SetupState> {
         if (this.#running !== null) return this.#running;
         this.#set({ state: 'running' });
         // Said once, as taking long; the run is never ended for it.
@@ -526,7 +549,7 @@ export class MachineSetup {
      * as `later` runs no finishing step, which would meet the same lock; any other outcome runs it, so a carried update in
      * flight is finished at this start whatever the routine came to.
      */
-    async #routine(why: 'start' | 'put_back'): Promise<Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>> {
+    async #routine(why: 'start' | 'put_back' | 'live'): Promise<Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>> {
         const { cli, platform, log, record } = this.#deps;
         const version = this.#deps.version ?? '';
         let terminalPath: string | null = null;

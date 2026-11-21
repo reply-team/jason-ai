@@ -5,9 +5,9 @@ contract for it: what a release is, what it publishes, how a running runtime lea
 how a person asks the same question by hand, and what `jason update apply` does to this machine when they say
 yes.
 
-**Nothing starts itself unless you asked.** Nothing is registered with the machine until
-`jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
-registration working, and whatever you wrote yourself, for the reason §7 gives.
+**The runtime starts at logon by default, and nothing else starts itself.** The machine set-up an install ends in
+registers the runtime to start at logon (§8), and `jason runtime autostart disable` turns that off for good. An update
+keeps that registration working, and whatever you wrote yourself, for the reason §7 gives.
 
 **The macOS executable is signed with Reply's Developer ID and notarized by Apple, and the Windows executable with a
 certificate issued to Reply through Azure Artifact Signing, timestamped; the Linux executable is not signed.**
@@ -1560,14 +1560,27 @@ that update replaced over 0.48.7. Run neither until you want 0.49 again.
 
 ## 8. Starting at logon
 
-Nothing is registered until you ask. `jason runtime autostart enable` registers **the runtime itself** to start
-when this account logs on; `disable` takes that registration away, and `status` says what is registered:
+The machine set-up registers **the runtime itself** to start when this account logs on, as
+`jason runtime autostart enable` registers it; `disable` takes that registration away and records that you turned it
+off, `enable` registers it again, and `status` says what is registered:
 
 ```sh
 jason runtime autostart enable
 jason runtime autostart status
 jason runtime autostart disable
 ```
+
+**Where set-up registers it.** `jason install` registers the start, naming the `jason` the application carries and
+this data directory, where the data directory already holds an installation or the run is `--roles`, as `install.sh`
+and `install.ps1` run it. Jason Desktop's first start on a new installation runs it with no flags and registers nothing,
+so the Demo opens with nothing written in the data directory; once Live has brought the installation up, the desktop runs
+the set-up once more, and that run registers. The report says what became of it under `logon`: `registered`, `already`
+(it names this `jason`), `off` (you turned it off), `left` (it names another program or data directory, said by name),
+`existing` (an installation set up before this default, which keeps what it had), `no_installation`, or `refused` (the
+system would not register it, said in `left`; never a problem, and the run still ends 0). The set-up starts nothing: on
+macOS it writes the LaunchAgent without loading it, so the next login starts the runtime, as it does on Windows and
+Linux. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
+does.
 
 One registration per operating system and per account, in the account's own scope, and **none of the three needs
 elevation**. On Windows it is a task the Task Scheduler accepts from an ordinary prompt; on macOS and Linux it is

@@ -1172,13 +1172,27 @@ install)
         say "the skills of Claude Code and Codex are recorded in both folders and the role skills under ~/.jason; the person's own quick-start is gone already, as said above, so this install's handling of it is not seen"
     fi
 
+    # The start at login, registered by the set-up install.sh ends in: the LaunchAgent names the carried jason, and it was
+    # written and not loaded, so the set-up started no runtime (RunAtLoad starts one at the next login).
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/install-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after install.sh"
+    [ "$(read_field "$OUT/install-autostart.json" registered)" = true ] || fail "install.sh registered no start at login: $(cat "$OUT/install-autostart.json")"
+    [ "$(read_field "$OUT/install-autostart.json" executable)" = "$carried" ] || fail "the start at login names $(read_field "$OUT/install-autostart.json" executable), not $carried"
+    ! launchctl print "gui/$(id -u)/ai.jason.runtime" > /dev/null 2>&1 || fail "the set-up loaded the LaunchAgent, which starts a runtime now"
+    say "install.sh registered the start at login naming $carried, written and not loaded: the set-up started no runtime"
+
     # The machine set-up an application's start runs: in a home of its own, so that what it writes is all it wrote; nothing
     # under the data directory, so a person's first start still opens on the Demo.
     person="$RUNNER_TEMP/person-start-home"
     rm -rf "$person"; mkdir -p "$person"
     within 120 'jason install as an application start runs it' env -u JASON_DATA_DIR HOME="$person" SHELL=/bin/zsh JASON_HARNESS__ROOT="$person/Jason" "$carried" install --terminal-path /usr/bin:/bin > "$OUT/person-start.json" || fail "jason install, as an application's start runs it, failed: $(cat "$OUT/person-start.json")"
     [ ! -e "$person/.jason" ] || fail "jason install with no --roles wrote under the data directory: $(find "$person/.jason" | head -20)"
-    say "jason install as an application's start runs it writes no entry under the data directory"
+    [ ! -e "$person/Library/LaunchAgents/ai.jason.runtime.plist" ] || fail "jason install with no --roles on a new installation registered a start at login"
+    say "jason install as an application's start runs it writes no entry under the data directory, and registers no start at login on a new installation"
     ;;
 
 enable-starts-now)
