@@ -182,8 +182,9 @@ test('rule 18 of the chat\'s instructions names exactly the nouns whose help run
     assert.deepEqual([...listed.matchAll(/`([a-z-]+)`/g)].map((match) => match[1]), helpNouns(fence.allowed, fence.reads));
     assert.match(rule, /run `jason <noun> --help` with one of these nouns/);
     assert.match(rule, /A verb's own options are in `jason <noun> <verb> --help`, and `jason --help` lists the nouns;/);
-    // Plan only keeps the nouns' exact help rules (`helpRules`) and refuses root help, so the rule gives it the noun's alone.
-    assert.match(rule, /where this mode only reads and proposes, read only `jason <noun> --help`\./);
+    // Plan only keeps the nouns' exact help rules (`helpRules`) and refuses root help, and so does a turn no hook rides below
+    // Claude Code's floor of Full access, so the rule gives both the noun's alone.
+    assert.match(rule, /where this mode only reads and proposes, or where `jason --help` does not run, read only `jason <noun> --help`\./);
     assert.doesNotMatch(rule, /refused|exactly those three words/);
 });
 
