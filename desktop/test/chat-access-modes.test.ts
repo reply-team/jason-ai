@@ -21,6 +21,7 @@ import type { Programs } from '../src/programs.ts';
 import { claudeFloor, compareVersions } from '../src/host-version.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 import { plantedMarkers } from './planted-session.ts';
+import { continueFlags } from '../src/open-in-terminal.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -871,7 +872,105 @@ test('a lost resume\'s fresh session meets the verdict a first start meets: one 
     }
 });
 
-test('a resumed Full access turn started again in Ask first starts a fresh session given the recap, never the session its stopped start was given the message in: the session the next turn resumes holds the message once, whether Claude Code named another mode or refused its bypass', async (t) => {
+/** The conversation's record as the desktop wrote it. */
+const keptRecord = (r: Rig, id: string) =>
+    JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8')) as {
+        sessions: Record<string, string>;
+        plain_sessions?: string[];
+        memory_given?: Record<string, { session: string }>;
+    };
+
+test('in a run that has seen no Full access start honoured, a resumed Full access start forks; refused its bypass, the turn is started again in the session it resumed, untouched, in Ask first and with no recap, and the fork is never recorded, whether Claude Code named another mode or refused its bypass', async (t) => {
+    const causes = [
+        { env: { STUB_INIT_MODE: 'default' }, why: 'bypass_off' },
+        { env: { STUB_BYPASS: 'refused' }, why: 'bypass_refused' },
+    ] as const;
+    for (const cause of causes) {
+        const r = rig(t);
+        const sessions = join(r.b.root, 'sessions');
+        mkdirSync(sessions);
+        r.b.env.STUB_SESSIONS = sessions;
+        const { id } = await r.chat.create();
+        await r.turn(id, 'the first message', claude);
+        // A new run of the desktop has seen no Full access start honoured.
+        r.chat = r.again();
+        Object.assign(r.b.env, cause.env);
+        const said = await r.turn(id, 'the second message', claude);
+        const [stopped, again] = r.hosts().slice(1);
+        assert.equal(flag(stopped?.args ?? [], '--resume'), 'stub-session-1', cause.why);
+        assert.ok(stopped?.args.includes('--fork-session'), `${cause.why}: the run's first resumed Full access start forks`);
+        assert.equal(flag(again?.args ?? [], '--permission-mode'), 'default', cause.why);
+        assert.equal(flag(again?.args ?? [], '--resume'), 'stub-session-1', `${cause.why}: started again in the session it resumed`);
+        assert.ok(!(again?.args ?? []).includes('--fork-session'), `${cause.why}: and that start does not fork`);
+        assert.deepEqual(done(said), { kind: 'done', error: null }, cause.why);
+        const held = readFileSync(join(sessions, 'stub-session-1'), 'utf8');
+        assert.equal(held.split('the second message').length - 1, 1, `${cause.why}: the session resumed holds the message once`);
+        assert.ok(!held.includes('<earlier-messages>'), `${cause.why}: given no recap`);
+        assert.equal(keptRecord(r, id).sessions.claude, 'stub-session-1', `${cause.why}: the fork is never recorded`);
+        await r.turn(id, 'the third message', claude);
+        assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--resume'), 'stub-session-1', `${cause.why}: the next turn resumes the session it always had`);
+        assert.equal(r.chat.open(id).mode, 'full_access', cause.why);
+    }
+});
+
+test('a resumed Full access start that forks and is honoured gives the record the fork: the session a terminal continues, the memory note, the next resume and `session open --resume` follow it, and no later start of the run forks', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'the first message', claude);
+    r.chat = r.again();
+    await r.turn(id, 'the second message', claude);
+    const kept = keptRecord(r, id);
+    assert.equal(kept.sessions.claude, 'stub-session-1-fork', 'the record takes the fork');
+    assert.deepEqual(kept.plain_sessions, ['claude'], 'marked as a plain turn\'s');
+    assert.equal(kept.memory_given?.claude?.session, 'stub-session-1-fork', 'the memory note is of the fork');
+    const found = r.chat.continuable(id);
+    assert.equal(found?.session, 'stub-session-1-fork', 'a terminal continues the fork');
+    assert.deepEqual(continueFlags(found!.host, found!.session), ['--here', '--host', 'claude_code', '--resume', 'stub-session-1-fork'], 'session open --resume names the fork');
+    // A second chat of the same run resumes with no fork: a Full access start was honoured.
+    await r.turn(id, 'the third message', claude);
+    const other = await r.chat.create();
+    await r.turn(other.id, 'elsewhere', claude);
+    await r.turn(other.id, 'elsewhere again', claude);
+    const hosts = r.hosts();
+    assert.deepEqual(hosts.map((host) => flag(host.args, '--resume')), [undefined, 'stub-session-1', 'stub-session-1-fork', undefined, 'stub-session-1']);
+    assert.deepEqual(hosts.map((host) => host.args.includes('--fork-session')), [false, true, false, false, false]);
+});
+
+test('a resumed Full access start refused once a Full access start was honoured in the run did not fork and keeps the fresh session with the recap; the refusal makes the run\'s next resumed Full access start fork again, once', async (t) => {
+    let clock = Date.parse('2026-11-21T10:00:00.000Z');
+    const r = rig(t, { chat: { now: () => clock } });
+    const sessions = join(r.b.root, 'sessions');
+    mkdirSync(sessions);
+    r.b.env.STUB_SESSIONS = sessions;
+    const { id } = await r.chat.create();
+    await r.turn(id, 'the first message', claude);
+    r.b.env.STUB_BYPASS = 'refused';
+    await r.turn(id, 'the second message', claude);
+    const [stopped, again] = r.hosts().slice(1);
+    assert.ok(!(stopped?.args ?? []).includes('--fork-session'), 'a Full access start was honoured in this run: no fork');
+    assert.ok(!(again?.args ?? []).includes('--resume'), 'started again in a fresh session');
+    clock += bypassHeldMs;
+    delete r.b.env.STUB_BYPASS;
+    await r.turn(id, 'the third message', claude);
+    await r.turn(id, 'the fourth message', claude);
+    const later = r.hosts().slice(3);
+    assert.deepEqual(later.map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'bypassPermissions']);
+    assert.deepEqual(later.map((host) => flag(host.args, '--resume')), ['stub-session-2', 'stub-session-3']);
+    assert.deepEqual(later.map((host) => host.args.includes('--fork-session')), [true, false], 'the refusal makes the next resumed start fork, and only that one');
+});
+
+test('a resumed Codex start in a new run carries no fork', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', { host: 'codex' });
+    r.chat = r.again();
+    await r.turn(id, 'hello again', { host: 'codex' });
+    const [first, resumed] = r.hosts();
+    assert.ok(resumed?.args.includes('resume'), JSON.stringify(resumed?.args));
+    for (const host of [first, resumed]) assert.ok(!(host?.args ?? []).includes('--fork-session'));
+});
+
+test('a resumed Full access turn started again in Ask first, in a run that saw a Full access start honoured, so its start did not fork, starts a fresh session given the recap, never the session its stopped start was given the message in: the session the next turn resumes holds the message once, whether Claude Code named another mode or refused its bypass', async (t) => {
     const causes = [
         { env: { STUB_INIT_MODE: 'default' }, why: 'bypass_off' },
         { env: { STUB_BYPASS: 'refused' }, why: 'bypass_refused' },
@@ -888,6 +987,7 @@ test('a resumed Full access turn started again in Ask first starts a fresh sessi
         const said = await r.turn(id, 'the second message', claude);
         const [stopped, again] = r.hosts().slice(1);
         assert.equal(flag(stopped?.args ?? [], '--resume'), 'stub-session-1', cause.why);
+        assert.ok(!(stopped?.args ?? []).includes('--fork-session'), `${cause.why}: no fork once a Full access start was honoured`);
         assert.equal(flag(again?.args ?? [], '--permission-mode'), 'default', cause.why);
         assert.ok(!(again?.args ?? []).includes('--resume'), `${cause.why}: started again in a fresh session`);
         assert.deepEqual(done(said), { kind: 'done', error: null }, cause.why);
