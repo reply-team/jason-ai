@@ -293,7 +293,7 @@ next message there, as records. One whose turn still runs opens running, with St
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. An agent's header holds in **…** the agent's folder in the file
 manager, named as Open in names that place, and after it **Open Claude Code in terminal** (or **Open Codex in
-terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat is set to use
+terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat runs on
 where Open in found it, else the first found, Claude Code before Codex, one item even where both are found, none where
 neither is, none in the demo, and it leaves the window's Open in where it was. The menu on the agent's row under
 **Recent** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts:

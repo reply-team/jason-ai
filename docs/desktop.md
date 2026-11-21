@@ -735,15 +735,15 @@ says before a start how many people the agent holds and how its messages go; it 
 becomes a campaign's. **…** holds the agent's folder in your file manager, named as Open in names it (**Open in File
 Explorer** on Windows, **Open in Finder** on macOS, **Open in File manager** on Linux), and after it **Open Claude
 Code in terminal** or **Open Codex in terminal**: a new session of that host in a terminal at the agent's folder, by the
-same `jason session open` as Open in's own entry for it, the host the agent's chat is set to use where it is found here,
-else Claude Code, else Codex; it is not there where neither is found, nor in the demo, and opening it leaves Open in's
-default as it was. The menu on the agent's row under **Recent** holds the two right after **Open**, then **Rename conversation**, **Start conversation fresh**, which begins
-the agent's next turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which
-deletes the conversation's record from this computer after one question, saying that the agent stays as it is and, for
-a conversation with a folder of its own, that the folder is kept seven days and where, that on Windows a program that
-has it open keeps it where it is until a later start of Jason Desktop moves it, and that on macOS and Linux a terminal
-open in it follows it there; the host keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**,
-**Start fresh** and **Remove**.
+same `jason session open` as Open in's own entry for it, the host the agent's chat runs on where it is found here, else
+Claude Code, else Codex; it is not there where neither is found, nor in the demo, nor in a tab, and opening it leaves
+Open in's default as it was. The menu on the agent's row under **Recent** holds the two right after **Open**, then
+**Rename conversation**, **Start conversation fresh**, which begins the agent's next turn without its memory of the
+conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
+computer after one question, saying that the agent stays as it is and, for a conversation with a folder of its own, that
+the folder is kept seven days and where, that on Windows a program that has it open keeps it where it is until a later
+start of Jason Desktop moves it, and that on macOS and Linux a terminal open in it follows it there; the host keeps its
+own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
