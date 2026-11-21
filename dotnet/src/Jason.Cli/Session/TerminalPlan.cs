@@ -219,7 +219,10 @@ public static class TerminalPlan
     /// word of it: where <paramref name="inherited"/> is given, the first word that expansion would change is refused,
     /// since the host would be given something Jason did not write. Windows Terminal runs the same expansion over the command
     /// line it starts (its <c>ConptyConnection.cpp</c>), but in the Terminal's own process, over that process's environment,
-    /// which for a Terminal already running is not the block scanned here: a name only that environment holds is not caught.
+    /// which for a Terminal already running is not the block scanned here: a name only that environment holds is not caught,
+    /// and neither is a name Jason removed from the block (<c>PSModulePath</c>, the confinement and chat-turn variables),
+    /// which passes the scan here and may still be expanded there by a Terminal that holds it. That concerns the words
+    /// alone; the tab's environment is the block of wt's start, without those names.
     /// The scan reads each word alone, while the console host reads the composed
     /// line: they differ only where a name spans two words, which takes a variable whose name holds a space or a quote. Nothing is escaped instead.
     /// </summary>
