@@ -89,11 +89,12 @@ tab are gone. A web interface of your own keeps its door: the runtime serves you
 
 ## Fixed since 0.49.2
 
-- **Reinstalling Jason Desktop after an uninstall sets up the role skills.** After `jason uninstall` that kept the
-  data directory, installing the same version again by hand, the AppImage started from a download or the deb by
-  `sudo apt install ./jason-desktop-linux-x64.deb`, set up the terminal command and the agents' skills but not the role
-  skills, so `jason status` said Not ready (`role_skills`). Its first start now sets them up too, and `jason status` no
-  longer reports `role_skills`.
+- **Jason Desktop puts the role skills back after `jason uninstall` kept the data.** Installing the same version of
+  Jason Desktop again after such an uninstall, the AppImage started by hand or the deb installed with
+  `sudo apt install ./jason-desktop-linux-x64.deb` say, set up the terminal command and the agents' skills but not the
+  role skills, so `jason status` read Not ready, failing `role_skills`. On every system, a start of Jason Desktop where
+  `jason status` finds no record of the role skills' deployment now deploys them from the package it carries, however
+  they went, so `jason status` no longer fails `role_skills`.
 
 ## Upgrading from 0.49.2
 
