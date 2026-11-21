@@ -93,7 +93,7 @@ voice.
   to act as. It names each campaign it archives with its id and the count, and says once that an archive cannot be
   undone. It lifts a contact's opt-out only when you asked for that verdict on that reply, and then says whose. The
   skills no longer say the chat cannot do what it now does on your word.
-- **Your own Claude Code configuration is loaded in a Full access chat.** <!-- pending C1 --> As in a terminal, a Full
+- **Your own Claude Code configuration is loaded in a Full access chat.** As in a terminal, a Full
   access turn on Claude Code loads your own skills, hooks and MCP servers.
 - **Notices go by themselves.** A blue notice goes when the next answer of that conversation
   begins, and has a close control; none stays until a restart. The line under the composer still says why a mode fell
@@ -171,7 +171,7 @@ voice.
 
 ## Known issues
 
-- Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet. <!-- goes with C1 -->
+- Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet.
 - No screen lists the archived agents yet.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
 - An agent has one conversation: there is no second chat for the same agent yet.
