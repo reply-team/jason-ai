@@ -39,7 +39,12 @@ export function UpdateSection() {
                         {item.label}
                     </button>
                     {newer !== null && (
-                        <span className="dot w" aria-label={t('settings.update.newer', { version: newer })} />
+                        <span
+                            className="dot w"
+                            role="img"
+                            aria-label={t('settings.update.newer', { version: newer })}
+                            title={t('settings.update.newer', { version: newer })}
+                        />
                     )}
                 </p>
             )}

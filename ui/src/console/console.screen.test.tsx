@@ -1748,6 +1748,8 @@ describe('the console', () => {
             return found!;
         });
         expect(dot.getAttribute('aria-label')).toBe('Jason Desktop 0.48.6 is available');
+        expect(dot.getAttribute('role')).toBe('img');
+        expect(dot.getAttribute('title')).toBe('Jason Desktop 0.48.6 is available');
         expect(dot.textContent).toBe('');
         expect(words(foot()).trim()).toBe('Settings');
         flush(() =>

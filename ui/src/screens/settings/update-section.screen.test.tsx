@@ -184,8 +184,13 @@ describe('Update, a section of Settings', () => {
         const onRow = await within(listed()).findByLabelText('Jason Desktop 0.48.6 is available');
         expect(row()!.contains(onRow)).toBe(true);
         expect(onRow.textContent).toBe('');
+        // Words for a sighted person too: the same words as a title, the dot an image.
+        expect(onRow.getAttribute('role')).toBe('img');
+        expect(onRow.getAttribute('title')).toBe('Jason Desktop 0.48.6 is available');
         const onItem = mark(section())!;
         expect(onItem.getAttribute('aria-label')).toBe('Jason Desktop 0.48.6 is available');
+        expect(onItem.getAttribute('role')).toBe('img');
+        expect(onItem.getAttribute('title')).toBe('Jason Desktop 0.48.6 is available');
         expect(onItem.previousElementSibling?.textContent).toBe('Download Jason 0.48.6');
         // Downloaded, Not Now chosen: still known, still marked.
         act(() =>

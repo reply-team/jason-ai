@@ -309,7 +309,7 @@ export function sideView(): Html {
                 : html`<div class="sfoot">
                       <button class="item" type="button" ${marked('settings')} ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
-                          ${newer === null ? null : html`<span class="dot w" aria-label="${t('settings.update.newer', { version: newer })}"></span>`}
+                          ${newer === null ? null : html`<span class="dot w" role="img" aria-label="${t('settings.update.newer', { version: newer })}" title="${t('settings.update.newer', { version: newer })}"></span>`}
                       </button>
                   </div>`
         }`;
