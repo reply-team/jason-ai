@@ -301,8 +301,8 @@ transcript of it; a set-up chat has them in its own bar as **Rename**, **Start f
 A file dropped on a chat's message box, or on the box of **Start**, puts its path in at the cursor, quoted, one for each
 file, as a terminal does. It goes in single quotes, which PowerShell, Git Bash and the macOS and Linux shells read as
 written, a UNC path among them. On Windows, a name with a quote (`'` or a typographic one: `‘ ’ ‚ ‛`) goes in double
-quotes instead. If that name also holds `$` or a backtick, or is a UNC path, its quotes are doubled for PowerShell, and
-Git Bash reads it wrong. Where a path cannot be read, in a tab or for a file dragged from a web page, the box says so.
+quotes instead. If that name also holds `$`, a backtick or a typographic double quote (`“ ” „`), or is a UNC path, its
+quotes are doubled for PowerShell, and Git Bash reads it wrong. Where a path cannot be read, in a tab or for a file dragged from a web page, the box says so.
 An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
