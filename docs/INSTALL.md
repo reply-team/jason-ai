@@ -373,8 +373,18 @@ skills step and by `jason skills`.
 
 ### With a package manager
 
-This page names no package for a new install: on macOS, Windows and Linux the route is the install script above, which
-installs Jason Desktop.
+On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon
+Mac, from the candidate that carries it, Homebrew's cask installs the same Jason Desktop, from the same release:
+
+```sh
+brew install --cask reply-team/tap/jason
+```
+
+Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
+and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and
+the harness root stay. Homebrew's older formula is the command line alone, without Jason Desktop: where it is
+installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the
+way.
 
 Where a package manager installed Jason, it is under the same MIT licence, and the package manager owns that
 installation: it updates it and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
@@ -839,8 +849,10 @@ could be started, that copy is a problem and the verb exits 1.
 
 Where Homebrew or winget installed Jason, the executable, its directory and the PATH entry that reaches it are the
 package manager's: the dry run and the report list them as left to it, with the command that takes them off —
-`brew uninstall jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above, the
-runtime stopped first.
+`brew uninstall --formula jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above,
+the runtime stopped first. Where Homebrew's cask placed Jason Desktop, `jason uninstall` takes off what Jason set up and
+leaves the application, its link and its state under `~/Library` to Homebrew: `brew uninstall --zap --cask jason` takes
+them off.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from

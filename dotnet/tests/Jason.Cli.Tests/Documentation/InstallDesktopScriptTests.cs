@@ -141,7 +141,7 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
         Assert.Contains("This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.", help, StringComparison.Ordinal);
         Assert.DoesNotContain("build for one is published", help, StringComparison.Ordinal);
         Assert.DoesNotContain("Intel Mac is not published", help, StringComparison.Ordinal);
-        Assert.Contains("On a Mac this script is the way to install Jason; Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
+        Assert.Contains("On a Mac this script is the way to install Jason, and Homebrew's cask installs the same Jason Desktop (brew install --cask reply-team/tap/jason); Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
     }
 
     /// <summary>
