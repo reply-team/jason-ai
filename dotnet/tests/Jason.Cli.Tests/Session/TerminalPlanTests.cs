@@ -848,6 +848,7 @@ public sealed class TerminalPlanTests : IDisposable
     [Fact]
     public void An_execution_aliass_program_is_read_from_its_reparse_data()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "An alias's program is a Windows full path, which only Windows' own path rules read as one; the reader runs only on Windows.");
         const string Program = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe";
         string[] strings = ["Microsoft.WindowsTerminal_8wekyb3d8bbwe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", Program, "0"];
 
