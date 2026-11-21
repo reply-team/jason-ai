@@ -540,7 +540,8 @@ the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is
 the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
 nothing newer. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.
 
-On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, from the candidate that carries it:
+On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door once the tap carries it; until then the
+install script is the way:
 
 ```sh
 brew install --cask reply-team/tap/jason
