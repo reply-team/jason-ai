@@ -2608,7 +2608,7 @@ internal static partial class StatusChecks
                 asides.Add(answered + channel.Reason switch
                 {
                     SilencedReasons.DisabledForApplication => "Jason's notifications were switched off (Settings > System > Notifications > Jason), " + TwoEntries,
-                    SilencedReasons.DisabledByGroupPolicy => "a group policy on this machine switched its notifications off; an administrator sets it.",
+                    SilencedReasons.DisabledByGroupPolicy => "a group policy on this machine switched Windows' notifications off; an administrator sets it.",
                     SilencedReasons.DisabledByManifest => "this program's own manifest switched its notifications off.",
                     _ => "notifications were switched off for every app.",
                 });

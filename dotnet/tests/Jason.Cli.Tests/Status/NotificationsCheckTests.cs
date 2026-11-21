@@ -148,7 +148,7 @@ public sealed class NotificationsCheckTests
     [Theory]
     [InlineData("disabled_for_application", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that Jason's notifications were switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.")]
     [InlineData("disabled_for_user", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that notifications were switched off for every app.")]
-    [InlineData("disabled_by_group_policy", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that a group policy on this machine switched its notifications off; an administrator sets it.")]
+    [InlineData("disabled_by_group_policy", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that a group policy on this machine switched Windows' notifications off; an administrator sets it.")]
     [InlineData("disabled_by_manifest", "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that this program's own manifest switched its notifications off.")]
     public async Task A_toast_the_person_switched_off_is_absent(string reason, string fact) =>
         Is(await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason)], "ntf_01K", NineOhSix)), CheckState.Absent, fact);
@@ -481,7 +481,10 @@ public sealed class NotificationsCheckTests
             CheckState.Absent,
             "When the toast was last sent, at 2026-10-01 09:06 UTC, Windows answered that this program's own manifest switched its notifications off.");
 
-    /// <summary>Switches that cannot be read, or no reader (any system but Windows), leave today's words exactly.</summary>
+    /// <summary>
+    /// Switches that cannot be read, or no reader (any system but Windows), leave the toast's last outcome as the words: a
+    /// toast not shown is what Windows answered when it was last sent, dated, and a shown one or none sent reads as before.
+    /// </summary>
     [Fact]
     public async Task Switches_that_cannot_be_read_leave_the_words_as_they_were()
     {
