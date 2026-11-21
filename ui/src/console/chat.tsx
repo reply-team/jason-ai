@@ -86,7 +86,7 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { agentFacts, peopleOf } from './agent-facts';
+import { agentFacts, peopleOf, readAgent } from './agent-facts';
 import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
@@ -266,6 +266,19 @@ export const openingWaiting = signal<Readonly<Record<string, string>>>({});
 export function holdOpening(id: string, text: string): void {
     const words = text.trim();
     if (words) openingWaiting.value = { ...openingWaiting.value, [id]: words };
+}
+
+/**
+ * Holds the first message of an agent's opening where no AI that drives the chat is connected and none waits yet: true
+ * where it was held, so the caller sends nothing. A tab locked out of the chat holds nothing.
+ */
+export function holdsOpening(id: string, text: string): boolean {
+    const chat = chats.value[id];
+    if (!chat || !asksStart(chat) || hostOf(chat) !== null || openingWaiting.value[id] !== undefined) return false;
+    if (inTab() && !tabMaySend(chat.mode)) return false;
+    if (!text.trim()) return false;
+    holdOpening(id, text);
+    return true;
 }
 
 /** The waiting message back into the opening's box. */
@@ -631,7 +644,10 @@ effect(() => {
 });
 
 define('chat.suggest', ([id, text]) => {
-    if (typeof id === 'string' && typeof text === 'string') sendTurn(id, text);
+    if (typeof id !== 'string' || typeof text !== 'string') return;
+    // A chip in an agent's opening is its first message, as Send's is: with no AI to take it, it waits there.
+    if (holdsOpening(id, text)) return;
+    sendTurn(id, text);
 });
 
 define('chat.approvePlan', ([id]) => {
@@ -1586,7 +1602,13 @@ export function ChatNotes({ chat }: { chat: Chat }) {
  * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
  */
 function AgentInBar({ campaignId }: { campaignId: string }) {
+    const api = useApi();
     const listed = campaigns.value.find((each) => each.id === campaignId);
+    // A draft's brief is read where no header read it, so the bar knows whether its Start is held (`startHeld`).
+    const unread = listed?.status === 'draft' && agentFacts.value[campaignId] === undefined;
+    useEffect(() => {
+        if (unread) void readAgent(api, campaignId);
+    }, [api, campaignId, unread]);
     // An archived campaign is over: it has no move, and its chat says nothing of a state.
     if (!listed || listed.status === 'archived') return null;
     // Its brief as its header read it, where it did, so a draft with none and no one in it offers no Start yet.
@@ -1666,6 +1688,14 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const record = chatOf(chatId).value;
     const removing = record?.removing ?? false;
     const renaming = record?.renaming !== null && record?.renaming !== undefined;
+    // The opening's box and the chat's are two boxes: once the first message ends the opening, the chat's box takes the
+    // focus the opening's had.
+    const openingNow = record !== undefined && asksStart(record);
+    const wasOpening = useRef(false);
+    useEffect(() => {
+        if (wasOpening.current && !openingNow) messageBox.current?.focus();
+        wasOpening.current = openingNow;
+    }, [openingNow]);
     // The rename box takes focus with its name selected, so typing replaces it; once it closes, by Save, Cancel or
     // Escape, focus goes back to Rename.
     useEffect(() => {
@@ -1836,8 +1866,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (!tabLocked && current && !host && asksStart(current) && openingWaiting.value[chatId] === undefined) {
             if (!current.draft.trim()) return;
             drop.reset();
-            holdOpening(chatId, current.draft);
-            changeChat(chatId, (each) => typed(each, ''));
+            if (holdsOpening(chatId, current.draft)) changeChat(chatId, (each) => typed(each, ''));
             return;
         }
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
@@ -2126,16 +2155,18 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         {heldWords !== undefined && (
                             <div className="note start-waiting" role="status" aria-label="Waiting message">
                                 <div>
-                                    {setup.value
-                                        ? 'Waiting for an AI to be connected. This waits here while the window is open, and goes when one is:'
-                                        : setupError.value !== null
-                                          ? 'The setup could not be read, so this is not sent yet:'
-                                          : 'Reading what is set up; this goes once an AI is there:'}
+                                    {t(
+                                        setup.value
+                                            ? 'agent.new.waiting'
+                                            : setupError.value !== null
+                                              ? 'agent.new.waitingUnread'
+                                              : 'agent.new.waitingReading',
+                                    )}
                                 </div>
                                 <div className="said">{heldWords}</div>
                                 <div className="crow">
                                     <button className="btn sm" type="button" onClick={() => takeOpeningBack(chatId)}>
-                                        Take back
+                                        {t('chat.queue.takeBack')}
                                     </button>
                                 </div>
                             </div>

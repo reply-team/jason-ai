@@ -194,6 +194,12 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         );
         await waitFor(() => expect(shownPane().querySelector('.agent-opening')).toBeNull());
         expect(shownPane().querySelectorAll('textarea[aria-label="Your message"]')).toHaveLength(1);
+        // The box the person typed in keeps the focus where the chat takes the opening's place.
+        await waitFor(() =>
+            expect(document.activeElement).toBe(
+                within(shownPane()).getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }),
+            ),
+        );
     });
 
     it('offers no Start while the draft has no brief and no one in it', async () => {
@@ -234,6 +240,37 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         const [first, second] = made(desktop).map((each) => each.args);
         expect(second).toEqual(first);
         expect(side().queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('New GTM agent after a lost answer', () => {
+    it.each<Place>(['window', 'tab'])('in the %s, Close then a new click makes one agent, not two', async (place) => {
+        const { desktop } = await renderAt(place);
+        const real = desktop.chat.createAgent;
+        let lose = true;
+        // The first create goes through, and its answer is lost on the way back.
+        desktop.chat.createAgent = async (...args: Parameters<typeof real>) => {
+            const made = await real(...args);
+            if (lose) {
+                lose = false;
+                throw new Error('The answer was lost.');
+            }
+            return made;
+        };
+        click();
+        const alert = await waitFor(() => side().getByRole('alert'));
+        fireEvent.click(within(alert).getByRole('button', { name: 'Close' }));
+        expect(side().queryByRole('alert')).toBeNull();
+        click();
+        await opened();
+        const ids = made(desktop).map((each) => each.args[0]);
+        expect(ids).toHaveLength(2);
+        expect(ids[1]).toBe(ids[0]);
+        expect([...desktop.kept.values()].filter((each) => each.madeAtClick === true)).toHaveLength(1);
+        // The click that made it is done with: the next is a new one.
+        click();
+        await waitFor(() => expect(made(desktop)).toHaveLength(3));
+        expect(made(desktop)[2]!.args[0]).not.toBe(ids[0]);
     });
 });
 
@@ -284,6 +321,93 @@ describe('New GTM agent with no AI connected', () => {
         const conversation = [...desktop.kept.values()].find((each) => each.madeAtClick === true)!.id;
         await waitFor(() => expect(sends(desktop)).toEqual([[conversation, 'Founders of seed-stage fintechs']]));
         expect(desktop.calls.some((each) => each.name === 'chat.create')).toBe(false);
+    });
+});
+
+describe('New GTM agent with no AI connected, while the click is made or a chip is chosen', () => {
+    const connect = (desktop: StubDesktop) => {
+        desktop.status = setupFound;
+        flush(() => desktop.changed());
+    };
+    const sends = (desktop: StubDesktop) =>
+        desktop.calls.filter((each) => each.name === 'chat.send').map((each) => [each.args[0], each.args[1]]);
+
+    it('a message Start holds goes into the agent when an AI connects while the click is being made, never a set-up chat', async () => {
+        const { desktop } = await renderAt('window', api(), noHost);
+        const start = await waitFor(() => document.querySelector<HTMLFormElement>('form[aria-label="Start"]')!);
+        const startBox = within(start).getByRole<HTMLTextAreaElement>('textbox');
+        fireEvent.change(startBox, { target: { value: 'Founders of seed-stage fintechs' } });
+        fireEvent.keyDown(startBox, { key: 'Enter' });
+        await waitFor(() => expect(startWaiting.value).toBe('Founders of seed-stage fintechs'));
+        // The desktop answers the click only once the AI has connected.
+        let answer!: () => void;
+        const answered = new Promise<void>((resolve) => (answer = resolve));
+        const real = desktop.chat.createAgent;
+        desktop.chat.createAgent = (...args: Parameters<typeof real>) => answered.then(() => real(...args));
+        click();
+        await waitFor(() => expect(agentMaking.value).toBe(true));
+        connect(desktop);
+        await waitFor(() => expect(setup.value?.hosts.some((each) => each.found)).toBe(true));
+        await flush(async () => {
+            await Promise.resolve();
+        });
+        expect(desktop.calls.some((each) => each.name === 'chat.create')).toBe(false);
+        answer();
+        // An AI is there by now, so the held message goes at once and the opening gives way to the chat.
+        await waitFor(() => expect(head()?.querySelector('h2')?.textContent).toBe('New agent 1'));
+        const conversation = [...desktop.kept.values()].find((each) => each.madeAtClick === true)!.id;
+        await waitFor(() => expect(sends(desktop)).toEqual([[conversation, 'Founders of seed-stage fintechs']]));
+        expect(desktop.calls.some((each) => each.name === 'chat.create')).toBe(false);
+    });
+
+    it('a chip in the opening is the first message: it waits, shown, with Take back, and goes once an AI is connected', async () => {
+        const { desktop } = await renderAt('window', api(), noHost);
+        click();
+        const { opening } = await opened();
+        const chip = shownPane().querySelector<HTMLButtonElement>('.sugs button')!;
+        const words = chip.textContent!.trim();
+        fireEvent.click(chip);
+        const note = await waitFor(() => within(opening).getByRole('status', { name: 'Waiting message' }));
+        expect(note.textContent).toContain(words);
+        expect(within(note).getByRole('button', { name: 'Take back' })).toBeTruthy();
+        expect(sends(desktop)).toEqual([]);
+        connect(desktop);
+        const conversation = [...desktop.kept.values()].find((each) => each.madeAtClick === true)!.id;
+        await waitFor(() => expect(sends(desktop).map(([id]) => id)).toEqual([conversation]));
+    });
+});
+
+describe('The bar’s rule in its other places, on the recorded draft', () => {
+    it('offers no Start in Recent’s row menu', async () => {
+        await renderAt('window');
+        click();
+        await opened();
+        await waitFor(() => expect(agentFacts.value['cmp_1']).toBeDefined());
+        const recent = within(side().getByRole('navigation', { name: 'Conversations' }));
+        fireEvent.contextMenu(await waitFor(() => recent.getByRole('button', { name: 'New agent 1' })));
+        const menu = await waitFor(() => document.querySelector<HTMLElement>('.row-menu')!);
+        expect(within(menu).getByRole('menuitem', { name: 'Open' })).toBeTruthy();
+        expect(within(menu).queryByRole('menuitem', { name: 'Start' })).toBeNull();
+    });
+
+    it('holds the Dashboard’s New GTM agent, busy, while an agent is being made', async () => {
+        const { desktop } = await renderAt('window');
+        flush(() => here().dock.show('dashboard'));
+        const dash = () => document.querySelector<HTMLElement>('[data-pane="dashboard"]')!;
+        await waitFor(() => expect(activePanel.value).toBe('dashboard'));
+        const button = await waitFor(() =>
+            within(dash()).getByRole<HTMLButtonElement>('button', { name: 'New GTM agent' }),
+        );
+        let answer!: () => void;
+        const answered = new Promise<void>((resolve) => (answer = resolve));
+        const real = desktop.chat.createAgent;
+        desktop.chat.createAgent = (...args: Parameters<typeof real>) => answered.then(() => real(...args));
+        fireEvent.click(button);
+        await waitFor(() => expect(agentMaking.value).toBe(true));
+        const held = within(dash()).getByRole<HTMLButtonElement>('button', { name: 'New GTM agent' });
+        expect([held.disabled, held.getAttribute('aria-busy')]).toEqual([true, 'true']);
+        answer();
+        await opened();
     });
 });
 

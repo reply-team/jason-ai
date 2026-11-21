@@ -128,7 +128,10 @@ describe('the agent’s move in a tab’s chat', () => {
         session.bridge.value = bridge;
         const fake = nothingWaitsInChats(new FakeApi())
             .answer('campaign.list', 'campaign.list/screen-empty', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all');
+            .answer('campaign.summary', 'campaign.summary/all')
+            // The bar reads a draft's brief, as an agent's header would.
+            .answerAnyRequest('campaign.get', 'campaign.get/unlinked')
+            .answerAnyRequest('workitem.list', 'workitem.list/creating-none');
         renderApp(fake);
         route.value = { screen: 'chat' };
         await waitFor(() => screen.getByRole('navigation', { name: 'Chats' }));
@@ -142,6 +145,31 @@ describe('the agent’s move in a tab’s chat', () => {
         const group = await waitFor(() => screen.getByRole('group', { name: 'This agent' }));
         expect(within(group).getByText('Draft')).toBeTruthy();
         expect(within(group).getByRole('button', { name: 'Start' })).toBeTruthy();
+    });
+});
+
+describe('the draft New GTM agent made, in a tab’s chat, which no agent header is drawn above', () => {
+    it('offers no Start in the chat bar while it has no brief and no one in it', async () => {
+        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1' });
+        const bridge: Bridge = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch, () => {
+            if (session.bridge.value === bridge) session.dropBridge();
+        });
+        session.bridge.value = bridge;
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answerAnyRequest('campaign.list', 'campaign.list/new-agent')
+            .answerAnyRequest('campaign.summary', 'campaign.summary/new-agent')
+            .answerAnyRequest('campaign.get', 'campaign.get/new-agent')
+            .answerAnyRequest('workitem.list', 'workitem.list/creating-none')
+            .answerAnyRequest('plugin.list', 'plugin.list/none')
+            .answerAnyRequest('route.list', 'route.list/empty')
+            .answerAnyRequest('ui.tokens', 'ui.tokens/two');
+        renderApp(fake);
+        route.value = { screen: 'chat' };
+        await waitFor(() => screen.getByRole('navigation', { name: 'Chats' }));
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'New agent 1' })));
+        const group = await waitFor(() => screen.getByRole('group', { name: 'This agent' }));
+        expect(within(group).getByText('Draft')).toBeTruthy();
+        await waitFor(() => expect(within(group).queryByRole('button', { name: 'Start' })).toBeNull());
     });
 });
 

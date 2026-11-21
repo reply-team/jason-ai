@@ -203,7 +203,8 @@ describe('the sidebar', () => {
         fireEvent.click(newAgent());
         const alert = await waitFor(() => side().getByRole('alert'));
         expect(alert.textContent).toContain('Jason is not running.');
-        // A click while the failure stands is that click again; once the line is closed, a click is a new one.
+        // A click while the failure stands is that click again, and so is one after the line is closed: the click is
+        // forgotten only once a click made its agent.
         fireEvent.click(newAgent());
         await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(2));
         fireEvent.click(within(await waitFor(() => side().getByRole('alert'))).getByRole('button', { name: 'Close' }));
@@ -214,7 +215,7 @@ describe('the sidebar', () => {
             expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
         ]);
         expect(second).toEqual(first);
-        expect(third).not.toEqual(first);
+        expect(third).toEqual(first);
         expect(inFront()).toBe('Agents');
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });
