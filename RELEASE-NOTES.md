@@ -67,7 +67,8 @@ voice.
   card in a form that names another source, place, ref or version. The commands that keep a card are `jason uninstall`,
   `jason import`, `jason export`, `jason update rollback`, `jason update apply` with `--version` or `--feed`,
   `jason plugin grant`, `jason plugin install` with `--feed` or `--replace`, `jason skills install` and
-  `jason skills update` with `--source`, `--feed`, `--root` or `--ref`, and `jason ui install --feed`. Every help runs
+  `jason skills update` with `--source`, `--feed`, `--root` or `--ref`, `jason ui install --feed`, `jason install --retire`,
+  and `jason profile create` and `jason profile update` with `--program`, `--cli-command` or `--file`. Every help runs
   with no card, and so do the reads, such as `jason runtime status` and `jason update check`, and a pipeline of such
   commands with a plain filter such as `jq`. Where the act is yours, the chat names you as `human:<account>` and gives
   its reason in its own words; an account or a reason in letters outside ASCII is put in single quotes.
