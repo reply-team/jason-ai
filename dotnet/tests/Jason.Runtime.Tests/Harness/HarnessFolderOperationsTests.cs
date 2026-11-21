@@ -85,38 +85,49 @@ public sealed class HarnessFolderOperationsTests
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var acme = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
-        Directory.CreateDirectory(Path.Combine(acme.FolderPath!, "campaigns"));
-        File.WriteAllText(Path.Combine(acme.FolderPath!, "campaigns", "q3-leads"), "in the way");
+        File.WriteAllText(Path.Combine(acme.FolderPath!, "campaigns"), "in the way");
 
         var refused = await api.PostErrorAsync(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, HttpStatusCode.Conflict, Ct);
 
         Assert.Equal("harness_folder_unavailable", refused.Code);
         Assert.Empty((await api.PostOkAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, new { project_id = acme.Id }, Ct)).Items);
         Assert.DoesNotContain("campaign_created", await KindsAsync(api));
-        Assert.Equal("in the way", File.ReadAllText(Path.Combine(acme.FolderPath!, "campaigns", "q3-leads")));
+        Assert.Equal("in the way", File.ReadAllText(Path.Combine(acme.FolderPath!, "campaigns")));
     }
 
     /// <summary>
-    /// A campaign's leaf taken by a folder marked for a campaign nobody here holds is refused, naming it; one taken by
-    /// another campaign this runtime holds is numbered, since campaign names are not unique.
+    /// Two campaigns of one name have folders of their own, each named by when it was made and the end of its id, never by
+    /// the name; a name a third one shares with neither changes nothing about its leaf either.
     /// </summary>
     [Fact]
-    public async Task A_campaign_leaf_is_numbered_for_a_held_campaign_and_refused_for_an_unknown_one()
+    public async Task Campaigns_of_one_name_have_folders_of_their_own_named_by_their_leaves()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var acme = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
         var first = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, Ct);
         var second = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, Ct);
-        var orphan = Path.Combine(acme.FolderPath!, "campaigns", "q4-leads");
-        Directory.CreateDirectory(Path.Combine(orphan, ".jason"));
-        File.WriteAllText(Path.Combine(orphan, ".jason", "marker.json"), """{"marker_version":1,"kind":"campaign","id":"cmp_01K7QN000000000000000GHOST"}""");
 
-        var refused = await api.PostErrorAsync(Operations.CampaignCreate, new { name = "Q4 leads", project_id = acme.Id }, HttpStatusCode.Conflict, Ct);
-
-        Assert.Equal((Path.Combine(acme.FolderPath!, "campaigns", "q3-leads"), Path.Combine(acme.FolderPath!, "campaigns", "q3-leads-2")), (first.FolderPath, second.FolderPath));
-        Assert.Equal("harness_folder_taken", refused.Code);
-        Assert.Contains(orphan, refused.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            (Path.Combine(acme.FolderPath!, "campaigns", TestHarness.LeafOf(first)), Path.Combine(acme.FolderPath!, "campaigns", TestHarness.LeafOf(second))),
+            (first.FolderPath, second.FolderPath));
+        Assert.NotEqual(first.FolderPath, second.FolderPath);
         Assert.Equal(2, (await KindsAsync(api)).Count(kind => kind == "campaign_created"));
+    }
+
+    /// <summary>
+    /// The leaf is read in the zone of the computer the runtime runs on, through the runtime's clock: a clock whose zone is
+    /// five hours ahead of UTC names the folder five hours ahead of the moment the campaign records.
+    /// </summary>
+    [Fact]
+    public async Task A_campaign_s_leaf_is_its_moment_in_the_runtime_s_local_time_and_the_end_of_its_id()
+    {
+        var zone = TimeZoneInfo.CreateCustomTimeZone("test+5", TimeSpan.FromHours(5), "test +5", "test +5");
+        var clock = new FixedClock(new DateTimeOffset(2026, 11, 21, 8, 45, 7, TimeSpan.Zero)) { Zone = zone };
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: clock);
+
+        var leads = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads" }, Ct);
+
+        Assert.Equal("2026-11-21-134507-" + leads.Id[^6..].ToLowerInvariant(), Path.GetFileName(leads.FolderPath));
     }
 
     /// <summary>
@@ -133,7 +144,7 @@ public sealed class HarnessFolderOperationsTests
 
         var standing = await api.PostOkAsync<ProjectDto>(Operations.ProjectGet, new { slug = "default" }, Ct);
         Assert.Equal(Path.Combine(root, "projects", "default"), standing.FolderPath);
-        Assert.Equal(Path.Combine(root, "projects", "default", "campaigns", "q3-marketing-leads"), leads.FolderPath);
+        Assert.Equal(Path.Combine(root, "projects", "default", "campaigns", TestHarness.LeafOf(leads)), leads.FolderPath);
         Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, leads.Id), HarnessMarker.In(leads.FolderPath!));
         Assert.Equal(leads.FolderPath, (await api.PostOkAsync<CampaignDto>(Operations.CampaignGet, new { campaign_id = leads.Id }, Ct)).FolderPath);
         var listed = await api.PostOkAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, new { limit = 10 }, Ct);
@@ -171,7 +182,7 @@ public sealed class HarnessFolderOperationsTests
         var again = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", idempotency_key = "launch-q3" }, Ct);
 
         Assert.Equal(first.FolderPath, again.FolderPath);
-        Assert.Equal(new string?[] { "q3-leads" }, Directory.GetDirectories(Path.GetDirectoryName(first.FolderPath!)!).Select(Path.GetFileName));
+        Assert.Equal(new string?[] { TestHarness.LeafOf(first) }, Directory.GetDirectories(Path.GetDirectoryName(first.FolderPath!)!).Select(Path.GetFileName));
     }
 
     /// <summary>A rename changes the name and nothing else: the folder keeps its leaf; an archived campaign keeps its folder.</summary>
@@ -207,7 +218,7 @@ public sealed class HarnessFolderOperationsTests
 
         var moved = await api.PostOkAsync<CampaignDto>(Operations.CampaignUpdate, new { campaign_id = leads.Id, project_id = beta.Id }, Ct);
 
-        Assert.Equal((beta.Id, Path.Combine(beta.FolderPath!, "campaigns", "q3-leads")), (moved.ProjectId, moved.FolderPath));
+        Assert.Equal((beta.Id, Path.Combine(beta.FolderPath!, "campaigns", TestHarness.LeafOf(leads))), (moved.ProjectId, moved.FolderPath));
         Assert.False(Directory.Exists(leads.FolderPath), "the campaign's old folder is still there.");
         Assert.Equal("Only clinics with two chairs or more.\n", File.ReadAllText(Path.Combine(moved.FolderPath!, "AGENTS.md")));
         Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, leads.Id), HarnessMarker.In(moved.FolderPath!));
@@ -228,7 +239,7 @@ public sealed class HarnessFolderOperationsTests
 
         var made = await api.PostOkAsync<ProjectDto>(Operations.ProjectGet, new { slug = "default" }, Ct);
         Assert.Equal(Path.Combine(RootOf(api), "projects", "default"), made.FolderPath);
-        Assert.Equal(Path.Combine(made.FolderPath!, "campaigns", "q3-leads"), moved.FolderPath);
+        Assert.Equal(Path.Combine(made.FolderPath!, "campaigns", TestHarness.LeafOf(leads)), moved.FolderPath);
     }
 
     /// <summary>A campaign with no folder recorded — one made before folders were — moves in the database alone, and no folder is made for it.</summary>
@@ -426,8 +437,8 @@ public sealed class HarnessFolderOperationsTests
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var campaigns = Path.Combine(RootOf(api), "projects", "default", "campaigns");
-        Directory.CreateDirectory(campaigns);
-        File.WriteAllText(Path.Combine(campaigns, "q3-leads"), "in the way");
+        Directory.CreateDirectory(Path.GetDirectoryName(campaigns)!);
+        File.WriteAllText(campaigns, "in the way");
 
         var refused = await api.PostErrorAsync(Operations.CampaignCreate, new { name = "Q3 leads" }, HttpStatusCode.Conflict, Ct);
 
@@ -442,9 +453,10 @@ public sealed class HarnessFolderOperationsTests
     /// <summary>
     /// The runtime writes structure only. A person's words in an <c>AGENTS.md</c> and their own <c>CLAUDE.md</c> are held
     /// open by the test with no sharing while the runtime adopts the folders they are in and makes folders below them, so
-    /// any open of them — to read, to write over, to create one where it is — fails the request; the campaign folder it
-    /// adopts keeps its <c>AGENTS.md</c> unheld, so a write over one shows in its bytes. Every one of them is byte for
-    /// byte as it was afterwards, the moved campaign's included, and no level is ever given a repository's files.
+    /// any open of them — to read, to write over, to create one where it is — fails the request; the campaign's own
+    /// <c>AGENTS.md</c>, written by the person once its folder stands, is left unheld, so a write over it at the move or the
+    /// archive shows in its bytes. Every one of them is byte for byte as it was afterwards, the moved campaign's included,
+    /// and no level is ever given a repository's files.
     /// </summary>
     [Fact]
     [Critical(Family.X2, "the runtime never opens a memory file, never writes over one, and writes no repository files")]
@@ -453,8 +465,7 @@ public sealed class HarnessFolderOperationsTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
         var root = RootOf(api);
         var waiting = Path.Combine(root, "projects", "acme-corp");
-        var leaf = Path.Combine(waiting, "campaigns", "q3-leads");
-        Directory.CreateDirectory(leaf);
+        Directory.CreateDirectory(waiting);
         var words = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [Path.Combine(root, "AGENTS.md")] = "We sell scheduling software to dental clinics.\n",
@@ -467,7 +478,6 @@ public sealed class HarnessFolderOperationsTests
         }
 
         const string Unheld = "Write as Marta, first person.\n";
-        File.WriteAllText(Path.Combine(leaf, "AGENTS.md"), Unheld);
 
         ProjectDto acme;
         using (Hold(words.Keys))
@@ -481,11 +491,13 @@ public sealed class HarnessFolderOperationsTests
             leads = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 leads", project_id = acme.Id }, Ct);
         }
 
+        File.WriteAllText(Path.Combine(leads.FolderPath!, "AGENTS.md"), Unheld);
+
         var beta = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Beta" }, Ct);
         var moved = await api.PostOkAsync<CampaignDto>(Operations.CampaignUpdate, new { campaign_id = leads.Id, project_id = beta.Id }, Ct);
         await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = leads.Id }, Ct);
 
-        Assert.Equal((waiting, leaf), (acme.FolderPath, leads.FolderPath));
+        Assert.Equal((waiting, Path.Combine(waiting, "campaigns", TestHarness.LeafOf(leads))), (acme.FolderPath, leads.FolderPath));
         Assert.All(words, word => Assert.Equal(word.Value, File.ReadAllText(word.Key)));
         Assert.Equal(Unheld, File.ReadAllText(Path.Combine(moved.FolderPath!, "AGENTS.md")));
         var names = Directory.GetFileSystemEntries(root, "*", SearchOption.AllDirectories).Select(Path.GetFileName).ToList();

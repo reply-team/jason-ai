@@ -113,7 +113,8 @@ never travels for the reason a campaign's never does ([notifications](notificati
 All three are lines of the installation, naming no campaign: a project is not a campaign. All three are the runtime's own, so
 `journal.append` refuses them. A project's name is a value somebody gave, so it never reaches a log, and
 `jason doctor --include-journal` names "project names as they changed" and "the folders a project link recorded" among
-what it carries: a campaign's folder is named from the campaign's name.
+what it carries: a project's folder is named by its slug, which is made from its name, and a campaign made before
+0.49.4 keeps a folder named from its name.
 
 ## 6. From the command line
 
@@ -283,7 +284,7 @@ records, the record wins.
       GEMINI.md
       .jason/marker.json                  {"marker_version":1,"kind":"project","id":"prj_…"}
       campaigns/
-        q3-marketing-leads/               a campaign's folder, named from its name
+        2026-11-21-084507-7h5nrd/         a campaign's folder, named by when it was made and the end of its id
           AGENTS.md
           CLAUDE.md
           GEMINI.md
@@ -337,20 +338,24 @@ is not there, and the folders the request needs:
   a project that has none recorded — the default project of an installation that had campaigns before it had folders,
   for instance. A project's folder made for a campaign, at its create or its move, is made and recorded in a step of its
   own that commits before the campaign's, so it stands, and is recorded, when the campaign's own folder is then refused.
-- **A campaign's folder**, `campaigns/<leaf>/` in its project's folder, made by `campaign.create`. The leaf is made from
-  the campaign's name the way a slug is made from a project's (§2): `Q3 Marketing Leads` is `q3-marketing-leads`; a name
-  that leaves fewer than two characters is `campaign-` and six hexadecimal characters, and a device name has `-campaign`
-  added. A campaign has no slug, and only the path is recorded: campaigns are addressed by id, and their names are not
-  unique.
+- **A campaign's folder**, `campaigns/<leaf>/` in its project's folder, made by `campaign.create`. The leaf is the moment
+  the campaign was made, its `created_at`, to the second, in the local time of the computer the runtime runs on, then
+  the last six characters of its id, lowercase: `cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD`, made at 08:45:07 there on
+  21 November 2026, is `2026-11-21-084507-7h5nrd`. It is never made from the name, so a name is free to change, a
+  placeholder included, and nothing ever asks for the folder to be renamed. The same campaign always has the same leaf:
+  a folder `project.link` makes for a campaign that has none ("Linking a folder", below) takes the leaf its
+  `created_at` makes. A campaign made before 0.49.4 keeps the folder it has, named from its name. A campaign has no
+  slug, and only the path is recorded: campaigns are addressed by id, and the end of the id in a leaf is what leads
+  from a folder to its campaign, as the marker in it does. `jason campaign get --human` says the folder.
 
 A folder already at a level's path is a fact the person must see, never one Jason walks around:
 
 - **With no marker**, it becomes the level's as the root does: its marker is written, and `AGENTS.md` and each import file
   where it has none; not a word of what it holds changes.
 - **Marked for this very project or campaign** — left by a create that was refused after it made it — it is used again.
-- **Marked for another campaign this runtime holds**, at a campaign's leaf, the leaf is followed by `-2`, `-3` and so
-  on, cut where needed so it stays within forty characters: campaign names are not unique. A project's folder is never
-  numbered: its slug is.
+- **Marked for another campaign this runtime holds**, at a campaign's leaf — two made in the same second whose ids end
+  alike, or a campaign moved into a project that has its leaf — the leaf is followed by `-2`, `-3` and so on. A
+  project's folder is never numbered: its slug is.
 - **Marked for anything else** — a level of another kind, another project, an id no project or campaign here holds, a
   marker this runtime cannot read — it is refused as `harness_folder_taken`, naming the path, and nothing is written.
   The person renames or moves it; Jason never deletes it.
@@ -393,7 +398,8 @@ and an empty `AGENTS.md`. Then it leaves them to the person. The import files ar
 - It never deletes a folder or a file. Archiving a campaign leaves its folder where it is.
 - It never runs `git` and never writes a `.gitignore`: the root is a repository only if the person makes it one.
 - A rename changes the name and nothing else; the folder keeps its name, since a session may have it open and a person's
-  own shortcuts point at it.
+  own shortcuts point at it, and memory files, skills and sessions hang on it. A campaign's leaf is never made from its
+  name for that reason.
 - It writes nothing outside the three levels: `projects/` and `campaigns/` are plain directories, with no marker and no
   files of their own.
 
@@ -404,7 +410,7 @@ name or word reaches a bundle.
 ### A campaign changing project
 
 `campaign.update` with `project_id` moves the campaign's folder into the new project's `campaigns/` by one rename, in the
-same request, under the name it had there — `-2`, `-3` where another campaign this runtime holds has that name there.
+same request, under the leaf it had there — `-2`, `-3` where another campaign this runtime holds has that leaf there.
 The project it moves to gets its own folder first when it has none recorded. A project whose folder is one of the
 person's own takes the move the same way: the campaign's folder is the policy's, the project's is theirs.
 
@@ -499,7 +505,8 @@ itself.
 | `harness_folder_present` | 409 | A link named a folder for a project whose recorded folder is still there and still carries its marker. Nothing was written; a link records where a folder went and never moves or copies one, so the person removes or renames one of the two, then links again. |
 
 Each message names the folder, so the person who reads it knows where to look. No folder's path reaches the runtime's
-log: a campaign's folder is named from the campaign's name.
+log: a project's folder is named by its slug, made from its name, and a campaign made before 0.49.4 keeps a folder
+named from its name.
 
 ## 9. A role's notes, by project
 

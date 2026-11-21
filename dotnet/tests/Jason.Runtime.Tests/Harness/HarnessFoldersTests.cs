@@ -14,7 +14,8 @@ namespace Jason.Runtime.Tests.Harness;
 /// The folder policy on a disk the test owns: the root made at the first need or adopted, the levels below it with their
 /// markers and their two files, the names a folder takes, and every refusal leaving the disk as it was. A folder already
 /// at a level's path is never walked around: with no marker it becomes the level's, marked for anything else it is refused,
-/// and only a campaign leaf another campaign of this runtime has is numbered.
+/// and only a campaign leaf another campaign of this runtime has — made in the same second with the same end of its id —
+/// is numbered.
 /// </summary>
 public sealed class HarnessFoldersTests : IDisposable
 {
@@ -27,6 +28,18 @@ public sealed class HarnessFoldersTests : IDisposable
     private const string Campaign = "cmp_01K7QN000000000000000000Q3";
 
     private const string Nobody = "cmp_01K7QN0000000000000NOBODY";
+
+    /// <summary>Another campaign whose id ends as <see cref="Campaign"/>'s does, so made in the same second it has the same leaf.</summary>
+    private const string SameEnd = "cmp_01K7QN0000000000000A0000Q3";
+
+    /// <summary>A third with that end.</summary>
+    private const string SameEndToo = "cmp_01K7QN0000000000000B0000Q3";
+
+    /// <summary>Another campaign whose leaf is not <see cref="Campaign"/>'s.</summary>
+    private const string There = "cmp_01K7QN000000000000000THERE";
+
+    /// <summary>When the test's campaigns were made, in UTC, the zone the test's computer keeps.</summary>
+    private static readonly DateTime Made = new(2026, 11, 21, 8, 45, 7, DateTimeKind.Utc);
 
     private readonly TempTree _tree = new();
 
@@ -69,7 +82,7 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
 
         var project = folders.MakeProjectFolder(Project, "acme");
-        var campaign = await MakeAsync(folders, project, Campaign, "Q3 Marketing Leads");
+        var campaign = await MakeAsync(folders, project, Campaign);
 
         Assert.Equal("Read the notes first.\n", Text(Root, file));
         Assert.Equal(line, Text(project, file));
@@ -97,16 +110,16 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var project = folders.MakeProjectFolder(Project, "acme");
 
-        var campaign = await MakeAsync(folders, project, Campaign, "Q3 Marketing Leads");
+        var campaign = await MakeAsync(folders, project, Campaign);
 
-        Assert.Equal(Path.Combine(project, "campaigns", "q3-marketing-leads"), campaign);
+        Assert.Equal(Path.Combine(project, "campaigns", Leaf(Campaign)), campaign);
         Assert.Equal($$"""{"marker_version":1,"kind":"campaign","id":"{{Campaign}}"}""", Text(campaign, ".jason", "marker.json"));
         string[] expected =
         [
             "AGENTS.md", "CLAUDE.md", "GEMINI.md", ".jason/marker.json",
             "projects/acme/AGENTS.md", "projects/acme/CLAUDE.md", "projects/acme/GEMINI.md", "projects/acme/.jason/marker.json",
-            "projects/acme/campaigns/q3-marketing-leads/AGENTS.md", "projects/acme/campaigns/q3-marketing-leads/CLAUDE.md",
-            "projects/acme/campaigns/q3-marketing-leads/GEMINI.md", "projects/acme/campaigns/q3-marketing-leads/.jason/marker.json",
+            $"projects/acme/campaigns/{Leaf(Campaign)}/AGENTS.md", $"projects/acme/campaigns/{Leaf(Campaign)}/CLAUDE.md",
+            $"projects/acme/campaigns/{Leaf(Campaign)}/GEMINI.md", $"projects/acme/campaigns/{Leaf(Campaign)}/.jason/marker.json",
         ];
         Assert.Equal(expected.Order(StringComparer.Ordinal), Files(Root));
     }
@@ -234,43 +247,40 @@ public sealed class HarnessFoldersTests : IDisposable
     }
 
     /// <summary>
-    /// A campaign's leaf is made from its name as a project's slug is: folded, lower case, runs of anything else one hyphen,
-    /// at most forty characters; a name that leaves too little takes <c>campaign-</c> and six hexadecimal characters, a
-    /// device name <c>-campaign</c>.
-    /// </summary>
-    [Theory]
-    [InlineData("Q3 Marketing Leads", "q3-marketing-leads")]
-    [InlineData("Álvaro's Café — Łódź", "alvaro-s-cafe-lodz")]
-    [InlineData("A name long enough to be cut at forty characters exactly", "a-name-long-enough-to-be-cut-at-forty-ch")]
-    [InlineData("CON", "con-campaign")]
-    [InlineData("Кампания", "campaign-")]
-    public void A_campaign_s_leaf_is_made_from_its_name_as_a_slug_is(string name, string expected)
-    {
-        var leaf = ProjectSlug.Leaf(name, "campaign");
-
-        Assert.True(expected.EndsWith('-') ? leaf.StartsWith(expected, StringComparison.Ordinal) && leaf.Length == expected.Length + 6 : leaf == expected, $"'{name}' made the leaf '{leaf}'.");
-        Assert.True(leaf.Length <= ProjectSlug.MaxLength, $"'{leaf}' is longer than {ProjectSlug.MaxLength} characters.");
-    }
-
-    /// <summary>
-    /// A leaf another campaign this runtime holds has gets the next number, since campaign names are not unique, and the
-    /// number never carries a leaf past forty characters.
+    /// A leaf another campaign this runtime holds has — two made in the same second whose ids end alike — gets the next
+    /// number; campaigns made at other moments, or whose ids end otherwise, never meet.
     /// </summary>
     [Fact]
     public async Task A_leaf_another_campaign_has_gets_the_next_number()
     {
         var folders = TestHarness.Folders(Home);
         var project = folders.MakeProjectFolder(Project, "acme");
-        var first = await MakeAsync(folders, project, "cmp_01K7QN0000000000000000FIRST", "Q3 leads");
+        var first = await MakeAsync(folders, project, SameEnd);
 
-        var second = await MakeAsync(folders, project, Campaign, "Q3 leads");
-        var long1 = await MakeAsync(folders, project, "cmp_01K7QN00000000000000000LONG1", new string('a', 60));
-        var long2 = await MakeAsync(folders, project, "cmp_01K7QN00000000000000000LONG2", new string('a', 60));
+        var second = await MakeAsync(folders, project, Campaign);
+        var third = await MakeAsync(folders, project, SameEndToo);
+        var later = await MakeAsync(folders, project, There);
 
-        Assert.Equal("q3-leads", Path.GetFileName(first));
-        Assert.Equal("q3-leads-2", Path.GetFileName(second));
-        Assert.Equal(new string('a', 40), Path.GetFileName(long1));
-        Assert.Equal(new string('a', 38) + "-2", Path.GetFileName(long2));
+        Assert.Equal(Leaf(Campaign), Path.GetFileName(first));
+        Assert.Equal(Leaf(Campaign) + "-2", Path.GetFileName(second));
+        Assert.Equal(Leaf(Campaign) + "-3", Path.GetFileName(third));
+        Assert.Equal(Leaf(There), Path.GetFileName(later));
+    }
+
+    /// <summary>A leaf is the policy's own, never a name: a create given anything but a leaf's shape is a mistake of the caller's.</summary>
+    [Theory]
+    [InlineData("q3-leads")]
+    [InlineData("Q3 leads")]
+    [InlineData("2026-11-21-084507-0000Q3")]
+    [InlineData("2026-11-21-084507-0000q3-2")]
+    public async Task A_campaign_s_folder_is_made_only_at_a_leaf_s_shape(string leaf)
+    {
+        var folders = TestHarness.Folders(Home);
+        var project = folders.MakeProjectFolder(Project, "acme");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => folders.MakeCampaignFolderAsync(project, Campaign, leaf, HeldAsync));
+
+        Assert.False(Directory.Exists(Path.Combine(project, "campaigns", leaf)));
     }
 
     /// <summary>A folder at the leaf with no marker becomes the campaign's, as the root does: its marker is written, the two files where absent, and nothing it held changes.</summary>
@@ -279,11 +289,11 @@ public sealed class HarnessFoldersTests : IDisposable
     {
         var folders = TestHarness.Folders(Home);
         var project = folders.MakeProjectFolder(Project, "acme");
-        var waiting = Path.Combine(project, "campaigns", "q3-leads");
+        var waiting = Path.Combine(project, "campaigns", Leaf(Campaign));
         Directory.CreateDirectory(waiting);
         File.WriteAllText(Path.Combine(waiting, "AGENTS.md"), "Clinics in Ontario first.\n");
 
-        var campaign = await MakeAsync(folders, project, Campaign, "Q3 leads");
+        var campaign = await MakeAsync(folders, project, Campaign);
 
         Assert.Equal(waiting, campaign);
         Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, Campaign), HarnessMarker.In(campaign));
@@ -303,12 +313,12 @@ public sealed class HarnessFoldersTests : IDisposable
     {
         var folders = TestHarness.Folders(Home);
         var project = folders.MakeProjectFolder(Project, "acme");
-        var taken = Path.Combine(project, "campaigns", "q3-leads");
+        var taken = Path.Combine(project, "campaigns", Leaf(Campaign));
         Directory.CreateDirectory(Path.Combine(taken, ".jason"));
         File.WriteAllText(Path.Combine(taken, ".jason", "marker.json"), marker);
         var before = Snapshot(Root);
 
-        var refused = await Assert.ThrowsAsync<DomainException>(() => MakeAsync(folders, project, Campaign, "Q3 leads"));
+        var refused = await Assert.ThrowsAsync<DomainException>(() => MakeAsync(folders, project, Campaign));
 
         Assert.Equal("harness_folder_taken", refused.Code);
         Assert.Contains(taken, refused.Message, StringComparison.Ordinal);
@@ -322,12 +332,12 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var project = folders.MakeProjectFolder(Project, "acme");
         Directory.CreateDirectory(Path.Combine(project, "campaigns"));
-        File.WriteAllText(Path.Combine(project, "campaigns", "q3-leads"), "a file of the person's own");
+        File.WriteAllText(Path.Combine(project, "campaigns", Leaf(Campaign)), "a file of the person's own");
 
-        var refused = await Assert.ThrowsAsync<DomainException>(() => MakeAsync(folders, project, Campaign, "Q3 leads"));
+        var refused = await Assert.ThrowsAsync<DomainException>(() => MakeAsync(folders, project, Campaign));
 
         Assert.Equal("harness_folder_unavailable", refused.Code);
-        Assert.Equal("a file of the person's own", File.ReadAllText(Path.Combine(project, "campaigns", "q3-leads")));
+        Assert.Equal("a file of the person's own", File.ReadAllText(Path.Combine(project, "campaigns", Leaf(Campaign))));
     }
 
     /// <summary>
@@ -471,14 +481,14 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        var campaign = await MakeAsync(folders, acme, Campaign);
         File.WriteAllText(Path.Combine(campaign, "AGENTS.md"), "Only clinics with two chairs or more.\n");
         File.WriteAllText(Path.Combine(campaign, "draft.md"), "kept\n");
         var before = Snapshot(campaign);
 
         var moved = await MoveAsync(folders, campaign, Campaign, other);
 
-        Assert.Equal(Path.Combine(other, "campaigns", "q3-leads"), moved);
+        Assert.Equal(Path.Combine(other, "campaigns", Leaf(Campaign)), moved);
         Assert.False(Directory.Exists(campaign), "the folder was copied rather than moved.");
         Assert.Equal(before, Snapshot(moved));
     }
@@ -494,11 +504,11 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        var campaign = await MakeAsync(folders, @"\\?\" + acme, Campaign, "Q3 leads");
+        var campaign = await MakeAsync(folders, @"\\?\" + acme, Campaign);
 
         var moved = await MoveAsync(folders, campaign, Campaign, other);
 
-        Assert.Equal(Path.Combine(other, "campaigns", "q3-leads"), moved);
+        Assert.Equal(Path.Combine(other, "campaigns", Leaf(Campaign)), moved);
         Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, Campaign), HarnessMarker.In(moved));
     }
 
@@ -508,12 +518,12 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        await MakeAsync(folders, other, "cmp_01K7QN000000000000000THERE", "Q3 leads");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        await MakeAsync(folders, other, SameEnd);
+        var campaign = await MakeAsync(folders, acme, Campaign);
 
         var moved = await MoveAsync(folders, campaign, Campaign, other);
 
-        Assert.Equal(Path.Combine(other, "campaigns", "q3-leads-2"), moved);
+        Assert.Equal(Path.Combine(other, "campaigns", Leaf(Campaign) + "-2"), moved);
     }
 
     /// <summary>
@@ -526,8 +536,8 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
-        var there = Path.Combine(other, "campaigns", "q3-leads");
+        var campaign = await MakeAsync(folders, acme, Campaign);
+        var there = Path.Combine(other, "campaigns", Leaf(Campaign));
         Directory.CreateDirectory(there);
         var before = Snapshot(Root);
 
@@ -546,7 +556,7 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        var campaign = await MakeAsync(folders, acme, Campaign);
         Directory.Move(campaign, Path.Combine(_tree.Root, "moved-away"));
         var before = Snapshot(Root);
 
@@ -567,8 +577,8 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        await MakeAsync(folders, other, "cmp_01K7QN000000000000000THERE", "Q4 leads");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        await MakeAsync(folders, other, There);
+        var campaign = await MakeAsync(folders, acme, Campaign);
         var before = Snapshot(Root);
 
         DomainException refused;
@@ -592,8 +602,8 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        await MakeAsync(folders, other, "cmp_01K7QN000000000000000THERE", "Q4 leads");
-        var campaign = await MakeAsync(folders, acme, Campaign, "Q3 leads");
+        await MakeAsync(folders, other, There);
+        var campaign = await MakeAsync(folders, acme, Campaign);
         var leaf = await folders.PlanCampaignMoveAsync(campaign, Campaign, other, HeldAsync);
         Directory.Delete(campaign, recursive: true);
         var before = Snapshot(Root);
@@ -644,7 +654,7 @@ public sealed class HarnessFoldersTests : IDisposable
         var folders = TestHarness.Folders(Home);
         var acme = folders.MakeProjectFolder(Project, "acme");
         var other = folders.MakeProjectFolder(Other, "other");
-        await MoveAsync(folders, await MakeAsync(folders, acme, Campaign, "Q3 leads"), Campaign, other);
+        await MoveAsync(folders, await MakeAsync(folders, acme, Campaign), Campaign, other);
 
         var entries = Directory.GetFileSystemEntries(Root, "*", SearchOption.AllDirectories).Select(Path.GetFileName).ToList();
 
@@ -653,11 +663,14 @@ public sealed class HarnessFoldersTests : IDisposable
     }
 
     /// <summary>Makes a campaign's folder as the runtime would, holding the campaign from then on, as its row would be held.</summary>
-    private async Task<string> MakeAsync(HarnessFolders folders, string project, string id, string name)
+    private async Task<string> MakeAsync(HarnessFolders folders, string project, string id)
     {
         _held.Add(id);
-        return await folders.MakeCampaignFolderAsync(project, id, name, HeldAsync);
+        return await folders.MakeCampaignFolderAsync(project, id, Leaf(id), HeldAsync);
     }
+
+    /// <summary>The leaf of a campaign this test made at <see cref="Made"/>.</summary>
+    private static string Leaf(string id) => CampaignLeaf.Of(id, Made, TimeZoneInfo.Utc);
 
     /// <summary>Moves a campaign's folder as the runtime would: its plan, which writes nothing, and then the rename.</summary>
     private async Task<string> MoveAsync(HarnessFolders folders, string campaign, string id, string project)

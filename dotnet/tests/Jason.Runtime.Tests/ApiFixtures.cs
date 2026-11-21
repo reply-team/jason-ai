@@ -821,6 +821,11 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
     private readonly Dictionary<string, int> _countByPrefix = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _digests = new(StringComparer.Ordinal);
 
+    private readonly Dictionary<string, string> _leaves = new(StringComparer.Ordinal);
+
+    /// <summary><see cref="FixedMoment"/> as a campaign folder's leaf writes a moment.</summary>
+    public const string FixedLeafMoment = "2026-10-16-090000";
+
     public JsonNode? Scrub(JsonNode? node, string? key = null)
     {
         switch (node)
@@ -839,7 +844,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
             case JsonArray array:
                 return new JsonArray([.. array.Select(child => Scrub(child))]);
             case JsonValue value when value.TryGetValue<string>(out var text):
-                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Text(text, key));
+                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Leaves(Text(text, key)));
             case JsonValue value when key == "pid" && value.TryGetValue<int>(out _):
                 return JsonValue.Create(4242);
             case JsonValue value when key is "port" or "configured_port" && value.TryGetValue<int>(out _):
@@ -904,6 +909,26 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
         return Ulid().Replace(text, match => Id(match.Value));
     }
 
+    /// <summary>
+    /// A campaign folder's leaf in a text — when the campaign was made and the end of its id, which a run's clock and its
+    /// ids decide — is written as one stable word: the fixed moment, and the end of the id it was scrubbed to
+    /// (<c>cmp001</c> for <c>cmp_1</c>), or a number of its own by first appearance where no id seen ends so.
+    /// </summary>
+    private string Leaves(string text) => Leaf().Replace(text, match =>
+    {
+        var tail = match.Groups["tail"].Value;
+        if (!_leaves.TryGetValue(tail, out var word))
+        {
+            var owner = _ids.FirstOrDefault(pair => pair.Key[^6..].Equals(tail, StringComparison.OrdinalIgnoreCase)).Value;
+            word = owner is not null
+                ? "cmp" + owner[(owner.IndexOf('_') + 1)..].PadLeft(3, '0')
+                : "leaf" + (_leaves.Count + 1).ToString(CultureInfo.InvariantCulture).PadLeft(2, '0');
+            _leaves[tail] = word;
+        }
+
+        return FixedLeafMoment + "-" + word + match.Groups["n"].Value;
+    });
+
     private string Cursor(string cursor)
     {
         if (!System.Buffers.Text.Base64Url.IsValid(cursor))
@@ -933,4 +958,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
 
     [GeneratedRegex("^sha256:[0-9a-f]{64}$")]
     private static partial Regex Digest();
+
+    [GeneratedRegex(@"(?<![0-9A-Za-z-])\d{4}-\d{2}-\d{2}-\d{6}-(?<tail>[0-9a-z]{6})(?<n>-\d+)?(?![0-9A-Za-z-])")]
+    private static partial Regex Leaf();
 }
