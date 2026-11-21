@@ -2802,6 +2802,10 @@ function scriptRefusal(kind: ScriptKind, text: string, path: string, scope: Chat
         const places = [...placesOf(whole, at), ...literalPlaces(tool, whole, at), ...literalPlaces(tool, chained, at), ...lines.flatMap((line) => literalPlaces(tool, line, at))];
         const refused = kindOver(whole, places, at);
         if (refused !== null) return refused;
+        // A walk of a folder that holds the data reaches it without naming it, in a script as in a command: its lines
+        // read as one command from the folder the turn runs in, its comment lines aside (`walksRoot`).
+        const walked = walkRefusal(walksRoot(tool, lines.filter((line) => !/^\s*#/.test(line)).join('\n'), scope));
+        if (walked !== null) return walked;
     }
     return null;
 }

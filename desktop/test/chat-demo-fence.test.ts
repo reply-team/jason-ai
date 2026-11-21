@@ -673,7 +673,9 @@ test('the text an edit is judged by is the file on disk, read only when it is a 
     writeFileSync(large, Buffer.alloc(textLimit + 1, 0x61));
     assert.equal(textOf(large), null);
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
-    const scope: ChatScope = { platform, cwd: root, chat: root, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
+    // The turn runs in a folder of its own, as a chat's does: the home folder holds the data directory.
+    const chat = join(root, 'chat');
+    const scope: ChatScope = { platform, cwd: chat, chat, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
     const judged = fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, scope);
     assert.equal(judged.outcome, 'refused', JSON.stringify(judged));
     assert.deepEqual(fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'ta' }, { ...scope, text: () => null }), { outcome: 'runs' }, 'the replacement alone names nothing');

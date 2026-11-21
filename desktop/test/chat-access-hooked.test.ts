@@ -433,6 +433,20 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('a script the agent writes is walked as its lines would run: a walk of a folder that holds the data directory in it, and a program its lines run in one, are refused as the command would be; a script of plain forms is written', () => {
+    for (const scope of scopes) {
+        for (const [input, sentence] of [
+            [{ file_path: 'go.sh', content: '#!/bin/sh\ndu -sh ~\n' }, searchRefusal],
+            [{ file_path: 'go.sh', content: '#!/bin/sh\ncd ~\nfrobnicate\n' }, inRootRefusal],
+            [{ file_path: 'Makefile', content: 'all:\n\ttar -cf x.tar /\n' }, searchRefusal],
+            [{ file_path: 'package.json', content: '{"scripts":{"backup":"cp -r ~ /tmp/copy"}}' }, searchRefusal],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement('Write', input, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${input.content}`);
+        }
+        assert.deepEqual(fullAccessJudgement('Write', { file_path: 'go.sh', content: '#!/bin/sh\nls ~\ncat ~/Desktop/notes.txt\n' }, scope), { outcome: 'runs' }, scope.platform);
+    }
+});
+
 test('a word that begins with a variable the reading does not know is refused in a form that descends or copies, and runs in a plain one; a variable the text gives a literal value is read as that value; the profile\'s drive, its path, the system drive and the folder PowerShell is asked for name a folder that holds the data directory', () => {
     for (const scope of scopes) {
         for (const command of ['grep -r api_key "$X"', 'du -sh "$X"', 'rsync -a "$X" /tmp/copy', 'ls -R $X', 'cp -r ${X} copy', 'zip -r x.zip "${X:-.}"', 'for d in ~ /; do du -sh "$d"; done', 'd=~; tar -cf x.tar "$d"', 'ls "$X"', 'grep api_key "$X"']) {

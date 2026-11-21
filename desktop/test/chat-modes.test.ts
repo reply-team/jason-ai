@@ -576,7 +576,7 @@ test('under Full access a script written with an escaped verb or a re-spelled op
     const w = await wired(t, 'full_access', fence);
     const file = join(w.scope.chat, 'go.sh');
     assert.equal(await hooked(w, 'Write', { file_path: file, content: 'jason approval appro\\ve apr_1\n' }), null);
-    assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl $U/v1/approval.appr''ove" }), null);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl http://127.0.0.1:4011/v1/approval.appr''ove" }), null);
 });
 
 test('env -i or env -u around a jason drops the chat\'s environment without naming it, and is refused in every mode', async (t) => {
