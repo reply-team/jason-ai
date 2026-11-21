@@ -620,7 +620,9 @@ applies to the turns a person starts by sending, from the next one on.
   `.mcp.json` directly in the chat folder are refused to a shell command as to the file tools, and the host is denied
   edits of them (`chatRules`), in every mode but Full access. In Full access the turn's folder is its own, a
   conversation's own folder and the shared chat folder alike, and is put right again before the next turn: the
-  instructions are written afresh and the agent folders hold only what the desktop placed (below).
+  instructions are written afresh and the agent folders hold only what the desktop placed (below). Two conversations an
+  earlier desktop made share that folder, so while both run a turn, one may read a skill the other's turn rewrote; the
+  next turn of each starts from the desktop's files.
 - **The files and commands that add an MCP server are a card each time in Ask first and Auto-edit.** A write of
   `.mcp.json` anywhere else, or of
   `.claude.json` anywhere (Claude Code keeps the user's and the local scopes' servers there), is a guarded name's card,

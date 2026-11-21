@@ -1013,6 +1013,22 @@ test('on a Claude Code below the floor of Full access, a verb that reads a reque
     }
 });
 
+test('on a Claude Code below the floor of Full access, a here-document followed by a second command is no plain form: it is a card in Ask first and in Auto-edit, and nothing runs before the answer', async (t) => {
+    for (const mode of ['ask_first', 'auto_edit'] as const) {
+        const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+        t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+        writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
+        const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
+        const { id } = await r.chat.create();
+        await r.chat.setMode(id, mode, 'claude');
+        const command = 'jason workitem create cmp_1 --file - <<\'EOF\'\n{"title":"Call Ada"}\nEOF\nrm item.json';
+        plan(r, [{ ask: { tool: 'Bash', input: { command } } }]);
+        const said = await answered(r, id, [false]);
+        assert.deepEqual(cards(said).map((card) => card.detail), [command], mode);
+        assert.ok(!texts(said).includes('decision allow'), `${mode}: ${JSON.stringify(texts(said))}`);
+    }
+});
+
 test('a restart opens a chat that was in Full access in Full access: its record holds no mode', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
