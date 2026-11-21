@@ -575,7 +575,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         log,
         reload: () => void repairer.reload(),
         login,
-        autostart,
         updates,
         packageMoved,
         restart: () => void restartIfOwed(),
@@ -597,7 +596,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const repointed = (async () => {
         await machineSetup?.settled();
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
-        await desk.readAutostart();
     })();
     // An update that installs the AppImage under a new file name moves Open Jason at Login to it.
     autoUpdater.on('appimage-filename-updated', (file) => {
@@ -870,6 +868,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             },
         );
         runtimeVersion = started.runtimeVersion;
+        // A new installation, brought up: the machine set-up once more, which registers the runtime's start at logon where
+        // the run at this start found no installation to register it for (`afterLive`).
+        void machineSetup?.afterLive();
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
@@ -1018,7 +1019,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     const noJason: Cli = { run: () => Promise.reject(new Error('The demo runs no jason.')) };
     let views: DemoViews | null = null;
     const login = new LoginItem({ platform: process.platform, home: homedir(), executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead: Promise.resolve(), log, env: process.env });
-    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
+    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
     // A terminal's update request: the Demo resolves no host name and holds no updater, so it refuses the request as the

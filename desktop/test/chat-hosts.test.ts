@@ -213,6 +213,15 @@ test('the campaign\'s and the project\'s folders are added one --add-dir each; a
     assert.ok(!first.includes('--add-dir') && !first.includes('--model') && !first.includes('--resume'));
 });
 
+test('a resume that forks passes --fork-session right after its session; a fork with no resume, or none asked for, passes nothing', () => {
+    const forked = claudeArguments({ ...turn, resume: 'ses-42', fork: true });
+    assert.deepEqual(forked.slice(forked.indexOf('--resume'), forked.indexOf('--resume') + 3), ['--resume', 'ses-42', '--fork-session']);
+    assert.equal(forked.filter((arg) => arg === '--fork-session').length, 1);
+    assert.ok(!claudeArguments({ ...turn, resume: 'ses-42' }).includes('--fork-session'));
+    assert.ok(!claudeArguments({ ...turn, resume: 'ses-42', fork: false }).includes('--fork-session'));
+    assert.ok(!claudeArguments({ ...turn, fork: true }).includes('--fork-session'));
+});
+
 test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed by its thread, the prompt from stdin', () => {
     assert.deepEqual(codexArguments({ platform: 'linux', model: 'gpt-5', resume: 'thr-1' }), [
         'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',

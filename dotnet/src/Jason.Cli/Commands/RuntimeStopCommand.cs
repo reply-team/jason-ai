@@ -32,9 +32,30 @@ public static class RuntimeStopCommand
         if (exit == ExitCodes.Success)
         {
             Installation.StartOwed.Remove(env.Paths);
+            if (StartsAtLogon(env))
+            {
+                env.Error.WriteLine(UntilTheNextLogon);
+            }
         }
 
         return exit;
+    }
+
+    /// <summary>What a stop a person or an agent asks for says on stderr where the runtime is registered to start at logon.</summary>
+    internal const string UntilTheNextLogon =
+        "It stays stopped until the next logon, which starts it again; `jason runtime autostart disable` stops that.";
+
+    /// <summary>Whether this account has the runtime registered to start at logon, as <c>runtime autostart status</c> reads it; no where that cannot be read.</summary>
+    private static bool StartsAtLogon(CliEnvironment env)
+    {
+        try
+        {
+            return RuntimeAutostartCommands.Registrar(env).Read().Registered;
+        }
+        catch (Autostart.AutostartException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

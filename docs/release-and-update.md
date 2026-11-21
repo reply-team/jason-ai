@@ -5,9 +5,9 @@ contract for it: what a release is, what it publishes, how a running runtime lea
 how a person asks the same question by hand, and what `jason update apply` does to this machine when they say
 yes.
 
-**Nothing starts itself unless you asked.** Nothing is registered with the machine until
-`jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
-registration working, and whatever you wrote yourself, for the reason §7 gives.
+**The runtime starts at logon by default, and nothing else starts itself.** The machine set-up an install ends in
+registers the runtime to start at logon (§8), and `jason runtime autostart disable` turns that off for good. An update
+keeps that registration working, and whatever you wrote yourself, for the reason §7 gives.
 
 **The macOS executable is signed with Reply's Developer ID and notarized by Apple, and the Windows executable with a
 certificate issued to Reply through Azure Artifact Signing, timestamped; the Linux executable is not signed.**
@@ -36,7 +36,8 @@ manifest and the checksums and publishes the release at once, with the assets be
 release unless a newer one already is or the version is a release candidate. The pull request is merged into `main` only
 after the publication is checked: the README and every page GitHub shows are read from `main`, so `main` never
 describes a release that is not out, and a release run that fails leaves `main` as it was. A release no longer asks the
-Homebrew tap to bump its formula (§6). A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
+Homebrew tap to bump its formula (§6). The job that would ask it to bump the cask (§6) is switched off until the tap
+carries the cask, and waits on the cask's own macOS proof: a red proof holds the cask's bump and never the release. A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
 `hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
 it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
 holds them assembles the release and says in one line that it publishes nothing.
@@ -527,7 +528,7 @@ with its own commands; Jason's verbs act only on what is Jason's:
 | | Homebrew | winget |
 |---|---|---|
 | updates it | `brew upgrade jason` | `winget upgrade Reply.Jason` |
-| takes it off | `brew uninstall jason` | `winget uninstall Reply.Jason` |
+| takes it off | `brew uninstall --formula jason` | `winget uninstall Reply.Jason` |
 
 `jason update check` names the command (§5) and `jason update apply` refuses (§7). `jason runtime autostart enable`
 registers the manager's own entry, which stays put across its upgrades, rather than the keg a link resolves to (§8).
@@ -537,19 +538,43 @@ rest to the manager (§9).
 Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs
 the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at
 the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
-nothing newer.
+nothing newer. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.
+
+On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, from the candidate that carries it:
+
+```sh
+brew install --cask reply-team/tap/jason
+```
+
+If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again. If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.
+
+It places `Jason.app` in `/Applications` from the release's `jason-desktop-macos-arm64.zip`, the file the application's
+own updater downloads, held to the release's `checksums.txt`, and links the `jason` the application carries as `jason`
+in Homebrew's `bin`. Open Jason once: its first start sets up the terminal command and the skills, as the disk image
+does. Jason then updates itself, and the cask says so, so `brew upgrade` leaves it alone; `brew upgrade --greedy`
+reinstalls it all the same wherever Homebrew's version is behind the application's, quitting it and stopping the runtime
+first. `brew uninstall --cask jason` quits it, stops the runtime and takes off the application and its link, and leaves
+the `jason` command's wrapper and the start at logon pointing at nothing; `brew uninstall --zap --cask jason` first has
+the `jason` it carries take off what Jason set up (`jason uninstall --keep-application`), then trashes the application's
+own state under `~/Library`. The data directory and the harness root stay in both. The cask is rendered from one
+template, `.github/cask/jason.rb.template`, which the tap's bump reads from this repository at the release's tag.
+
+While the formula's keg is linked, Homebrew does not link the cask's `jason`. Jason Desktop's set-up, on a Mac and on
+Linux, names a linked formula beside the `jason` it carries, with `jason runtime stop` and `brew uninstall --formula
+jason` as what takes it off, stops a runtime started from the keg, and leaves the keg's files to Homebrew; `jason status`
+says the same as a detail of its `path` check, which still passes.
 
 The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason
 Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:
 
 ```sh
 jason uninstall
-brew uninstall jason
+brew uninstall --formula jason
 curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 `jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data
-directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason
+directory, and leaves the rest to Homebrew (§9); `brew uninstall --formula jason` takes the rest; the one line installs Jason
 Desktop, which opens the same data directory as it is.
 
 ### Carried by the desktop
@@ -1560,14 +1585,34 @@ that update replaced over 0.48.7. Run neither until you want 0.49 again.
 
 ## 8. Starting at logon
 
-Nothing is registered until you ask. `jason runtime autostart enable` registers **the runtime itself** to start
-when this account logs on; `disable` takes that registration away, and `status` says what is registered:
+The machine set-up registers **the runtime itself** to start when this account logs on, as
+`jason runtime autostart enable` registers it; `disable` takes that registration away and records that you turned it
+off, `enable` registers it again, and `status` says what is registered:
 
 ```sh
 jason runtime autostart enable
 jason runtime autostart status
 jason runtime autostart disable
 ```
+
+**Where set-up registers it.** `jason install` registers the start, naming the `jason` the application carries and
+this data directory, where the data directory already holds an installation or the run is `--roles`, as `install.sh`
+and `install.ps1` run it. Jason Desktop's first start on a new installation runs it with no flags and registers nothing,
+so the Demo opens with nothing written in the data directory; once Live has brought the installation up, the desktop runs
+the set-up once more, and that run registers. The report says what became of it under `logon`: `registered`, `already`
+(it names this `jason`), `off` (you turned it off), `left` (it names another program or data directory, said by name),
+`no_installation`, or `refused` (the system would not register it, said in `left`; never a problem, and the run still
+ends 0).
+
+**An update turns it on once.** An installation set up before this default gets the start at logon from the first
+set-up of a version that has it, the Desktop's first start of that version or a terminal's update, unless you turned it
+off: `<data>/autostart/off.json`, or on macOS launchd's record of the label as disabled. That set-up writes
+`<data>/autostart/default.json`, and no later one turns the start on again; one you took off by other means than
+`disable` stays off and is said under `left`. On Windows and Linux a `disable` made before this default left no record, so
+such an installation is turned on once too; `disable` again turns it off for good. The set-up starts nothing now: the
+runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`; on macOS it writes the LaunchAgent
+without loading it. A command-line tarball installed by hand runs no set-up and registers nothing; `jason runtime autostart enable`
+does.
 
 One registration per operating system and per account, in the account's own scope, and **none of the three needs
 elevation**. On Windows it is a task the Task Scheduler accepts from an ordinary prompt; on macOS and Linux it is
@@ -1585,8 +1630,20 @@ registration carries — and nothing watches it afterwards: a runtime that stops
 starts it. There is no restart policy, no `KeepAlive`, and no second process whose job is to keep the first one
 alive.
 
-**`enable` starts nothing now, and `disable` stops nothing.** They change what happens at the *next* logon.
-Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`. On macOS `disable`, and
+**`enable` also starts the runtime now, where none answers, and `disable` stops nothing.** On macOS the load starts it,
+since the LaunchAgent carries `RunAtLoad`, and `enable` waits up to thirty seconds for that runtime's endpoint before it
+starts one itself; on Windows and Linux it is started as `jason runtime start` starts it. The outcome is one sentence on
+stderr, and a start that fails leaves the registration in place. Stopping a runtime today is still `jason runtime stop`,
+and where the runtime is registered the stop says on stderr that it holds until the next logon, which starts it again.
+
+**`disable` is recorded as your word.** It writes `<data>/autostart/off.json`, the moment and the version that wrote it,
+so that nothing which turns the start at logon on by default turns it on again; on macOS launchd's own record of the label
+as disabled, which `disable` leaves, counts as the same word. `enable` removes the file, `autostart status` says
+`turned_off`, and `jason status`'s optional `autostart` check says the start was turned off by you. `disable` says on
+stderr that after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.
+`jason uninstall` removes
+`off.json`, and `default.json` beside it, also where it keeps the data, and `jason export` carries neither: an import is a
+new machine, where the default holds. On macOS `disable`, and
 `jason uninstall` with it, take the job out of launchd before its file goes — `launchctl unload -w` on the file where it is
 there, then `launchctl remove ai.jason.runtime` by its label, which holds for a job whose file is gone already, each
 waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` records
@@ -1806,8 +1863,8 @@ directory is not empty until it does.
 **Where a package manager installed Jason** (§6), the last two steps are the manager's. The executable, the directory it
 is in and the PATH entry that reaches it are left to the package manager, and so are the native libraries the executable
 unpacked, which stay with it; the plan and the report name them as left to it, with the command that takes them off —
-`brew uninstall jason`, or `winget uninstall Reply.Jason`. Everything above them goes as it always does, the runtime
-stopped first, and the plan an agent reads carries the same as `left_to`.
+`brew uninstall --formula jason`, or `winget uninstall Reply.Jason`. Everything above them goes as it always does, the
+runtime stopped first, and the plan an agent reads carries the same as `left_to`.
 
 **Where the desktop application carries this `jason`** (§6), on macOS, Windows and Linux, this verb is the one
 uninstall: of the application, of what `jason install` placed for it, and of an older command-line install. It is
@@ -1841,10 +1898,10 @@ runs from there. Beside the steps above:
 | in place of the PATH entry and the executable | the terminal command, by the rules `jason install` placed it by: on macOS, and on Linux for an AppImage, `~/.local/bin/jason` and `jason-desktop` where each is the application's wrapper running this `jason`, or one that is gone, or for an AppImage another version's copy beside it (from the deb `/usr/bin/jason` is the package's, gone with it), then `install.sh`'s lines for `~/.local/bin` where that folder then holds nothing but Jason — a profile file itself removed only where `jason install` recorded that it created that file and nothing but whitespace is left once the lines are out, so a file the person had, one they have written into since, and one with no record (an install before 0.49) stay — then the folder once empty; on Windows the application's `jason` and `jason-desktop` command files in WindowsApps, and the entry in this account's Path naming the application's `resources\bundle` where that folder holds nothing but what the application carries there (the executable, `LICENSE`, `THIRD-PARTY-NOTICES`, `skills/`, `version.json`, and the `jason-update.pid` a carried update writes beside them and an update ended part-way leaves, §10). Then the native libraries this `jason`'s build unpacked, by the executable's step above and its routine — its own build's directory, on Windows every other build's beside it, on macOS the others counted and left — since the `jason` itself goes with the application and the runtime that loads them has stopped. An older command-line install, found where `jason install` looks for one, goes by the rule that retires one: its executable, its notice files, its Path entry or profile block, its folder. Then the folders an earlier version's demo made, each only where it carries the demo's mark, and the updater's cache — on Linux under `XDG_CACHE_HOME`, `~/.cache` by default; on macOS also Squirrel's ShipIt state, `~/Library/Caches/ai.jasonharness.desktop.ShipIt`, after the launchd job Squirrel submits for ShipIt on an update, `ai.jasonharness.desktop.ShipIt`, which launchd keeps loaded once ShipIt has ended: taken out of this account's login domain where `launchctl print` says it is loaded and not running (`/bin/launchctl bootout gui/<uid>/ai.jasonharness.desktop.ShipIt`, then `launchctl remove` by its label, each waited for ten seconds at most) and said in the report; one running or set to run is an update being installed, and is left, with ShipIt's state, the application and its own state under `~/Library`, each said under `kept` and the reason among the problems; a ShipIt found running at the last look, just before the application goes, keeps the application and its own state, and is said among the problems; one `launchctl` could not be asked about is left as it was, and said, where launchd, asked then about the login domain itself (`launchctl print gui/<uid>`), says the domain is there; one not loaded is nothing to say, and nor is one whose login domain launchd says is not there, as for an account with no login session: no job is loaded in a domain that is not there. The plan names it as `updater_job` where launchd says it is loaded when the plan is read |
 | Linux, an AppImage, just before the file, only where it goes | its menu entry, `applications/jason-desktop.desktop` under `XDG_DATA_HOME` (`~/.local/share` by default) where it starts that file, its icons `icons/hicolor/<size>/apps/jason-desktop-app.png` there, the copies of its `jason` under `<data>/desktop/bundle/`, the copy an update kept under `<data>/desktop/rollback/`, `<data>/desktop/appimage.json`, and `ai.jasonharness.desktop` there, `jason install`'s record of the profiles it created. `--keep-application` keeps all of it |
 | macOS, just before the application, only where it goes | the application's own state under `~/Library`, each only where it is found as itself, never through a link, and each named in the plan before anything is removed. The application moves Electron's profile and logs into the data directory before it is ready (`app.setPath('userData')`, `setAppLogsPath`), so what is here is what macOS and the frameworks keep by the bundle identifier: `Preferences/ai.jasonharness.desktop.plist`, removed through the preferences system first (`defaults delete ai.jasonharness.desktop`, "Removes all default information for domain", waited for ten seconds at most), which would otherwise write back a copy it holds, then as a file; `Saved Application State/ai.jasonharness.desktop.savedState`, the windows macOS restores at the next open; `Caches/ai.jasonharness.desktop`, Squirrel.Mac's update state (`NSCachesDirectory` and the bundle identifier); `HTTPStorages/ai.jasonharness.desktop` and `HTTPStorages/ai.jasonharness.desktop.binarycookies`, the system's HTTP storage and cookies for the bundle; `WebKit/ai.jasonharness.desktop`; and `Application Support/ai.jasonharness.desktop`, the folder Apple's convention gives the bundle, where `jason install` records the profiles it created, `created-profiles.json`. Removing them forgets the application's preferences, its window layout, its caches and cookies; none is the person's work. Only what is provably the application's goes by name: `Application Support/Jason` and `Logs/Jason`, Electron's default profile and log folders (`app.getPath('userData')`, "the appData directory appended with your app's name"; `~/Library/Logs/YourAppName`), are named after the application and not its identifier, and the application has written its own into the data directory since its first release, so nothing in them proves them its own rather than another application's named Jason: each found is named under `left` and left, `--purge-data` or not. Where the home directory is `/`, whose `Library` is the system's, or is not the account's own as the account database names it (`getpwuid`), nothing under `~/Library` is looked at or removed, and `left` says so. `--keep-application` keeps all of it |
-| last, after the data directory | the application. macOS: the `Jason.app` the `jason` is inside, deleted by this verb, whose own image stays mapped until it exits, and only where its `Contents/Info.plist` names the bundle identifier `ai.jasonharness.desktop`; a bundle that does not is left and named, with `application_fate` `not_found`. A delete macOS refuses — it may refuse a terminal the right to delete an application — is reported with what is left and the one thing to do, move that bundle, named by its path wherever it is, to the Trash, and the verb exits 1. An application in `/Applications` is one for every account of the Mac, and taking it off takes it from all of them. Windows: the application's uninstaller refuses while any process runs from its folder, this verb's included, so the verb starts one waiter, which once the verb has ended copies `Uninstall Jason.exe` out of the folder and runs the copy silently on it in place (`/S --uninstalled-by-jason _?=<folder>`), waiting for it. A silent uninstaller never closes a running Jason Desktop: finding one, or unable to look, it removes nothing and ends 3, and the waiter then runs the copy once more without `/S`, so the person who asked is asked on the screen; any other code but 0 at the end leaves one line in the desktop's log of that day, which `jason logs --source desktop` shows, where the log folder is still there. The report says the folder goes after the verb ends and names the waiter's process. Once that process has ended, and only if Jason is then still listed in Installed apps in Settings, uninstall Jason there; do not start that uninstall before then, since two at once can leave part of the folder behind. The uninstaller in Installed apps runs this verb through the application's own start, so a second one started there runs the application's `Jason.exe` from the folder while the first deletes the folder, and that file stays. `--uninstalled-by-jason` tells the uninstaller the application's steps are done, so it does not start the application, which would write into a data directory just purged. `--keep-application` leaves the folder: the uninstaller in Installed apps runs the verb so, through the application's own start, and removes the folder itself next. Linux: the AppImage file, deleted; from the deb nothing here, the package having gone first |
+| last, after the data directory | the application. macOS: the `Jason.app` the `jason` is inside, deleted by this verb, whose own image stays mapped until it exits, and only where its `Contents/Info.plist` names the bundle identifier `ai.jasonharness.desktop`; a bundle that does not is left and named, with `application_fate` `not_found`. One Homebrew's cask placed is left to Homebrew, with `application_fate` `left_to_homebrew`: Homebrew's own record of the cask, `Caskroom/jason/.metadata/INSTALL_RECEIPT.json` under one of its prefixes (`HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local`), names it, and the application is the `Jason.app` in the folder that record says the cask put it in. Its link and its own state under `~/Library` are left with it, the start at logon goes as it does where the application is kept, and the report names `brew uninstall --zap --cask jason`, which takes them off; `--purge-data` still empties the data directory. A record that outlived the application reads as Homebrew's, and costs one more command; a prefix this does not know, or a record it cannot read, reads as none, the application is deleted, and the next `brew uninstall --cask jason` then needs `--force`. A delete macOS refuses — it may refuse a terminal the right to delete an application — is reported with what is left and the one thing to do, move that bundle, named by its path wherever it is, to the Trash, and the verb exits 1. An application in `/Applications` is one for every account of the Mac, and taking it off takes it from all of them. Windows: the application's uninstaller refuses while any process runs from its folder, this verb's included, so the verb starts one waiter, which once the verb has ended copies `Uninstall Jason.exe` out of the folder and runs the copy silently on it in place (`/S --uninstalled-by-jason _?=<folder>`), waiting for it. A silent uninstaller never closes a running Jason Desktop: finding one, or unable to look, it removes nothing and ends 3, and the waiter then runs the copy once more without `/S`, so the person who asked is asked on the screen; any other code but 0 at the end leaves one line in the desktop's log of that day, which `jason logs --source desktop` shows, where the log folder is still there. The report says the folder goes after the verb ends and names the waiter's process. Once that process has ended, and only if Jason is then still listed in Installed apps in Settings, uninstall Jason there; do not start that uninstall before then, since two at once can leave part of the folder behind. The uninstaller in Installed apps runs this verb through the application's own start, so a second one started there runs the application's `Jason.exe` from the folder while the first deletes the folder, and that file stays. `--uninstalled-by-jason` tells the uninstaller the application's steps are done, so it does not start the application, which would write into a data directory just purged. `--keep-application` leaves the folder: the uninstaller in Installed apps runs the verb so, through the application's own start, and removes the folder itself next. Linux: the AppImage file, deleted; from the deb nothing here, the package having gone first |
 
 The plan carries these under `desktop`: `application`, `application_fate` (`deleted`, `after_exit`, `kept`, `purged` for
-the deb's package, or `not_found` where the `jason` is not inside a folder shaped as the application's), `open_at_login`, `desktop_link`,
+the deb's package, `left_to_homebrew` for an application Homebrew's cask placed, or `not_found` where the `jason` is not inside a folder shaped as the application's), `open_at_login`, `desktop_link`,
 `command_files`, `command_folder`, `command_line_install`, `demo`, `caches`, `updater_job` (macOS:
 `ai.jasonharness.desktop.ShipIt` where launchd says that job is loaded when the plan is read, else null),
 `application_state` (macOS: each place under

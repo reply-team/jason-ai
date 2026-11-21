@@ -1299,19 +1299,28 @@ internal static partial class StatusChecks
         // here, as installed: a release's image, which every release has. Another file first by name is what a person and
         // every agent typing jason runs, so this one's readiness says nothing of theirs; the application's wrapper running
         // this image, or the deb's link to it, is this jason by name.
+        // Homebrew's older formula, linked beside the jason Jason Desktop carries: an older Jason, said as a detail while the
+        // check passes, and named with what takes it off where it is the file found first.
         var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        var formula = CarriedExecutable.Of(env) is not null ? Installation.HomebrewFormula.Linked(env) : null;
         if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
+            var kegFirst = formula is not null && IsThisFile(resolved, formula.Owner.Executable);
             return new StatusCheck(
                 "path",
                 true,
                 CheckState.Failed,
                 $"'jason' resolves to {resolved}, not to this jason ({running}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
-                + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}.",
+                + (kegFirst
+                    ? $"It is Homebrew's older formula: `jason runtime stop`, then `{Installation.HomebrewFormula.UninstallCommand}`, takes it off, or run this jason by its full path, {running}."
+                    : $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}."),
                 null);
         }
 
-        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null)
+        {
+            Details = formula is null ? null : new Dictionary<string, string> { [Installation.HomebrewFormula.DetailName] = formula.Sentence() },
+        };
     }
 
     /// <summary>
@@ -2489,9 +2498,13 @@ internal static partial class StatusChecks
             return new StatusCheck("autostart", false, CheckState.Unknown, failure.Message, null);
         }
 
+        // A person's turn-off is said as theirs, still optional and still absent, with the line that takes it back: whether
+        // the runtime starts at logon is never a condition of being ready.
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
+            : Jason.Cli.Autostart.AutostartOff.Stands(env.Paths, registrar)
+                ? new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", Repair.EnableAutostart)
+                : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 
     /// <summary>

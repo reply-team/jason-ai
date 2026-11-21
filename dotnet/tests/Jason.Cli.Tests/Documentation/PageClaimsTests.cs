@@ -997,20 +997,26 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The package subsection offers no package for a new install: on macOS and Windows the install is Jason Desktop,
-    /// which the install script installs, and Homebrew's formula is the command line alone, so the pages stop offering it
-    /// for a new install on a Mac; the winget package is not published, so no line installs it either. They say nothing
-    /// of what becomes of the formula.
+    /// The package subsection offers one package for a new install, Homebrew's cask on an Apple silicon Mac, which installs
+    /// the same Jason Desktop the install script does; Homebrew's formula is the command line alone, so it is offered only
+    /// as what to take off first, by its own --formula command; the winget package is not published, so no line installs
+    /// it, and the README offers no package at all.
     /// </summary>
     [Fact]
-    public void The_package_subsection_offers_no_package_for_a_new_install()
+    public void The_package_subsection_offers_the_cask_alone_for_a_new_install()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("This page names no package for a new install: on macOS, Windows and Linux the route is the install script above, which installs Jason Desktop.", package, StringComparison.Ordinal);
-        Assert.DoesNotContain("brew install", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, from the candidate that carries it, Homebrew's cask installs the same Jason Desktop, from the same release:", package, StringComparison.Ordinal);
+        Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
+        Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", package, StringComparison.Ordinal);
+        Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
+        Assert.Contains("Homebrew's older formula is the command line alone, without Jason Desktop: where it is installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the way.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("This page names no package for a new install", package, StringComparison.Ordinal);
+        Assert.DoesNotMatch("brew install(?! --cask reply-team/tap/jason)", Flat(Page("docs", "INSTALL.md")));
         Assert.DoesNotContain("brew install", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.DoesNotContain("winget install", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("reinstall", package, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1140,7 +1146,7 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and, where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question about what comes next: its question goes in a message of its own.",
+            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question about what comes next: its question goes in a message of its own.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1251,16 +1257,18 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Starting the runtime at logon is not asked at install: the guide marks it as not done, so an agent says it at the
-    /// end with the command and an unmarked paragraph cannot be read as an act to run.
+    /// Starting the runtime at logon is done at install, by the set-up an install ends in: the guide marks it so, says it
+    /// starts nothing now, and gives the line that turns it off, so no agent asks for it or registers it again by hand.
     /// </summary>
     [Fact]
-    public void The_logon_start_is_marked_not_done_at_install()
+    public void The_logon_start_is_marked_done_at_install()
     {
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 6. "));
 
-        Assert.Contains("**Not done at install.** An agent that installs Jason does not register this", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("**Ask first.** To have the runtime start", section, StringComparison.Ordinal);
+        Assert.Contains("**Done at install.** The set-up an install ends in registers the runtime to start when you log on, and starts nothing now", section, StringComparison.Ordinal);
+        Assert.Contains("jason runtime autostart disable", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("**Not done at install.**", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("starting the runtime at logon (§6)", Flat(Agent()), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2552,7 +2560,9 @@ public partial class PageClaimsTests
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
 
         Assert.Contains("Where Homebrew or winget installed Jason", section, StringComparison.Ordinal);
-        Assert.Contains("`brew uninstall jason`", section, StringComparison.Ordinal);
+        Assert.Contains("`brew uninstall --formula jason`", section, StringComparison.Ordinal);
+        Assert.Contains("Where Homebrew's cask placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the application, its link and its state under `~/Library` to Homebrew: `brew uninstall --zap --cask jason` takes them off.", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("`brew uninstall jason`", section, StringComparison.Ordinal);
         Assert.Contains("`winget uninstall Reply.Jason`", section, StringComparison.Ordinal);
     }
 
@@ -2711,7 +2721,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:13ea5addb570d2508726bbacbdf723bc1d3f0cbf3a578bc869e87d1c8002f5f4";
+    private const string AgentSectionDigest = "sha256:6b39dfe3d81ab7c7dda4e6b719329561067231e023996eeff67c058e414ed6ac";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

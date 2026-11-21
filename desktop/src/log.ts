@@ -58,7 +58,7 @@ export const templates = {
     // The login items.
     login_item_set: 'Open Jason at login was set to {On} on {Platform}',
     login_item_moved: 'Open Jason at login was moved to the file an update installed on {Platform}',
-    autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
+    autostart_disabled: 'The runtime’s start at logon was taken off: jason runtime autostart disable exited {Exit}',
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
     path_lines_set: 'The PATH lines were set to {On} on {Platform}: {Files} profiles written, {Refused} refused',

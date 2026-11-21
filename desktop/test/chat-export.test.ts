@@ -44,7 +44,7 @@ const campaignChat = 'conv_01JA0000000000000000000001';
 const setupChat = 'conv_01JA0000000000000000000002';
 const emptyChat = 'conv_01JA0000000000000000000003';
 
-function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
+function rig(t: { after(fn: () => void | Promise<void>): void }, more: Conversation[] = []): Rig {
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'] });
     placeSandboxFiles(b);
@@ -52,6 +52,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
     writeConversation(b.paths.conversations, conversation(campaignChat, 'cmp_01ABC'));
     writeConversation(b.paths.conversations, conversation(setupChat, null));
     writeConversation(b.paths.conversations, conversation(emptyChat, null, []));
+    for (const each of more) writeConversation(b.paths.conversations, each);
     const events = new Map<string, ChatEvent[]>();
     const waiters: { chatId: string; take: (event: ChatEvent) => boolean; resolve: (event: ChatEvent) => void }[] = [];
     const chat = new Chat({
@@ -411,6 +412,22 @@ test('an export of a chat with nothing said yet, or with no name, is refused', a
     places(r);
     assert.deepEqual(await r.send(emptyChat, '/export x.md'), [{ kind: 'done', error: 'This conversation has nothing to write yet.' }]);
     assert.deepEqual(await r.send(setupChat, '/export'), [{ kind: 'done', error: 'Name the file to write, such as /export notes.md.' }]);
+});
+
+test('a resumed Full access turn that forked and was honoured is exported with the rest: the record names the fork, and the file holds the turn', async (t) => {
+    const resumedChat = 'conv_01JA0000000000000000000004';
+    const r = rig(t, [{ ...conversation(resumedChat, null), sessions: { claude: 'session-before' }, plain_sessions: ['claude'] }]);
+    const { root } = places(r);
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ say: 'Write to the three who replied first.' }]);
+    const turn = await r.send(resumedChat, 'Who comes first?');
+    assert.deepEqual(turn.at(-1), { kind: 'done', error: null });
+    const started = r.b.record().filter((each) => each.name === 'claude' && each.args[0] !== '--version');
+    assert.ok(started[0]?.args.includes('--fork-session'), 'the run\'s first resumed Full access start forks');
+    const kept = readConversations(r.b.paths.conversations).kept.find((each) => each.id === resumedChat);
+    assert.equal(kept?.sessions.claude, 'session-before-fork', 'the record names the fork');
+    await r.send(resumedChat, '/export forked.md');
+    const written = readFileSync(join(root, 'forked.md'), 'utf8');
+    assert.ok(written.includes('Who comes first?') && written.includes('Write to the three who replied first.'), written);
 });
 
 test('any other word that begins with a slash goes to the host as before', async (t) => {
