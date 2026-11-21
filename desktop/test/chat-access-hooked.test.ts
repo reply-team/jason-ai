@@ -913,7 +913,7 @@ test('the settings and the data refusals say what is closed, that it is Jason\'s
     assert.match(searchRefusal, /would pass through Jason's own data/);
 });
 
-test('in Full access the hook refuses nothing but the three kinds: the person\'s files anywhere are read, appended to and written, and every jason verb runs, the four carded ones among them', () => {
+test('in Full access the hook refuses the three kinds and what would reach them unseen, and nothing else: the person\'s files anywhere are read, appended to and written, and every jason verb runs, those Ask first and Auto-edit show first among them', () => {
     for (const scope of scopes) {
         const desktop = scope.platform === 'win32' ? 'C:\\Users\\someone\\Desktop\\мой файл 1.txt' : `${scope.home}/Desktop/мой файл 1.txt`;
         for (const [tool, input] of [
