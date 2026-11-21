@@ -157,7 +157,7 @@ public sealed partial class InstallCommandTests
         var report = Report(output);
         Assert.Equal("refused", report.GetProperty("logon").GetString());
         Assert.DoesNotContain(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("logon", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("could not reach the user manager", StringComparison.Ordinal));
+        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString() == "The start at logon could not be registered: systemctl --user could not reach the user manager. `jason runtime autostart enable` tries again.");
     }
 
     /// <summary>
@@ -175,7 +175,7 @@ public sealed partial class InstallCommandTests
         var report = Report(output);
         Assert.Equal("refused", report.GetProperty("logon").GetString());
         Assert.Empty(report.GetProperty("problems").EnumerateArray());
-        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("systemctl --user refused: Failed to enable unit: Unit jason.service does not exist", StringComparison.Ordinal));
+        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString() == "The start at logon could not be registered: systemctl --user refused: Failed to enable unit: Unit jason.service does not exist. `jason runtime autostart enable` tries again.");
         Assert.Empty(Registrar(env).Applied);
         Assert.False(File.Exists(_data.Paths.AutostartDefaultFile));
     }

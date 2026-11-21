@@ -1152,7 +1152,7 @@ public static class MachineSetup
             }
             catch (AutostartException refused)
             {
-                Left.Add($"The start at logon could not be registered: {refused.Message} `jason runtime autostart enable` tries again.");
+                Left.Add($"The start at logon could not be registered: {Sentence(refused.Message)} `jason runtime autostart enable` tries again.");
                 return LogonStates.Refused;
             }
         }
@@ -1239,6 +1239,13 @@ public static class MachineSetup
         /// this run was told, and starting nothing: on macOS the LaunchAgent is written and not loaded, since loading it would
         /// start a runtime (<c>RunAtLoad</c>), and this routine starts no process that outlives it.
         /// </summary>
+        /// <summary>A tool's words as one sentence: a full stop added where they end without one of their own.</summary>
+        private static string Sentence(string said)
+        {
+            var trimmed = said.TrimEnd();
+            return trimmed.Length == 0 || trimmed[^1] is '.' or '!' or '?' ? trimmed : trimmed + ".";
+        }
+
         private void Register(IAutostartRegistrar registrar, bool newInstallation)
         {
             var once = newInstallation ? string.Empty : " It was turned on once, for an installation set up before the runtime started at logon by default; `jason runtime autostart disable` turns it off for good.";
