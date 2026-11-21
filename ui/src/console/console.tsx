@@ -84,7 +84,7 @@ import {
 consoleShell.loaded = true;
 consoleShell.settingsSections = LiveSettingsSections;
 
-// The desktop's shell: a sidebar and one area. The sidebar's menu, its Recent and the palette are the only way about, and
+// The desktop's shell: a sidebar and one area. The sidebar's menu, its two sections (Agents, Chats) and the palette are the only way about, and
 // the area shows exactly one thing: Start, one chat, one of the panels the console draws itself from the Runtime API, or
 // one of the browser shell's screens. Nothing is closed, only chosen; every window opens on Start.
 
@@ -562,7 +562,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             void conversations.value;
             untracked(retireShadowed);
         });
-        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Recent.
+        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Agents.
         const unlisted = readUnlisted(api);
         return () => {
             updatesFollowed();

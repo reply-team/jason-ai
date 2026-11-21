@@ -6,25 +6,23 @@ import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { act, define, menuPointer, systemMenuAfterKey } from './actions';
 import { html, type Html } from './html';
-import { agentMaking, newAgent } from './new-agent';
-import { offUnless } from './off';
+import { newAgent } from './new-agent';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { supersede } from './conversation-acts';
 import { needsInput } from './needs';
 import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
-import { closeFilterMenu, closeRowMenu, recentView, rowMenu } from './recent';
+import { closeFilterMenu, closeRowMenu, drawnRow, recentView, rowElement, rowMenu } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 import { updateMark } from '../screens/settings/update-state';
 
-// The console's sidebar, top to bottom: the brand, the button that makes an agent and the one under it that makes a chat
-// about no agent, Search, Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More
-// (the screens with no row of their own), the conversations under "Recent", and Settings in the foot. The menu and
-// Recent scroll between the buttons and the foot, so Settings stays at the foot of the window. Live draws the
-// essentials alone, in the same order: the brand, the two buttons, Search, Needs you, the Feed, Accounts, Recent and
-// Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds every page in
-// both modes. Demo draws the whole list.
+// The console's sidebar, top to bottom: the brand, Search, Dashboard, Needs you with the number of what waits, the Feed,
+// People, Agents, Accounts, More (the screens with no row of their own), the two sections AGENTS and CHATS, each with a
+// plus that makes one (`recent.ts`), and Settings in the foot. The menu and the sections scroll between the brand and
+// the foot, so Settings stays at the foot of the window. Live draws the essentials alone, in the same order: the brand,
+// Search, Needs you, the Feed, Accounts, AGENTS, CHATS and Settings. The rows left out are only not drawn: each page
+// keeps its route and its code, and Search finds every page in both modes. Demo draws the whole list.
 
 /** Whether the sidebar's menu, More, is open. */
 const open = signal<'more' | null>(null);
@@ -55,7 +53,7 @@ const more: readonly { label: string; hint: string; icon: IconName; panel?: Pane
     { label: 'System', hint: 'The runtime and this installation', icon: 'ops', screen: 'system' },
 ];
 
-/** The rows of the sidebar that mark what the area shows; a chat is marked in Recent, or on the Feed's row. */
+/** The rows of the sidebar that mark what the area shows; a chat is marked in the sections, or on the Feed's row. */
 type Row = 'start' | 'dashboard' | 'needs' | 'people' | 'campaigns' | 'accounts' | 'more' | 'settings';
 
 /** The screens of the browser shell each row stands for; a screen of none of them marks no row. */
@@ -83,7 +81,7 @@ function shownRow(): Row | null {
         case 'connect':
             return 'more';
         case 'page':
-            // An agent's page is marked in Recent, by its conversation's row, as its chat is.
+            // An agent's page is marked in Agents, by its row, as its chat is.
             return shownAgent.value !== null ? null : (screenRows[route.value.screen] ?? null);
         default:
             return null;
@@ -106,7 +104,8 @@ define('side.search', () => {
     closeMenus();
     openPalette();
 });
-// New GTM agent makes the agent at the click, and its place opens on its Chat, which asks Start's question (`new-agent.ts`).
+// The plus over AGENTS makes the agent at the click, and its place opens on its Chat, which asks Start's question
+// (`new-agent.ts`); the plus over CHATS makes a chat about no agent.
 define('side.start', () => {
     closeMenus();
     void newAgent();
@@ -124,7 +123,7 @@ define('side.feed', () => {
         here().dock.showChat(held);
     });
 });
-/** Shows a conversation of Recent, as a click on its row does. */
+/** Shows a conversation of either section, as a click on its row does. */
 export function openRow(id: string): void {
     supersede();
     void openConversation(id).then((held) => {
@@ -136,8 +135,28 @@ define('side.chat', ([id]) => {
     if (typeof id === 'string') openRow(id);
 });
 
+/** Opens an agent with no conversation yet, as the Agents page does: its Chat makes the conversation at the first act. */
+export function openAgentRow(id: string): void {
+    const row = drawnRow(id);
+    supersede();
+    here().dock.chat({ id, name: row?.title ?? id });
+}
+
+define('side.agent', ([id]) => {
+    if (typeof id === 'string') openAgentRow(id);
+});
+
+/** The three dots on a row: its menu, under the dots, as the keys open it under the row. */
+define('side.rowdots', ([id], element) => {
+    if (typeof id !== 'string') return;
+    const row = rowElement(id);
+    const box = element.getBoundingClientRect();
+    closeMenus();
+    rowMenu.value = { id, title: row?.getAttribute('aria-label') ?? '', x: box.left, y: box.bottom };
+});
+
 /**
- * Opens the menu on a row of Recent, and nothing else: the row is neither opened nor shown. A right-click places it at
+ * Opens the menu on a row of either section, and nothing else: the row is neither opened nor shown. A right-click places it at
  * the pointer; the keyboard, Shift+F10 or the menu key, under the row. A menu the keyboard opened on a row already is not
  * opened again by the system's own event that follows the key.
  */
@@ -210,19 +229,6 @@ export function sideView(): Html {
             <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
             <span class="alpha">Alpha</span>
-        </div>
-        <div class="newstack">
-            <button
-                class="newbtn"
-                type="button"
-                ${act('side.start')}
-                ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
-            >
-                ${svg('plusc', 15)}New GTM agent
-            </button>
-            <button class="newbtn" type="button" ${act('side.new')} ${offUnless('chat.create')}>
-                ${svg('chat', 15)}${t('side.newChat')}
-            </button>
         </div>
         <div class="sscroll">
             <nav class="list" aria-label="Menu">

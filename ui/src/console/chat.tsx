@@ -404,7 +404,7 @@ const composerBox = 'textarea[aria-label="Your message"]';
 const opening = new Set<string>();
 
 /**
- * An unmade chat stands in for its agent's conversation only while there is none. Once one is held (opened from Recent,
+ * An unmade chat stands in for its agent's conversation only while there is none. Once one is held (opened from its row in the sidebar,
  * or a set-up chat chosen for the agent) the unmade chat gives way to it; once the desktop lists one (made in another
  * place on the same agent) it is opened, and the unmade chat gives way to it. One being made here is left to its make.
  */

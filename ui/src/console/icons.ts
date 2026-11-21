@@ -41,7 +41,7 @@ const sheets = html`<rect x="9" y="9" width="12" height="12" rx="2" /><path
     />`;
 
 // The console's line icons: paths on a 24-unit grid, stroked in the current colour. Needs you is a check in a circle,
-// Settings a cog, Recent's filter two sliders and a note's close control a cross, as the console's look draws them.
+// Settings a cog, Agents' filter two sliders and a note's close control a cross, as the console's look draws them.
 const icons = {
     home: html`<path d="M3 11l9-7 9 7v9H3z" />`,
     att: html`<path d="M12 3v12M12 19v.5" /><circle cx="12" cy="12" r="10" />`,

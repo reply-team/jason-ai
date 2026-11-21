@@ -5,7 +5,7 @@ import { conversationItems, type ConversationAct, type ConversationFacts, type G
 import { folderWord, hostsOffered } from './open-folder';
 import { changeChat, chats, conversations, inTab } from './state';
 
-// The conversation's acts as they are taken, wherever they are offered: the agent's "…" and the menu on a row of Recent.
+// The conversation's acts as they are taken, wherever they are offered: the agent's "…" and the menu on a row of the sidebar.
 // Each shows the conversation first and begins there, so the person sees what is renamed, started fresh or removed.
 
 /**

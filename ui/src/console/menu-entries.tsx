@@ -2,7 +2,7 @@ import type { KeyboardEvent } from 'react';
 import type { MenuItem } from './conversation-items';
 
 // The entries of the console's React menus and the keys they take, one way for each: the agent's "…" and the menu on a
-// row of Recent.
+// row of the sidebar.
 
 /** The acts of a menu, each a menuitem, held where it cannot be taken now, with a separator between groups. */
 export function MenuEntries({ items, onChoose }: { items: MenuItem[]; onChoose: (item: MenuItem) => void }) {

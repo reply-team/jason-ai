@@ -1,5 +1,5 @@
 // Pure: the acts a conversation offers, as one list, so the agent's header ("…", `agent-head.tsx`) and the menu on a
-// row of Recent (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Every word and
+// row of the sidebar (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Every word and
 // title is the locale table's (`agent.menu.*`, `agent.openHost`); the file manager's name and the host's are put in by
 // Open in (`open-folder.ts`).
 
@@ -109,7 +109,7 @@ export function conversationItems(facts: ConversationFacts, gates: Gates): MenuI
 }
 
 /**
- * The menu on a row of Recent: Open, and right after it the agent's folder in the file manager and the agent host in a
+ * The menu on a row of the sidebar: Open, and right after it the agent's folder in the file manager and the agent host in a
  * terminal, where the conversation's acts hold them; for an agent whose status is read, its move by that status and Archive…, neither for an archived one;
  * then the conversation's other acts, Remove last after a separator of its own. A draft with no brief and no one in it
  * has no move yet (`startHeld`). A chat about no agent, or an agent not

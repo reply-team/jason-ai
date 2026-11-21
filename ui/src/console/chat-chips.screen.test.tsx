@@ -17,6 +17,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { chats, conversations, feedId, feedUnseen } from './state';
 import { forgetWaiting } from './waiting';
+import { sideRow } from '../test/side-rows';
 
 // The chips as a person meets them: an empty chat draws its opening three; no chat draws any under an answer, whatever
 // the agent's counts, and neither do the Feed and a set-up chat; a click sends the chip's words as the person's first
@@ -78,10 +79,7 @@ function given(fake: FakeApi): FakeApi {
 
 async function openChat(title: string): Promise<HTMLElement> {
     await waitFor(() => {
-        const list = within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', {
-            name: 'Conversations',
-        });
-        fireEvent.click(within(list).getByRole('button', { name: title }));
+        fireEvent.click(sideRow(title));
         expect(document.querySelector('.area > .pane:not([hidden]) .chat-panel')).not.toBeNull();
     });
     return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;

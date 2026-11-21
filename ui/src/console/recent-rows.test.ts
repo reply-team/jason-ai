@@ -3,7 +3,7 @@ import type { ApprovalSummary, CampaignSummary, DecisionSummary } from '../api/t
 import type { DesktopConversation } from '../platform/desktop';
 import { ageOf } from './live';
 import type { ChatWait } from './needs-model';
-import { inFilter, matches, pageSize, recentRows, shownRows, type RecentRow } from './recent-rows';
+import { agentRows, chatRows, inFilter, pageSize, recentRows, shownRows, type RecentRow } from './recent-rows';
 
 const now = Date.parse('2026-10-16T09:00:00.000Z');
 const before = (ms: number) => new Date(now - ms).toISOString();
@@ -28,6 +28,8 @@ const question = (campaign: string) => ({ campaign_id: campaign }) as DecisionSu
 
 const row = (fields: Partial<RecentRow>): RecentRow => ({
     id: 'conv_1',
+    campaignId: null,
+    conversationId: 'conv_1',
     title: 'A chat',
     agent: null,
     aboutAgent: false,
@@ -212,30 +214,85 @@ describe('an agent the list of agents does not hold', () => {
     });
 });
 
-describe('searching and paging', () => {
-    it('matches the title alone, whatever the case, and every row for no text', () => {
-        const renamed = row({ title: 'Q4 push', agent: 'Spring' });
-        expect(matches(renamed, ' Q4 ')).toBe(true);
-        expect(matches(renamed, 'spring')).toBe(false);
-        expect(matches(renamed, 'autumn')).toBe(false);
-        expect(matches(row({ title: 'Plain' }), '')).toBe(true);
-        expect(matches(row({ title: 'Plain' }), 'spring')).toBe(false);
+describe('the two sections', () => {
+    const input = {
+        conversations: [
+            conversation({ id: 'conv_feed', main: true, title: 'Feed' }),
+            conversation({ id: 'conv_n', title: 'Set-up chat' }),
+            conversation({ id: 'conv_a', campaignId: 'cmp_a', title: 'Alpha' }),
+            conversation({ id: 'conv_a2', campaignId: 'cmp_a', title: 'Alpha, an older one' }),
+            conversation({ id: 'conv_h', campaignId: 'cmp_handed', title: 'Handed over' }),
+            conversation({ id: 'conv_m', title: 'Mailboxes' }),
+        ],
+        titles: () => undefined,
+        campaigns: agents,
+        approvals: [approval('cmp_p')],
+        questions: [],
+        now,
+    };
+
+    it('puts each agent in AGENTS once, by its conversation newest first, then the agents with none, in the order of the list of agents', () => {
+        const rows = agentRows(input);
+        expect(rows.map((each) => each.id)).toEqual(['conv_a', 'conv_h', 'cmp_p', 'cmp_d']);
+        expect(rows.map((each) => each.conversationId)).toEqual(['conv_a', 'conv_h', null, null]);
+        expect(rows.map((each) => each.title)).toEqual(['Alpha', 'Handed over', 'Pending', 'Drafty']);
     });
 
+    it('names each agent by its campaign, whatever title its conversation carries, and an agent not read by that title', () => {
+        const rows = agentRows({
+            ...input,
+            conversations: [
+                conversation({ id: 'conv_q', campaignId: 'cmp_a', title: 'Q4 push' }),
+                ...input.conversations,
+            ],
+        });
+        expect(rows[0]).toMatchObject({ id: 'conv_q', title: 'Alpha' });
+        expect(rows.find((each) => each.id === 'conv_h')?.title).toBe('Handed over');
+    });
+
+    it('gives an agent with no conversation its state, what waits for it and no age', () => {
+        const pending = agentRows(input).find((each) => each.id === 'cmp_p')!;
+        expect([pending.campaignId, pending.state, pending.waiting, pending.dot, pending.age]).toEqual([
+            'cmp_p',
+            'paused',
+            1,
+            'waiting',
+            '',
+        ]);
+    });
+
+    it('puts in CHATS the conversations about no agent alone, newest first, and no conversation in both', () => {
+        const chats = chatRows(input);
+        expect(chats.map((each) => each.id)).toEqual(['conv_n', 'conv_m']);
+        const agentKeys = new Set(agentRows(input).map((each) => each.conversationId));
+        expect(chats.some((each) => agentKeys.has(each.id))).toBe(false);
+    });
+
+    it('leaves an archived agent out of AGENTS, with or without a conversation', () => {
+        const archived = [...agents, { id: 'cmp_old', name: 'Old', status: 'archived' as const }];
+        const rows = agentRows({
+            ...input,
+            campaigns: archived,
+            conversations: [...input.conversations, conversation({ id: 'conv_o', campaignId: 'cmp_old' })],
+        });
+        expect(rows.some((each) => each.campaignId === 'cmp_old')).toBe(false);
+    });
+});
+
+describe('paging', () => {
     const many = Array.from({ length: 25 }, (_, at) => row({ id: `conv_${at}`, title: `Chat ${at}` }));
 
     it('shows ten, then ten more per limit, and says whether more remain', () => {
-        expect(shownRows(many, 'all', '', pageSize)).toMatchObject({ more: true });
-        expect(shownRows(many, 'all', '', pageSize).rows).toHaveLength(10);
-        expect(shownRows(many, 'all', '', 20).rows).toHaveLength(20);
-        expect(shownRows(many, 'all', '', 30)).toMatchObject({ more: false });
-        expect(shownRows(many, 'all', '', 30).rows).toHaveLength(25);
+        expect(shownRows(many, 'all', pageSize)).toMatchObject({ more: true });
+        expect(shownRows(many, 'all', pageSize).rows).toHaveLength(10);
+        expect(shownRows(many, 'all', 20).rows).toHaveLength(20);
+        expect(shownRows(many, 'all', 30)).toMatchObject({ more: false });
+        expect(shownRows(many, 'all', 30).rows).toHaveLength(25);
     });
 
-    it('shows every match while a search text or a filter is active', () => {
-        expect(shownRows(many, 'all', 'chat', pageSize)).toMatchObject({ more: false });
-        expect(shownRows(many, 'all', 'chat', pageSize).rows).toHaveLength(25);
+    it('shows every match while a filter is active', () => {
         const live = many.map((each) => ({ ...each, state: 'active' as const }));
-        expect(shownRows(live, 'live', '', pageSize).rows).toHaveLength(25);
+        expect(shownRows(live, 'live', pageSize)).toMatchObject({ more: false });
+        expect(shownRows(live, 'live', pageSize).rows).toHaveLength(25);
     });
 });

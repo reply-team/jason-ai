@@ -25,7 +25,7 @@ export const setupError = signal<string | null>(null);
 export const chats = signal<Readonly<Record<string, Chat>>>({});
 /** Every conversation the desktop keeps, newest first, as it listed them last. */
 export const conversations = signal<readonly DesktopConversation[]>([]);
-/** The conversation whose chat is shown, which the sidebar marks in Recent; null while anything else is shown. */
+/** The conversation whose chat is shown, which the sidebar marks in its sections; null while anything else is shown. */
 export const currentChat = signal<string | null>(null);
 /** The Feed's id, once the desktop answered the first ask; null before. */
 export const feedId = signal<string | null>(null);

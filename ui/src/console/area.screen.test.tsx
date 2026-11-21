@@ -17,6 +17,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { resetRecent } from './recent';
 import { chats, conversations, here } from './state';
+import { sideRow } from '../test/side-rows';
 
 // The console's one area beside the sidebar: no tab strip and no right column, exactly one thing shown at a time, chosen
 // from the menu, Recent, the palette, a desktop command or a link, and marked in the sidebar. Read against the recorded
@@ -59,8 +60,7 @@ async function renderConsole(
 
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const menu = () => within(side().getByRole('navigation', { name: 'Menu' }));
-const recentRow = (name: string) =>
-    within(side().getByRole('navigation', { name: 'Conversations' })).getByRole('button', { name });
+const recentRow = (name: string) => sideRow(name);
 /** The sidebar's controls that say they stand for what is shown. */
 const marked = () =>
     Array.from(document.querySelectorAll<HTMLElement>('.side [aria-current="true"]'), (each) =>
@@ -146,7 +146,7 @@ describe('the one area', () => {
         expect(document.querySelectorAll('.area > .pane:not([hidden])')).toHaveLength(1);
     });
 
-    it('keeps a chat left and chosen again from Recent as it was: the words typed, what arrived meanwhile and the message that waits', async () => {
+    it('keeps a chat left and chosen again from its row as it was: the words typed, what arrived meanwhile and the message that waits', async () => {
         const desktop = await renderConsole(seedSpring);
         fireEvent.click(await waitFor(() => recentRow('Q4 push')));
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
