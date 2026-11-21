@@ -301,7 +301,7 @@ function ownRefusal(kind: NonNullable<GuardedName['chatsOwn']>): string {
     return kind === 'instructions' ? instructionsRefusal : kind === 'servers' ? serversRefusal : configurationRefusal;
 }
 /** What a command that names one of them is told after the write's sentence: the file tools read it. */
-const ownByCommand = ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools, Read, Grep and Glob. Nothing was run.';
+const ownByCommand = ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools. Nothing was run.';
 const longRefusal ='That command is longer than the card can show whole, so nobody could read what they would allow: the chat never runs it. '
     + 'Put the content in a file in the chat\'s folder and give it as --file - < <file>, or split the work. Nothing was run.';
 
