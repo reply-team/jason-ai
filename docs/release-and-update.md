@@ -546,7 +546,7 @@ On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, from th
 brew install --cask reply-team/tap/jason
 ```
 
-If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.
+If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again. If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.
 
 It places `Jason.app` in `/Applications` from the release's `jason-desktop-macos-arm64.zip`, the file the application's
 own updater downloads, held to the release's `checksums.txt`, and links the `jason` the application carries as `jason`
