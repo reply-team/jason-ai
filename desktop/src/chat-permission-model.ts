@@ -599,7 +599,7 @@ function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgeme
     const paths = pathsOf(scope.platform);
     const path = located(value, scope);
     const key = keyOf(scope.platform, path);
-    if (inPersonsOwn(scope, path)) return { verdict: 'deny', message: personsRefusal };
+    if (inPersonsOwn(scope, path) || linksPersonsOwn(scope, path)) return { verdict: 'deny', message: personsRefusal };
     if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key) || linksProtected(scope, path)) {
         return { verdict: 'deny', message: settingsRefusal };
     }
@@ -1184,6 +1184,10 @@ interface WrittenWord {
     spaced: boolean;
     built: boolean;
     pattern: boolean;
+    /** A POSIX pattern outside quotes, a bracket among it: what the shell expands to the names it matches. */
+    glob?: boolean;
+    /** A POSIX brace outside quotes, not a variable's: a group the shell may expand into words of its own. */
+    braced?: boolean;
 }
 
 /**
@@ -1266,12 +1270,14 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
     const escape = powershell ? '`' : '\\';
     const separating = powershell ? /[\s;&|()<>{}]/ : /[\s;&|()<>`]/;
     // A kept substitution is read through its text (`inner`), so it does not make its word one to read again.
-    const append = (piece: string, built = false, pattern = false, kept = false) => {
+    const append = (piece: string, built = false, pattern = false, kept = false, glob = false, braced = false) => {
         const each: WrittenWord = word ?? { text: '', spaced: false, built: false, pattern: false };
         each.text += piece;
         if (!kept && separating.test(piece)) each.spaced = true;
         if (built) each.built = true;
         if (pattern) each.pattern = true;
+        if (glob) each.glob = true;
+        if (braced) each.braced = true;
         word = each;
     };
     const endWord = () => {
@@ -1464,7 +1470,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
             at++;
             continue;
         }
-        append(c, false, !powershell && (c === '*' || c === '?'));
+        append(c, false, !powershell && (c === '*' || c === '?'), false, !powershell && '*?['.includes(c), !powershell && c === '{' && text[at - 1] !== '$');
         at++;
     }
     endCommand();
@@ -1852,6 +1858,256 @@ function unseenReadRefusal(tool: string, command: string, scope: ChatScope): str
     return null;
 }
 
+/** What the kinds' reading carries through a command: the walk's, and the values the text gives its own variables. */
+interface KindsReading extends WalkReading {
+    assigned: ReadonlyMap<string, readonly string[]>;
+    /** The shell matches a name that begins with a dot by a pattern that does not: PowerShell, or an option a text sets. */
+    dotted: boolean;
+}
+
+/**
+ * The literal values a text gives its own variables, by the variable's name (in PowerShell in any case): a POSIX
+ * assignment word wherever it stands, `export`'s and `local`'s among them, the words of a `for` loop's list, and
+ * PowerShell's `$name = value` and `$name=value`; a value the shell builds is left out, so a variable that has none is
+ * one the reading does not know.
+ */
+function assignedValues(text: string, reading: ShellReading): Map<string, string[]> {
+    const { powershell } = reading;
+    const values = new Map<string, string[]>();
+    const add = (name: string, value: string) => {
+        const key = powershell ? name.toLowerCase() : name;
+        values.set(key, [...(values.get(key) ?? []), value]);
+    };
+    const visit = (inner: string, depth: number) => {
+        if (depth > walkDepth) return;
+        for (const each of readCommands(inner, reading).commands) {
+            const words = each.command.words;
+            if (!powershell && words[0]?.text === 'for' && words[2]?.text === 'in' && words.slice(3).every((word) => !word.built)) {
+                for (const item of words.slice(3)) add(words[1]?.text ?? '', item.text);
+            }
+            words.forEach((word, at) => {
+                if (powershell) {
+                    const joined = /^\$([A-Za-z_]\w*)=(.*)$/s.exec(word.text);
+                    if (joined !== null && !/[$`(]/.test(joined[2] as string)) add(joined[1] as string, joined[2] as string);
+                    const value = words[at + 2];
+                    if (/^\$[A-Za-z_]\w*$/.test(word.text) && words[at + 1]?.text === '=' && value !== undefined && !value.built) add(word.text.slice(1), value.text);
+                    return;
+                }
+                const assignment = /^([A-Za-z_][A-Za-z0-9_]*)\+?=(.*)$/s.exec(word.text);
+                if (assignment !== null && !word.built) add(assignment[1] as string, assignment[2] as string);
+            });
+            for (const again of readAgain(each, false, powershell)) visit(again, depth + 1);
+        }
+    };
+    visit(text, 0);
+    return values;
+}
+
+/** The variables of the shell the kinds' reading knows by their names: the home folder's and the profile's, the drive's, the folder the shell is in. */
+function knownVariable(name: string, scope: ChatScope, folders: readonly string[]): string[] | null {
+    const drive = scope.platform === 'win32' ? (/^[A-Za-z]:/.exec(scope.home)?.[0] ?? null) : null;
+    switch (name.toUpperCase()) {
+        case 'HOME':
+        case 'USERPROFILE':
+            return [scope.home];
+        case 'HOMEDRIVE':
+        case 'SYSTEMDRIVE':
+            return drive === null ? null : [drive];
+        case 'HOMEPATH':
+            return drive === null ? null : [scope.home.slice(drive.length)];
+        case 'PWD':
+            return [...folders];
+        default:
+            return null;
+    }
+}
+
+/** A variable as a word spells it: `${name}` with what may follow the name in it, `$name`, `$env:name`, `%name%`. */
+const variableSpelling = /\$\{(?:env:)?([A-Za-z_]\w*)([^}]*)\}|\$(?:env:)?([A-Za-z_]\w*)|%([A-Za-z_]\w*)%/gi;
+/** What may follow a variable's name inside its braces and still leave its value a path to the same folder. */
+const sameValue = /^(?:|:?[-=?][^}]*|%%?\/*)$/;
+/** PowerShell's call for the profile's folder. */
+const profileFolder = /\(?\s*\[(?:System\.)?Environment\]::GetFolderPath\(\s*(['"]?)UserProfile\1\s*\)\s*\)?/gi;
+/** The most spellings one word is read in. */
+const spellingLimit = 16;
+
+/**
+ * The spellings a word holds once the variables the reading knows are put in (`knownVariable`, and the text's own
+ * values, `assignedValues`), and a `~` of the home folder, by itself or by the home's own account name, is the home
+ * folder; null where any other part of it is built while the shell runs, a variable the reading does not know among them.
+ */
+function resolvedSpellings(word: WrittenWord, values: (name: string) => readonly string[] | null, scope: ChatScope): string[] | null {
+    const tilded = (text: string): string => {
+        const account = pathsOf(scope.platform).basename(scope.home);
+        const named = /^~([^\\/]+)(?=[\\/]|$)/.exec(text);
+        if (named !== null && keyOf(scope.platform, named[1] as string) === keyOf(scope.platform, account)) return `${scope.home}${text.slice(named[0].length)}`;
+        return homeExpanded(text, scope);
+    };
+    const text = word.text.replace(profileFolder, () => scope.home);
+    if (!word.built) return [tilded(text)];
+    let spellings = [''];
+    let at = 0;
+    for (const match of text.matchAll(variableSpelling)) {
+        const name = (match[1] ?? match[3] ?? match[4]) as string;
+        if (!sameValue.test(match[2] ?? '')) return null;
+        const value = values(name);
+        if (value === null || value.length === 0) return null;
+        const before = text.slice(at, match.index);
+        spellings = spellings.flatMap((done) => value.map((each) => `${done}${before}${each}`)).slice(0, spellingLimit);
+        at = match.index + match[0].length;
+    }
+    spellings = spellings.map((done) => `${done}${text.slice(at)}`);
+    return spellings.some((each) => /[$`]/.test(each)) ? null : spellings.map(tilded);
+}
+
+/** A path's components as the platform compares them: its root first, then each folder and name. */
+function componentsOf(path: string, scope: ChatScope): string[] {
+    return keyOf(scope.platform, path).split(scope.platform === 'win32' ? /\\+/ : /\/+/);
+}
+
+/** True when a pattern's component may match a name: `*`, `?` and a bracket's class, a leading dot matched only by a dot unless `dotted`. */
+function componentMatches(part: string, name: string, dotted: boolean): boolean {
+    if (!/[*?[]/.test(part)) return part === name;
+    if (name.startsWith('.') && !part.startsWith('.') && !dotted) return false;
+    let source = '';
+    for (let at = 0; at < part.length; at++) {
+        const c = part[at] as string;
+        if (c === '*') {
+            source += '.*';
+        } else if (c === '?') {
+            source += '.';
+        } else if (c === '[' && part.indexOf(']', at + 2) > 0) {
+            const end = part.indexOf(']', at + 2);
+            const body = part.slice(at + 1, end).replace(/^!/, '^').replace(/\\/g, '\\\\');
+            source += `[${body}]`;
+            at = end;
+        } else {
+            source += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+        }
+    }
+    try {
+        return new RegExp(`^${source}$`, 's').test(name);
+    } catch {
+        return true;
+    }
+}
+
+/**
+ * True when a pattern's components may match a target's or something under it: `**` matches any number of folders,
+ * a component the shell expands one name, and a pattern that ends above the target names only its parents.
+ */
+function patternReaches(pattern: readonly string[], target: readonly string[], dotted: boolean, at = 0, depth = 0): boolean {
+    if (depth >= target.length) return true;
+    if (at >= pattern.length) return false;
+    const part = pattern[at] as string;
+    if (/^\*{2,}$/.test(part)) return patternReaches(pattern, target, dotted, at + 1, depth) || patternReaches(pattern, target, dotted, at, depth + 1);
+    return componentMatches(part, target[depth] as string, dotted) && patternReaches(pattern, target, dotted, at + 1, depth + 1);
+}
+
+/**
+ * The kind a located pattern can name, by every name it may match: the person's own directories in a demo; then,
+ * unless every name it may match is in the chat folder, a settings file or the run file, then the data directory.
+ */
+function patternKind(path: string, scope: ChatScope, dotted: boolean): string | null {
+    const parts = componentsOf(path, scope);
+    const reaches = (place: string) => patternReaches(parts, componentsOf(located(place, scope), scope), dotted);
+    if (personsOwnOf(scope).some(reaches)) return personsRefusal;
+    const fixed = parts.slice(0, Math.max(parts.findIndex((part) => /[*?[]/.test(part)), 0));
+    const chat = componentsOf(located(scope.chat, scope), scope);
+    if (fixed.length >= chat.length && chat.every((part, at) => part === fixed[at])) return null;
+    if (scope.protectedFiles.some(reaches)) return settingsRefusal;
+    return reaches(scope.data) ? dataRefusal : null;
+}
+
+/**
+ * The kind one command's words name, read as the kinds' reading reads them: each word in every spelling the variables
+ * the reading knows give it (`resolvedSpellings`), each brace group expanded, each piece a place is located as
+ * (`placesOfWords`) located from every folder the shell may be in, and a pattern judged by every name it may match
+ * (`patternKind`); then the kinds over the words and the places (`kindOver`).
+ */
+function wordsKind(each: ReadCommand, place: WalkPlace, reading: KindsReading): string | null {
+    const { scope, powershell } = reading;
+    const values = (name: string) => reading.assigned.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
+    const texts: string[] = [];
+    const places: string[] = [];
+    for (const word of each.command.words) {
+        for (const spelling of resolvedSpellings(word, values, scope) ?? []) {
+            for (const expansion of word.braced === true ? (braces(spelling) ?? [spelling]) : [spelling]) {
+                const qualifier = /\(([^()]*)\)$/.exec(expansion);
+                const plain = qualifier !== null && word.glob === true ? expansion.slice(0, qualifier.index) : expansion;
+                const dotted = reading.dotted || (qualifier !== null && (qualifier[1] ?? '').includes('D'));
+                texts.push(plain);
+                const joined = powershell ? /^-[A-Za-z][\w-]*:(.+)$/.exec(plain) : null;
+                for (const piece of new Set([plain, ...plain.split(/[=@,]/), ...(joined === null ? [] : [joined[1] as string])])) {
+                    if (piece === '' || piece.length > pathLimit(scope.platform)) continue;
+                    const value = nativeSpelling(homeExpanded(piece, scope), scope);
+                    const wild = /[*?[]/.test(value) && (powershell || word.glob === true);
+                    for (const folder of place.folders) {
+                        const path = located(value, { ...scope, cwd: folder });
+                        if (!wild) {
+                            places.push(path);
+                            continue;
+                        }
+                        const kind = patternKind(path, scope, dotted);
+                        if (kind !== null) return kind;
+                    }
+                }
+            }
+        }
+    }
+    return kindOver(texts.join('\n'), places, scope);
+}
+
+/**
+ * The kinds' reading of the commands a text holds, as the walk reads them (`walkedFrom`): from where the shell may run
+ * on, a folder change of the shell's own followed (`changedPlace`) with its target read through the variables the
+ * reading knows, and what may run of a command read again (`readAgain`).
+ */
+function kindsFrom(text: string, start: WalkPlace, reading: KindsReading, depth: number): { kind: string | null; place: WalkPlace } {
+    if (depth > walkDepth) return { kind: null, place: start };
+    const { scope, powershell } = reading;
+    const { commands, pure } = readCommands(text, reading);
+    let place = start;
+    for (const each of commands) {
+        const kind = wordsKind(each, place, reading);
+        if (kind !== null) return { kind, place };
+        for (const inner of readAgain(each, pure, powershell)) {
+            const read = kindsFrom(inner, place, reading, depth + 1);
+            if (read.kind !== null) return read;
+            if (each.program === 'eval') place = read.place;
+        }
+        if (each.program === null) continue;
+        const values = (name: string) => reading.assigned.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
+        const args = each.args.map((arg) => {
+            const spellings = resolvedSpellings(arg, values, scope);
+            return spellings?.length === 1 ? (spellings[0] as string) : arg.text;
+        });
+        place = changedPlace(each.program, args, place, reading);
+    }
+    return { kind: null, place };
+}
+
+/**
+ * Where the hook rides the turn, the three kinds as the walk reads a command: a relative path read from where a folder
+ * change led, a word read through the variables the reading knows (the home folder's and the profile's, the drive's,
+ * the folder the shell is in, and the values the text gives its own), a `~` of the home's own account name, and a
+ * pattern by every name it may match, for a read and for a listing of its names alike. A variable the reading does not
+ * know, and a path a program builds while it runs, stay unread. Null when none.
+ */
+function readKinds(tool: string, command: string, scope: ChatScope): string | null {
+    const powershell = tool === 'PowerShell';
+    const start = located(scope.cwd, scope);
+    const reading: KindsReading = {
+        scope,
+        powershell,
+        redefined: false,
+        named: false,
+        assigned: assignedValues(command, { scope, powershell }),
+        dotted: powershell || /dotglob|globdots|glob_dots|GLOBIGNORE/i.test(command),
+    };
+    return kindsFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).kind;
+}
+
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */
 function isReply(platform: Platform, token: string): boolean {
     const program = programOf(platform, token);
@@ -2235,8 +2491,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     const places = [...placesOf(command, scope), ...literalPlaces(tool, command, scope)];
     const remote = wordNamesHost(places, scope);
     if (remote !== null) return { verdict: 'deny', message: remote };
-    if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
-    if (places.some((path) => isProtected(scope, path))) return { verdict: 'deny', message: settingsRefusal };
+    if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope) || places.some((path) => linksPersonsOwn(scope, path))) return { verdict: 'deny', message: personsRefusal };
+    if (places.some((path) => isProtected(scope, path) || linksProtected(scope, path))) return { verdict: 'deny', message: settingsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     const jasonRefused = jasonRefusal(jason);
@@ -2253,7 +2509,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
         let unseen: string | null;
         let walks: boolean;
         try {
-            unseen = unseenReadRefusal(tool, command, scope);
+            unseen = readKinds(tool, command, scope) ?? unseenReadRefusal(tool, command, scope);
             walks = walksRoot(tool, command, scope);
         } catch {
             unseen = unreadRefusal;
@@ -2774,11 +3030,25 @@ function isProtected(scope: ChatScope, path: string): boolean {
  * path names such a file that no comparison of paths sees. A network path is never looked up.
  */
 function linksProtected(scope: ChatScope, path: string): boolean {
+    return linksOneOf(scope, path, scope.protectedFiles);
+}
+
+/**
+ * In a demo run, whether a located path is the person's own settings file or run file by another of its links: those
+ * files of each of the person's own directories (`ChatScope.personsOwn`), compared as `linksProtected` compares.
+ */
+function linksPersonsOwn(scope: ChatScope, path: string): boolean {
+    const files = personsOwnOf(scope).flatMap((folder) => [pathsOf(scope.platform).join(folder, 'config', 'settings.json'), pathsOf(scope.platform).join(folder, 'run', 'runtime.json')]);
+    return files.length > 0 && linksOneOf(scope, path, files);
+}
+
+/** Whether a located path is an existing file with more than one link that is one of these files (`ChatScope.identity`). */
+function linksOneOf(scope: ChatScope, path: string, files: readonly string[]): boolean {
     const identify = scope.identity;
     if (identify === undefined || network(scope.platform, path)) return false;
     const target = identify(path);
     if (target === null || target.links < 2n) return false;
-    return scope.protectedFiles.some((file) => {
+    return files.some((file) => {
         const own = identify(located(file, scope));
         return own !== null && own.volume === target.volume && own.file === target.file;
     });
@@ -2793,7 +3063,7 @@ function linksProtected(scope: ChatScope, path: string): boolean {
 function pathKind(value: string, scope: ChatScope): string | null {
     const path = hookPlace(located(value, scope), scope);
     if (path === null) return unplacedRefusal;
-    if (inPersonsOwn(scope, path)) return personsRefusal;
+    if (inPersonsOwn(scope, path) || linksPersonsOwn(scope, path)) return personsRefusal;
     if (isProtected(scope, path) || linksProtected(scope, path)) return settingsRefusal;
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, located(scope.chat, scope), path)) return dataRefusal;
     return null;
@@ -2896,8 +3166,8 @@ function kindOver(text: string, places: readonly string[], scope: ChatScope): st
     if (changesSearch(text)) return lookupRefusal;
     const leads = places.map((path) => hookPlace(path, scope));
     const read = leads.filter((path): path is string => path !== null);
-    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(read, scope)) return personsRefusal;
-    if (read.some((path) => isProtected(scope, path))) return settingsRefusal;
+    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(read, scope) || read.some((path) => linksPersonsOwn(scope, path))) return personsRefusal;
+    if (read.some((path) => isProtected(scope, path) || linksProtected(scope, path))) return settingsRefusal;
     if (leads.includes(null)) return unplacedRefusal;
     return namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope) ? dataRefusal : null;
 }
@@ -2925,6 +3195,8 @@ function commandKind(tool: string, command: string, scope: ChatScope): string | 
         }
         if (reading.commands.some((each) => clearsConfinement(each.words))) return confinedRefusal;
     }
+    const read = readKinds(tool, command, scope);
+    if (read !== null) return read;
     // No read is blocked where the hook rides the turn, so a read no word shows, and a walk of a folder that holds the
     // data, reach it without naming it: the data's kind too.
     const unseen = unseenReadRefusal(tool, command, scope);

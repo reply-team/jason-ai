@@ -361,8 +361,8 @@ applies to the turns a person starts by sending, from the next one on.
   before it runs; its settings block no read (`hookedSettings`), and the permission model judges it by what the hook
   refuses (`ChatScope.hooked`):
   - a read anywhere, by Read, Glob, Grep, a listing or the host's own read-only commands, runs with no card; a walk of
-    a folder that holds the data directory, which the hook refuses (below), is a card each time, never covered by a
-    grant, where the permission model is asked about it;
+    a folder that holds the data directory is refused by the hook with the walk's sentence (below), before the
+    permission model is asked about it;
   - a change outside the chat's folders is one card, "Change a file outside the chat's folders", for Write and Edit
     alike, an append among them, a `~` of the home folder taken as the file tools take it; inside them as before;
   - every `jason` verb runs with no card but the forms of `askingCardedForms`: `uninstall`, `import`, `export`,
@@ -481,9 +481,16 @@ applies to the turns a person starts by sending, from the next one on.
     a loopback address or its own name) through a drive's share (`C$`) as that drive's path, and one in a device's or a
     volume's namespace, or through another share of this computer, by the sentence that says Jason could not place where
     it leads (`hookPlace`, `unplacedRefusal`); in the text a
-    writer tool would put in a file; and in every string of an MCP tool's input. **The limit:** a command that names one
-    of them is refused, and a command that builds the name while it runs is not seen: a pattern (`~/.jas*`), a variable,
-    `cd "$HOME"` and then a relative path, or `~user` runs in Full access. With no read blocked, a walk of a folder that
+    writer tool would put in a file; and in every string of an MCP tool's input. A command is also read as the shell would
+    lead it (`readKinds`): a relative path from the folder a change of folder led to, a variable the reading knows (the
+    home folder's and the profile's, the drive's, the folder the shell is in, and a value the text gives one of its
+    own, `assignedValues`), a `~` followed by the home's own account name, and a pattern by every name it can match,
+    a name that begins with a dot only by a pattern that does too unless the text sets an option that says otherwise
+    (`patternKind`), for a read and a listing alike. **The limit:** a variable the reading does not know, and a path a
+    program builds while it runs, are not seen: such a command runs in Full access. A command that names another link
+    to a settings file or the run file, as a word or as a redirect's source, is refused as that file, and in a demo
+    run another link to the person's own settings file or run file as the person's own (`linksPersonsOwn`). With no
+    read blocked, a walk of a folder that
     holds the data directory (the home folder, a drive's top, the data directory's parents) is the data's kind: a search
     of it by the Grep or Glob tool (`walkKind`), and a command that names such a folder, runs in one after a folder
     change, or takes a word the shell builds from one, in any form but the few known not to descend (`plainWalkForm`: a

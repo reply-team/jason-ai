@@ -29,6 +29,7 @@ import {
     noCardFilters,
     optionRefusal,
     ownToolRefusal,
+    personsRefusal,
     rootHelpRefusal,
     searchRefusal,
     settingsRefusal,
@@ -550,6 +551,48 @@ test('the three kinds are refused in every mode the hook rides, by the hook and 
     }
 });
 
+test('the three kinds are read as the walk reads a command: after a folder change, through a variable the reading knows and by a pattern that can name them, for a read and a listing alike, by the hook and by the model; a file of the person\'s in their home still reads', () => {
+    for (const scope of scopes) {
+        const refusals: [string, string, string][] = [
+            ['Bash', 'cd "$HOME" && cat .jason/config/settings.json', settingsRefusal],
+            ['Bash', 'cd ~ && cat .jason/run/runtime.json', settingsRefusal],
+            ['Bash', 'd=.jason; cat ~/$d/config/settings.json', settingsRefusal],
+            ['Bash', 'export d=.jason && cat "$HOME/$d/config/settings.json"', settingsRefusal],
+            ['Bash', 'cat ~/.jas*/config/settings.json', settingsRefusal],
+            ['Bash', 'cat ~/.j?son/config/settings.json', settingsRefusal],
+            ['Bash', 'cat ~/.[j]ason/config/settings.json', settingsRefusal],
+            ['Bash', 'cat ~someone/.jason/config/settings.json', settingsRefusal],
+            ['Bash', 'cd ~ && grep api_key .j*/config/*', settingsRefusal],
+            ['Bash', 'grep -s api_key ~/.*/**/*', settingsRefusal],
+            ['Bash', 'shopt -s globstar dotglob; grep -s api_key ~/**', settingsRefusal],
+            ['Bash', 'ls ~/.j*', dataRefusal],
+            ['Bash', 'cd ~ && ls .jason', dataRefusal],
+            ['Bash', 'cd ~ && ls .j*', dataRefusal],
+            ['Bash', 'cat ${HOME%/}/.jason/config/settings.json', settingsRefusal],
+        ];
+        if (scope.platform === 'win32') {
+            refusals.push(
+                ['PowerShell', 'cd $HOME; Get-Content .jason\\config\\settings.json', settingsRefusal],
+                ['PowerShell', "$d = '.jason'; Get-Content ~\\$d\\config\\settings.json", settingsRefusal],
+                ['PowerShell', 'Get-Content ~\\.jas*\\config\\settings.json', settingsRefusal],
+                ['PowerShell', 'Get-ChildItem ~\\.j*', dataRefusal],
+            );
+        }
+        for (const [tool, command, sentence] of refusals) {
+            assert.deepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
+            for (const judged of both(tool, { command }, scope)) assert.deepEqual(judged, { verdict: 'deny', message: sentence }, `${scope.platform}: ${command}`);
+        }
+        for (const input of [{ pattern: '~/.jas*/config/*' }, { pattern: '.j*/config/*', path: scope.home }]) {
+            assert.equal(fullAccessJudgement('Glob', input, scope).outcome, 'refused', `${scope.platform}: ${JSON.stringify(input)}`);
+        }
+        for (const command of ['cat ~/Desktop/notes.txt', 'ls ~/Downloads', 'ls -la ~', 'cat ~/.bashrc', 'cat ~/.*rc', 'cd ~ && cat Desktop/notes.txt', 'ls ~/D*', 'f=notes.md; cat ~/Documents/$f']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'deny', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cat ~/Desktop/notes.txt', 'ls ~/Downloads', 'ls -la ~']) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+    }
+});
+
 test('the three kinds are refused through a link or a junction, from outside the data directory and from inside the chat\'s own folder, by the hook and by the model, for every tool', (t) => {
     const root = mkdtempSync(join(tmpdir(), 'jason-hooked-'));
     t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
@@ -612,6 +655,45 @@ test('a file tool\'s target that is another link to a settings file or the run f
     }
     assert.equal(identityOf(documents), null, 'a folder has no identity of a file');
     assert.equal(identityOf(join(documents, 'missing.md')), null, 'nothing is there');
+});
+
+test('a command that names another link to a settings file or the run file, as a word or as a redirect\'s source, is refused as that file by the hook and by the model; in a demo another link to the person\'s own settings file is refused as the person\'s own', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-hooked-'));
+    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+    const home = realPathOf(root) ?? root;
+    const data = join(home, '.jason');
+    const own = join(home, 'own', '.jason');
+    const documents = join(home, 'Documents');
+    for (const folder of [join(data, 'config'), join(data, 'run'), join(data, 'desktop', 'chats', 'c1'), join(own, 'config'), documents]) mkdirSync(folder, { recursive: true });
+    writeFileSync(join(data, 'config', 'settings.json'), '{}');
+    writeFileSync(join(data, 'run', 'runtime.json'), '{}');
+    writeFileSync(join(own, 'config', 'settings.json'), '{}');
+    writeFileSync(join(documents, 'plain.md'), 'x');
+    try {
+        linkSync(join(data, 'config', 'settings.json'), join(documents, 'notes.json'));
+    } catch {
+        t.skip('the file system of the temporary folder cannot make a second link to a file');
+        return;
+    }
+    linkSync(join(data, 'run', 'runtime.json'), join(documents, 'state.json'));
+    linkSync(join(own, 'config', 'settings.json'), join(documents, 'mine.json'));
+    const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
+    const scope = hookedScope(platform, home, { real: realPathOf, entry: entryOf, text: textOf, identity: identityOf });
+    const quoted = (path: string) => `'${path}'`;
+    for (const file of ['notes.json', 'state.json']) {
+        const path = join(documents, file);
+        for (const command of [`cat ${quoted(path)}`, `cp ${quoted(path)} copy.json`, `wc -l < ${quoted(path)}`, `cd ${quoted(documents)} && cat ${file}`]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: settingsRefusal }, command);
+            for (const judged of both('Bash', { command }, scope)) assert.deepEqual(judged, { verdict: 'deny', message: settingsRefusal }, command);
+        }
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: `cat ${quoted(join(documents, 'plain.md'))}` }, scope), { outcome: 'runs' });
+    const demo = { ...scope, personsOwn: [own] };
+    const mine = join(documents, 'mine.json');
+    for (const [tool, input] of [['Read', { file_path: mine }], ['Bash', { command: `cat ${quoted(mine)}` }]] as const) {
+        assert.deepEqual(fullAccessJudgement(tool, input, demo), { outcome: 'refused', message: personsRefusal }, `${tool} ${JSON.stringify(input)}`);
+        for (const judged of both(tool, input, demo)) assert.deepEqual(judged, { verdict: 'deny', message: personsRefusal }, `${tool} ${JSON.stringify(input)}`);
+    }
 });
 
 test('a role\'s attempt and the chat\'s own variables stay refused where the hook rides: JASON_CHAT_TURN, JASON_CONFINED and JASON_ATTEMPT_ID, by the hook and by the model', () => {

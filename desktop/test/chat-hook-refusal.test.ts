@@ -504,8 +504,11 @@ test('in Full access a verb of the deny list, a jason that starts with an option
     }
 });
 
-test('the limit: Full access refuses a command that names the settings file, the data directory or what Jason sets for the turn, and one that reaches them without naming them runs: a glob, a variable, a change to a folder a variable names, another account\'s ~', () => {
-    for (const command of ['cat ~/.jas*/config/settings.json', 'd=.jason; cat ~/$d/config/settings.json', 'cd "$HOME" && cat .jason/config/settings.json', 'cat ~someone/.jason/config/settings.json']) {
+test('the limit: Full access refuses a command that reaches the settings file or the data directory by a pattern, a variable it knows or a folder change, and runs one that reaches them by a variable the reading does not know or by a path a program builds while it runs', () => {
+    for (const command of ['cat ~/.jas*/config/settings.json', 'd=.jason; cat ~/$d/config/settings.json', 'cd "$HOME" && cat .jason/config/settings.json', 'cat ~someone/.jason/config/settings.json', 'ls ~/.j*']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, linux).outcome, 'refused', command);
+    }
+    for (const command of ['cat ~/$NAME/config/settings.json', 'cat "$(printf %s ~/.ja)son/config/settings.json"']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), runs, command);
     }
 });
