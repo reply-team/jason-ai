@@ -448,8 +448,9 @@ applies to the turns a person starts by sending, from the next one on.
   the conversation `codexFullAccessNarrowed`; every other warning is dropped, as before. No event names the sandbox a
   turn ran in (`thread.started` carries the thread alone), so a narrowing Codex does not warn of goes unseen.
 - **How Full access runs on Claude Code.** Claude Code starts with `--permission-mode bypassPermissions`. Anthropic says a Bash rule
-  "isn't a security boundary around the program", so every deny rule is passed as in an Ask first turn the hook rides, and the turn's settings,
-  in a file under `<data>/desktop/turns/` beside its MCP file and removed with it (`hookedSettings`), add a `PreToolUse`
+  "isn't a security boundary around the program", so every deny rule is passed as in an Ask first turn the hook rides,
+  and the turn's settings, in a file under `<data>/desktop/turns/` beside its MCP file and removed with it
+  (`hookedSettings`), add a `PreToolUse`
   HTTP hook on every tool with `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in
   `allowedHttpHookUrls`, so no project file can switch the hook off or filter it. The hook posts each tool use to the
   turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one

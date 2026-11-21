@@ -1045,7 +1045,7 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   an opt-out put on that person, and it can let a drafted answer go under a standing approval. In every mode, refused:
   a read or a write that names a path under the data directory outside the turn's folder (the settings file, the run file
   and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that names
-  that directory, from 2.1.322 on a search or a walk of a folder that holds it,
+  that directory, where Jason's check rides the turn a search or a walk of a folder that holds it (above),
   and what Jason itself sets for the turn, its variables and its permission tool: a command that names `JASON_CONFINED`
   or `JASON_CHAT_TURN`, which Jason alone sets, a command that names `JASON_ATTEMPT_ID` (a chat is never a role's run),
   a command that changes where the shell finds a program (`PATH`, `PATHEXT`), and a use of the tool that answers the
