@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type BypassWhy, type ChatMode } from './chat-modes.ts';
+import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type Bypass, type ChatMode } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -276,7 +276,7 @@ export interface SetupDeps {
      * Why Claude Code's bypass, which Full access runs in, is not available here, as the chat knows it
      * (`Chat.bypassUnavailable`); absent, nothing is known, and a turn finds it.
      */
-    bypass?(): BypassWhy | null;
+    bypass?(): Bypass | null;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**

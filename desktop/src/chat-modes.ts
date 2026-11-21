@@ -113,29 +113,95 @@ export const tabFullAccess = "Full access is for Jason Desktop's own window, and
 
 /**
  * Why Claude Code's bypass, which Full access runs in, is not available here: the desktop runs as root, which Claude Code
- * refuses its bypass under on macOS and Linux; Claude Code's settings turn it off (`disableBypassPermissionsMode`, the
- * person's own or an administrator's), so it starts in its default mode with no word of it, as seen on 2.1.329; it
- * refuses the mode before it starts, in its restricted mode or under a policy ("Error: bypassPermissions not supported in
- * restricted mode", seen on 2.1.329); or a tool ran that Jason's hook never saw, a policy having filtered the hook out.
+ * refuses its bypass under on macOS and Linux; Claude Code started a turn that asked for its bypass in another mode, which
+ * its init line names, and said on its standard error that it forced its default mode (`forced_default`, read from those
+ * words alone, `forcedDefault`), or said nothing of why (`bypass_off`, why not being read); it refuses the mode before it
+ * starts, in its restricted mode or under a policy ("Error: bypassPermissions not supported in restricted mode", seen on
+ * 2.1.329); or a tool ran that Jason's hook never saw, a policy having filtered the hook out.
  */
-export type BypassWhy = 'root' | 'bypass_off' | 'bypass_refused' | 'unguarded';
+export type BypassWhy = 'root' | 'bypass_off' | 'forced_default' | 'bypass_refused' | 'unguarded';
 
 /**
- * Each cause's sentence, of the one shape: "Full access is not available here: <why>." A cause a turn showed is kept for
- * the rest of this run of the desktop, and its sentence says so: "... until Jason Desktop starts again: <why>."
+ * Claude Code's own words on its standard error when it starts in its default mode whatever mode the start asked for, as
+ * 2.1.329 does while `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is set: "⚠ Permission mode forced to default —
+ * CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). ...". A closed match on these words, and
+ * nothing else of what it wrote is read: what is said and logged of it is the cause's word, `forced_default`.
  */
-export const bypassSentences: Readonly<Record<BypassWhy, string>> = {
+export const forcedDefaultWords = 'Permission mode forced to default';
+
+/** Whether what Claude Code wrote on its standard error holds its own words that it forced its default mode. */
+export function forcedDefault(stderr: string): boolean {
+    return stderr.includes(forcedDefaultWords);
+}
+
+/**
+ * The words Claude Code names its modes by on its init line, other than its bypass, that Jason knows: a closed table, so
+ * what is said and logged of a mode is one of these words or `another`, never a word Claude Code printed.
+ */
+export const claudeModeWords = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] as const;
+
+/** The mode Claude Code named instead of its bypass: a word of its table (`claudeModeWords`), or `another`. */
+export type NamedMode = (typeof claudeModeWords)[number] | 'another';
+
+/** The mode a word names, read from the closed table: any word outside it is `another`. */
+export function namedMode(word: string): NamedMode {
+    return claudeModeWords.find((known) => known === word) ?? 'another';
+}
+
+/** Why Claude Code's bypass is not available here, and the mode Claude Code named instead where it named one. */
+export interface Bypass {
+    why: BypassWhy;
+    named: NamedMode | null;
+}
+
+/**
+ * The fixed causes' sentences, of the one shape: "Full access is not available here: <why>." How long each holds is
+ * `bypassLeadsTo`'s, and the sentence says it: a cause that holds a minute "... right now: <why>.", a tool that ran
+ * unchecked, which holds for the rest of this run, "... until Jason Desktop starts again: <why>.", and running as root as
+ * it is, since a restart does not change it. A start that named another mode and said nothing of why is said by
+ * `bypassSentence`, which names that mode.
+ */
+export const bypassSentences: Readonly<Record<Exclude<BypassWhy, 'bypass_off'>, string>> = {
     root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
-    bypass_off: "Full access is not available here until Jason Desktop starts again: Claude Code's own settings turn its bypass mode off (disableBypassPermissionsMode).",
-    bypass_refused: 'Full access is not available here until Jason Desktop starts again: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
+    forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
+    bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
     unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
 };
 
 /**
- * The end of a Full access turn stopped where a tool ran that the turn's hook never saw: said once, the conversation
- * keeps its mode, and its later turns run in Ask first (`unguarded`).
+ * A cause's sentence: the fixed causes' own (`bypassSentences`), and for a start that named another mode and said nothing
+ * of why what was read, that Claude Code did not start in its bypass mode and which mode it named, never why.
  */
-export const unguardedSentence = `${bypassSentences.unguarded} The turn was stopped there; the chat keeps its mode, and its next turns run in Ask first.`;
+export function bypassSentence(bypass: Bypass): string {
+    if (bypass.why !== 'bypass_off') return bypassSentences[bypass.why];
+    const named = bypass.named === null || bypass.named === 'another' ? 'a mode Jason does not know' : `its ${bypass.named} mode`;
+    return `Full access is not available here right now: Claude Code did not start in its bypass mode, and named ${named} instead.`;
+}
+
+/** How long a cause a turn found holds (`bypassLeadsTo`): a minute, after which a Full access turn asks for the bypass again. */
+export const bypassHeldMs = 60_000;
+
+/**
+ * What Full access on Claude Code leads to where its bypass is not available: the one place it is decided, for the turn
+ * that found the cause and for the turns after it. The turn that found it is started again in the mode this names
+ * (`Chat.send`), and the turns after it run in that mode (`turnMode`), which the status hands the page for the menu
+ * (`Setup.status`), for as long as the cause holds: a minute where a turn found it (`bypassHeldMs`), so each Full access
+ * turn after that asks for the bypass again and a cause that went away needs no restart of the desktop, while the minute
+ * spares a second start of the host on every turn while the cause stays; for the rest of this run where the desktop runs
+ * as root, and where a tool ran that the hook never saw, which only a tool that ran unchecked shows. Ask first, the cause
+ * said.
+ */
+export function bypassLeadsTo(bypass: Bypass): { mode: 'ask_first'; why: { kind: AskFirstWhy; text: string }; held: 'one_minute' | 'this_run' } {
+    const held = bypass.why === 'root' || bypass.why === 'unguarded' ? 'this_run' : 'one_minute';
+    return { mode: 'ask_first', why: { kind: bypass.why, text: bypassSentence(bypass) }, held };
+}
+
+/**
+ * The end of a Full access turn stopped where a tool ran that the turn's hook never saw, said once in the words of the
+ * box (`askFirstThisTurn`): the menu shows the mode each next turn runs in, Ask first while the cause holds
+ * (`unguarded`), and the record keeps Full access, which only a turn in Full access can be stopped for.
+ */
+export const unguardedSentence = `${bypassSentences.unguarded} The turn was stopped there, and the menu shows the mode each next turn runs in; the chat stays set to Full access.`;
 
 /**
  * What an Ask first or Auto-edit turn says once where a tool ran that the turn's hook never saw: the turn runs on, the
@@ -155,8 +221,11 @@ export interface TurnPlace {
     offered: boolean;
     /** Claude Code's version as read, null when it could not be read; undefined when it was not read. */
     claudeVersion: string | null | undefined;
-    /** Why Claude Code's bypass is not available here, as the machine or an earlier turn showed it; absent, it is. */
-    bypass?: BypassWhy | null;
+    /**
+     * Why Claude Code's bypass is not available here, as the machine or an earlier turn showed it, while that holds
+     * (`bypassLeadsTo`); absent or null, it is, and a Full access turn asks for it.
+     */
+    bypass?: Bypass | null;
 }
 
 /**
@@ -164,8 +233,9 @@ export interface TurnPlace {
  * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
  * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
  * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab,
- * while this version does not offer it, where Claude Code's bypass is not available (`bypass`), and on a Claude Code
- * below its floor of Full access or whose version could not be read, the first of these that holds being the one said;
+ * while this version does not offer it, where Claude Code's bypass is not available (`bypass`, as `bypassLeadsTo`
+ * decides it), and on a Claude Code below its floor of Full access or whose version could not be read, the first of
+ * these that holds being the one said;
  * on Codex it runs as itself, with no sandbox, held to neither Claude Code's bypass nor its floor. Auto-edit runs in Ask
  * first on Codex. Every other mode runs as itself.
  */
@@ -176,19 +246,25 @@ export function turnMode(recorded: ChatMode, program: string, place: TurnPlace):
         if (!place.offered) return askFirst('not_offered', fullAccessNotYet);
         // Codex runs Full access with no sandbox and is held to neither Claude Code's bypass nor its floor; every other
         // program is held to both.
-        if (program !== 'codex' && place.bypass !== undefined && place.bypass !== null) return askFirst(place.bypass, bypassSentences[place.bypass]);
+        if (program !== 'codex' && place.bypass !== undefined && place.bypass !== null) {
+            const { mode, why } = bypassLeadsTo(place.bypass);
+            return { mode, why };
+        }
         const below = program === 'codex' || place.claudeVersion === undefined ? null : fullAccessSentence(place.claudeVersion);
         if (below !== null) return askFirst('floor', below);
     } else if (recorded === 'auto_edit' && program === 'codex') return askFirst('codex_auto_edit', codexAutoEdit);
     return { mode: recorded, why: null };
 }
 
+/** The modes by the names the menu gives them. */
+const modeNames: Readonly<Record<ChatMode, string>> = { ask_first: 'Ask first', plan_only: 'Plan only', auto_edit: 'Auto-edit', full_access: 'Full access' };
+
 /**
- * What a conversation is told, once, when a turn cannot run in its mode: why, and that the turn runs in Ask first while
- * the conversation keeps its mode for the turns that can.
+ * What a conversation is told, once, when a turn cannot run in its mode: why, and what the menu draws, that the turn runs
+ * in Ask first and the menu shows the mode each next turn runs in, while the record keeps the chat's own mode, `kept`.
  */
-export function askFirstThisTurn(why: string): string {
-    return `${why} This turn runs in Ask first, and the chat keeps its mode.`;
+export function askFirstThisTurn(why: string, kept: ChatMode): string {
+    return `${why} This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to ${modeNames[kept]}.`;
 }
 
 /**
