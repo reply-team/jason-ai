@@ -96,7 +96,9 @@ the chat as in a terminal, with no block of reads outside the working folders. `
 the person's `defaultMode` never decides the mode; their deny and ask rules keep working, an ask a card, and their hooks
 run beside the turn's, which still sees every tool the model asks for; a hook of the person's own that rewrites a
 tool's input is their configuration acting. Their hooks run in a Full access turn even where their `disableAllHooks`
-switches them off, since the turn's settings set it to `false` to keep Jason's check on. A hook or a rule a Full access
+switches them off, since the turn's settings set it to `false` to keep Jason's check on; and an HTTP hook of theirs runs
+there only where their own `allowedHttpHookUrls` names its address, since the turn's list, merged with theirs, is never
+empty. A hook or a rule a Full access
 turn leaves in the person's Claude Code configuration acts in every later Full access turn and in their own terminal.
 The settings file of every turn the hook rides sets, as `env`, what the desktop decides of the turn's environment
 (`pinnedEnvironment`): PATH, the data directory, `JASON_CHAT_TURN`, the folder and background variables, and empty values
@@ -494,8 +496,8 @@ applies to the turns a person starts by sending, from the next one on.
   and the turn's settings, in a file under `<data>/desktop/turns/` beside its MCP file and removed with it
   (`hookedSettings`), add a `PreToolUse`
   HTTP hook on every tool with `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in
-  `allowedHttpHookUrls`, so no project file can switch the hook off or filter it. The hook posts each tool use to the
-  turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
+  `allowedHttpHookUrls`, so no settings file of the person's or a project's can switch the hook off or filter it. The
+  hook posts each tool use to the turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
   judgement (`fullAccessJudgement`), the same in every mode the hook rides:
   - **refused**, with no card, for three kinds alone, each by a sentence that says what is closed, that it is Jason's
     own and not one of the person's files, and the `jason` verb that does the act where one does, never that it cannot:

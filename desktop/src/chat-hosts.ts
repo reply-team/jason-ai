@@ -131,9 +131,9 @@ function serverDefences() {
 export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] }, ...serverDefences() });
 
 /**
- * The settings of a turn in Plan only: reads outside the working folders blocked, as every turn's are; no classifier in
- * planning, so a command outside Claude Code's read-only set reaches the permission tool, which refuses it; and the server
- * defences (`serverDefences`), as every turn's that does not run in Full access. Anthropic, https://code.claude.com/docs/en/settings
+ * The settings of a turn in Plan only: reads outside the working folders blocked, as every turn's the hook does not ride
+ * are; no classifier in planning, so a command outside Claude Code's read-only set reaches the permission tool, which
+ * refuses it; and the server defences (`serverDefences`), as every turn's that does not run in Full access. Anthropic, https://code.claude.com/docs/en/settings
  * (read 2026-11-11), `useAutoModeDuringPlan` is honored as "`false` from any managed source, `--settings`, ..."; and
  * https://code.claude.com/docs/en/permission-modes: with auto mode not available, or `useAutoModeDuringPlan` off,
  * "commands outside the built-in read-only set prompt for approval".

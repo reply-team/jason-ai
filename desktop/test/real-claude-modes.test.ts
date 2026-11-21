@@ -16,6 +16,7 @@ import { readFence } from '../src/chat-deny.ts';
 import { permissionModes } from '../src/chat-hosts.ts';
 import { fullAccessSentence, type ChatMode } from '../src/chat-modes.ts';
 import { startHost, type HostProcess } from '../src/chat-process.ts';
+import { compareVersions, noChromeFrom } from '../src/host-version.ts';
 import { pathOf, programsOn } from '../src/programs.ts';
 import { bench, outsideStandIn } from './harness.ts';
 
@@ -249,6 +250,7 @@ test('the real Claude Code, signed out, runs each mode\'s turn in the mode its i
             assert.equal(settings.includes('blockReadsOutsideWorkingDirectories'), !hooked, 'the block of reads as the mode decides it');
             // A turn that runs in Full access loads the person's own configuration; every other turn keeps the sealed line.
             for (const sealing of ['--setting-sources', '--strict-mcp-config']) assert.equal(start.args.includes(sealing), mode !== 'full_access', sealing);
+            assert.equal(start.args.includes('--no-chrome'), mode !== 'full_access' && version !== null && compareVersions(version, noChromeFrom) >= 0, '--no-chrome');
             if (mode === 'plan_only') {
                 // Found on 2.1.329 on Windows: under the scrub Claude Code starts a Plan only turn in its default mode and says
                 // so; with none, as on Linux, it runs in the plan mode asked for.
