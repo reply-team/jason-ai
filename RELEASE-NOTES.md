@@ -19,10 +19,12 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.2-rc.2
+# Jason 0.49.2-rc.3
 
 This is a candidate, published as a pre-release. It is built on 0.49.1 and carries 0.49.2's work on Jason Desktop's
-chat, with the fixes below. It follows 0.49.2-rc.1 and replaces it.
+chat, with the fixes below. It follows 0.49.2-rc.2 and replaces it. Beside the chat it carries a set of smaller
+changes: an agent's menus open its agent host in a terminal, Open in on Windows opens Windows Terminal, Update has a
+section of its own in Settings, `--human` says an error as a sentence, and the Reply package needs reply-cli 0.22.0.
 
 0.49.1 made Jason on Linux one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries,
 installed, updated and removed once. This candidate carries all of it.
@@ -101,12 +103,20 @@ voice.
 - **Open the agent's folder.** An agent's "..." menu and its row's menu carry **Open in File Explorer** (Windows),
   **Open in Finder** (macOS) or **Open in File manager** (Linux), which opens the agent's folder. A chat of no agent and
   a browser tab have none.
+- **Open Claude Code, or Codex, in a terminal from an agent's menus.** After the folder item, the agent's "..." menu
+  and its row's menu carry **Open Claude Code in terminal** or **Open Codex in terminal**: a new session of that host
+  in a terminal at the agent's folder, the host the agent's chat runs on where this computer has it, else the first one
+  found. It is not offered in a browser tab, for a chat of no agent, or where no host is found.
 - **`/export <file name>` writes the conversation to a file.** A chat message of `/export` and a file name writes the
   conversation's words to a new Markdown file.
 - **A file dropped on the message box puts its path in the text.** The path is quoted and set at
-  the caret, as a terminal does; several files put several paths.
+  the caret, as a terminal does; several files put several paths. On macOS and Linux it goes in single quotes. On
+  Windows it goes in single quotes where the name holds none, in double quotes where it holds one and nothing
+  PowerShell would expand, and otherwise in single quotes with each quote doubled, as PowerShell reads them.
 - **A right-click on an agent's row opens its menu.** In the console's left column, the row of an agent offers the
-  actions its own "..." menu offers, among them Open and Archive.
+  actions its own "..." menu offers, among them Open and Archive. For an agent pinned to a provider's campaign,
+  Archive... there offers Jason's pause first, as the same dialog in the agent's Settings does: ask in the agent's
+  chat to pause that campaign, and archive once that work has finished.
 - **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
   `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
   is kept seven days, and the removal dialog says so; nothing is deleted at once.
@@ -119,6 +129,35 @@ voice.
 - **New chat, the Feed and Accounts have rows of their own.** In the console's left column, New chat is a button
   directly under "New GTM agent", and in Live the Feed stands under "Needs you" and Accounts below it, as in the Demo. A
   chat that belongs to no agent says so in one line at its top, "Chat · no agent".
+- **Open in on Windows opens Windows Terminal.** `jason session open`, and every Open in of Jason Desktop that goes
+  through it, opens the agent host in a new Windows Terminal window at the folder where your account has Windows
+  Terminal 1.18.2681.0 or later. Otherwise the console window opens as before; where Windows Terminal does not start,
+  the console window opens in its place and the command says so. A folder whose name holds a `%` opens in the console
+  window. macOS and Linux are unchanged.
+- **Update has a section of its own in Settings.** In Jason Desktop, Settings lists **Update** last, with the desktop's
+  version, its update item and what the last check you asked for found; the line under the list is gone. From the
+  moment the desktop knows of a version it has not installed until that version is installed, a quiet dot stands on
+  the sidebar's Settings row and on the Update section. The notification that says what a check you asked for found
+  opens Settings at Update. Where Jason Desktop is the deb, the section says that the system's packages update it.
+- **A download you asked for asks to install now.** When a download you asked for ends, Jason Desktop asks once:
+  **Restart and Install**, or **Not Now**, the default. Not Now leaves the download waiting under "Restart Jason and
+  Its Runtime to Install". A look Jason Desktop makes by itself downloads nothing and asks nothing, and nothing installs
+  by itself.
+- **`--human` says an error as a sentence.** With `--human`, a refusal is printed as a sentence with its code in
+  brackets, for example `Refused (campaign_not_found): The campaign cmp_X was not found.`; where no runtime could be
+  asked it begins `Not reached`, one worth repeating ends "It can be tried again.", and each detail follows on a line
+  of its own. Without `--human` the output is the same as before: the exact JSON body.
+- **Notifications say what Windows answered, and when.** In Settings, Notifications, a toast Windows did not show is
+  said as what Windows answered at that notification and how long ago, and that Windows is asked again at the next
+  one. Jason Desktop reads it again each time its window takes the focus back. `jason status` counts the toast as
+  reaching you again once Windows' switches read as on, and words a toast Windows did not show as what Windows
+  answered when it was last sent.
+- **Jason and Homebrew on a Mac.** Where Homebrew placed Jason Desktop, `jason uninstall` takes off what Jason set up
+  and leaves the application, its link and its state under `~/Library` to Homebrew, and its report names
+  `brew uninstall --zap --cask jason`, which takes them off. Where the older Homebrew formula is still linked beside
+  the `jason` Jason Desktop carries, set-up says so and stops a runtime started from it, and set-up and `jason status`
+  name `brew uninstall --formula jason`, which takes it off; every command Jason prints for the formula now says
+  `--formula`. Jason Desktop is not yet offered in Homebrew's tap: install this candidate as "Upgrading" says.
 
 ## Fixed since 0.49.1
 
@@ -127,6 +166,18 @@ voice.
   starts in Full access as the menu says.
 - **A question is no longer answered as if you asked it twice.** A conversation whose message had to be started again in Ask
   first now holds that message once; before, the session it went on in could hold it twice.
+- **A refused Full access turn keeps the whole conversation.** When Claude Code refuses Full access on a turn of a
+  conversation it already holds, Jason Desktop now runs that turn in Ask first in the same conversation, with all of
+  it in Claude Code's memory, instead of in a fresh session given a recap of it.
+- **A Reply mailbox that cannot send is that mailbox's block.** Where Reply says a mailbox cannot send direct emails
+  at all, its daily limit being 0 or its team's plan sending nothing, the Reply package (0.19.0) now holds that as the
+  mailbox's block: the messages wait on it and go once the mailbox can send, instead of each failing. Its note says
+  what to change in Reply.
+- **A daily-limit block clears no later than the next midnight UTC.** Where an email was held for a later day that is
+  already full, the mailbox's block used to run to the end of that day, weeks out. It now clears at the next midnight
+  UTC; a shorter wait is kept, and the active-contacts limit is not capped.
+- **Jason Desktop no longer offers Reply's shared mailbox page.** Where Reply makes no link for one mailbox, the Reply
+  card says the Reply CLI answered `email_link.not_available` and offers nothing else.
 - **Recent leaves out a conversation whose agent is archived.** Recent no longer lists it.
 - **The chat keeps the end of the conversation in view** when the cards under it, or the message box, change height,
   and the Reply card no longer goes away and comes back at a chat's first send.
@@ -159,15 +210,21 @@ voice.
   uninstall`, which keeps your data directory, then run the line. The first start of this version then sets Jason up
   again, as after any update. The final 0.49.2 reaches a deb with the system's own updates, Software Updater or
   `sudo apt update && sudo apt upgrade`, and an AppImage by its own update item or `jason update apply`.
-- **From 0.49.0 or rc.1.** This version adds no migration to the database, so either opens the same data as it is.
-  0.49.1's Linux work comes with it.
+- **From 0.49.0, rc.1 or rc.2.** This version adds no migration to the database, so each opens the same data as it
+  is. 0.49.1's Linux work comes with it.
+- **The Reply package needs reply-cli 0.22.0 or later.** The Reply package, now 0.19.0, and Jason Desktop's Reply card
+  ask for reply-cli 0.22.0 or later. With an older one the Reply package is unavailable, `jason plugin list` says
+  `executable_incompatible`, and the Reply card says to update the Reply CLI and offers its install where npm is on this
+  computer. Bring it up to date as it was installed, with `npm install -g reply-cli`; where npm's global folder is not
+  your account's own, `npm install -g --prefix ~/.local reply-cli`.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
   in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
   again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
   file is removed at the first start.
 - **Going back.** If you go back to an earlier Jason Desktop and then return to this one, the chats that earlier
   version used open in Ask first, a chat in Plan only keeps it, and each says why once. The earlier version does not
-  keep the mode or the folder this release writes with a chat.
+  keep the mode or the folder this release writes with a chat. The Reply package stays at 0.19.0, which 0.48.7 reads as
+  it is, since it adds no manifest key, and which still needs reply-cli 0.22.0 or later.
   [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says how
   to go back to an earlier release.
 
@@ -178,5 +235,9 @@ voice.
 - No screen lists the archived agents yet.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
 - An agent has one conversation: there is no second chat for the same agent yet.
-- **Archive** from an agent's row menu does not offer to have Jason pause the provider's campaign first; it says to pause it in the provider itself. The same
-  dialog from Settings does offer it.
+- On Windows, a `%NAME%` in the agent host's words may still be expanded by a Windows Terminal that is already
+  running, over its own environment.
+- On Windows, a dropped file's path whose name holds a single quote together with a `$` or a backtick, or a network
+  path whose name holds a single quote, is quoted as PowerShell reads it, and Git Bash reads it back wrong.
+- A Jason Desktop older than this one, showing this version's page, may still say "Its shared mailbox page can be
+  opened instead." with no button after it.
