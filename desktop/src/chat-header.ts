@@ -83,6 +83,11 @@ export const accountLimit = 100;
 /** The characters a name the header gives may hold: letters of any script, digits, dots, underscores, hyphens and spaces. */
 const nameCharacters = /^[\p{L}\p{N}._ -]+$/u;
 
+/** Whether an account's name can stand as the system gives it after `human:` (`personSentence`). */
+export function usableAccount(account: unknown): account is string {
+    return typeof account === 'string' && account.length > 0 && account.length <= accountLimit && account.trim() === account && nameCharacters.test(account);
+}
+
 /**
  * The sentence that names the person a turn's words come from by the actor the carried `jason` writes a person's acts
  * under: this account's name as the operating system gives it (`os.userInfo().username` here, `Environment.UserName`
@@ -93,13 +98,7 @@ const nameCharacters = /^[\p{L}\p{N}._ -]+$/u;
  * says to ask, since a record that goes wrong silently is worse than one question.
  */
 function personSentence(account: unknown): string {
-    const usable =
-        typeof account === 'string' &&
-        account.length > 0 &&
-        account.length <= accountLimit &&
-        account.trim() === account &&
-        nameCharacters.test(account);
-    if (!usable) {
+    if (!usableAccount(account)) {
         return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word, and where the name they give holds a character other than a letter, a digit, a dot, an underscore, a hyphen or a space, ask once for it written with those alone, and give one with a space in single quotes, as `--actor 'human:Ada Lovelace'`.";
     }
     const actor = `human:${account}`;

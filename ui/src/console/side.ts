@@ -6,6 +6,7 @@ import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { act, define, menuPointer, systemMenuAfterKey } from './actions';
 import { html, type Html } from './html';
+import { agentMaking, newAgent } from './new-agent';
 import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
@@ -105,10 +106,10 @@ define('side.search', () => {
     closeMenus();
     openPalette();
 });
-// Start is made or brought forward as the window does it; no chat is made until the person sends one.
+// New GTM agent makes the agent at the click, and its place opens on its Chat, which asks Start's question (`new-agent.ts`).
 define('side.start', () => {
     closeMenus();
-    here().dock.show('start');
+    void newAgent();
 });
 define('side.new', () => {
     closeMenus();
@@ -211,7 +212,12 @@ export function sideView(): Html {
             <span class="alpha">Alpha</span>
         </div>
         <div class="newstack">
-            <button class="newbtn" type="button" ${marked('start')} ${act('side.start')} ${offUnless('chat.create')}>
+            <button
+                class="newbtn"
+                type="button"
+                ${act('side.start')}
+                ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
+            >
                 ${svg('plusc', 15)}New GTM agent
             </button>
             <button class="newbtn" type="button" ${act('side.new')} ${offUnless('chat.create')}>

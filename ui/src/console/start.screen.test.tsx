@@ -13,7 +13,7 @@ import type { FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
-import { chats, conversations, lines, setup, setupError } from './state';
+import { chats, conversations, here, lines, setup, setupError } from './state';
 import { chosenSection } from '../screens/settings/chosen';
 import {
     noteKey,
@@ -537,7 +537,7 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')).toHaveLength(0);
     });
 
-    it('keeps a message that waits while another page is chosen, and shows it again with Start', async () => {
+    it('keeps a message that waits while another page is chosen, and shows it again when Start is shown', async () => {
         const desktop = renderConsole(stubDesktop(noHost));
         await waitFor(() => startForm());
         await ready();
@@ -547,7 +547,8 @@ describe('the start screen', () => {
         fireEvent.click(side.getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(screen.queryByRole('form', { name: 'Start' })).toBeNull());
         expect(startWaiting.value).toBe('Founders of seed-stage fintechs');
-        fireEvent.click(side.getByRole('button', { name: 'New GTM agent' }));
+        // Start is shown as the window shows it when it opens: New GTM agent makes an agent and brings no page.
+        flush(() => here().dock.show('start'));
         await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
         expect(box().value).toBe('Founders of seed-stage fintechs');

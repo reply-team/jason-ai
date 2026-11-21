@@ -179,6 +179,7 @@ export function AgentHead({ id, tab }: { id: string; tab: CampaignTab }) {
                     {campaign && (
                         <CampaignMoves
                             campaign={campaign}
+                            people={people}
                             buttonClass={(move) => (move === 'pause' ? 'btn agent-move' : 'btn p agent-move')}
                             frame={(dialog) => <div className="harness">{dialog}</div>}
                             onDone={() => {

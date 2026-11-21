@@ -106,6 +106,33 @@ if (args[0] === 'status') {
     }
     const next = from + size < items.length ? String(from + size) : null;
     print({ items: items.slice(from, from + size), next_cursor: next });
+} else if (verb === 'campaign create') {
+    // Adds the campaign to STUB_CAMPAIGNS_FILE, as a draft of the default project, unless one was made under the same
+    // --idempotency-key, which is answered again, as the runtime does. STUB_CREATE_FAILS=1 answers the runtime's refusal
+    // (STUB_CREATE_SAYS its message), 3 an unreachable runtime; STUB_CREATE_LOST=yes makes the campaign and then loses the
+    // answer, as a timeout does.
+    if (process.env.STUB_CREATE_FAILS === '3') {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    if (process.env.STUB_CREATE_FAILS === '1') {
+        print({ error: { code: 'validation_failed', message: process.env.STUB_CREATE_SAYS || 'The name is not valid.', retryable: false } });
+        process.exit(1);
+    }
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(process.env.STUB_CAMPAIGNS_FILE, 'utf8'));
+    } catch {}
+    const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+    const key = flag('--idempotency-key');
+    let made = key === null ? undefined : items.find((each) => each.idempotency_key === key);
+    if (made === undefined) {
+        made = { id: `cmp_MADE${items.length + 1}`, name: flag('--name'), status: 'draft', created_at: new Date().toISOString(), idempotency_key: key };
+        items.push(made);
+        writeFileSync(process.env.STUB_CAMPAIGNS_FILE, JSON.stringify(items));
+    }
+    if (process.env.STUB_CREATE_LOST === 'yes') process.exit(1);
+    print({ id: made.id, name: made.name, status: made.status, project_id: 'prj_01STUB', project_slug: 'default', folder_path: null });
 } else if (verb === 'journal list') {
     // The lines STUB_JOURNAL_FILE holds, as one page: newest first, as the runtime answers; STUB_JOURNAL_MORE=yes says
     // there is a next page, and STUB_JOURNAL_FAILS=yes answers as an unreachable runtime does.

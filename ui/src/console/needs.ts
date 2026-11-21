@@ -1011,7 +1011,12 @@ export function needsView(): Html {
                         <div class="bd">You're all caught up</div>
                         <div class="needs-none-says">Nothing is waiting for your decision.</div>
                         <div class="ask-a">
-                            <button class="btn sm p" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                            <button
+                                class="btn sm p"
+                                type="button"
+                                ${act('side.start')}
+                                ${offUnless('chat.createAgent')}
+                            >
                                 New GTM agent
                             </button>
                             <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your agents</button>

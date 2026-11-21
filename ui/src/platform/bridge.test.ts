@@ -37,6 +37,7 @@ describe('the transport', () => {
         await seam.chat.list();
         await seam.chat.open('conv_none');
         await seam.chat.create();
+        await seam.chat.createAgent('0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10');
         await seam.chat.send('conv_none', 'hello', { host: 'claude_code' } as never);
         await seam.chat.stop('conv_none');
         await seam.chat.rename('conv_none', 'A name');

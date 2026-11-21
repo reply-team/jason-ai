@@ -27,6 +27,7 @@ const desktop = {
         list: () => ipcRenderer.invoke('jason:chat.list'),
         open: (chatId: string) => ipcRenderer.invoke('jason:chat.open', chatId),
         create: (campaignId?: string) => ipcRenderer.invoke('jason:chat.create', campaignId),
+        createAgent: (clickId: string) => ipcRenderer.invoke('jason:chat.createAgent', clickId),
         remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
         restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
         attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),

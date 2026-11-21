@@ -81,10 +81,12 @@ import {
     noteClosed,
     turnOptions,
     typed,
+    asksStart,
     type Answer,
     type Chat,
     type Entry,
 } from './chat-model';
+import { agentFacts, peopleOf } from './agent-facts';
 import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
@@ -101,7 +103,7 @@ import { AccessButton, Glyph, ModeMark, ModelButton, modeSaysOn, useFit } from '
 import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
-import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
+import { aiCardView, chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import {
     changeChat,
     chatOf,
@@ -114,6 +116,7 @@ import {
     inTab,
     messageOf,
     setup,
+    setupError,
 } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
@@ -1145,6 +1148,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         </div>`;
     // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
     const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
+    // An agent made at the click asks Start's question above, in its panel, with its box: here are its chips alone.
+    if (asksStart(chat)) return html`<div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
@@ -1546,15 +1551,19 @@ export function ChatNotes({ chat }: { chat: Chat }) {
  * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
  */
 function AgentInBar({ campaignId }: { campaignId: string }) {
-    const campaign = campaigns.value.find((each) => each.id === campaignId);
+    const listed = campaigns.value.find((each) => each.id === campaignId);
     // An archived campaign is over: it has no move, and its chat says nothing of a state.
-    if (!campaign || campaign.status === 'archived') return null;
+    if (!listed || listed.status === 'archived') return null;
+    // Its brief as its header read it, where it did, so a draft with none and no one in it offers no Start yet.
+    const brief = agentFacts.value[campaignId]?.campaign.context;
+    const campaign = brief === undefined ? listed : { ...listed, context: brief };
     const { state, tone } = toCampaignRow(campaign, undefined);
     return (
         <div className="chat-agent" role="group" aria-label="This agent">
             <span className={`pillc chat-agent-state ${tone}`}>{state}</span>
             <CampaignMoves
                 campaign={campaign}
+                people={peopleOf(campaignId)}
                 buttonClass={(move) => (move === 'pause' ? 'btn sm chat-agent-move' : 'btn sm p chat-agent-move')}
                 frame={(dialog) => <div className="harness">{dialog}</div>}
                 onDone={() => void reloadCampaigns()}
@@ -1828,6 +1837,121 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const queues =
         chat.draft.trim() !== '' && host !== null && !nameMissing && !tabLocked && !chat.stopping && !chat.removing;
     const underHead = headed && chat.campaignId !== null && !chat.main;
+    // An agent made at the click asks Start's question in its own place until its first message: Start's box, its
+    // pickers and, with no AI that drives the chat, Start's AI card first, under the question; the chips below it.
+    const opening = asksStart(chat);
+    const aiCard =
+        opening && (setup.value ? chatHosts(setup.value.hosts).drive.length === 0 : setupError.value !== null);
+    const composer = (
+        <form className="cform" onSubmit={send} aria-label="Message">
+            <div className="composer">
+                {setup.value && !host && heldSaid.length > 0 && (
+                    <div className="note am host-held">
+                        {[...new Set(heldSaid.map((each) => each.belowFloor!))].map((sentence) => (
+                            <div key={sentence}>
+                                {sentence.split('`').map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
+                            </div>
+                        ))}{' '}
+                        <button className="btn sm" type="button" onClick={() => void listHosts()}>
+                            Check again
+                        </button>
+                    </div>
+                )}
+                {setup.value && !host && held.length === 0 && !aiCard && (
+                    <div className="note am">
+                        No AI host that drives the chat was found on this machine. Connect lists the hosts and installs
+                        one.{' '}
+                        {!inTab() && (
+                            <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
+                                Connect
+                            </button>
+                        )}
+                    </div>
+                )}
+                {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
+                {drop.said !== null && (
+                    <div className="note am" role="status">
+                        {drop.said}
+                    </div>
+                )}
+                {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
+                <textarea
+                    ref={messageBox}
+                    rows={1}
+                    disabled={chat.removing || tabLocked}
+                    placeholder={
+                        chat.running
+                            ? t('chat.queue.placeholder')
+                            : opening
+                              ? host?.id === 'claude'
+                                  ? `${t('start.placeholder')} ${t('start.placeholder.site')}`
+                                  : t('start.placeholder')
+                              : 'Ask Jason…'
+                    }
+                    aria-label="Your message"
+                    value={chat.draft}
+                    onChange={(event) => {
+                        drop.reset();
+                        changeChat(chatId, (each) => typed(each, event.target.value));
+                    }}
+                    onKeyDown={keys}
+                    onDragOver={drop.draggedOver}
+                    onDrop={drop.dropped}
+                />
+                <div
+                    className="crow"
+                    onClickCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                    onKeyDownCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                >
+                    <ChatControls
+                        chat={chat}
+                        change={(next) => changeChat(chatId, next)}
+                        choose={(mode) => chooseMode(chatId, mode)}
+                        modeMenu={modeMenu}
+                    />
+                    {/* One round button. While a turn runs it is the arrow only where it can send the words typed to
+                        wait for the turn's end, and Stop in every other state; Escape in the box stops the turn too. */}
+                    {chat.running && !queues ? (
+                        <button
+                            className="send"
+                            type="button"
+                            title="Stop"
+                            aria-label="Stop"
+                            disabled={chat.removing}
+                            onClick={stop}
+                        >
+                            <Glyph name="stop" size={16} />
+                        </button>
+                    ) : chat.running ? (
+                        <button
+                            className="send"
+                            type="submit"
+                            title={t('chat.queue.sendTitle')}
+                            aria-label={t('chat.queue.send')}
+                        >
+                            <Glyph name="up" size={16} />
+                        </button>
+                    ) : (
+                        <button
+                            className="send"
+                            type="submit"
+                            title="Send"
+                            aria-label="Send"
+                            disabled={!host || chat.removing || nameMissing || tabLocked}
+                            {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
+                        >
+                            <Glyph name="up" size={16} />
+                        </button>
+                    )}
+                </div>
+            </div>
+            {/* Queuing is said to a screen reader: the region stands empty and takes the queued line's words. */}
+            <div className="chat-announce" role="status">
+                {chat.waiting !== null ? t('chat.queue.line') : ''}
+            </div>
+            <ChatNotes chat={chat} />
+        </form>
+    );
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
@@ -1941,6 +2065,16 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                 </div>
             )}
             <div className="chat-scroll" ref={scroller}>
+                {opening && (
+                    <div className="agent-opening">
+                        <div className="start-title hero">
+                            <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+                            <h2>{t('agent.new.question', { name: chat.title })}</h2>
+                        </div>
+                        {aiCard && <Painted className="start-ai" view={aiCardView} />}
+                        {composer}
+                    </div>
+                )}
                 <Painted className="thread" view={view} />
                 {chat.waiting !== null && (
                     <Queued
@@ -1974,108 +2108,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         </button>
                     </div>
                 )}
-            <form className="cform" onSubmit={send} aria-label="Message">
-                <div className="composer">
-                    {setup.value && !host && heldSaid.length > 0 && (
-                        <div className="note am host-held">
-                            {[...new Set(heldSaid.map((each) => each.belowFloor!))].map((sentence) => (
-                                <div key={sentence}>
-                                    {sentence
-                                        .split('`')
-                                        .map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
-                                </div>
-                            ))}{' '}
-                            <button className="btn sm" type="button" onClick={() => void listHosts()}>
-                                Check again
-                            </button>
-                        </div>
-                    )}
-                    {setup.value && !host && held.length === 0 && (
-                        <div className="note am">
-                            No AI host that drives the chat was found on this machine. Connect lists the hosts and
-                            installs one.{' '}
-                            {!inTab() && (
-                                <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
-                                    Connect
-                                </button>
-                            )}
-                        </div>
-                    )}
-                    {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
-                    {drop.said !== null && (
-                        <div className="note am" role="status">
-                            {drop.said}
-                        </div>
-                    )}
-                    {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
-                    <textarea
-                        ref={messageBox}
-                        rows={1}
-                        disabled={chat.removing || tabLocked}
-                        placeholder={chat.running ? t('chat.queue.placeholder') : 'Ask Jason…'}
-                        aria-label="Your message"
-                        value={chat.draft}
-                        onChange={(event) => {
-                            drop.reset();
-                            changeChat(chatId, (each) => typed(each, event.target.value));
-                        }}
-                        onKeyDown={keys}
-                        onDragOver={drop.draggedOver}
-                        onDrop={drop.dropped}
-                    />
-                    <div
-                        className="crow"
-                        onClickCapture={unmade ? (event) => openMade(event, chatId) : undefined}
-                        onKeyDownCapture={unmade ? (event) => openMade(event, chatId) : undefined}
-                    >
-                        <ChatControls
-                            chat={chat}
-                            change={(next) => changeChat(chatId, next)}
-                            choose={(mode) => chooseMode(chatId, mode)}
-                            modeMenu={modeMenu}
-                        />
-                        {/* One round button. While a turn runs it is the arrow only where it can send the words typed to
-                            wait for the turn's end, and Stop in every other state; Escape in the box stops the turn too. */}
-                        {chat.running && !queues ? (
-                            <button
-                                className="send"
-                                type="button"
-                                title="Stop"
-                                aria-label="Stop"
-                                disabled={chat.removing}
-                                onClick={stop}
-                            >
-                                <Glyph name="stop" size={16} />
-                            </button>
-                        ) : chat.running ? (
-                            <button
-                                className="send"
-                                type="submit"
-                                title={t('chat.queue.sendTitle')}
-                                aria-label={t('chat.queue.send')}
-                            >
-                                <Glyph name="up" size={16} />
-                            </button>
-                        ) : (
-                            <button
-                                className="send"
-                                type="submit"
-                                title="Send"
-                                aria-label="Send"
-                                disabled={!host || chat.removing || nameMissing || tabLocked}
-                                {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
-                            >
-                                <Glyph name="up" size={16} />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                {/* Queuing is said to a screen reader: the region stands empty and takes the queued line's words. */}
-                <div className="chat-announce" role="status">
-                    {chat.waiting !== null ? t('chat.queue.line') : ''}
-                </div>
-                <ChatNotes chat={chat} />
-            </form>
+            {opening ? null : composer}
         </div>
     );
 }

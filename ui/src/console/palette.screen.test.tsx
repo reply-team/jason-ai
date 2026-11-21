@@ -427,16 +427,19 @@ describe('where each kind goes', () => {
         await waitFor(() => expect(inFront()).toBe('Connect'));
     });
 
-    it('opens the actions as the two buttons do: Start, and a new chat', async () => {
+    it('opens the actions as the two buttons do: an agent made at the click, and a new chat', async () => {
         const { desktop } = renderConsole();
         await opened();
         flush(() => here().dock.show('campaigns'));
         await waitFor(() => expect(inFront()).toBe('Agents'));
+        // The desktop refuses the agent, so nothing opens: the action asked what the sidebar's button asks.
+        desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());
         type('new gtm');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toBe('Start'));
+        await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(1));
+        expect(inFront()).toBe('Agents');
         expect(calls(desktop, 'chat.create')).toEqual([]);
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });

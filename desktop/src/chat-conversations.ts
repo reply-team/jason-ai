@@ -62,6 +62,11 @@ export interface Conversation {
      * the campaign's name, not a name the desktop asks a model for. Absent when the desktop named the conversation.
      */
     named_by_person?: true;
+    /**
+     * Present, and true, for an agent's conversation the desktop made with its campaign at the person's click on New GTM
+     * agent, kept from that moment: the campaign carries the desktop's placeholder name until it is named.
+     */
+    made_at_click?: true;
     created_at: string;
     updated_at: string;
     /** By host id, the session or thread that host named for this conversation. */
@@ -280,6 +285,7 @@ function readRecord(text: string, id: string): { conversation: Conversation; sta
         ...taken,
         title: raw.title,
         ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
+        ...(raw.made_at_click === true && typeof raw.campaign_id === 'string' ? { made_at_click: true as const } : {}),
         created_at: raw.created_at,
         updated_at: raw.updated_at,
         sessions,
@@ -306,11 +312,12 @@ export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, memory_given, entries, dropped, chosen } = conversation;
     const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
+    const clicked = conversation.made_at_click === true ? { made_at_click: true } : {};
     const moded = conversation.mode === undefined || conversation.mode === 'full_access' ? {} : { mode: conversation.mode };
     const owned = conversation.folder === 'own' ? { folder: 'own' } : {};
     const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
     const memory = memory_given === undefined || Object.keys(memory_given).length === 0 ? {} : { memory_given };
-    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...moded, ...owned, shape: recordShape });
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, ...clicked, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...moded, ...owned, shape: recordShape });
 }
 
 /**
