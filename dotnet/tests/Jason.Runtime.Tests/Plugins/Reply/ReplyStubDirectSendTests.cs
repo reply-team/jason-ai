@@ -1399,18 +1399,54 @@ public class ReplyStubDirectSendTests
     }
 
     /// <summary>
-    /// Reply sends a Retry-After with a limit's refusal, and reply-cli 0.22.0 passes it on as <c>retry_after</c>; the
-    /// stand-in does where a test plants one on the mailbox.
+    /// A send's code of failure and the message as it went are printed as reply-cli 0.22.0 prints them
+    /// (src/operations/direct-sends.ts, <c>rendering_of</c>): each member on its own, where Reply gave it as text or null,
+    /// and the names Reply could not fill as a list after them, before <c>cancelled_at</c>.
     /// </summary>
     [Fact]
-    public async Task A_limit_refusal_carries_the_retry_after_planted_on_the_mailbox()
+    public async Task Direct_send_get_prints_each_member_of_a_rendering_on_its_own()
     {
-        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: "daily", retryAfter: 3600);
+        using var account = new ReplyAccount()
+            .WithDirectSend("email-1001", "failed", reply: new JsonObject { ["failureCode"] = "directSend.dispatchInterrupted" })
+            .WithDirectSend("email-1002", "sent", reply: new JsonObject { ["renderedBody"] = "<p>Hi</p>" })
+            .WithDirectSend("email-1003", "sent", reply: new JsonObject { ["renderedSubject"] = null })
+            .WithDirectSend("email-1004", "sent", reply: new JsonObject { ["renderedSubject"] = "Tuesday", ["renderedBody"] = "Hi", ["missingVariables"] = new JsonArray("firstName") });
+
+        async Task<JsonObject> Read(string reference) => JsonNode.Parse((await account.RunAsync(Line("direct-send", "get", reference), Ct)).Item2)!.AsObject();
+        static string[] Rendering(JsonObject printed) =>
+            [.. printed.Select(member => member.Key).Where(name => name is "failure_code" or "rendered_subject" or "rendered_body" or "missing_variables")];
+
+        var code = await Read("email-1001");
+        var body = await Read("email-1002");
+        var none = await Read("email-1003");
+        var all = await Read("email-1004");
+
+        Assert.Equal(["failure_code"], Rendering(code));
+        Assert.Equal("directSend.dispatchInterrupted", (string?)code["failure_code"]);
+        Assert.Equal(["rendered_body"], Rendering(body));
+        Assert.Equal("<p>Hi</p>", (string?)body["rendered_body"]);
+        Assert.Equal(["rendered_subject"], Rendering(none));
+        Assert.Null(none["rendered_subject"]);
+        Assert.Equal(["rendered_subject", "rendered_body", "missing_variables"], Rendering(all));
+        Assert.Equal("""["firstName"]""", all["missing_variables"]!.ToJsonString());
+        Assert.Equal("cancelled_at", all.Select(member => member.Key).SkipWhile(name => name != "missing_variables").Skip(1).First());
+    }
+
+    /// <summary>
+    /// Reply sends a Retry-After with a limit's refusal, and reply-cli 0.22.0 passes it on as <c>retry_after</c>; the
+    /// stand-in does where a test plants one on the mailbox, and a mailbox with none planted prints none.
+    /// </summary>
+    [Theory]
+    [InlineData(3600)]
+    [InlineData(null)]
+    public async Task A_limit_refusal_carries_the_retry_after_planted_on_the_mailbox_and_none_where_none_is(int? wait)
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: "daily", retryAfter: wait);
 
         var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
 
         var error = Error(said);
-        Assert.Equal((1, "email.limit_reached", 3600), (exit, (string?)error["code"], (int?)error["retry_after"]));
+        Assert.Equal((1, "email.limit_reached", wait, wait is not null), (exit, (string?)error["code"], (int?)error["retry_after"], error.ContainsKey("retry_after")));
         Assert.Empty(account.Sent);
     }
 
