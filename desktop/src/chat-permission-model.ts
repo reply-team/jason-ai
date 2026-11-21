@@ -58,6 +58,15 @@ export interface ChatScope {
      * none: every jason command that reaches the model is a card.
      */
     allowed?: readonly string[] | undefined;
+    /**
+     * Whether the turn's hook rides it: Full access, and Ask first and Auto-edit from Claude Code's floor of Full access on,
+     * where the turn's settings block no read (`hookedSettings`) and the hook refuses the three kinds wherever a tool names
+     * them. There a read anywhere else runs with no card, the host's own read-only commands among them (`noCardCommand`),
+     * a change outside the chat's folders is one card, a walk of a folder that holds the data directory is refused
+     * (`walkRefusal`), and every jason verb runs with no card but those of `askingCardedVerbs`, its help and its version
+     * among them. Absent or false, below the floor and in Plan only: as it was.
+     */
+    hooked?: boolean;
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
     real: (path: string) => string | null;
     /**
@@ -185,11 +194,12 @@ export const replyNoCardForms: readonly string[] = (() => {
  * that only the person answers it; Ask first, Auto-edit and Plan only refuse the same places by the same sentences.
  */
 export const settingsRefusal =
-    'That is Jason\'s settings file or its run file, the installation\'s own data, which the chat does not open: `jason runtime status` says how Jason runs, '
-    + '`jason route set` and `jason plugin grant` change its routes and grants, and a plugin\'s configuration is the person\'s to write. Nothing was done.';
+    'That is Jason\'s settings file or its run file, Jason\'s own and not one of the person\'s files, so the chat does not open it: `jason status` says '
+    + 'whether Jason runs and can work, `jason route list` and `jason plugin list` show its routes and plugins, `jason route set` and `jason plugin grant` '
+    + 'change them, and a plugin\'s configuration is the person\'s to write. Nothing was done.';
 export const dataRefusal =
-    'That path is the installation\'s own data, outside the chat\'s folder, which the chat does not open: Jason answers for it, with `jason campaign list`, '
-    + '`jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
+    'That path is in Jason\'s own data directory, outside the chat\'s folder: Jason\'s own and not one of the person\'s files, so the chat does not open it. '
+    + 'Jason answers for what is there, with `jason campaign list`, `jason workitem list`, `jason journal list` or `jason logs`. Nothing was done.';
 export const personsRefusal =
     'That path is the person\'s own installation, and this chat runs in the demo, which does not open it: the demo\'s own `jason` answers for its data, '
     + 'such as `jason campaign list`. Nothing was done.';
@@ -198,15 +208,22 @@ const networkRefusal = 'That path is on another computer, or reaches this one as
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const braceRefusal = 'That pattern has a brace group that can name another folder: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
-const searchRefusal = 'That folder holds the installation\'s own data, so a search or a listing of it would walk that data: the chat does not take it. Name a narrower folder, one that does not hold the data directory. Nothing was done.';
+/**
+ * The refusal of a walk of a folder that holds Jason's data directory: a search of it by the Grep or Glob tool, and where
+ * the hook rides the turn a command that walks it (`walkRefusal`), with how to go on. A plain listing of such a folder is
+ * no walk; a listing of the data directory itself is a read of the data (`dataRefusal`).
+ */
+export const searchRefusal =
+    'That folder holds Jason\'s own data directory, which is not one of the person\'s files, so a search or a walk of it would reach Jason\'s data: the chat '
+    + 'does not take it. Search a folder inside it instead, such as Documents or Desktop. Nothing was done.';
 const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
-const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
+export const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
 /** A jason that starts with an option, or carries a word that begins with @: refused in every mode, by the form to use. */
-const optionRefusal = 'That command starts jason with an option, or gives it a word that begins with @, which the chat never runs: write the verb first and its options after it, such as `jason approval approve <id> --actor human:<name>`. Nothing was run.';
-const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
+export const optionRefusal = 'That command starts jason with an option, or gives it a word that begins with @, which the chat never runs: write the verb first and its options after it, such as `jason approval approve <id> --actor human:<name>`. Nothing was run.';
+export const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
 /**
  * A command that names or clears Jason's own variables (`ownVariables`), in every mode: Jason alone sets them, and a jason
  * started without the chat's environment may act on another installation than the one this window shows; and

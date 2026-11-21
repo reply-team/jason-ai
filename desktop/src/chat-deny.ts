@@ -248,9 +248,12 @@ export function helpRules(nouns: readonly string[]): string[] {
 }
 
 /**
- * The host's deny rules for the list: each command and everything after it, and every jason command that starts with
- * an option, since `jason --actor human:x approval approve` would otherwise pass the `jason` allow rule untouched.
+ * The host's deny rules for the list: each command and everything after it, and, where no hook rides the turn, every
+ * jason command that starts with an option, since `jason --actor human:x approval approve` would otherwise pass the
+ * `jason` allow rule untouched. Where the hook rides it (`hooked`), such a command reaches the permission model instead,
+ * which runs jason's own help and version with no card and refuses any other option first (`optionRefusal`), and Full
+ * access runs it.
  */
-export function denyRules(entries: readonly string[]): string[] {
-    return [...entries.map((entry) => `Bash(jason ${entry}:*)`), 'Bash(jason -*)'];
+export function denyRules(entries: readonly string[], hooked = false): string[] {
+    return [...entries.map((entry) => `Bash(jason ${entry}:*)`), ...(hooked ? [] : ['Bash(jason -*)'])];
 }

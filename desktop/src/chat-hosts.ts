@@ -130,18 +130,22 @@ export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOuts
 export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, ...serverDefences() });
 
 /**
- * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit those of every turn
- * (`claudeTurnSettings`), in Full access those with no rule that a page asks; and a `PreToolUse` hook on every tool that
- * posts the tool use to the turn's endpoint, which answers a refusal of the three kinds or nothing (`HookAnswer`).
- * Claude Code's deny rules match a command as written only, so the hook reads what they cannot, and a refusal of it
- * stands in front of an allow rule. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"`
- * "prevents the tool call", and "Deny and ask rules are still evaluated regardless of what the hook returns"; a matcher
- * of `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
- * `command` or `http` hook. Requires Claude Code v2.1.295 or later."
+ * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit the rule that every
+ * page asks (`claudeTurnSettings`), in Full access no rule at all; and a `PreToolUse` hook on every tool that posts the
+ * tool use to the turn's endpoint, which answers a refusal of the three kinds or nothing (`HookAnswer`). Reads outside
+ * the working folders are not blocked: the hook refuses the three kinds wherever a tool names them, so a read anywhere
+ * else runs in Full access, and in Ask first and Auto-edit reaches the prompt tool, which runs it with no card, and a
+ * change outside the working folders is the one card (`ChatScope.hooked`). With the block, Claude Code refused such a
+ * read before it asked anyone, and an edit, which needs a read of the file first, died with it. Claude Code's deny rules
+ * match a command as written only, so the hook reads what they cannot, and a refusal of it stands in front of an allow
+ * rule. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"` "prevents the tool call", and "Deny
+ * and ask rules are still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence
+ * of the event"; "To block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude
+ * Code v2.1.295 or later."
  */
 export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string) {
     return {
-        permissions: mode === 'full_access' ? { blockReadsOutsideWorkingDirectories: true } : { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] },
+        ...(mode === 'full_access' ? {} : { permissions: { ask: ['WebFetch(domain:*)'] } }),
         // No project file can switch the hook off or filter it out. Anthropic, https://code.claude.com/docs/en/settings
         // (read 2026-11-12), of command-line settings: "A key you set there overrides the same key in your project and
         // user settings files", and "Lists merge instead of overriding", so the hook's address is always on the list.
@@ -220,11 +224,14 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * request's content comes from, the host is given no allow rule for a form of a verb that reads one from a file or from
  * standard input (`withoutRequestFiles`), so each reaches the prompt tool, which refuses a redirect from the
  * installation's own data and runs a plain form with no card, as the rule would. Every deny rule is passed in every mode; Anthropic,
- * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
+ * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". The rule against
+ * a jason that starts with an option is passed only where no hook rides the turn (`denyRules`): where one does, such a
+ * command reaches the prompt tool, which runs jason's own help and version and refuses any other. Never
  * `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat, and from `noChromeFrom` on `--no-chrome`, so
- * the browser's tools do not either (the settings' `serverDefences` hold below it); reads outside the working folders blocked
- * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
+ * the browser's tools do not either (the settings' `serverDefences` hold below it); reads outside the working folders
+ * blocked where no hook rides the turn (`claudeTurnSettings`, `planTurnSettings`), and not where one does
+ * (`hookedSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
  * so a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
@@ -234,7 +241,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const allowed = mode === 'plan_only' ? (turn.reads ?? []) : turn.settingsFile ? turn.allowed : withoutRequestFiles(turn.allowed);
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
     const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied, turn.settingsFile !== undefined), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
