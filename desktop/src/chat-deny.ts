@@ -213,6 +213,34 @@ export const askingCardedForms: readonly CardedForm[] = [
 ];
 
 /**
+ * The CLI's own command tree: every verb of it but a hidden one, by its words after `jason`, held to the tree
+ * `CliApp.BuildRootCommand` builds by DesktopDenyListTests, so a verb added to the CLI is red there until it is named here.
+ * Where the hook rides an Ask first or Auto-edit turn, a jason whose words do not begin with one of these, or with a
+ * noun's help, is a card (`ChatScope.hooked`): the CLI's parser takes a word before the noun that names no verb, the
+ * root's own name or a directive, and the executable starts modes that are no verb of the CLI at all.
+ */
+export const cliCommandTree: readonly string[] = [
+    'approval approve', 'approval get', 'approval list', 'approval list-standing', 'approval reject', 'approval set-standing',
+    'approval unset-standing', 'audience availability', 'audience filter-values', 'audience preview', 'block clear', 'block get', 'block list',
+    'campaign activity', 'campaign activity-by-period', 'campaign add-contacts', 'campaign archive', 'campaign audience', 'campaign create',
+    'campaign get', 'campaign list', 'campaign list-contacts', 'campaign pause', 'campaign remove-contacts', 'campaign set-send-mode',
+    'campaign start', 'campaign summary', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
+    'contact list', 'contact thread', 'contact threads', 'contact update', 'decision answer', 'decision get', 'decision list', 'decision raise',
+    'doctor', 'events backfill', 'events signal', 'events sources', 'export', 'import', 'install', 'journal append', 'journal kinds', 'journal list',
+    'journal watch', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
+    'plugin reload', 'plugin revoke', 'preference list', 'preference set', 'preference unset', 'profile create', 'profile disable', 'profile enable',
+    'profile get', 'profile list', 'profile set-default', 'profile unset-default', 'profile update', 'project create', 'project get', 'project link',
+    'project list', 'project update', 'reply count', 'reply record', 'report get', 'report list', 'report submit', 'role add', 'role list',
+    'role set-profile', 'rolenote get', 'rolenote list', 'rolenote set', 'route list', 'route resolve', 'route set', 'route unset',
+    'runtime autostart disable', 'runtime autostart enable', 'runtime autostart status', 'runtime drain', 'runtime restart', 'runtime resume',
+    'runtime start', 'runtime status', 'runtime stop', 'sender list', 'session open', 'skills install', 'skills update', 'status',
+    'subscription list', 'subscription rewind', 'subscription runs', 'suppression add', 'suppression list', 'suppression remove', 'ui install',
+    'ui open', 'ui revoke', 'ui tokens', 'uninstall', 'update apply', 'update check', 'update rollback', 'update status', 'workitem cancel',
+    'workitem complete', 'workitem count', 'workitem create', 'workitem get', 'workitem heartbeat', 'workitem list', 'workitem resume',
+    'workitem review', 'workitem set-result', 'workitem update', 'workitem wait',
+];
+
+/**
  * The fence one turn runs under in its mode. Plan only: the fence as it is read, every command and operation of the deny
  * list refused. Every other mode: no command or operation of the deny list is refused. The forms of a person's word
  * (`personsWordForms`) join the allow list and run with no card, and `cardedVerbs` leave it. Every other command of the

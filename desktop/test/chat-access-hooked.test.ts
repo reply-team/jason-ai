@@ -315,6 +315,32 @@ test('the carded forms keep their card whatever their spelling and in any compou
     }
 });
 
+test('a jason whose words do not begin with a verb of the CLI\'s own tree, or a noun\'s help, is a card in Ask first and Auto-edit, whatever stands before the noun, and so is every mode of the executable that is no verb; Full access runs each', () => {
+    const cards = [
+        'jason jason uninstall',
+        'jason ./jason uninstall',
+        'jason /any/folder/jason uninstall',
+        "jason '[a]' uninstall",
+        "jason '[a b]' uninstall",
+        "jason '' uninstall",
+        'jason jason status',
+        'jason campaign',
+        'jason campaign frobnicate',
+        'jason frobnicate',
+        'jason runtime run',
+        'jason plugin-host --protocol 1 --plugin p --operation o --correlation c',
+        'jason toast-host',
+        'jason host-hook',
+        'jason jason://approvals/apr_1',
+    ];
+    for (const scope of scopes) {
+        for (const command of cards) {
+            assert.deepEqual(both('Bash', { command }, scope).map((judged) => judged.verdict), ['ask', 'ask'], `${scope.platform}: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `Full access: ${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('every form of askingCardedForms is named in rule 11 of the chat\'s instructions, in desktop/README.md and in docs/desktop.md, each with every option that cards it', () => {
     const desktop = join(import.meta.dirname, '..');
     const rule = readFileSync(join(desktop, 'chat-instructions.md'), 'utf8').split('\n').find((line) => line.startsWith('11. ')) ?? '';

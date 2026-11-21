@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { askingCardedForms } from './chat-deny.ts';
+import { askingCardedForms, cliCommandTree } from './chat-deny.ts';
 import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -1035,16 +1035,35 @@ function namesOption(word: string, option: string): boolean {
 }
 
 /**
- * True when the words after `jason` run with no card where the hook rides an Ask first or Auto-edit turn: any verb in any
- * form but the forms that keep a card (`askingCardedForms`), whose verb is told in any letter case and with anything
- * between its words (`holdsEntry`) and whose option is told anywhere among them (`namesOption`); the help of a carded
- * form, a `--help` or `-h` anywhere before a `--`, which runs nothing; and jason's own help and version, each alone
- * (`rootForms`). Nothing else that starts with an option.
+ * True when the words after `jason` begin with a verb of the CLI's own tree (`cliCommandTree`), word for word as the tree
+ * spells it, or with a noun of it and that noun's help (`--help`, `-h`). Any other word where a noun or a verb stands is
+ * no verb: the root's own name again, a path to it, a directive, an empty word, a mode of the executable such as
+ * `plugin-host` or `runtime run`, an option between a noun and its verb, or a noun alone.
+ */
+function namesCliVerb(rest: readonly string[]): boolean {
+    for (let length = 1; length <= rest.length; length++) {
+        const words = rest.slice(0, length).join(' ');
+        if (cliCommandTree.includes(words)) return true;
+        if (!cliCommandTree.some((verb) => verb.startsWith(`${words} `))) return false;
+        const next = rest[length];
+        if (next === '--help' || next === '-h') return true;
+    }
+    return false;
+}
+
+/**
+ * True when the words after `jason` run with no card where the hook rides an Ask first or Auto-edit turn: a verb of the
+ * CLI's own tree (`namesCliVerb`), or a noun's help, in any form but the forms that keep a card (`askingCardedForms`),
+ * whose verb is told in any letter case and with anything between its words (`holdsEntry`) and whose option is told
+ * anywhere among them (`namesOption`); the help of a carded form, a `--help` or `-h` anywhere before a `--`, which runs
+ * nothing; and jason's own help and version, each alone (`rootForms`). Nothing else that starts with an option, and
+ * nothing the tree does not name.
  */
 function noCardJason(rest: readonly string[]): boolean {
     const first = rest[0];
     if (first === undefined) return false;
     if (first.startsWith('-')) return rest.length === 1 && rootForms.includes(first);
+    if (!namesCliVerb(rest)) return false;
     const carded = askingCardedForms.some(
         ({ verb, options }) => holdsEntry(rest, verb) && (options === undefined || rest.some((word) => options.some((option) => namesOption(word, option)))),
     );

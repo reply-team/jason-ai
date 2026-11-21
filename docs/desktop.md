@@ -998,7 +998,9 @@ asks only about a change and about a few of Jason's own commands:
   plain form, which takes the release's own, runs with no card: `jason update apply` with `--version` or `--feed`;
   `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with
   `--source`, `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire` or
-  `--terminal-path`. An act of your word is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the
+  `--terminal-path`. A `jason` whose words do not begin with a verb of the CLI, or with a noun's help, is a card too:
+  one with another word before the noun, and the executable's own modes that are no verb (`runtime run`,
+  `plugin-host`, `toast-host`, `host-hook` and a link it is handed). Full access runs them, as it runs any program. An act of your word is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the
   agent's own words, each in single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`,
   `jason --version` and the help of any noun or verb run with no card, those of the commands above included; any other
   `jason` that starts with an option is refused, with the words to put the verb first.

@@ -373,6 +373,10 @@ applies to the turns a person starts by sending, from the next one on.
     `--retire` or `--terminal-path`. Each is a card, its words told in any letter case and with anything between them
     (`holdsEntry`), its option anywhere among them, with its value after `=` or `:` too, and in a compound; the help of
     one of them, a `--help` or `-h` before any `--`, runs;
+  - a `jason` whose words do not begin with a verb of `cliCommandTree`, the CLI's own tree held to
+    `CliApp.BuildRootCommand` by DesktopDenyListTests, or with a noun's help, is a card (`namesCliVerb`): a word before
+    the noun that the parser takes, the root's own name or a directive, and the executable's modes that are no verb
+    (`runtime run`, `plugin-host`, `toast-host`, `host-hook`, a link); Full access runs them, as it runs any program;
   - jason's own `--help`, `-h` and `--version`, each alone, and any noun's or verb's help run with no card; any other
     option before the verb is refused (`optionRefusal`);
   - a pipeline or a sequence whose every part is such a `jason` or a program of `noCardFilters` (`jq`, `grep`, `head`,
