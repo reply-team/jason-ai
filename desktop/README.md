@@ -360,20 +360,26 @@ applies to the turns a person starts by sending, from the next one on.
   (below), so a command an allow rule lets run with no card, one fed the settings file by a redirection say, is refused
   before it runs; its settings block no read (`hookedSettings`), and the permission model judges it by what the hook
   refuses (`ChatScope.hooked`):
-  - a read anywhere, by Read, Glob, Grep, a listing or the host's own read-only commands, runs with no card, and a walk
-    of a folder that holds the data directory is refused as the hook refuses it (below);
+  - a read anywhere, by Read, Glob, Grep, a listing or the host's own read-only commands, runs with no card; a walk of
+    a folder that holds the data directory, which the hook refuses (below), is a card each time, never covered by a
+    grant, where the permission model is asked about it;
   - a change outside the chat's folders is one card, "Change a file outside the chat's folders", for Write and Edit
     alike, an append among them, a `~` of the home folder taken as the file tools take it; inside them as before;
-  - every `jason` verb runs with no card but the four of `askingCardedVerbs`, `uninstall`, `import`, `update rollback`
-    and `plugin grant`, each a card in every form, its words told in any letter case and with anything between them
-    (`holdsEntry`), and in a compound too; the help of one of them, `--help` or `-h` right after its words, runs;
+  - every `jason` verb runs with no card but the forms of `askingCardedForms`: `uninstall`, `import`, `export` and
+    `update rollback` in every form, `update apply` with `--version`, `plugin grant`, `plugin install` with `--feed` or
+    `--replace`, and `skills install` and `skills update` with `--source`, `--feed` or `--root`; each is a card, its
+    words told in any letter case and with anything between them (`holdsEntry`), its option anywhere among them, with
+    its value after `=` or `:` too, and in a compound; the help of one of them, a `--help` or `-h` before any `--`, runs;
   - jason's own `--help`, `-h` and `--version`, each alone, and any noun's or verb's help run with no card; any other
     option before the verb is refused (`optionRefusal`);
   - a pipeline or a sequence whose every part is such a `jason` or a program of `noCardFilters` (`jq`, `grep`, `head`,
-    `tail`, `wc`, `sort` with no option that writes a file or starts a program, `uniq` with one file at most, `cut`,
-    `tr`, `cat`, `ls`, `echo`), read literally, with no directory change, no file named like one of its programs in the
-    turn's folder and nothing redirected into a file, runs with no card (`hookedNoCard`); anything else is a card, as
-    before.
+    `tail`, `wc`, `sort`, `uniq` with one file at most, `cut`, `tr`, `cat`, `ls`, `echo`), each with only the options of
+    its own table (`optionTables`: none that descends, reads a file it is told of on its input or by another file,
+    writes a file or starts a program; jq with `-r`, `-c`, `-e`, `-s`, `-j`, `-S`, `-M`, `-a`, `--arg` and `--argjson`
+    alone) and, in a command of more than one part, as a reader of standard input that names no file (`ls` aside), read
+    literally, a letter outside ASCII taken in a single-quoted body, with no directory change, no file named like one of
+    its programs in the turn's folder and nothing redirected into a file, runs with no card (`hookedNoCard`); anything
+    else is a card, as before.
 
   Below the floor no hook rides the turn, and the host is given no allow rule for a form of a verb that
   reads a request's content from a file or from standard input (`requestFileVerbs`, held to the CLI's command tree by
@@ -466,14 +472,19 @@ applies to the turns a person starts by sending, from the next one on.
     normalised forms and, where every word is literal, over the words the literal reading resolves; in a file tool's path
     by every route a path can take, on Windows a path that names this computer as another computer would (`localhost`,
     a loopback address or its own name) through a drive's share (`C$`) as that drive's path, and one in a device's or a
-    volume's namespace, or through another share of this computer, as the data directory (`hookPlace`); in the text a
+    volume's namespace, or through another share of this computer, by the sentence that says Jason could not place where
+    it leads (`hookPlace`, `unplacedRefusal`); in the text a
     writer tool would put in a file; and in every string of an MCP tool's input. **The limit:** a command that names one
     of them is refused, and a command that builds the name while it runs is not seen: a pattern (`~/.jas*`), a variable,
     `cd "$HOME"` and then a relative path, or `~user` runs in Full access. With no read blocked, a walk of a folder that
-    holds the data directory is the data's kind: a search of it by the Grep or Glob tool (`walkKind`), and a command
-    that walks it, a recursive search, a finder, a size, a tree, a recursive listing or copy, or an archive made of it
-    (`walkRefusal`), are refused by the sentence that says to name a narrower folder (`searchRefusal`); a plain listing
-    of such a folder runs. A Glob pattern is read where it can lead, its fixed folders climbed once for each `..` after
+    holds the data directory (the home folder, a drive's top, the data directory's parents) is the data's kind: a search
+    of it by the Grep or Glob tool (`walkKind`), and a command that names such a folder, runs in one after a folder
+    change, or takes a word the shell builds from one, in any form but the few known not to descend (`plainWalkForm`: a
+    listing or a search with only its table's options, a read of a file, a print, a folder change), are refused by the
+    sentence that says to name a narrower folder (`searchRefusal`, `walksRoot`). So is a command that reads what no word
+    of it shows (`unseenReadRefusal`): a jq program that holds `env`, `$ENV`, `import`, `include` or `modulemeta`, takes
+    its program from a file or is given a word the shell builds (`jqRefusal`), and `sort`, `wc`, `du` or `find` told the
+    files it reads by `--files0-from` (`filesFromRefusal`). A plain listing of such a folder runs. A Glob pattern is read where it can lead, its fixed folders climbed once for each `..` after
     them, and one whose brace group can name a place is refused (`braceRefusal`). A judgement that fails refuses;
   - **nothing** for everything else, the deny list's verbs, a jason that starts with an option, PowerShell and a
     command Jason does not read literally among them: the host's own mode and rules decide it.
@@ -526,7 +537,7 @@ applies to the turns a person starts by sending, from the next one on.
   (`modeFence`): the acts of a person's word (`personsWordForms`: five verbs, and `preference set` and `unset` of two
   keys, `sender.identity` and `tone_of_voice`, each a host rule of its own) are allowed as the allow list's verbs are,
   `reply record` (`cardedVerbs`) leaves the allow list, and every other one is the mode's: where the hook rides an Ask
-  first or Auto-edit turn it runs with no card but the four of `askingCardedVerbs`, below the floor it is a card, and
+  first or Auto-edit turn it runs with no card but the forms of `askingCardedForms`, below the floor it is a card, and
   Full access runs it. In Plan only `jason Campaign Set-Send-Mode` is refused as
   `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
   sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
