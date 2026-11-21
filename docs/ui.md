@@ -271,9 +271,10 @@ with what the runtime said or that it did not answer, that the archive still can
 fails, as the page holds it, it says that campaign is left as it is, keeps sending if it is live there, and cannot be
 paused by Jason once the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or
 paused and its route lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by
-asking in the agent's chat, and always in the provider itself. One press sends one archive. The page then goes back to
-the list, read again without the agent, and says the agent is archived and what was cancelled, only what there was; an
-archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
+asking in the agent's chat, and always in the provider itself, the same from Settings and from **Archive…** on the
+agent's row under **Recent**. One press sends one archive. The page then goes back to the list, read again without the
+agent, and says the agent is archived and what was cancelled, only what there was; an archived agent's Settings say it
+is archived and offer nothing, and a confirmation opened after another window archived
 the agent says so. The browser
 shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox, Results and Settings and no Sequence, its Chat, or its People where no chat can be made; an address that names Sequence still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
