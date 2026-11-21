@@ -407,8 +407,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   arrives as written. Where there is no Windows Terminal, or it does not start, Jason starts the console host,
   `conhost.exe` from the system folder, with the host after `--`: once, and the command says so on stderr. Which window
   the console host shows, a plain console window or one of your default terminal's, is not yet measured on a machine.
-  Both replace every `%NAME%` of a variable across the command line they hand on,
-  before the host reads a word of it, so a word they would change starts nothing: a host's program, a folder the brief
+  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
+  before the host reads a word of it, and Windows Terminal may expand one too, so the refusal applies to both: a word
+  holding such a name starts nothing, and a folder holding a `%` is opened by the console host. A host's program, a folder the brief
   names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
   the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
