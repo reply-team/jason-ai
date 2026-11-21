@@ -238,9 +238,9 @@ test('past four live sessions the oldest is ended: its secret is refused and its
 
 // --- one table ---------------------------------------------------------------------------------------------------------
 
-const table: InvokeMember[] = ['mode.get', 'theme.get', 'setup.status', 'chat.list', 'chat.open', 'chat.create', 'chat.send', 'chat.stop', 'chat.rename'];
+const table: InvokeMember[] = ['mode.get', 'theme.get', 'setup.status', 'chat.list', 'chat.open', 'chat.create', 'chat.createAgent', 'chat.send', 'chat.stop', 'chat.rename'];
 
-test('the table is exactly the five reads and the four acts', () => {
+test('the table is exactly the five reads and the five acts', () => {
     assert.deepEqual([...bridgeMembers].sort(), [...table].sort());
 });
 

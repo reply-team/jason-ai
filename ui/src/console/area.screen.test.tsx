@@ -107,7 +107,7 @@ beforeEach(() => {
 });
 
 describe('the one area', () => {
-    it('opens on Start, with no tab strip and no right column, and marks the button that brings Start', async () => {
+    it('opens on Start, with no tab strip and no right column, and marks no row of the sidebar', async () => {
         await renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(shown()).toBe('start');
@@ -118,7 +118,8 @@ describe('the one area', () => {
         expect(screen.queryByRole('heading', { name: 'Agents', level: 1 })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Activity', level: 1 })).toBeNull();
         expect(screen.queryByText('Page')).toBeNull();
-        expect(marked()).toEqual(['New GTM agent']);
+        // New GTM agent makes an agent at the click: it is no row that brings Start.
+        expect(marked()).toEqual([]);
     });
 
     it('shows exactly the one thing chosen from the menu, and marks its row alone', async () => {
@@ -229,7 +230,7 @@ describe('the one area', () => {
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.remove')).toBe(true));
         await waitFor(() => expect(shown()).toBe('start'));
         expect(screen.getByRole('heading', { name: 'Who do you want to reach?' })).toBeTruthy();
-        expect(marked()).toEqual(['New GTM agent']);
+        expect(marked()).toEqual([]);
         expect(document.querySelector('[data-pane="chat:conv_s"]')).toBeNull();
     });
 

@@ -175,13 +175,29 @@ describe('the sidebar', () => {
         expect(version.contains(settings)).toBe(true);
     });
 
-    it('opens Start from New GTM agent, bringing it forward, and makes no chat', async () => {
+    it('asks the desktop for an agent from New GTM agent, and makes no chat and opens nothing when the desktop refuses', async () => {
         const desktop = renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
         await waitFor(() => expect(inFront()).toBe('Agents'));
+        // The desktop refuses, so the click opens nothing: where the agent opens is the agent's own test's.
+        desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
         fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
-        await waitFor(() => expect(inFront()).toBe('Start'));
+        const alert = await waitFor(() => side().getByRole('alert'));
+        expect(alert.textContent).toContain('Jason is not running.');
+        // A click while the failure stands is that click again; once the line is closed, a click is a new one.
+        fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
+        await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(2));
+        fireEvent.click(within(await waitFor(() => side().getByRole('alert'))).getByRole('button', { name: 'Close' }));
+        fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
+        await waitFor(() => expect(calls(desktop, 'chat.createAgent')).toHaveLength(3));
+        const [first, second, third] = calls(desktop, 'chat.createAgent').map((each) => each.args);
+        expect(first).toEqual([
+            expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
+        ]);
+        expect(second).toEqual(first);
+        expect(third).not.toEqual(first);
+        expect(inFront()).toBe('Agents');
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });
 
@@ -468,10 +484,9 @@ describe('the sidebar’s look', () => {
         expect(Array.from(stack().querySelectorAll('button'))).toEqual([button(), newChat()]);
         expect(button().getAttribute('aria-label')).toBeNull();
         expect(newChat().getAttribute('aria-label')).toBeNull();
-        // Start is in front: New GTM agent is marked and New chat is not.
-        expect(button().getAttribute('aria-current')).toBe('true');
+        // Start is in front, and neither is marked: New GTM agent makes an agent, it brings no page forward.
+        expect(button().getAttribute('aria-current')).toBeNull();
         expect(newChat().getAttribute('aria-current')).toBeNull();
-        expect(styleOf(button())).toMatchObject({ 'border-color': 'var(--accent-line)', background: 'var(--hover)' });
         fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
         expect(styleOf(stack())).toMatchObject({

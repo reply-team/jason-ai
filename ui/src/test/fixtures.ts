@@ -199,6 +199,10 @@ import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
 import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.json';
+import campaignListNewAgent from '../../../docs/api/fixtures/campaign.list/new-agent.json';
+import campaignGetNewAgent from '../../../docs/api/fixtures/campaign.get/new-agent.json';
+import campaignGetNewAgentBrief from '../../../docs/api/fixtures/campaign.get/new-agent-brief.json';
+import campaignSummaryNewAgent from '../../../docs/api/fixtures/campaign.summary/new-agent.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
 import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
@@ -940,6 +944,8 @@ export const fixtures = {
     'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/making': campaignGetMaking satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/new-agent': campaignGetNewAgent satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/new-agent-brief': campaignGetNewAgentBrief satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/send-mode-override': campaignGetSendModeOverride satisfies Exchange<
         { campaign_id: string },
@@ -970,6 +976,7 @@ export const fixtures = {
     'campaign.list/first-page': campaignListFirstPage satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/inbox': campaignListInbox satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list/new-agent': campaignListNewAgent satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -1098,6 +1105,10 @@ export const fixtures = {
     >,
     'campaign.summary/many': campaignSummaryMany satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/many-next': campaignSummaryManyNext satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/new-agent': campaignSummaryNewAgent satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,

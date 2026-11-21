@@ -63,7 +63,7 @@ function modeRefusal(mode: string): Ruled {
 }
 
 /**
- * The table, exactly: five reads and four acts. Everything else the window may ask is outside it by not being here, among
+ * The table, exactly: five reads and five acts. Everything else the window may ask is outside it by not being here, among
  * them every answer to a card, every choice of a mode, the Feed (the window feeds it; two feeders would double it), and
  * every act of set-up, of the demo, of the theme, of Open in, of links and of the window's pairing.
  */
@@ -74,6 +74,8 @@ const rows = new Map<InvokeMember, Row>([
     ['chat.list', { arity: 0 }],
     ['chat.open', { arity: 1 }],
     ['chat.create', { arity: 1 }],
+    // Whatever may make a chat may make an agent, by the same road: a tab's click makes it as the window's does.
+    ['chat.createAgent', { arity: 1 }],
     [
         'chat.send',
         {

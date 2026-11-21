@@ -488,10 +488,6 @@
 .jc-console .newbtn:hover {
     border-color: var(--accent-line);
 }
-.jc-console .newbtn[aria-current='true'] {
-    border-color: var(--accent-line);
-    background: var(--hover);
-}
 .jc-console .menuwrap {
     position: relative;
 }

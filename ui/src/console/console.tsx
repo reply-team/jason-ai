@@ -50,6 +50,8 @@ import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
 import { Painted } from './painted';
 import { Palette } from './palette';
+import { t } from '../platform/i18n';
+import { agentFailure, agentMaking, forgetAgentFailure, tryAgentAgain } from './new-agent';
 import { folderRefusal, readFileManager } from './open-folder';
 import { closeMark } from './icons';
 import { readUnlisted } from './recent';
@@ -765,11 +767,26 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 function SideFailure() {
     const failure = conversationsFailure.value;
     const folder = folderRefusal.value;
+    const agent = agentFailure.value;
     return (
         <>
             {failure !== null && (
                 <div className="note am side-note" role="alert">
                     {failure}
+                </div>
+            )}
+            {/* A click on New GTM agent that made no agent: Try again sends the same click, so it makes one agent at most. */}
+            {agent !== null && (
+                <div className="note am side-note agent-failed" role="alert">
+                    <span className="note-said">{agent.said}</span>
+                    <span className="crow">
+                        <button className="btn sm" type="button" disabled={agentMaking.value} onClick={tryAgentAgain}>
+                            {t('agent.new.again')}
+                        </button>
+                        <button className="btn sm" type="button" onClick={forgetAgentFailure}>
+                            {t('agent.new.close')}
+                        </button>
+                    </span>
                 </div>
             )}
             {/* Why an agent's folder did not open in the file manager, until it is closed or opened again. */}

@@ -406,6 +406,9 @@ export const en = {
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
     // The agent's menus, the header's "…" and the menu on its row under Recent (`conversation-items.ts`).
+    'agent.new.again': 'Try again',
+    'agent.new.close': 'Close',
+    'agent.new.question': 'Who should {name} reach?',
     'agent.menu.open': 'Open',
     'agent.menu.folder': 'Open in {place}',
     'agent.menu.move.start': 'Start',

@@ -1,5 +1,6 @@
 import type { JournalEntry } from '../api/types';
 import type {
+    DesktopAgentMade,
     DesktopChatEvent,
     DesktopChatOptions,
     DesktopCommand,
@@ -275,6 +276,11 @@ export interface StubDesktop extends JasonDesktop {
     kept: Map<string, DesktopConversationRecord>;
     /** A campaign's name, as the desktop reads it from the runtime when it makes that campaign's conversation. */
     names: Map<string, string>;
+    /**
+     * The campaign the next new click on New GTM agent makes, as the runtime answers the desktop's create; a click id
+     * asked again gives the agent it made back. A draft named "New agent 1" unless a test names another.
+     */
+    agentCampaign: { id: string; name: string };
     /** Keeps a conversation as a desktop that kept it before this window opened. */
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
     /**
@@ -377,6 +383,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         running,
         mode,
         ownFolder,
+        madeAtClick,
     }: DesktopConversationRecord): DesktopConversation => ({
         id,
         campaignId,
@@ -386,7 +393,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         running,
         mode,
         ...(ownFolder === true ? { ownFolder } : {}),
+        ...(madeAtClick === true ? { madeAtClick } : {}),
     });
+    /** By click id, the conversation that click's agent was made with. */
+    const clicks = new Map<string, string>();
     const keep = (record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord => {
         const full: DesktopConversationRecord = {
             campaignId: null,
@@ -489,6 +499,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         paths,
         kept,
         names,
+        agentCampaign: { id: 'cmp_3', name: 'New agent 1' },
         keep,
         held: null,
         link: (target) => linkHandlers.forEach((handler) => handler(target)),
@@ -574,6 +585,26 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 // Made and never sent to: the window's that made it, not yet listed.
                 listed.delete(id);
                 return summaryOf(record);
+            }),
+            // As the desktop answers a click: the campaign made, and its conversation kept at once and marked made at it.
+            createAgent: answering('chat.createAgent', (clickId): DesktopAgentMade => {
+                const earlier = typeof clickId === 'string' ? clicks.get(clickId) : undefined;
+                const known = earlier === undefined ? undefined : kept.get(earlier);
+                if (known?.campaignId)
+                    return { conversation: summaryOf(known), campaign: { id: known.campaignId, name: known.title } };
+                const { id: campaignId, name } = stub.agentCampaign;
+                names.set(campaignId, name);
+                const record = keep({
+                    id: `conv_01JD${String(++made).padStart(22, '0')}`,
+                    campaignId,
+                    title: name,
+                    updatedAt: now(),
+                    mode: 'full_access',
+                    ownFolder: true,
+                    madeAtClick: true,
+                });
+                if (typeof clickId === 'string') clicks.set(clickId, record.id);
+                return { conversation: summaryOf(record), campaign: { id: campaignId, name } };
             }),
             remove: answering('chat.remove', (id) => {
                 const record = own(id);
