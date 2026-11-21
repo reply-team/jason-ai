@@ -450,6 +450,31 @@ test('a folder that holds the data directory is walked in no form but those the 
     }
 });
 
+test('a quoted text or a here-document is read again as commands only where a shell, a runner or eval may run it: a commit message, a pull request body and a printed text holding a lone / or ~, or the words of a jq program, are data and are not refused; under sh -c, eval or a pipe into a shell the same words are read', () => {
+    for (const scope of scopes) {
+        for (const command of [
+            "git commit -m 'a / b'",
+            "git commit -m 'kept under ~ for now'",
+            "gh pr create --title 'Notes' --body 'kept under ~ for now'",
+            "git commit -F - <<'EOF'\nmove a / b\nEOF",
+            "echo 'a / b' | sort",
+            "echo 'jq env'",
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'deny', `${scope.platform}: ${command}`);
+        }
+        for (const [command, sentence] of [
+            ["sh -c 'du -sh /'", searchRefusal],
+            ["eval 'du -sh ~'", searchRefusal],
+            ["echo 'du -sh ~' | sh", searchRefusal],
+            ["sh -c 'jq env'", jqRefusal],
+            ["eval 'jq env'", jqRefusal],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('a plain listing of such a folder, a read of a file in it and a body that only mentions a walk run with no card in Ask first and Auto-edit and run in Full access: the Downloads folder, the home folder, a here-document and a quoted text', () => {
     for (const scope of scopes) {
         const commands = [

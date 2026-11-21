@@ -5,7 +5,7 @@
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
 import { askingCardedForms, cliCommandTree } from './chat-deny.ts';
-import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
+import { followsLinksIn, heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
@@ -713,8 +713,9 @@ export function isCompound(command: string): boolean {
  * the others. An interpreter is also matched by its stem followed by a version (`python3.12`, `node22`).
  */
 const runsAnother = new Set(
-    ('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make '
-        + 'timeout nohup time command exec watch nice stdbuf setsid doas alacritty gdb lldb').split(' '),
+    ('cmd sh bash zsh dash ksh mksh ash yash fish csh tcsh busybox pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun '
+        + 'ruby perl php tclsh wish expect lua luajit irb julia guile npm pnpm yarn make timeout nohup time command exec watch nice stdbuf setsid doas '
+        + 'alacritty gdb lldb').split(' '),
 );
 const interpreterStem = /^(python|pythonw|node|nodejs|ruby|perl|php)[0-9.]*$/;
 
@@ -1163,17 +1164,6 @@ function plainWalkForm(program: string, args: readonly string[], powershell: boo
 }
 
 /**
- * True when a program never runs a word it is given, so a quoted word or a here-document's body given to it is its data
- * and never a command (`walkedFrom`): the desktop's own jason, whose words are a request, and the programs of
- * `noCardFilters` but `sort`, and of `neverWalks`; in PowerShell its kinds of `neverWalks` and its listing.
- */
-function takesTextOnly(program: string, powershell: boolean): boolean {
-    if (program === 'jason') return true;
-    if (powershell) return powerShellNeverWalks.has(program) || powerShellListing.has(program);
-    return (program !== 'sort' && noCardFilters.includes(program)) || neverWalks.has(program);
-}
-
-/**
  * True when a command's text could make a program of the plain forms another one: an alias, a function, `hash` or
  * `enable` in a shell, and the variable BSD grep reads its options from; an alias, a function, a filter or a default
  * parameter in PowerShell. Such a command has no plain form.
@@ -1607,7 +1597,31 @@ interface ReadCommand {
     program: string | null;
 }
 
-/** The commands of a text, each with its program, and whether every program of them takes text only (`takesTextOnly`). */
+/** The PowerShell commands that run a text or a script block they are given, or start a program of the agent's choosing. */
+const powerShellRuns: ReadonlySet<string> = new Set(['invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start-job', 'sajb', 'start-threadjob', '.', '&']);
+
+/**
+ * True when a command may run a text it is given as commands: one whose program the shell builds; a program that runs
+ * another (`runsAnotherProgram`), a shell and an interpreter among them, or takes words from its input (`inputRunners`);
+ * `eval`, `.` and `source`; PowerShell's own (`powerShellRuns`); and one the literal reader holds by what runs
+ * (`heldByWhatRuns`): code given as text or fed to a program that reads it, a runner, git's execute options, find's
+ * `-exec` and their like.
+ */
+function runsText(each: ReadCommand, powershell: boolean): boolean {
+    const { program } = each;
+    if (program === null) return false;
+    const at = each.command.words.length - each.args.length - 1;
+    if (each.command.words[at]?.built === true) return true;
+    if (program === 'eval' || program === '.' || program === 'source' || inputRunners.has(program) || runsAnotherProgram(program)) return true;
+    if (powershell) return powerShellRuns.has(program);
+    const input = each.command.piped ? 'pipe' : each.command.bodies.length > 0 ? 'here_document' : 'none';
+    return heldByWhatRuns([{ words: each.command.words.slice(at).map((word) => word.text), targets: [], input, cwd: null }]) !== null;
+}
+
+/**
+ * The commands of a text, each with its program, and whether none of them may run a text it is given (`runsText`): a
+ * text with no shell, runner or `eval` in it runs none of its quoted words and none of its bodies, so they are data.
+ */
 function readCommands(text: string, reading: ShellReading): { commands: ReadCommand[]; pure: boolean } {
     const commands = writtenCommands(text, reading.powershell).map((command) => {
         const texts = command.words.map((each) => each.text);
@@ -1615,19 +1629,17 @@ function readCommands(text: string, reading: ShellReading): { commands: ReadComm
         const word = texts[at];
         return { command, assigned, word, args: command.words.slice(at + 1), program: word === undefined ? null : programKey(reading.scope.platform, word, reading.powershell) };
     });
-    // A text whose every program takes text only runs none of its words, so a quoted word or a body is data there; where
-    // any other program reads it, a shell or an interpreter among them, it may be run.
-    return { commands, pure: commands.every(({ program }) => program === null || takesTextOnly(program, reading.powershell)) };
+    return { commands, pure: !commands.some((each) => runsText(each, reading.powershell)) };
 }
 
 /**
- * The texts the walk reads again as commands of their own: the substitutions and expressions a command holds; where a
- * program that does not take text only reads the text, every word that holds a space or a separator and every body of a
- * here-document, and `eval`'s words as one command; and otherwise a body's substitutions where its tag is not quoted.
- * `pure` false reads every one of them again, whatever reads the text.
+ * The texts the walk reads again as commands of their own: the substitutions and expressions a command holds, and
+ * `eval`'s words as one command; where a command of the text may run a text it is given (`pure` false), every word that
+ * holds a space or a separator and every body of a here-document; and otherwise a body's substitutions where its tag is
+ * not quoted.
  */
 function readAgain(each: ReadCommand, pure: boolean, powershell: boolean): string[] {
-    const text = pure && each.program !== null && takesTextOnly(each.program, powershell);
+    const text = pure;
     return [
         ...each.command.inner,
         ...(text ? [] : each.command.words.filter((word) => word.spaced).map((word) => word.text)),
@@ -1807,8 +1819,8 @@ function everyCommand(text: string, reading: ShellReading, depth: number): Writt
     if (depth > walkDepth) {
         return [['env', ...text.split(/[\s'"`;|&()<>]+/)].filter((word) => word !== '').map((word) => ({ text: word, spaced: false, built: false, pattern: false }))];
     }
-    const { commands } = readCommands(text, reading);
-    return commands.flatMap((each) => [each.command.words, ...readAgain(each, false, reading.powershell).flatMap((inner) => everyCommand(inner, reading, depth + 1))]);
+    const { commands, pure } = readCommands(text, reading);
+    return commands.flatMap((each) => [each.command.words, ...readAgain(each, pure, reading.powershell).flatMap((inner) => everyCommand(inner, reading, depth + 1))]);
 }
 
 /**
