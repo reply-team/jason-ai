@@ -836,6 +836,40 @@ test('a quoted text or a here-document is read again as commands only where a sh
     }
 });
 
+test('an awk program that calls system or pipes to or from a command, and a sed script with an e command or an s command with the e flag, run a shell text: awk\'s double-quoted strings and the text after sed\'s e are read as a shell\'s own, under env too, and each that reaches the settings file is refused by the hook in every mode it rides', () => {
+    for (const scope of scopes) {
+        for (const command of [
+            "awk 'BEGIN{system(\"cat ~/.j*/config/settings.json\")}'",
+            "awk 'BEGIN{system(\"cd; cat .jason/config/settings.json\")}'",
+            "awk 'BEGIN{while ((\"cat ~/.j*/config/settings.json\" | getline l) > 0) print l}'",
+            "awk 'BEGIN{print \"cat ~/.j*/config/settings.json\" | \"sh\"}'",
+            "echo | sed 'e cat ~/.j*/config/settings.json'",
+            "env awk 'BEGIN{system(\"cat ~/.j*/config/settings.json\")}'",
+            "env sed 'e cat ~/.j*/config/settings.json' notes.txt",
+            "gawk -F, 'BEGIN{system(\"cat ~/.j*/config/settings.json\")}'",
+            "sed -n -e '1e cat ~/.j*/config/settings.json' notes.txt",
+            "sed -ne '1e cat ~/.j*/config/settings.json' notes.txt",
+            "echo x | sed 's/x/cat ~\\/.j*\\/config\\/settings.json/e'",
+            "echo x | sed 's|x|cat ~/.j*/config/settings.json|e'",
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: settingsRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of [
+            "awk '{s+=$1} END {print s / NR}' data.csv",
+            "sed 's/ a / b /' notes.txt",
+            "export MSG='a / b'",
+            "awk 'BEGIN{system(\"date\")}'",
+            "sed -e 's/a/b/g' -e 's/c/d/' notes.txt",
+            "sed 's/x/echo done/e' notes.txt",
+            "awk '$1 == \"a / b\" {print}' data.csv",
+            "sed '/e/d' notes.txt",
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('a plain listing of such a folder, a read of a file in it and a body that only mentions a walk run with no card in Ask first and Auto-edit and run in Full access: the Downloads folder, the home folder, a here-document and a quoted text', () => {
     for (const scope of scopes) {
         const commands = [

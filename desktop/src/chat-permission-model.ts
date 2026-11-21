@@ -1807,13 +1807,235 @@ interface ReadCommand {
     word: string | undefined;
     args: WrittenWord[];
     program: string | null;
+    /** The shell texts an awk program or a sed script of the command runs (`textProgramShells`); null where it runs none. */
+    shells: string[] | null;
 }
 
 /** The PowerShell commands that run a text or a script block they are given, or start a program of the agent's choosing. */
 const powerShellRuns: ReadonlySet<string> = new Set(['invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start-job', 'sajb', 'start-threadjob', '.', '&']);
 
-/** The programs whose code is given as text but run no shell and no other program of it: awk's and sed's. */
+/** The programs whose code is given as text and runs no shell of it unless it says so (`textProgramShells`): awk's and sed's. */
 const textPrograms: ReadonlySet<string> = new Set(['awk', 'gawk', 'mawk', 'nawk', 'sed', 'gsed']);
+
+/**
+ * The inline programs of an awk command, from the words after its program: each value of `-e` and `--source`, and the
+ * first word that is no option and no option's value; a program given by a file (`-f`) is not read.
+ */
+function awkPrograms(words: readonly string[]): string[] {
+    const programs: string[] = [];
+    for (let at = 0; at < words.length; at++) {
+        const word = words[at] as string;
+        if (word === '--') {
+            if (words[at + 1] !== undefined) programs.push(words[at + 1] as string);
+            break;
+        }
+        if (word === '-e' || word === '--source') {
+            if (words[at + 1] !== undefined) programs.push(words[at + 1] as string);
+            at++;
+        } else if (word.startsWith('--source=')) {
+            programs.push(word.slice('--source='.length));
+        } else if (/^-[Fvf]$/.test(word) || /^--(?:field-separator|assign|file)$/.test(word)) {
+            at++;
+        } else if (!word.startsWith('-') || word === '-') {
+            programs.push(word);
+            break;
+        }
+    }
+    return programs;
+}
+
+/**
+ * The shell texts an awk program runs: where it calls `system` or holds a `|`, a pipe to or from a command, every
+ * double-quoted string in it, its escapes taken as awk takes them; null where it runs none.
+ */
+function awkShells(program: string): string[] | null {
+    if (!/\bsystem\b|\|/.test(program)) return null;
+    const texts: string[] = [];
+    for (let at = 0; at < program.length; at++) {
+        if (program[at] !== '"') continue;
+        let text = '';
+        let end = at + 1;
+        for (; end < program.length && program[end] !== '"'; end++) {
+            const c = program[end] as string;
+            if (c === '\\' && end + 1 < program.length) {
+                const next = program[++end] as string;
+                text += next === 'n' ? '\n' : next === 't' ? '\t' : next;
+            } else {
+                text += c;
+            }
+        }
+        texts.push(text);
+        at = end;
+    }
+    return texts;
+}
+
+/**
+ * The scripts of a sed command, from the words after its program: each value of `-e` and `--expression`, alone, joined
+ * to its option or ending a cluster of short options, and with none of them the first word that is no option and no
+ * option's value; a script given by a file (`-f`) is not read.
+ */
+function sedScripts(words: readonly string[]): string[] {
+    const scripts: string[] = [];
+    let first: string | undefined;
+    let given = false;
+    for (let at = 0; at < words.length; at++) {
+        const word = words[at] as string;
+        if (word === '--') {
+            first ??= words[at + 1];
+            break;
+        }
+        if (word.startsWith('--')) {
+            const equals = word.indexOf('=');
+            const name = equals < 0 ? word : word.slice(0, equals);
+            const value = equals < 0 ? undefined : word.slice(equals + 1);
+            if (name === '--expression') {
+                given = true;
+                const script = value ?? words[++at];
+                if (script !== undefined) scripts.push(script);
+            } else if ((name === '--file' || name === '--line-length') && value === undefined) {
+                at++;
+            }
+        } else if (word.startsWith('-') && word !== '-') {
+            for (let index = 1; index < word.length; index++) {
+                const option = word[index] as string;
+                if (option === 'e' || option === 'f' || option === 'l') {
+                    const value = index + 1 < word.length ? word.slice(index + 1) : words[++at];
+                    if (option === 'e') {
+                        given = true;
+                        if (value !== undefined) scripts.push(value);
+                    }
+                    break;
+                }
+                // `-i` takes the rest of its word as the suffix of the copy it keeps.
+                if (option === 'i') break;
+            }
+        } else {
+            first ??= word;
+        }
+    }
+    return given ? scripts : first === undefined ? [] : [first];
+}
+
+/**
+ * The shell texts a sed script runs, read as GNU sed reads its commands: the text after an `e` command, to the end of
+ * its line, and the replacement of an `s` command with the `e` flag, its escapes taken; none where an `e` runs the
+ * pattern space alone; null where the script runs no shell.
+ */
+function sedShells(script: string): string[] | null {
+    const texts: string[] = [];
+    let runs = false;
+    let at = 0;
+    const end = script.length;
+    // Where a command's text ends: at the end of its line, a line that ends with a backslash going on to the next.
+    const lineEnd = (from: number): number => {
+        let stop = script.indexOf('\n', from);
+        while (stop > 0 && script[stop - 1] === '\\') stop = script.indexOf('\n', stop + 1);
+        return stop < 0 ? end : stop;
+    };
+    const labelEnd = (from: number): number => {
+        const stop = script.slice(from).search(/[;\n]/);
+        return stop < 0 ? end : from + stop;
+    };
+    // The text up to the delimiter that closes it, each escape taken but a group's number; and where it closes.
+    const delimited = (from: number, delimiter: string): { text: string; close: number } => {
+        let text = '';
+        let index = from;
+        for (; index < end && script[index] !== delimiter; index++) {
+            const c = script[index] as string;
+            if (c === '\\' && index + 1 < end) {
+                const next = script[++index] as string;
+                text += next === 'n' ? '\n' : /\d/.test(next) ? `\\${next}` : next;
+            } else {
+                text += c;
+            }
+        }
+        return { text, close: index };
+    };
+    const space = (): void => {
+        while (at < end && /[ \t]/.test(script[at] as string)) at++;
+    };
+    const address = (): void => {
+        const c = script[at];
+        if (c !== undefined && /\d/.test(c)) {
+            while (at < end && /[\d~]/.test(script[at] as string)) at++;
+        } else if (c === '$') {
+            at++;
+        } else if (c === '/' || (c === '\\' && at + 1 < end)) {
+            const delimiter = c === '/' ? '/' : (script[at + 1] as string);
+            at = delimited(at + (c === '/' ? 1 : 2), delimiter).close + 1;
+            while (at < end && /[IM]/.test(script[at] as string)) at++;
+        } else {
+            return;
+        }
+        space();
+        if (script[at] !== ',') return;
+        at++;
+        space();
+        if (script[at] === '+' || script[at] === '~') {
+            at++;
+            while (at < end && /\d/.test(script[at] as string)) at++;
+        } else {
+            address();
+        }
+    };
+    while (at < end) {
+        if (/[\s;{}]/.test(script[at] as string)) {
+            at++;
+            continue;
+        }
+        address();
+        while (at < end && /[\s!]/.test(script[at] as string)) at++;
+        const command = script[at++];
+        if (command === undefined) break;
+        if ('#aicrRwW'.includes(command)) {
+            at = lineEnd(at);
+        } else if (':btTv'.includes(command)) {
+            at = labelEnd(at);
+        } else if (command === 'e') {
+            runs = true;
+            const stop = lineEnd(at);
+            const text = script.slice(at, stop).trim();
+            if (text !== '') texts.push(text);
+            at = stop;
+        } else if (command === 's' || command === 'y') {
+            const delimiter = script[at];
+            if (delimiter === undefined) break;
+            const pattern = delimited(at + 1, delimiter);
+            const replacement = delimited(pattern.close + 1, delimiter);
+            at = replacement.close + 1;
+            if (command === 'y') continue;
+            let flags = '';
+            while (at < end && /[gpeiImM\d]/.test(script[at] as string)) flags += script[at++] as string;
+            if (script[at] === 'w') at = lineEnd(at);
+            if (flags.includes('e')) {
+                runs = true;
+                texts.push(replacement.text);
+            }
+        }
+    }
+    return runs ? texts : null;
+}
+
+/**
+ * The shell texts the awk programs and the sed scripts of a command run (`awkShells`, `sedShells`): those of its own
+ * program, and where its program runs another (`runsAnotherProgram`), `env awk` say, those of each awk or sed among its
+ * words; null where none runs a shell.
+ */
+function textProgramShells(words: readonly string[], at: number, program: string | null, platform: Platform, powershell: boolean): string[] | null {
+    if (program === null) return null;
+    const own = textPrograms.has(program.toLowerCase());
+    if (!own && !runsAnotherProgram(program)) return null;
+    let found: string[] | null = null;
+    for (let index = at; index < (own ? at + 1 : words.length); index++) {
+        const key = programKey(platform, words[index] as string, powershell).toLowerCase();
+        if (!textPrograms.has(key)) continue;
+        const rest = words.slice(index + 1);
+        const texts = key.endsWith('sed') ? sedScripts(rest).map(sedShells) : awkPrograms(rest).map(awkShells);
+        for (const each of texts) if (each !== null) found = [...(found ?? []), ...each];
+    }
+    return found;
+}
 /** The builtins that hand the shell a text to run: a trap's and an alias's later, zsh's `emulate -c` at once. */
 const shellTextBuiltins: ReadonlySet<string> = new Set(['trap', 'alias', 'emulate']);
 
@@ -1822,10 +2044,11 @@ const shellTextBuiltins: ReadonlySet<string> = new Set(['trap', 'alias', 'emulat
  * another (`runsAnotherProgram`), a shell and an interpreter among them, or takes words from its input (`inputRunners`);
  * `eval`, `.` and `source`, and the builtins that hand the shell a text (`shellTextBuiltins`); PowerShell's own
  * (`powerShellRuns`); and one the literal reader holds by what runs (`heldByWhatRuns`): a runner, git's execute options,
- * find's `-exec`, an editor's or a debugger's commands and their like. awk's and sed's code (`textPrograms`), and the
- * value a builtin sets, declares, prints or tests, run no shell of their text, so it is data, except what the shell
- * evaluates of it: an array's subscript that holds an expansion, and a value given the trace prompt (`PS4`), which the
- * shell expands before each command it traces.
+ * find's `-exec`, an editor's or a debugger's commands and their like; and awk's and sed's code where it runs a shell
+ * text (`textProgramShells`). Any other code of awk's and sed's (`textPrograms`), and the value a builtin sets,
+ * declares, prints or tests, run no shell of their text, so it is data, except what the shell evaluates of it: an
+ * array's subscript that holds an expansion, and a value given the trace prompt (`PS4`), which the shell expands before
+ * each command it traces.
  */
 function runsText(each: ReadCommand, powershell: boolean): boolean {
     const { program } = each;
@@ -1833,6 +2056,7 @@ function runsText(each: ReadCommand, powershell: boolean): boolean {
     if (program === null) return false;
     const at = each.command.words.length - each.args.length - 1;
     if (each.command.words[at]?.built === true) return true;
+    if (each.shells !== null) return true;
     if (program === 'eval' || program === '.' || program === 'source' || inputRunners.has(program) || runsAnotherProgram(program)) return true;
     if (powershell) return powerShellRuns.has(program);
     if (shellTextBuiltins.has(program)) return true;
@@ -1853,21 +2077,24 @@ function readCommands(text: string, reading: ShellReading): { commands: ReadComm
         const texts = command.words.map((each) => each.text);
         const { at, assigned } = programIndex(texts, reading.powershell);
         const word = texts[at];
-        return { command, assigned, word, args: command.words.slice(at + 1), program: word === undefined ? null : programKey(reading.scope.platform, word, reading.powershell) };
+        const program = word === undefined ? null : programKey(reading.scope.platform, word, reading.powershell);
+        const shells = textProgramShells(texts, at, program, reading.scope.platform, reading.powershell);
+        return { command, assigned, word, args: command.words.slice(at + 1), program, shells };
     });
     return { commands, pure: !commands.some((each) => runsText(each, reading.powershell)) };
 }
 
 /**
- * The texts the walk reads again as commands of their own: the substitutions and expressions a command holds, and
- * `eval`'s words as one command; where a command of the text may run a text it is given (`pure` false), every word that
- * holds a space or a separator and every body of a here-document; and otherwise a body's substitutions where its tag is
- * not quoted.
+ * The texts the walk reads again as commands of their own: the substitutions and expressions a command holds, `eval`'s
+ * words as one command, and the shell texts its awk programs and sed scripts run (`textProgramShells`); where a command
+ * of the text may run a text it is given (`pure` false), every word that holds a space or a separator and every body of
+ * a here-document; and otherwise a body's substitutions where its tag is not quoted.
  */
 function readAgain(each: ReadCommand, pure: boolean, powershell: boolean): string[] {
     const text = pure;
     return [
         ...each.command.inner,
+        ...(each.shells ?? []),
         ...(text ? [] : each.command.words.filter((word) => word.spaced).map((word) => word.text)),
         ...(each.program === 'eval' ? [each.args.map((arg) => arg.text).join(' ')] : []),
         ...each.command.bodies.flatMap((body) => (!text ? [body.text] : body.quoted ? [] : substitutions(body.text, powershell))),
@@ -2070,11 +2297,11 @@ function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth:
             const walks = plain ? null : walksThere(each, place, reading);
             if (walks !== null) return { walks, place };
         }
-        // A text a shell runs is read as the shell's own; another program's, an awk or a Python program's say, only for
-        // what it names (`WalkReading.foreign`).
+        // A text a shell runs is read as the shell's own, the shell text an awk program or a sed script runs among them;
+        // another program's code, an awk or a Python program's say, only for what it names (`WalkReading.foreign`).
         const shell = each.command.words.some((word) => shellPrograms.has(programKey(scope.platform, word.text, powershell)));
         for (const inner of readAgain(each, pure, powershell)) {
-            const foreign = reading.foreign === true || (!shell && !each.command.inner.includes(inner));
+            const foreign = reading.foreign === true || (!shell && !each.command.inner.includes(inner) && !(each.shells ?? []).includes(inner));
             const read = walkedFrom(inner, place, foreign ? { ...reading, foreign } : reading, depth + 1);
             if (read.walks !== null) return { walks: read.walks, place };
             if (each.program === 'eval') place = read.place;
