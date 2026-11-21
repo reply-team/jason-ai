@@ -63,7 +63,8 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 `jason runtime start` only when none is; a runtime that is already up is used as it is, and `jason runtime run` is never
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
-package it carries, once for each desktop version, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
+package it carries, once for each desktop version, and the role skills again at a start where `jason status` finds no
+readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 

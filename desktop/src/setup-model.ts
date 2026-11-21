@@ -515,17 +515,30 @@ export interface StatusFacts {
     uiNeeded: boolean;
     /** Whether a UI is served all the same: `ui_module` is failed only while one is, and absent when none is. */
     uiServed: boolean;
+    /**
+     * Whether `role_skills` carries no details: its role root holds no record of a deployment, or one that cannot be read,
+     * as after `jason uninstall` with the data kept. Read from the record on disk whatever the check's state.
+     */
+    roleSkillsUnrecorded: boolean;
 }
 
 /** What `jason status` printed, read by its checks' names and states; anything unreadable says no runtime. */
 export function statusFacts(stdout: string): StatusFacts {
     try {
-        const raw = JSON.parse(stdout) as { checks?: { name?: unknown; state?: unknown }[] };
-        const state = (name: string) => raw.checks?.find((check) => check.name === name)?.state;
+        const raw = JSON.parse(stdout) as { checks?: { name?: unknown; state?: unknown; details?: unknown }[] };
+        const check = (name: string) => raw.checks?.find((each) => each.name === name);
+        const state = (name: string) => check(name)?.state;
         const ui = state('ui_module');
-        return { runtimeUp: state('runtime') === 'ok', sameVersion: state('runtime_version') === 'ok', uiNeeded: ui !== 'ok', uiServed: ui === 'ok' || ui === 'failed' };
+        const roles = check('role_skills');
+        return {
+            runtimeUp: state('runtime') === 'ok',
+            sameVersion: state('runtime_version') === 'ok',
+            uiNeeded: ui !== 'ok',
+            uiServed: ui === 'ok' || ui === 'failed',
+            roleSkillsUnrecorded: roles !== undefined && (typeof roles.details !== 'object' || roles.details === null),
+        };
     } catch {
-        return { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false };
+        return { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false, roleSkillsUnrecorded: false };
     }
 }
 

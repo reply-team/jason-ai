@@ -121,13 +121,21 @@ test('a UI that is served but not this runtime’s is installed again, and an in
     assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
 });
 
-test('the skills are deployed once per bundle version', async (t) => {
-    const b = bench(t);
-    runtimeAlreadyUp(b);
-    mkdirSync(b.paths.skillsRecords, { recursive: true });
-    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
-    const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
-    assert.equal(verbs.some((args) => args[0] === 'skills'), false);
+test('the skills are deployed once per bundle version, and the role skills again wherever the role root holds no deployment', async (t) => {
+    const deployedOnce = async (env: Record<string, string>) => {
+        const b = bench(t, { env });
+        runtimeAlreadyUp(b);
+        mkdirSync(b.paths.skillsRecords, { recursive: true });
+        for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
+        const { verbs, saved } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+        return { skills: verbs.filter((args) => args[0] === 'skills'), saved, bundle: join(b.root, 'bundle') };
+    };
+    const once = await deployedOnce({});
+    assert.deepEqual([once.skills, once.saved], [[], []]);
+    // `jason uninstall` with the data kept takes the role skills off and leaves the desktop's settings and the chat folder's
+    // records: the same version started again deploys the role skills alone, and has nothing new to record.
+    const again = await deployedOnce({ STUB_ROLE_SKILLS: 'unrecorded' });
+    assert.deepEqual([again.skills, again.saved], [[['skills', 'install', '--roles-only', '--source', again.bundle]], []]);
 });
 
 test('a chat skills folder whose deployment the desktop keeps no record of is deployed afresh, and what stood there unrecorded is gone', async (t) => {

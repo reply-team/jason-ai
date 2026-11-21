@@ -22,6 +22,11 @@ if (args[0] === 'status') {
             { name: 'runtime', required: true, state: up ? 'ok' : 'failed', fact: '', fix: '' },
             { name: 'runtime_version', required: false, state: up ? (process.env.STUB_SAME_VERSION === 'no' ? 'failed' : 'ok') : 'unknown', fact: '', fix: '' },
             { name: 'ui_module', required: false, state: up ? process.env.STUB_UI_MODULE || 'absent' : 'unknown', fact: '', fix: '' },
+            // As the real check reports its role root: the deployment its record names as details, and no details where
+            // there is no record, as after `jason uninstall` with the data kept (STUB_ROLE_SKILLS=unrecorded).
+            process.env.STUB_ROLE_SKILLS === 'unrecorded'
+                ? { name: 'role_skills', required: true, state: up ? 'failed' : 'unknown', fact: '', fix: 'jason skills install --roles-only' }
+                : { name: 'role_skills', required: true, state: up ? 'ok' : 'unknown', fact: '', fix: null, details: { ref: 'v0.34.0-rc.1', source: 'bundle', commit: '' } },
         ],
     });
     process.exit(1);

@@ -231,7 +231,11 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         if (removedRecorded) for (const host of skillsFolders) rmSync(join(paths.skillsRecords, host.record), { force: true });
         const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
         if (unrecorded && topRight) rmSync(join(paths.skillsRecords, replyRecord), { force: true });
-        if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {
+        // The desktop's record says what it deployed for this version, not what is still there: `jason uninstall` with the
+        // data kept takes the role skills off and leaves the record, so a role root `jason status` finds with no deployment
+        // gets the role skills again, and the chat folder, whose records still stand, nothing.
+        const bundleDeployed = deps.settings.skillsDeployedFor === deps.bundleVersion && !unrecorded;
+        if (!bundleDeployed || facts.roleSkillsUnrecorded) {
             let deployed = true;
             if (facts.sameVersion) {
                 const roles = await cli.run(['skills', 'install', '--roles-only', '--source', deps.bundle], { timeoutMs: 300_000 });
@@ -245,7 +249,7 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
             // both folders.
             // The CLI's record of each deployment lives under <data>/desktop/skills-records, outside the chat folder: it is put
             // beside the skills for the CLI to read, and moved out again once the CLI has written it.
-            if (topRight) {
+            if (topRight && !bundleDeployed) {
                 const [claudeSkills, codexSkills] = skillsFolders;
                 if (claudeSkills === undefined || codexSkills === undefined) throw new Error('The chat has two skills folders.');
                 beforeSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
