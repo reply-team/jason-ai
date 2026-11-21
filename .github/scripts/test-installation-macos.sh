@@ -1201,9 +1201,10 @@ enable-starts-now)
     grep -F "The runtime runs now" "$OUT/enable-starts-now.err" > /dev/null || fail "enable did not say the runtime runs now: $(cat "$OUT/enable-starts-now.err")"
     # The runtime that answers is launchd's own: the descriptor's pid is the PID launchd reports for the label. A count of
     # processes taken now would pass where a second start lost the lock and had already exited.
-    described="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$DATA/run/runtime.json" 2>/dev/null || true)"
+    [ -f "$DATA/run/runtime.json" ] || fail "no descriptor at $DATA/run/runtime.json names the runtime that answers"
+    described="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$DATA/run/runtime.json" || true)"
     launched="$(launchctl list ai.jason.runtime 2>/dev/null | sed -n 's/^[[:space:]]*"PID" = \([0-9]*\);.*/\1/p' | head -n 1)"
-    [ -n "$described" ] || fail "no descriptor at $DATA/run/runtime.json names the runtime that answers"
+    [ -n "$described" ] || fail "python3 read no pid from the descriptor $DATA/run/runtime.json: $(cat "$DATA/run/runtime.json" 2>&1)"
     [ -n "$launched" ] || fail "launchctl list ai.jason.runtime reports no PID: launchd did not start the runtime that answers ($(launchctl list ai.jason.runtime 2>&1 | tr '\n' ' '))"
     [ "$described" = "$launched" ] || fail "the runtime that answers (pid $described) is not the one launchd started (pid $launched): enable started a second one"
     say "enable started the runtime at once (RunAtLoad): a runtime answered $((waited / 2)) s after jason runtime autostart enable, where none ran before, and it is launchd's own, pid $launched"

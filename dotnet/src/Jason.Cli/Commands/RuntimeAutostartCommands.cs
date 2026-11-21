@@ -99,6 +99,7 @@ public static class RuntimeAutostartCommands
 
         var registrar = Registrar(env);
         string? before;
+        var keeps = false;
         int exit;
         try
         {
@@ -110,6 +111,11 @@ public static class RuntimeAutostartCommands
             // The instance recorded before the load, stale or not: on macOS the load's runtime is the one that answers with
             // another, whether a runtime ran before (a re-enable's unload stops launchd's) or a stale file was left.
             before = new DescriptorReader(env.Paths).Read()?.InstanceId;
+
+            // On macOS with no job registered the load's unload stops nothing: a runtime that answers now, one Jason Desktop
+            // started say, is the one that runs, and the load's own start loses the data directory's lock to it. Only a
+            // re-enable, whose unload stops launchd's runtime, waits for the load's.
+            keeps = registrar.Platform is AutostartPlatform.MacOs && env.Processes is not null && !Registered(registrar) && await AnswersAsync(env, cancellationToken).ConfigureAwait(false);
             registrar.Apply(Registration(env, registrar.Platform));
             if (!AutostartOff.Remove(env.Paths))
             {
@@ -123,8 +129,21 @@ public static class RuntimeAutostartCommands
             return Fail(env, human, refusal);
         }
 
-        env.Error.WriteLine(await StartNowAsync(env, registrar.Platform, before, loadWait ?? RunAtLoadWait, cancellationToken).ConfigureAwait(false));
+        env.Error.WriteLine(keeps ? Running : await StartNowAsync(env, registrar.Platform, before, loadWait ?? RunAtLoadWait, cancellationToken).ConfigureAwait(false));
         return exit;
+    }
+
+    /// <summary>Whether a job is registered now; one that cannot be read counts as registered, so the load's start is waited for.</summary>
+    private static bool Registered(IAutostartRegistrar registrar)
+    {
+        try
+        {
+            return registrar.Read().Registered;
+        }
+        catch (AutostartException)
+        {
+            return true;
+        }
     }
 
     /// <summary>

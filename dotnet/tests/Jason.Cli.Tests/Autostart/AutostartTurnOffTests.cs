@@ -175,6 +175,60 @@ public class AutostartTurnOffTests
     }
 
     /// <summary>
+    /// On macOS a runtime that answers before <c>enable</c> where no job is registered, one Jason Desktop started, is the one
+    /// that runs: the unload stops nothing, so <c>enable</c> says it runs at once, with no wait and no launch. Where a job is
+    /// registered, a re-enable, the unload stops launchd's runtime, so <c>enable</c> waits for the load's.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task On_macOS_a_runtime_that_answers_before_enable_is_kept_only_where_no_job_was_registered(bool registered)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NOW")) };
+        var registrar = new LoadStarts(dir, registered);
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var env = new CliEnvironment(output, error, dir.Paths, RuntimeVerbs.EchoesTheDescriptor(dir), null, processes, InstallPath: Installed, Autostart: registrar);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+
+        Assert.Equal(ExitCodes.Success, await RuntimeAutostartCommands.EnableAsync(env, human: false, Ct, TimeSpan.FromSeconds(30)));
+
+        Assert.Empty(processes.Launches);
+        Assert.Contains("The runtime runs now", error.ToString(), StringComparison.Ordinal);
+        if (registered)
+        {
+            // Waited past rt_LIVE for the load's runtime.
+            SpinWait.SpinUntil(() => new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read()?.InstanceId == "rt_LOAD", TimeSpan.FromSeconds(5));
+            Assert.Equal("rt_LOAD", new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read()!.InstanceId);
+        }
+        else
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), $"enable waited {waited.Elapsed} for a load where a runtime answered and no job was registered");
+        }
+    }
+
+    /// <summary>
+    /// macOS, the wait's last branch: a job was registered, the load's runtime never answers, and the instance from before
+    /// still does, one launchd did not start: nothing is launched, and it runs.
+    /// </summary>
+    [Fact]
+    public async Task On_macOS_the_instance_from_before_still_answering_when_the_wait_runs_out_runs_and_none_is_launched()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NOW")) };
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs) { State = new AutostartState(true, [Installed, "runtime", "run"], null) };
+        var (env, _, error) = Machine(dir, registrar, processes, RuntimeVerbs.EchoesTheDescriptor(dir));
+
+        Assert.Equal(ExitCodes.Success, await RuntimeAutostartCommands.EnableAsync(env, human: false, Ct, TimeSpan.FromMilliseconds(50)));
+
+        Assert.Empty(processes.Launches);
+        Assert.Contains("The runtime runs now", error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// On macOS a descriptor left before the load, stale or a re-enable's whose runtime the unload stopped, is not the
     /// load's runtime: <c>enable</c> waits for the one that answers as another instance, and launches nothing beside it.
     /// </summary>
@@ -185,7 +239,8 @@ public class AutostartTurnOffTests
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STALE"));
         var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NOW")) };
         var registrar = new LoadStarts(dir);
-        var echoes = RuntimeVerbs.EchoesTheDescriptor(dir);
+        // The stale descriptor's port answers as another instance, as a port reused after the runtime it named went does.
+        var echoes = RuntimeVerbs.EchoesTheDescriptor(dir, id => id == "rt_STALE" ? "rt_SOMEONE" : id);
         var output = new StringWriter();
         var error = new StringWriter();
         var env = new CliEnvironment(output, error, dir.Paths, echoes, null, processes, InstallPath: Installed, Autostart: registrar);
@@ -281,9 +336,9 @@ public class AutostartTurnOffTests
     }
 
     /// <summary>A macOS machine whose load starts the runtime, as <c>RunAtLoad</c> does: the descriptor appears a moment after <c>Apply</c>.</summary>
-    private sealed class LoadStarts(TempPaths dir) : IAutostartRegistrar
+    private sealed class LoadStarts(TempPaths dir, bool registered = false) : IAutostartRegistrar
     {
-        private AutostartState _state = new(false, [], null);
+        private AutostartState _state = registered ? new(true, [Installed, "runtime", "run"], null) : new(false, [], null);
 
         public AutostartPlatform Platform => AutostartPlatform.MacOs;
 
