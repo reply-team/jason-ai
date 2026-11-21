@@ -2,11 +2,13 @@ import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@test
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { loadMode, mode } from '../platform/mode';
-import { setPlace } from '../platform/places';
+import { Bridge } from '../platform/bridge';
+import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
+import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -69,6 +71,7 @@ const holdAgent = (fake: FakeApi, id: string) =>
 async function renderConsole(
     adjust: (fake: FakeApi) => void = () => undefined,
     seed: (desktop: StubDesktop) => void = () => undefined,
+    place: 'window' | 'tab' = 'window',
 ): Promise<StubDesktop> {
     const desktop = stubDesktop({ ...setupFound });
     seed(desktop);
@@ -76,8 +79,14 @@ async function renderConsole(
     desktop.keep({ id: autumn, campaignId: 'cmp_2', title: 'Autumn' });
     desktop.keep({ id: winter, campaignId: 'cmp_4', title: 'Winter' });
     desktop.keep({ id: setupChat, title: 'Set-up' });
-    setPlace('window');
-    await loadMode(desktop);
+    let used: Parameters<typeof Console>[0]['desktop'] = desktop;
+    let held: Bridge | null = null;
+    if (place === 'tab') {
+        held = new Bridge({ port: 43210, secret: standInSecret }, standInBridge(desktop).fetch);
+        used = tabDesktop(held);
+        setPlace('tab', used);
+    } else setPlace('window');
+    await loadMode(used);
     const fake = api();
     adjust(fake);
     watch(fake);
@@ -91,7 +100,8 @@ async function renderConsole(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} bootstrapped />);
+    session.bridge.value = held;
+    render(<Console api={fake} desktop={used} stream={stubStream().stream} bootstrapped />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
     // The agents are listed, so each row's state is known.
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
@@ -368,10 +378,25 @@ describe('The menu on a row of Recent', () => {
             expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
         });
 
+        it('is not offered in a tab the desktop opened', async () => {
+            await renderConsole(undefined, undefined, 'tab');
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!)[0]).toBe('Open');
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
+        });
+
         it('is not offered where there is no desktop', async () => {
             await renderConsole();
             expect(hostsOffered().map((each) => each.label)).toEqual(['Claude Code', 'Codex']);
+            // The same rows, drawn where the page has no desktop: the menu opens, with neither the folder nor the host.
             setPlace('none');
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!)[0]).toBe('Open');
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
             expect(hostsOffered()).toEqual([]);
         });
 
