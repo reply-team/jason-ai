@@ -1554,6 +1554,12 @@ switch ($Step) {
         if (-not (Test-Path -LiteralPath (Join-Path $data 'skills\roles\.jason-skills.json'))) { Fail "no role skills record under $data" }
         Say "the role skills are recorded under $data"
 
+        # The start at logon, registered by the set-up install.ps1 ends in, naming the carried jason; it starts nothing now.
+        $registration = Read-Document (Invoke-Program $carried @('runtime', 'autostart', 'status')).Said
+        if (-not $registration -or -not $registration.registered) { Fail "install.ps1 registered no start at logon: $(if ($registration) { $registration | ConvertTo-Json -Compress } else { 'nothing read' })" }
+        if ($registration.executable -ine $carried) { Fail "the start at logon names $($registration.executable), not $carried" }
+        Say "install.ps1 registered the start at logon, the task naming $carried"
+
         # Run again as the one-liner runs it: its text in the shell that typed it, which keeps nothing of it, and over the
         # version already installed, which downloads nothing.
         # The pinned one-liner runs the text as a script block given -Version, as the page's pinned line does.

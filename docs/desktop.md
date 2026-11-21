@@ -202,12 +202,12 @@ first, naming the version, since installing stops the runtime, which ends a runn
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
 reaches.
-The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item, and Uninstall
-Jason… on macOS and Linux. The tray's menu opens the window, a new chat and what needs you, and carries the same
-acts for the installation. The tray counts what waits for you, approvals and questions, read through
-`jason approval list` and `jason decision list` no more often than every 30 seconds while a runtime answers; a system
-notification carries the counts alone, never a name or the words of a question. Both login items are off until you turn
-them on.
+The Jason menu carries Open Jason at Login, Command Line, the update item, and Uninstall Jason… on macOS and Linux. The
+tray's menu opens the window, a new chat and what needs you, and carries the same acts for the installation. The tray
+counts what waits for you, approvals and questions, read through `jason approval list` and `jason decision list` no more
+often than every 30 seconds while a runtime answers; a system notification carries the counts alone, never a name or the
+words of a question. Open Jason at Login is off until you turn it on; the runtime's start at logon is the machine
+set-up's, and no item of the menu's.
 
 ## Its own files
 
@@ -1229,7 +1229,8 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   full path.
 - **Open Jason at Login** is a Windows login item, a macOS LaunchAgent (`~/Library/LaunchAgents/ai.jasonharness.desktop.plist`)
   or a Linux autostart entry (`~/.config/autostart/ai.jasonharness.desktop.desktop`), and opens the window only.
-  **Start the Runtime at Logon** is `jason runtime autostart` for the `jason` the application carries.
+  The runtime's start at logon is no item of the menu's: the machine set-up registers it, once Live has brought a new
+  installation up, and `jason runtime autostart disable` and `enable` in a terminal turn it off and on.
 
 ## On Linux
 
@@ -1242,7 +1243,7 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), the
   update item and Back to Your Own Installation are reached by their keys (Ctrl+Shift+D, Ctrl+Shift+L; the update key
   acts on the item's current step, which shows nowhere there, and asks before it installs), and Open Jason at Login,
-  Start the Runtime at Logon, Command Line and Uninstall Jason… cannot be reached from the window. Closing the
+  Command Line and Uninstall Jason… cannot be reached from the window. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.

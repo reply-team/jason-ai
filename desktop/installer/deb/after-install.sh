@@ -70,3 +70,7 @@ Suites: ./
 Signed-By: /usr/share/keyrings/jason-desktop.gpg
 SOURCE
 chmod 644 /etc/apt/sources.list.d/jason-desktop.sources
+
+# A deb installed directly, by apt or dpkg, starts nothing and sets nothing up for the account: the application's first
+# start does. Said in one line, so the install does not end in silence.
+echo "Open Jason Desktop to start Jason."

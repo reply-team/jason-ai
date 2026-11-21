@@ -1151,3 +1151,37 @@ test('the data directory a wrapper names is none where JASON_DATA_DIR is unset o
     assert.equal(main.includes("process.env['JASON_DATA_DIR'] || null"), false);
     assert.equal(main.split('namedDataDirectory(process.env, home, process.platform)').length - 1, 2);
 });
+
+test('Live brought up on a new installation runs the routine once more, where the start’s run found no installation, and only then', async () => {
+    const data = join(folder(), '.jason');
+    const cli = fakeCli(printed(report({ logon: 'no_installation' })), printed(report({ logon: 'registered' })));
+    const { setup } = setupOn(data, cli);
+    await setup.atStart();
+    assert.equal(setup.state.state === 'reported' && setup.state.report.logon, 'no_installation');
+    await setup.afterLive();
+    await setup.afterLive();
+    assert.equal(cli.calls.filter((call) => call.args[0] === 'install').length, 2, 'once at the start, once after Live, and no more');
+    assert.equal(setup.state.state === 'reported' && setup.state.report.logon, 'registered');
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).report?.logon, 'registered', 'the record says what the later run did');
+});
+
+test('Live brought up runs nothing more where the start’s run registered, or left, the runtime’s start at logon', async () => {
+    for (const logon of ['registered', 'already', 'off', 'left', 'refused', 'unsupported', undefined]) {
+        const data = join(folder(), '.jason');
+        const cli = fakeCli(printed(report(logon === undefined ? {} : { logon })));
+        const { setup } = setupOn(data, cli);
+        await setup.atStart();
+        await setup.afterLive();
+        assert.equal(cli.calls.filter((call) => call.args[0] === 'install').length, 1, `logon ${logon}`);
+    }
+});
+
+test('the runtime’s start at logon is no item of the Jason menu or the tray, and Live’s bringing up runs the routine once more', () => {
+    const source = (name: string) => readFileSync(join(import.meta.dirname, '..', 'src', name), 'utf8');
+    const desk = source('desk.ts');
+    assert.equal(desk.includes('Start the Runtime at Logon'), false, 'the item is gone from the menu and the tray');
+    assert.equal(/readAutostart|autostartOn|deps.autostart/.test(desk), false, 'and so is its handler, and the read it drew from');
+    assert.ok(desk.includes("label: 'Open Jason at Login'"), 'the desktop’s own item stays');
+    assert.ok(source('main.ts').includes('        runtimeVersion = started.runtimeVersion;\n        // A new installation, brought up: the machine set-up once more'));
+    assert.ok(source('main.ts').includes('void machineSetup?.afterLive();'));
+});

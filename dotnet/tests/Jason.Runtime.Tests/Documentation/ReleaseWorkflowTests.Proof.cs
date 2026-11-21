@@ -216,6 +216,7 @@ public partial class ReleaseWorkflowTests
         ("union-macos", "Install this build by install.sh over the previous release's running command-line Jason", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "The previous release's Jason Desktop, its bundle replaced by this build's as its updater replaces it, sets the machine up at its first start", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "The previous release's Jason Desktop and its running command-line Jason, the bundle replaced by this build's as its updater replaces it, set up at its first start", "the release runs the legs it ran before; this one joins once it is green in CI"),
+        ("union-macos", "The previous release's running command-line Jason with no start at login, the bundle replaced by this build's, the start at login turned on once", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Open this build from its disk image, then eject it", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Say what the previous release's own uninstall leaves in launchd", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Move again from the previous release, then go back to it as the update page says", "the release runs the legs it ran before; this one joins once it is green in CI"),

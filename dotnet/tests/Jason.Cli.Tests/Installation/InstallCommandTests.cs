@@ -24,7 +24,7 @@ namespace Jason.Cli.Tests.Installation;
 /// <c>jason install</c>, the machine setup, run against a scratch home, a scratch data directory, a carried folder of the
 /// test's own and, on Windows, a registry key of the test's own: never the person's profiles, Path or skills.
 /// </summary>
-public sealed class InstallCommandTests : IDisposable
+public sealed partial class InstallCommandTests : IDisposable
 {
     private readonly TempPaths _data = new();
     private readonly TempPaths _tree = new();

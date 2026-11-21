@@ -1172,13 +1172,28 @@ install)
         say "the skills of Claude Code and Codex are recorded in both folders and the role skills under ~/.jason; the person's own quick-start is gone already, as said above, so this install's handling of it is not seen"
     fi
 
+    # The start at login, registered by the set-up install.sh ends in: the LaunchAgent names the carried jason, and it was
+    # written and not loaded, so the set-up started no runtime (RunAtLoad starts one at the next login).
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+    within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/install-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after install.sh"
+    [ "$(read_field "$OUT/install-autostart.json" registered)" = true ] || fail "install.sh registered no start at login: $(cat "$OUT/install-autostart.json")"
+    [ "$(read_field "$OUT/install-autostart.json" executable)" = "$carried" ] || fail "the start at login names $(read_field "$OUT/install-autostart.json" executable), not $carried"
+    ! launchctl print "gui/$(id -u)/ai.jason.runtime" > /dev/null 2>&1 || fail "the set-up loaded the LaunchAgent, which starts a runtime now"
+    say "install.sh registered the start at login naming $carried, written and not loaded: the set-up started no runtime"
+
     # The machine set-up an application's start runs: in a home of its own, so that what it writes is all it wrote; nothing
     # under the data directory, so a person's first start still opens on the Demo.
     person="$RUNNER_TEMP/person-start-home"
     rm -rf "$person"; mkdir -p "$person"
     within 120 'jason install as an application start runs it' env -u JASON_DATA_DIR HOME="$person" SHELL=/bin/zsh JASON_HARNESS__ROOT="$person/Jason" "$carried" install --terminal-path /usr/bin:/bin > "$OUT/person-start.json" || fail "jason install, as an application's start runs it, failed: $(cat "$OUT/person-start.json")"
     [ ! -e "$person/.jason" ] || fail "jason install with no --roles wrote under the data directory: $(find "$person/.jason" | head -20)"
-    say "jason install as an application's start runs it writes no entry under the data directory"
+    [ ! -e "$person/Library/LaunchAgents/ai.jason.runtime.plist" ] || fail "jason install with no --roles on a new installation registered a start at login"
+    [ "$(read_field "$OUT/person-start.json" logon)" = no_installation ] || fail "jason install with no --roles on a new installation reports logon '$(read_field "$OUT/person-start.json" logon)', not no_installation"
+    say "jason install as an application's start runs it writes no entry under the data directory, and registers no start at login on a new installation"
     ;;
 
 enable-starts-now)
@@ -2077,7 +2092,10 @@ bundle-swap)
     # application's own updater, its download, its signature check and its swap; the swap is the leg's. The uninstall and
     # the compare after it are the leg's next steps.
     previous="$1"; built="$2"; version="$3"; mode="${4:-}"
-    case "$mode" in ''|running-cli) ;; *) fail "bundle-swap takes running-cli or nothing after the version, not '$mode'" ;; esac
+    case "$mode" in ''|running-cli|running-cli-no-login) ;; *) fail "bundle-swap takes running-cli, running-cli-no-login or nothing after the version, not '$mode'" ;; esac
+    # running-cli-no-login: the same command-line install, its runtime running, with no start at login registered, so this
+    # build's first set-up has an installation to turn the start on for once.
+    cli=""; [ -z "$mode" ] || cli=yes
     zip="$previous/jason-desktop-macos-arm64.zip"
     [ -f "$zip" ] || fail "no $zip: the step fetching the previous release did not take it"
     [ -d "$built" ] || fail "no application at $built"
@@ -2102,12 +2120,14 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
 
     # With running-cli: the previous release's command-line Jason by its own script, a runtime running from it, its login
     # start registered and one campaign made; the notice files and the runtime held first to be there.
-    if [ "$mode" = running-cli ]; then
+    if [ -n "$cli" ]; then
         within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/bundle-swap-cli.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/bundle-swap-cli.txt")"
         cli_old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
         { [ -n "$cli_old" ] && [ "$cli_old" != "$version" ]; } || fail "the previous release's jason says '$cli_old', where it must be a version before $version"
         within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
-        within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+        if [ "$mode" = running-cli ]; then
+            within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+        fi
         within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before the swap' > "$OUT/bundle-swap-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/bundle-swap-campaign.json")"
         made="$(read_field "$OUT/bundle-swap-campaign.json" id)" || fail "the campaign made under the previous release has no id"
         [ -n "$made" ] || fail "the campaign made under the previous release has no id: $(cat "$OUT/bundle-swap-campaign.json")"
@@ -2115,7 +2135,7 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
         grep -qx "$made" "$OUT/bundle-swap-ids-before.txt" || fail "the campaign $made made under the previous release is not listed"
         for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ -f "$HOME/.local/bin/$notice" ] || fail "the previous release's install.sh placed no $notice in ~/.local/bin"; done
         [ -n "$(runtimes_of "$WRAPPER")" ] || fail "no process runs '$WRAPPER runtime run' after the previous release's runtime start; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
-        say "the previous release's command-line Jason $cli_old installed by its own script at $WRAPPER, a runtime running from it, its login start registered, $(wc -l < "$OUT/bundle-swap-ids-before.txt" | tr -d ' ') campaign(s)"
+        say "the previous release's command-line Jason $cli_old installed by its own script at $WRAPPER, a runtime running from it, $(if [ "$mode" = running-cli ]; then echo "its login start registered"; else echo "no login start registered"; fi), $(wc -l < "$OUT/bundle-swap-ids-before.txt" | tr -d ' ') campaign(s)"
     fi
 
     # The previous release's Jason Desktop, from its own download, started once and quit.
@@ -2144,15 +2164,18 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
         say "the previous release's quit left no runtime of its own running"
     fi
     write_listing "$OUT/bundle-swap-before-swap.txt" quiet
+    # Whether the data directory held an installation before the swap, read now rather than after this build's start, which
+    # may make one: the start at login is turned on once only for an installation that was there.
+    had_database=no; [ ! -f "$DATA/state/jason.db" ] || had_database=yes
     say "the previous release's Jason Desktop $old placed at $placed from its own download, its signature verified, started once for 30 s and quit; the machine then, $(grep -c . "$OUT/bundle-swap-before-swap.txt") line(s), is in bundle-swap-before-swap.txt"
     cat "$OUT/bundle-swap-before-swap.txt"
     # Whether the previous release had its start at login, by its own jason: the command-line one's with running-cli,
     # else the application's.
-    if [ "$mode" = running-cli ]; then asked="$WRAPPER"; else asked="$placed/Contents/Resources/bundle/jason"; fi
+    if [ -n "$cli" ]; then asked="$WRAPPER"; else asked="$placed/Contents/Resources/bundle/jason"; fi
     within 60 "the previous release's jason runtime autostart status" "$asked" runtime autostart status > "$OUT/bundle-swap-autostart-before.json" 2>/dev/null || fail "the previous release's jason runtime autostart status failed"
     had_login="$(read_field "$OUT/bundle-swap-autostart-before.json" registered)"
     say "before the swap the previous release's start at login is registered: ${had_login:-unknown}; launchd's records: $(launchd_records | tr '\t\n' ' ;' || true)"
-    if [ "$mode" = running-cli ]; then
+    if [ -n "$cli" ]; then
         [ -n "$(runtimes_of "$WRAPPER")" ] || fail "the previous release's command-line runtime no longer runs before the swap; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
         say "the previous release's command-line runtime still runs from $WRAPPER before the swap"
     fi
@@ -2218,7 +2241,7 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
     keep_desktop_log "$desktop_log"
     [ "${finished_after%% *}" -gt "${finished_before%% *}" ] || fail "this build's application wrote no machine_setup_finished line at its start within 120 s of the set-up"
     say "the finishing step after the set-up ran: completed ${finished_after#* }"
-    [ "$mode" = running-cli ] || [ "${finished_after#* }" = true ] || fail "the finishing step after the set-up at this build's first start after the swap did not complete"
+    [ -n "$cli" ] || [ "${finished_after#* }" = true ] || fail "the finishing step after the set-up at this build's first start after the swap did not complete"
     # The runtime: looked for for 120 s from the carried jason, since it starts only once the finishing step returns.
     until=$(( $(date +%s) + 120 ))
     answered=""
@@ -2226,7 +2249,7 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
         if within 20 'jason runtime status from the carried jason' "$carried" runtime status > "$OUT/bundle-swap-runtime.txt" 2>&1 && [ -n "$(runtimes_of "$carried")" ]; then answered=1; break; fi
         sleep 2
     done
-    if [ "$mode" = running-cli ]; then
+    if [ -n "$cli" ]; then
         [ -n "$answered" ] || fail "no runtime answered from $carried within 120 s of the set-up: $(cat "$OUT/bundle-swap-runtime.txt"); the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
         say "a runtime answers from $carried (pid $(runtimes_of "$carried" | awk '{print $1}' | tr '\n' ' '))"
     else
@@ -2242,7 +2265,7 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
     : > "$OUT/bundle-swap-report-profiles.txt"
     if [ -f "$record" ]; then report_profiles "$record" "$OUT/bundle-swap-report-profiles.txt" || true; fi
     # With running-cli the finishing step writes no record (it reads the public feed), so there is no done to read.
-    if [ "$mode" = running-cli ]; then hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt"; else hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt" "$record"; fi
+    if [ -n "$cli" ]; then hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt"; else hold_account_terminal "$version" "$OUT/bundle-swap-report-profiles.txt" "$record"; fi
     others="$(ps -axo pid=,command= | grep -E '/jason runtime run' | grep -v grep | grep -vF "$carried runtime run" || true)"
     [ -z "$others" ] || fail "a runtime runs from another jason than $carried: $others"
     say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and no runtime runs from another jason"
@@ -2266,12 +2289,21 @@ print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/bundle-swap
     if [ "$had_login" = true ]; then
         [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = true ] || fail "the previous release had its start at login, and after the swap none is registered: $(cat "$OUT/bundle-swap-autostart.json")"
         [ "$(read_field "$OUT/bundle-swap-autostart.json" executable)" = "$carried" ] || fail "the start at login names $(read_field "$OUT/bundle-swap-autostart.json" executable), not $carried"
-        say "the previous release had its start at login, and it now names $carried"
+        say "branch: had a start at login. The previous release had its start at login, and it now names $carried"
+    elif [ "$had_database" = yes ]; then
+        # An installation the previous release set up, with no start at login: this build's first set-up turns it on once.
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = true ] || fail "the previous release had no start at login, and this build's first set-up did not turn it on once: $(cat "$OUT/bundle-swap-autostart.json")"
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" executable)" = "$carried" ] || fail "the start at login turned on once names $(read_field "$OUT/bundle-swap-autostart.json" executable), not $carried"
+        [ -f "$DATA/autostart/default.json" ] || fail "the set-up turned the start at login on once and wrote no $DATA/autostart/default.json"
+        say "branch: once. The previous release had no start at login over an installation; this build's first set-up turned it on once, naming $carried, and recorded that in autostart/default.json"
     else
-        say "the previous release had no start at login; after the swap it is registered: $(read_field "$OUT/bundle-swap-autostart.json" registered)"
+        # No installation in the data directory yet (the Demo): nothing to start, so nothing is registered.
+        [ "$mode" != running-cli-no-login ] || fail "running-cli-no-login is there to reach the once branch, and the data directory held no installation before the swap"
+        [ "$(read_field "$OUT/bundle-swap-autostart.json" registered)" = false ] || fail "the data directory holds no installation, and a start at login was registered: $(cat "$OUT/bundle-swap-autostart.json")"
+        say "branch: no installation. The previous release had no start at login and the data directory held no installation before the swap, so none is registered"
     fi
 
-    if [ "$mode" = running-cli ]; then
+    if [ -n "$cli" ]; then
         # The command-line install retired: the note that a start is owed gone, the old executable now the wrapper (held
         # above), its notice files gone, no runtime from it, and the campaigns the same by id.
         [ ! -e "$owed" ] || fail "the note that a start is owed stands at $owed after this build's first start: $(cat "$owed")"

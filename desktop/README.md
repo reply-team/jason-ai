@@ -1018,7 +1018,7 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
   Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
   desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
-  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Uninstall Jason…. Closing the
+  without a key: Open Jason at Login, Command Line and Uninstall Jason…. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
@@ -1040,7 +1040,7 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
   at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
-  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon the person set up from
+  the Command Line's acts are not offered. A start at logon the person set up from
   another version's copy is set up again from this one at each start, the same act as turning it on, and the copy's own
   `jason install` writes the wrapper anew; one
   never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
@@ -1077,7 +1077,9 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   uninstall` on its own with `--wait-for` this process's id, and quits. For the deb the verb takes the package
   `jason-desktop` off first, once the runtime has stopped, purged by apt through the system's own password dialog, and
   removes nothing of the account's when that is refused; for an AppImage it removes its menu entry, its icons, the copies
-  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system.
+  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system;
+  it leaves the installation and its data, and takes the runtime's start at logon off with `jason runtime autostart
+  disable`, which records the turn-off, so the start stays off until `jason runtime autostart enable`.
   The system's own removal leaves the account's files, and what they start is made harmless: the autostart entry and
   the AppImage's menu entry name the file they start as `TryExec=` (`autostartEntry` in `src/login-item.ts`), and the
   runtime's systemd user unit carries `ConditionPathExists=`. When Jason will not start, take off by hand what it placed.
