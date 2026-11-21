@@ -159,6 +159,26 @@ public sealed partial class InstallCommandTests
         Assert.DoesNotContain(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("logon", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("could not reach the user manager", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The apt route's case: the manager answers a read, and then refuses the enable of a unit it cannot see. The run ends
+    /// 0 with the refusal under left and logon refused, and records no once, so a later run or `enable` may still register it.
+    /// </summary>
+    [Fact]
+    public async Task An_enable_the_manager_refuses_after_a_read_is_said_and_records_no_once()
+    {
+        var (env, output) = Environment(LinuxPlaces(), Carried(linux: "appimage", under: Path.Combine(_tree.Paths.Root, "bundles", "0.0.0")));
+        Registrar(env).RefusesApply = new AutostartException("systemctl --user refused: Failed to enable unit: Unit jason.service does not exist");
+
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(env, new InstallOptions(false, true, null), Ct));
+
+        var report = Report(output);
+        Assert.Equal("refused", report.GetProperty("logon").GetString());
+        Assert.Empty(report.GetProperty("problems").EnumerateArray());
+        Assert.Contains(report.GetProperty("left").EnumerateArray(), said => said.GetString()!.Contains("systemctl --user refused: Failed to enable unit: Unit jason.service does not exist", StringComparison.Ordinal));
+        Assert.Empty(Registrar(env).Applied);
+        Assert.False(File.Exists(_data.Paths.AutostartDefaultFile));
+    }
     /// <summary>
     /// An update of an installation set up before this default: its first set-up turns the start on once, from Jason
     /// Desktop's start (no flags) and from a terminal's (<c>--roles</c>) alike, and records that in

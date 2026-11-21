@@ -192,8 +192,8 @@ said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/u
 echo "The deb placed Jason's source, its key and /usr/bin/jason; a new login shell runs jason $said."
 
 # The start at logon, which the set-up the install line ends in registers: a user unit naming the jason the package
-# carries where the runner has a systemd user manager, and otherwise the set-up's own sentence that the system would not
-# register it, never a failed install.
+# carries where the runner's systemd user manager reads the leg's home, and otherwise the set-up's own sentence that the
+# system would not register it, logon refused in its report, never a failed install.
 "${person[@]}" /usr/bin/jason runtime autostart status > "$work/autostart.json" 2> "$work/autostart.err" || true
 if grep -qF '"registered":true' "$work/autostart.json"; then
   grep -qF '"executable":"/opt/Jason/resources/bundle/jason"' "$work/autostart.json"     || fail "The start at logon names another jason than the package's: $(cat "$work/autostart.json")"
@@ -208,6 +208,23 @@ elif ! "${person[@]}" systemctl --user is-system-running > "$work/user-manager.t
   grep -qF '"registered":false' "$work/autostart.json" \
     || { cat "$work/autostart.json" "$work/autostart.err"; fail "With no systemd user manager, jason runtime autostart status does not say registered false."; }
   echo "The runner has no systemd user manager ($(head -n 1 "$work/user-manager.txt")), and the set-up said so in its report, registered nothing and ended 0."
+elif ! "${person[@]}" systemctl --user show -p UnitPath --value 2> /dev/null | tr ' ' '\n' | grep -qxF "$work/home/.config/systemd/user"; then
+  # The leg's account is a home of its own under the runner's account, and the runner's user manager reads its units from
+  # the runner's home, not this one: the unit the set-up writes there is one the manager cannot see, so its enable is
+  # refused. The set-up must say that refusal under left, report logon refused, end 0, and put the unit file back.
+  "${person[@]}" systemctl --user show -p UnitPath --value > "$work/unit-path.txt" 2>&1 || true
+  said=$(grep -oE 'The start at logon could not be registered[^"]*' "$work/install.out" || true)
+  case "$said" in *"systemctl --user refused"*"does not exist"*) ;; *)
+    cat "$work/install.out" "$work/unit-path.txt"
+    fail "The runner's user manager does not read the leg's home, and the set-up did not say systemctl refused the unit it cannot see: '$said'" ;;
+  esac
+  grep -qF '"logon":"refused"' "$work/install.out" \
+    || { cat "$work/install.out"; fail "The runner's user manager does not read the leg's home, and the set-up's report does not say logon refused."; }
+  grep -qF '"registered":false' "$work/autostart.json" \
+    || { cat "$work/autostart.json" "$work/autostart.err"; fail "With the unit refused, jason runtime autostart status does not say registered false."; }
+  [ ! -e "$work/home/.config/systemd/user/jason.service" ] \
+    || fail "The refused registration left $work/home/.config/systemd/user/jason.service behind."
+  echo "The runner's user manager reads its units from $(cat "$work/unit-path.txt"), not the leg's home: the set-up said systemctl refused the unit, reported logon refused, left no unit file and ended 0."
 else
   cat "$work/autostart.json" "$work/autostart.err" "$work/install.out"; fail "The runner has a systemd user manager, and the set-up registered no start at logon."
 fi
