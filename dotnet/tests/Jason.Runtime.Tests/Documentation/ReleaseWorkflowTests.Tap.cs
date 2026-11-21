@@ -31,6 +31,13 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("[ \"$status\" = 0 ] || fail \"brew trust $tap exited $status", taps, StringComparison.Ordinal);
         Assert.DoesNotContain("|| true", taps, StringComparison.Ordinal);
         Assert.Equal(1, CountOf(script, "brew tap-new --no-git"));
+
+        // In the workflow the taps are made, and so trusted, before the audit and before the first install.
+        var workflow = Read([".github", "workflows", "release.yml"]);
+        var tapsStep = workflow.IndexOf("test-cask-macos.sh taps", StringComparison.Ordinal);
+        Assert.True(tapsStep >= 0, "release.yml runs no taps step of the cask proof");
+        Assert.True(tapsStep < workflow.IndexOf("test-cask-macos.sh audit", StringComparison.Ordinal), "release.yml audits the cask before its taps are made and trusted");
+        Assert.True(tapsStep < workflow.IndexOf("test-cask-macos.sh install", StringComparison.Ordinal), "release.yml installs the cask before its taps are made and trusted");
     }
 
     private const string TapRequestToken = "github_pat_00NOTAREALTOKEN";

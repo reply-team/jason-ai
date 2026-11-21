@@ -16,7 +16,8 @@ cask "jason" do
 
   auto_updates true
   depends_on arch: :arm64
-  # Electron 44.10.2's README: "macOS (Ventura and up)". A release named alone is the floor (Homebrew/OSDependsOn).
+  # Electron 44.10.2's README: "macOS (Ventura and up)". Homebrew's cask DSL reads a bare release as the floor
+  # (`depends_on macos=` parses with the ">=" comparator); the string form ">= :ventura" is deprecated.
   depends_on macos: :ventura
 
   app "Jason.app"

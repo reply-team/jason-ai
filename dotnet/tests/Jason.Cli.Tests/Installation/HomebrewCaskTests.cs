@@ -140,6 +140,19 @@ public sealed partial class HomebrewCaskTests : IDisposable
         Assert.DoesNotContain("launchctl", zap, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The macOS floor is the release Electron's README names, as Homebrew's cask DSL reads a bare release: Ventura or
+    /// newer. The line is held exactly, so a change to it is seen.
+    /// </summary>
+    [Fact]
+    public void The_casks_macos_floor_is_ventura_or_newer_in_the_dsls_own_form()
+    {
+        var lines = Template().Split('\n');
+
+        Assert.Single(lines, line => line == "  depends_on macos: :ventura");
+        Assert.DoesNotContain(lines, line => line.Contains(">= :ventura", StringComparison.Ordinal) && !line.TrimStart().StartsWith('#'));
+    }
+
     [Fact]
     public void The_cask_quits_the_application_by_its_identifier_and_calls_the_jason_it_carries()
     {

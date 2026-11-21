@@ -1156,7 +1156,6 @@ public class ReleaseAndUpdateDocTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
     /// <summary>
     /// Installing's cask paragraph says, conditionally, what to do where Homebrew says the tap is not trusted: whether a
     /// fully qualified install trusts the tap by itself is not yet seen, so the page claims neither.
@@ -1170,6 +1169,7 @@ public class ReleaseAndUpdateDocTests
         Assert.DoesNotContain("trusts the tap by itself", installing, StringComparison.Ordinal);
     }
 
+    /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
     private static string Section(string page, string heading)
     {
         var start = page.IndexOf(heading + "\n", StringComparison.Ordinal);
