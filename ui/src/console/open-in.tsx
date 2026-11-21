@@ -12,6 +12,7 @@ import type {
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { shownAgent } from './agent-place';
+import { fileManager } from './open-folder';
 import { activePanel, chats, currentChat } from './state';
 
 // "Open in": the split button of the console's top bar, in Live and in Demo alike. The main part opens the folder in the
@@ -243,6 +244,9 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             setAnswer(kept);
             setAnswerChat(chatId);
             setProblem(null);
+            // The file manager's name, which the agent's "…" and a row's menu name their Open in it by.
+            const files = kept.places.find((each) => each.id === 'files');
+            fileManager.value = files === undefined ? null : nameOf(files);
             return kept;
         } catch (error) {
             if (asked !== reads.current) return null;

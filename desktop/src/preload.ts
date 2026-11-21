@@ -2,7 +2,7 @@
 // Electron, so the channel names are written here as they are in ipc.ts; a test holds the two lists together. No event
 // object, no ipcRenderer and no Node reaches the page: each member passes its own arguments and returns the answer.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 type Handler = (...args: never[]) => void;
 
@@ -35,6 +35,8 @@ const desktop = {
         openFolder: (name: string) => ipcRenderer.invoke('jason:chat.openFolder', name),
         feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
         cardRefused: (chatId: string, kind: string, failure: string) => ipcRenderer.invoke('jason:chat.cardRefused', chatId, kind, failure),
+        // Read here, from the file the page was given by a drop, and never through the main process: no channel carries it.
+        pathOf: (file: File) => webUtils.getPathForFile(file),
     },
     theme: {
         get: () => ipcRenderer.invoke('jason:theme.get'),

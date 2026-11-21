@@ -874,6 +874,13 @@ export interface JasonDesktop {
          * desktop's log, a tab or none, refuses it in its own words.
          */
         cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
+        /**
+         * Where a file dropped on the message box is on this computer, read by the desktop's preload from the file itself
+         * (Electron's `webUtils.getPathForFile`), so the box can put the path in as a terminal does: answered at once,
+         * with no call to the desktop's main process. Empty for a file that is not on this computer, one a page made, and
+         * in a place with no desktop's window, a tab or none.
+         */
+        pathOf(file: File): string;
     };
     links: {
         /**

@@ -95,6 +95,8 @@ const words = (at: HTMLElement) =>
         each.getAttribute('role') === 'separator' ? '-' : each.textContent,
     );
 const item = (name: string) => within(menu()!).getByRole('menuitem', { name });
+/** The agent's folder in the file manager, named as Open in names it: here by the page's word, the stand-in's label being empty. */
+const folder = 'Open in File manager';
 const restarts = (desktop: StubDesktop) =>
     desktop.calls.filter((each) => each.name === 'chat.restart').map((each) => each.args[0]);
 
@@ -182,7 +184,7 @@ describe('The menu on a row of Recent', () => {
             const opened = await waitFor(() => menu()!);
             expect(document.activeElement).toBe(item('Open'));
             fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
-            expect(document.activeElement).toBe(item('Pause'));
+            expect(document.activeElement).toBe(item(folder));
             fireEvent.keyDown(opened, { key: 'Escape' });
             await waitFor(() => expect(menu()).toBeNull());
             expect(document.activeElement).toBe(await row('Spring'));
@@ -194,21 +196,43 @@ describe('The menu on a row of Recent', () => {
         await renderConsole();
         const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
         fireEvent.contextMenu(await row('Spring'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', 'Pause', 'Archive…', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Pause', 'Archive…', ...rest]));
         closeMenus();
         fireEvent.contextMenu(await row('Autumn'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', 'Start', 'Archive…', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Start', 'Archive…', ...rest]));
         closeMenus();
-        // Winter, archived, is not among the agents listed: the menu asks nothing, and offers no move and no Archive….
+        // Winter, archived, is not among the agents listed: the menu asks nothing, and offers no move and no Archive…;
+        // its folder is there all the same.
         fireEvent.contextMenu(await row('Winter'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, ...rest]));
         flush(() => {
             agentFacts.value = { cmp_4: { campaign: { ...archivedWinter }, creating: false } };
         });
-        expect(words(menu()!)).toEqual(['Open', ...rest]);
+        expect(words(menu()!)).toEqual(['Open', folder, ...rest]);
         closeMenus();
         fireEvent.contextMenu(await row('Set-up'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', ...rest]));
+    });
+
+    it('opens the row’s agent’s folder in the file manager through Open in, and says a refusal beside the sidebar until closed', async () => {
+        const desktop = await renderConsole();
+        const opened = () => desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args);
+        await pick('Autumn', folder);
+        await waitFor(() => expect(opened()).toEqual([['files', 'cmp_2']]));
+        // Nothing else was opened or shown, and nothing was said.
+        expect(document.querySelector(`[data-pane="chat:${autumn}"]`)).toBeNull();
+        expect(within(side()).queryByRole('alert')).toBeNull();
+        desktop.refuse.set('openIn.open', 'This agent’s folder is not on this computer.');
+        await pick('Spring', folder);
+        const said = await waitFor(() => within(side()).getByRole('alert'));
+        expect(said.textContent).toBe('This agent’s folder is not on this computer.');
+        expect(opened().at(-1)).toEqual(['files', 'cmp_1']);
+        fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(within(side()).queryByRole('alert')).toBeNull());
+        // A chat about no agent has no folder of its own to open.
+        fireEvent.contextMenu(await row('Set-up'));
+        await waitFor(() => menu()!);
+        expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
     });
 
     it('opens a move’s dialog named for the row’s agent, where another conversation is shown', async () => {
@@ -343,10 +367,10 @@ describe('The menu on a row of Recent', () => {
         fireEvent.keyDown(springRow, { key: 'F10', shiftKey: true });
         await waitFor(() => menu()!);
         fireEvent.keyDown(menu()!, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(item('Pause'));
+        expect(document.activeElement).toBe(item(folder));
         fireEvent.contextMenu(await row('Spring'), { button: 0 });
         expect(menu()).not.toBeNull();
-        expect(document.activeElement).toBe(item('Pause'));
+        expect(document.activeElement).toBe(item(folder));
     });
 
     it('gives the focus to the first act it can take when the one focused is held, so its keys still work', async () => {
@@ -452,17 +476,17 @@ describe('The menu on a row of Recent', () => {
         try {
             fireEvent.contextMenu(await row('Spring'), { clientX: 780, clientY: 590, button: 2 });
             const opened = await waitFor(() => menu()!);
-            // Six acts, 180 high: kept 4 inside the right and the bottom.
+            // Seven acts, 210 high: kept 4 inside the right and the bottom.
             expect(opened.style.getPropertyValue('--row-menu-x')).toBe('566px');
-            expect(opened.style.getPropertyValue('--row-menu-y')).toBe('416px');
-            // The agent is no longer listed: four acts, 120 high, placed again.
+            expect(opened.style.getPropertyValue('--row-menu-y')).toBe('386px');
+            // The agent is no longer listed: five acts, 150 high, placed again.
             flush(() => {
                 consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.filter(
                     (each) => each.id !== 'cmp_1',
                 );
             });
-            await waitFor(() => expect(within(menu()!).getAllByRole('menuitem')).toHaveLength(4));
-            expect(menu()!.style.getPropertyValue('--row-menu-y')).toBe('476px');
+            await waitFor(() => expect(within(menu()!).getAllByRole('menuitem')).toHaveLength(5));
+            expect(menu()!.style.getPropertyValue('--row-menu-y')).toBe('446px');
         } finally {
             spy.mockRestore();
             Object.defineProperty(window, 'innerWidth', { value: size.width, configurable: true });

@@ -1,14 +1,62 @@
 import { describe, expect, it } from 'vitest';
 import { conversationItems, rowItems, type ConversationFacts, type Gates, type MenuItem } from './conversation-items';
 
-const kept: ConversationFacts = { kept: 'conv_1', id: 'conv_1', running: false, removing: false };
-const everything: Gates = { create: true, rename: true, restart: true, remove: true, tab: false };
+const kept: ConversationFacts = { kept: 'conv_1', id: 'conv_1', campaignId: null, running: false, removing: false };
+const everything: Gates = {
+    create: true,
+    rename: true,
+    restart: true,
+    remove: true,
+    tab: false,
+    folder: 'Open in File Explorer',
+};
 
 /** Each entry by its word, a held one marked, a separator as a dash. */
 const said = (items: MenuItem[]) =>
     items.map((each) =>
         each.kind === 'separator' ? '-' : 'disabled' in each && each.disabled ? `${each.label} (held)` : each.label,
     );
+
+describe('Open in the file manager', () => {
+    const agent: ConversationFacts = { ...kept, campaignId: 'cmp_1' };
+    const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
+
+    it('stands right after Open on the row of a chat about an agent, read or not', () => {
+        expect(said(rowItems({ status: 'active' }, agent, everything))).toEqual([
+            'Open',
+            'Open in File Explorer',
+            'Pause',
+            'Archive…',
+            ...rest,
+        ]);
+        expect(said(rowItems(null, agent, everything))).toEqual(['Open', 'Open in File Explorer', ...rest]);
+    });
+
+    it('stands first in the agent’s “…”, before the conversation’s acts', () => {
+        expect(said(conversationItems(agent, everything))).toEqual([
+            'Open in File Explorer',
+            'Rename conversation',
+            'Start conversation fresh',
+            'Remove conversation',
+        ]);
+    });
+
+    it('is offered for no chat about no agent, in no tab, and nowhere the place names no file manager', () => {
+        expect(said(rowItems(null, kept, everything))).not.toContain('Open in File Explorer');
+        expect(said(rowItems({ status: 'active' }, agent, { ...everything, tab: true }))).toEqual([
+            'Open',
+            'Pause',
+            'Archive…',
+            '-',
+            'Rename conversation',
+        ]);
+        expect(said(conversationItems(agent, { ...everything, folder: null }))).toEqual([
+            'Rename conversation',
+            'Start conversation fresh',
+            'Remove conversation',
+        ]);
+    });
+});
 
 describe('the menu on a row of Recent', () => {
     it('offers an agent the move its status allows, Archive…, and the conversation’s acts, Remove last', () => {
@@ -100,7 +148,7 @@ describe('the conversation’s acts', () => {
             'Remove conversation',
         ]);
         const unkept = conversationItems(
-            { kept: undefined, id: 'unmade:1', running: false, removing: false },
+            { kept: undefined, id: 'unmade:1', campaignId: null, running: false, removing: false },
             everything,
         );
         expect(said(unkept)).toEqual([

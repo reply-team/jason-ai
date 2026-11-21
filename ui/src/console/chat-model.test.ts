@@ -38,6 +38,8 @@ import {
     exportTypeIt,
     typed,
     afresh,
+    noteClosed,
+    withPaths,
     codexPlanLine,
     choiceStops,
     livePlan,
@@ -133,6 +135,92 @@ describe('a chat as the page keeps it', () => {
         expect(
             received(chat, { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' }).entries.at(-1),
         ).toEqual({ kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' });
+    });
+
+    describe('the paths of files dropped on the box', () => {
+        const windows = 'C:\\Users\\Ана Ли\\Desktop\\1.txt';
+
+        it('go in at the caret, each quoted, with a space after them, as a terminal puts them', () => {
+            expect(withPaths('', 0, 0, [windows])).toEqual({
+                text: `"${windows}" `,
+                caret: windows.length + 3,
+            });
+            expect(withPaths('add these lines to ', 19, 19, ['/Users/ana/1.txt'])).toEqual({
+                text: 'add these lines to "/Users/ana/1.txt" ',
+                caret: 38,
+            });
+        });
+
+        it('stand apart from the words on each side, and several go in one after another', () => {
+            expect(withPaths('readthat now', 4, 4, ['/a b', '/c'])).toEqual({
+                text: 'read "/a b" "/c" that now',
+                caret: 17,
+            });
+            expect(withPaths('compare  and', 8, 8, ['/x'])).toEqual({ text: 'compare "/x" and', caret: 12 });
+        });
+
+        it('take the place of the words selected', () => {
+            expect(withPaths('open FILE please', 5, 9, ['/d/e.txt'])).toEqual({
+                text: 'open "/d/e.txt" please',
+                caret: 15,
+            });
+        });
+    });
+
+    describe('a notice and an aside', () => {
+        const open = (chat: Chat) =>
+            chat.entries.flatMap((each) =>
+                (each.kind === 'notice' || each.kind === 'aside') && each.closed !== true ? [each.text] : [],
+            );
+        /** A turn that said a notice and an aside, ended, and the person's next message. */
+        const next = () => {
+            const first = received(
+                received(received(said(newChat('conv_1', 'claude'), 'Go'), { kind: 'notice', text: 'Fell back.' }), {
+                    kind: 'text',
+                    text: 'Done.',
+                }),
+                { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' },
+            );
+            const asided = {
+                ...first,
+                entries: [...first.entries, { kind: 'aside' as const, text: 'Written: /h/a.md' }],
+            };
+            return said(received(asided, { kind: 'done', error: null }), 'And now?');
+        };
+
+        it('stay through their turn and until the next answer begins, then go', () => {
+            const chat = next();
+            expect(open(chat)).toEqual(['Fell back.', 'Kept seven days: /d', 'Written: /h/a.md']);
+            expect(open(received(chat, { kind: 'text', text: 'Here.' }))).toEqual([]);
+            expect(open(received(chat, { kind: 'step', text: 'Read a file' }))).toEqual([]);
+        });
+
+        it('said in the turn that runs, stay while its answer goes on', () => {
+            const chat = received(next(), { kind: 'notice', text: 'This turn runs in Ask first.' });
+            expect(
+                open(received(received(chat, { kind: 'text', text: 'Here.' }), { kind: 'done', error: null })),
+            ).toEqual(['This turn runs in Ask first.']);
+        });
+
+        it('go at the end of the next turn even where it gave no answer', () => {
+            expect(open(received(next(), { kind: 'done', error: 'The host stopped.' }))).toEqual([]);
+        });
+
+        it('are closed one by one by their close control, and nothing else is', () => {
+            const chat = next();
+            const at = chat.entries.findIndex((each) => each.kind === 'aside');
+            expect(open(noteClosed(chat, at))).toEqual(['Fell back.', 'Kept seven days: /d']);
+            const text = chat.entries.findIndex((each) => each.kind === 'text');
+            expect(noteClosed(chat, text)).toBe(chat);
+            expect(noteClosed(chat, chat.entries.length + 3)).toBe(chat);
+        });
+
+        it('still lock the choice before them once closed', () => {
+            const asked = received(said(newChat('conv_1', 'claude'), 'Go'), { kind: 'text', text: 'Pick one.' });
+            const told = received(received(asked, { kind: 'done', error: null }), { kind: 'notice', text: 'Gone.' });
+            const closed = noteClosed(told, told.entries.length - 1);
+            expect(choiceState(closed, 1, ['A'], null, true)).toEqual({ state: 'locked' });
+        });
     });
 
     it('becomes a campaign’s conversation on a hand-over, and keeps a fresh session and a pick in its thread', () => {

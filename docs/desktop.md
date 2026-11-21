@@ -644,11 +644,12 @@ Claude Code.
 - **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn outside Full access leaves your
   `config.toml` unread (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that
   cannot be read, the turn is refused before Codex starts, with a sentence that says to update Codex. Outside Full
-  access the line under the composer says **The chat does not read your Codex config.toml, so a provider or profile set
-  there is not used; connect a key on the Connect card.** Nor are the MCP servers it names loaded, since Codex asks no
-  one before such a tool runs, nor your ChatGPT apps (connectors), which every Codex turn turns off; its sign-in is still
-  used. A Full access turn reads your `config.toml`, its MCP servers, providers and profiles with it; the connectors stay
-  off and the search stays on the cached index, both set for the run.
+  access the line under the composer says **In this mode the chat does not read your Codex config.toml; Full access
+  does. A provider or profile set there is not used here; connect a key on the Connect card.** Nor are the MCP servers
+  it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which every
+  Codex turn turns off; its sign-in is still used. A Full access turn reads your `config.toml`, its MCP servers,
+  providers and profiles with it; the connectors stay off and the search stays on the cached index, both set for the
+  run.
 - **On Windows, a read-only Codex turn needs its elevated sandbox.** Every such turn names it
   (`windows.sandbox="elevated"`), since a command in Codex's other Windows sandbox can read the runtime's run file, and
   with it the token that lets a program act as you through Jason's API. A Full access turn runs in no sandbox, names
@@ -730,12 +731,14 @@ tab, the first of its tabs, under the agent's one header, which stays while you 
 state and kind as pills, its one move, **Start** for a draft, **Pause** for an agent that runs, **Resume** for a paused
 one, and **…** with the conversation's acts. The move is the agent page's own control, with the same confirmation, which
 says before a start how many people the agent holds and how its messages go; it shows from the moment a set-up chat
-becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
-turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
-conversation's record from this computer after one question, saying that the agent stays as it is and, for a
-conversation with a folder of its own, that the folder is kept seven days and where, that on Windows a program that has
-it open keeps it where it is until a later start of Jason Desktop moves it, and that on macOS and Linux a terminal open in
-it follows it there; the host keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**,
+becomes a campaign's. **…** holds the agent's folder in your file manager, named as Open in names it (**Open in File
+Explorer** on Windows, **Open in Finder** on macOS, **Open in File manager** on Linux), which the menu on the agent's
+row under **Recent** holds right after **Open**, then **Rename conversation**, **Start conversation fresh**, which begins
+the agent's next turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which
+deletes the conversation's record from this computer after one question, saying that the agent stays as it is and, for
+a conversation with a folder of its own, that the folder is kept seven days and where, that on Windows a program that
+has it open keeps it where it is until a later start of Jason Desktop moves it, and that on macOS and Linux a terminal
+open in it follows it there; the host keeps its own transcript. A set-up chat has the same acts in its own bar, as **Rename**,
 **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
@@ -939,7 +942,9 @@ administrator's turns the mode off, Claude Code refuses it in its restricted mod
 Jason's check never saw, a policy having filtered the check out, which also stops the turn it ran in; and "Full access
 is not available here" where Jason Desktop runs as root or under sudo. A turn whose mode a setting turned off is
 stopped at its first line and started again in Ask first, as Ask first's own turn is. A turn you stopped ends with no
-word of a mode.
+word of a mode. What a chat says once, and what an `/export` answered, closes with its own **×** and goes by itself when
+the next answer of that conversation begins; the line under the composer still says why the next turn runs in another
+mode.
 
 From Claude Code 2.1.322 on, a turn in Ask first or Auto-edit carries the same check in front of Claude Code's own
 rules, so a command one of its allow rules runs with no card, one fed a settings file by a redirection say, is refused

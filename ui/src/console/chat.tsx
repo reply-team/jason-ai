@@ -2,8 +2,11 @@ import { computed, effect } from '@preact/signals-react';
 import {
     useCallback,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
+    useState,
+    type DragEvent,
     type FormEvent,
     type KeyboardEvent,
     type MouseEvent,
@@ -78,6 +81,10 @@ import {
     fullAccessWhyWords,
     takenBack,
     told,
+    noteClosed,
+    noPathDropped,
+    somePathsDropped,
+    withPaths,
     turnOptions,
     typed,
     type Answer,
@@ -647,6 +654,12 @@ define('chat.openFolder', ([id, name]) => {
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 });
 
+// A notice or an aside closed by its control: the page's own, so a tab closes it too.
+define('chat.closeNote', ([id, index]) => {
+    if (typeof id !== 'string' || typeof index !== 'number') return;
+    changeChat(id, (chat) => noteClosed(chat, index));
+});
+
 define('chat.attach', ([id, campaignId]) => {
     // A tab never says yes, and never reaches what only the desktop's window may.
     if (!can('chat.attach')) return;
@@ -808,6 +821,20 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
+
+/** The control that closes a notice or an aside of the chat, which it names by its place among the chat's entries. */
+const closeNote = (chatId: string, index: number | undefined): Html | null =>
+    index === undefined
+        ? null
+        : html`<button
+              class="note-close"
+              type="button"
+              aria-label="Close"
+              title="Close"
+              ${act('chat.closeNote', chatId, index)}
+          >
+              ${svg('close', 14)}
+          </button>`;
 
 /** A kind as the line of a card that did not hold what it needs names it: the card, by its kind or by where it leads. */
 const kindWords: Readonly<Record<CardKind, string>> = {
@@ -1210,17 +1237,30 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         ? `${host?.label ?? 'This AI host'} has not seen this conversation; it was given the last messages.`
                         : "The AI's memory of this conversation was gone; it starts from the last messages.",
                 );
+            // A notice and an aside go once closed, by their control or as the next answer began.
             case 'notice':
-                return entry.folder === null || inTab()
-                    ? noteLine(entry.text)
-                    : html`<div class="note chat-note">
-                          ${entry.text}
-                          <button class="btn sm" type="button" ${act('chat.openFolder', chat.id, entry.folder)}>
-                              Open folder
-                          </button>
-                      </div>`;
+                if (entry.closed === true) return null;
+                return html`<div class="note chat-note closable">
+                    <span class="note-said">${entry.text}</span>
+                    ${
+                        entry.folder === null || inTab()
+                            ? null
+                            : html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${act('chat.openFolder', chat.id, entry.folder)}
+                              >
+                                  Open folder
+                              </button>`
+                    }
+                    ${closeNote(chat.id, indexOf.get(entry))}
+                </div>`;
             case 'aside':
-                return noteLine(entry.text);
+                if (entry.closed === true) return null;
+                return html`<div class="note chat-note closable">
+                    <span class="note-said">${entry.text}</span>
+                    ${closeNote(chat.id, indexOf.get(entry))}
+                </div>`;
             case 'afresh':
                 return noteLine("Started fresh: the AI's next turn begins without its memory of this conversation.");
             case 'line':
@@ -1567,6 +1607,21 @@ function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, c
     });
 }
 
+/** Whether a drag carries files from the system, rather than words dragged from a page. */
+const carriesFiles = (transfer: DataTransfer | null): transfer is DataTransfer =>
+    transfer !== null && [...transfer.types].includes('Files');
+
+/** Where a dropped file is on this computer, as the desktop reads it; empty where this place, or the file, has none. */
+function pathOfDropped(file: File): string {
+    if (!can('chat.pathOf')) return '';
+    // A desktop of an earlier version has no such member, and a file it cannot place throws: neither has a path here.
+    try {
+        return here().desktop.chat.pathOf(file);
+    } catch {
+        return '';
+    }
+}
+
 /**
  * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
  * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
@@ -1623,6 +1678,16 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
     }, [draftCampaignId]);
     useFit(messageBox, record?.draft ?? '');
+    // A file dropped on the box: what the box says when a path could not be put in, until the next drop or word typed,
+    // and where the caret goes once the box shows the paths that were.
+    const [dropSaid, setDropSaid] = useState<string | null>(null);
+    const caretAfterDrop = useRef<number | null>(null);
+    useLayoutEffect(() => {
+        const at = caretAfterDrop.current;
+        if (at === null) return;
+        caretAfterDrop.current = null;
+        messageBox.current?.setSelectionRange(at, at);
+    }, [record?.draft]);
     // An agent's chat whose last choice may still be live reads, once while it is drawn, whether the person acted on the
     // agent after it was asked; the journal's stream keeps that current (`heardLine`). A chat of no agent reads nothing.
     const api = useApi();
@@ -1767,6 +1832,33 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         here()
             .desktop.chat.stop(chatId)
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
+    };
+    // A file dropped on the box puts its path in, quoted, at the caret, as a terminal does; several files, several paths.
+    // The page never goes to a dropped file, and a path it could not read is said, never passed over.
+    const draggedOver = (event: DragEvent<HTMLTextAreaElement>) => {
+        if (!carriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    };
+    const dropped = (event: DragEvent<HTMLTextAreaElement>) => {
+        if (!carriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        const files = [...event.dataTransfer.files];
+        const paths = files.map(pathOfDropped).filter((each) => each !== '');
+        // A drag that carries no file it can read, none at all included, is said too.
+        setDropSaid(
+            files.length > 0 && paths.length === files.length
+                ? null
+                : paths.length === 0
+                  ? noPathDropped
+                  : somePathsDropped,
+        );
+        if (paths.length === 0) return;
+        const box = event.currentTarget;
+        const next = withPaths(box.value, box.selectionStart, box.selectionEnd, paths);
+        caretAfterDrop.current = next.caret;
+        changeChat(chatId, (each) => typed(each, next.text));
+        box.focus();
     };
     // Enter sends, or adds to what waits while a turn runs; Shift+Enter makes a new line. Escape stops the running turn
     // when nothing else on the page takes that key (`escapeTaken`), and never while a stop is already asked for; what is
@@ -1961,6 +2053,11 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         </div>
                     )}
                     {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
+                    {dropSaid !== null && (
+                        <div className="note am" role="status">
+                            {dropSaid}
+                        </div>
+                    )}
                     {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                     <textarea
                         ref={messageBox}
@@ -1969,8 +2066,13 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         placeholder={chat.running ? t('chat.queue.placeholder') : 'Ask Jason…'}
                         aria-label="Your message"
                         value={chat.draft}
-                        onChange={(event) => changeChat(chatId, (each) => typed(each, event.target.value))}
+                        onChange={(event) => {
+                            setDropSaid(null);
+                            changeChat(chatId, (each) => typed(each, event.target.value));
+                        }}
                         onKeyDown={keys}
+                        onDragOver={draggedOver}
+                        onDrop={dropped}
                     />
                     <div
                         className="crow"

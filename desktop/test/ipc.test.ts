@@ -120,6 +120,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             openFolder: 'function',
             feed: 'function',
             cardRefused: 'function',
+            pathOf: 'function',
         },
         theme: { get: 'function', set: 'function' },
         updates: { key: 'function', item: 'function', press: 'function', onChanged: 'function' },

@@ -523,18 +523,28 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(creates(desktop)).toHaveLength(1);
     });
 
-    it('closes its “…”, whose acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
+    it('closes its “…”, whose conversation’s acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
         await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         const more = within(head()!).getByRole('button', { name: "More for this agent's conversation" });
         more.focus();
         fireEvent.click(more);
         const menu = within(head()!).getByRole('menu');
+        // The agent's folder is there before its conversation is, in the window; a tab opens no folder.
         expect(
             within(menu)
                 .getAllByRole('menuitem')
-                .every((each) => (each as HTMLButtonElement).disabled),
-        ).toBe(true);
+                .map((each) => [each.textContent, (each as HTMLButtonElement).disabled]),
+        ).toEqual(
+            place === 'window'
+                ? [
+                      ['Open in File manager', false],
+                      ['Rename conversation', true],
+                      ['Start conversation fresh', true],
+                      ['Remove conversation', true],
+                  ]
+                : [['Rename conversation', true]],
+        );
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more);
@@ -668,8 +678,11 @@ describe.each<Place>(['window', 'tab'])('An archived agent with no conversation,
             expect(within(shownPane).queryByRole('button')).toBeNull();
             expect(area.querySelector('[data-pane^="chat:"]')).toBeNull();
             expect(shownPane.querySelector('.sug, .crow, [aria-haspopup="menu"]')).toBeNull();
+            // Open in the file manager opens the agent's folder, which is there, and makes nothing.
             expect(
-                [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some((each) => !each.disabled),
+                [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some(
+                    (each) => !each.disabled && each.textContent !== 'Open in File manager',
+                ),
             ).toBe(false);
         };
         nothingToMake();
@@ -748,7 +761,7 @@ describe('An agent the runtime no longer knows', () => {
 describe('The conversation’s acts in the agent’s “…”', () => {
     const more = () => within(head()!).getByRole('button', { name: "More for this agent's conversation" });
 
-    it('names the conversation in each, from the keyboard, and Escape gives the focus back', async () => {
+    it('opens on the agent’s folder, names the conversation in each of its own acts, from the keyboard, and Escape gives the focus back', async () => {
         await renderAt('window');
         await openSpring();
         more().focus();
@@ -758,13 +771,26 @@ describe('The conversation’s acts in the agent’s “…”', () => {
             within(menu)
                 .getAllByRole('menuitem')
                 .map((each) => each.textContent),
-        ).toEqual(['Rename conversation', 'Start conversation fresh', 'Remove conversation']);
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Rename conversation' }));
+        ).toEqual(['Open in File manager', 'Rename conversation', 'Start conversation fresh', 'Remove conversation']);
+        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Open in File manager' }));
         fireEvent.keyDown(menu, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Start conversation fresh' }));
+        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Rename conversation' }));
         fireEvent.keyDown(menu, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more());
+    });
+
+    it('opens the agent’s folder in the file manager through Open in, and nothing else', async () => {
+        const { desktop } = await renderAt('window');
+        await openSpring();
+        fireEvent.click(more());
+        fireEvent.click(within(head()!).getByRole('menuitem', { name: 'Open in File manager' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['files', 'cmp_1'],
+            ]),
+        );
+        expect(within(head()!).queryByRole('menu')).toBeNull();
     });
 
     it('in a tab the desktop opened holds Rename conversation alone', async () => {
