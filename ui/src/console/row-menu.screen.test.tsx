@@ -17,6 +17,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
 import { hostsOffered } from './open-folder';
+import { en } from '../locale/en';
 import { closeMenus } from './side';
 import { forgetWaiting } from './waiting';
 import { activePanel, chats, conversations, feedId, lines, setup, setupError } from './state';
@@ -184,6 +185,67 @@ afterEach(() => {
 });
 
 describe('The menu on a row of Recent', () => {
+    it('draws its words, titles and the header’s “…” from the locale table, as another language would give them', async () => {
+        // No second language ships yet: this stands one in, by the table's own keys, for the length of the test.
+        const table = en as unknown as Record<string, string>;
+        const other: Record<string, string> = {
+            'agent.menu.open': 'Öffnen',
+            'agent.menu.folder': 'In {place} öffnen',
+            'agent.openHost': '{host} im Terminal öffnen',
+            'agent.menu.move.pause': 'Pausieren',
+            'agent.menu.archive': 'Archivieren…',
+            'agent.menu.rename': 'Unterhaltung umbenennen',
+            'agent.menu.renameTitle': 'Dieser Unterhaltung einen eigenen Namen geben',
+            'agent.menu.fresh': 'Unterhaltung neu beginnen',
+            'agent.menu.freshTitle': 'Die nächste Runde beginnt ohne Erinnerung an diese Unterhaltung',
+            'agent.menu.remove': 'Unterhaltung entfernen',
+            'agent.menu.more': 'Mehr zur Unterhaltung dieses Agenten',
+            'agent.menu.moreTitle': 'Mehr',
+            'agent.menu.label': 'Die Unterhaltung dieses Agenten',
+            'openIn.place.files': 'Dateimanager',
+        };
+        const kept = Object.fromEntries(Object.keys(other).map((key) => [key, table[key]]));
+        Object.assign(table, other);
+        try {
+            await renderConsole();
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!)).toEqual([
+                'Öffnen',
+                'In Dateimanager öffnen',
+                'Claude Code im Terminal öffnen',
+                'Pausieren',
+                'Archivieren…',
+                '-',
+                'Unterhaltung umbenennen',
+                'Unterhaltung neu beginnen',
+                '-',
+                'Unterhaltung entfernen',
+            ]);
+            expect(item('Unterhaltung umbenennen').title).toBe('Dieser Unterhaltung einen eigenen Namen geben');
+            expect(item('Unterhaltung neu beginnen').title).toBe(
+                'Die nächste Runde beginnt ohne Erinnerung an diese Unterhaltung',
+            );
+            closeMenus();
+            fireEvent.click(await row('Spring'));
+            const more = await waitFor(() => {
+                const found = document.querySelector<HTMLButtonElement>('.agent-head button[aria-haspopup="menu"]');
+                expect(found).not.toBeNull();
+                return found!;
+            });
+            expect([more.getAttribute('aria-label'), more.title]).toEqual([
+                'Mehr zur Unterhaltung dieses Agenten',
+                'Mehr',
+            ]);
+            fireEvent.click(more);
+            expect(document.querySelector('.agent-head [role="menu"]')!.getAttribute('aria-label')).toBe(
+                'Die Unterhaltung dieses Agenten',
+            );
+        } finally {
+            Object.assign(table, kept);
+        }
+    });
+
     it('opens on a right-click at the pointer, named by the row, with Open focused, and opens nothing by itself', async () => {
         await renderConsole();
         const before = activePanel.value;

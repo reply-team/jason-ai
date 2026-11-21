@@ -1,10 +1,10 @@
 // Pure: the acts a conversation offers, as one list, so the agent's header ("…", `agent-head.tsx`) and the menu on a
-// row of Recent (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Each word is
-// a literal, as the header always said it, but the file manager's, which Open in names (`open-folder.ts`), and the
-// agent host's, a word of the locale table with the host's name in it.
+// row of Recent (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Every word and
+// title is the locale table's (`agent.menu.*`, `agent.openHost`); the file manager's name and the host's are put in by
+// Open in (`open-folder.ts`).
 
 import { t } from '../platform/i18n';
-import { transitions, verbs, type Transition } from '../screens/campaigns/moves-model';
+import { transitions, type Transition } from '../screens/campaigns/moves-model';
 
 /** An act of the conversation itself. */
 export type ConversationAct = 'rename' | 'fresh' | 'remove';
@@ -63,8 +63,6 @@ export interface Gates {
     hosts: readonly SessionHost[];
 }
 
-const keptTitle = 'Send a message first; then the chat can be renamed';
-
 /**
  * The conversation's acts, as the agent's "…" holds them: for a conversation about an agent, first, the act that opens
  * the agent's folder in the file manager, where the place names one and is no tab, and the act that opens an agent host
@@ -94,19 +92,19 @@ export function conversationItems(facts: ConversationFacts, gates: Gates): MenuI
     if (gates.rename)
         items.push({
             kind: 'rename',
-            label: 'Rename conversation',
+            label: t('agent.menu.rename'),
             disabled: facts.kept === undefined || facts.removing,
-            title: facts.kept === undefined ? keptTitle : 'Give this conversation a name of your own',
+            title: t(facts.kept === undefined ? 'agent.menu.renameWaits' : 'agent.menu.renameTitle'),
         });
     if (!gates.tab && gates.restart)
         items.push({
             kind: 'fresh',
-            label: 'Start conversation fresh',
+            label: t('agent.menu.fresh'),
             disabled: facts.id === undefined || facts.kept === undefined || busy,
-            title: "The AI's next turn begins without its memory of this conversation; what is shown here stays",
+            title: t('agent.menu.freshTitle'),
         });
     if (!gates.tab && gates.remove)
-        items.push({ kind: 'remove', label: 'Remove conversation', disabled: facts.kept === undefined || busy });
+        items.push({ kind: 'remove', label: t('agent.menu.remove'), disabled: facts.kept === undefined || busy });
     return items;
 }
 
@@ -120,13 +118,19 @@ export function rowItems(agent: { status: string } | null, facts: ConversationFa
     const own = conversationItems(facts, gates);
     const groups: MenuItem[][] = [
         [
-            { kind: 'open', label: 'Open' },
+            { kind: 'open', label: t('agent.menu.open') },
             ...own.filter((each) => each.kind === 'folder' || each.kind === 'session'),
             ...(agent === null
                 ? []
                 : [
-                      ...transitions(agent).map((move): MenuItem => ({ kind: 'move', move, label: verbs[move] })),
-                      ...(agent.status === 'archived' ? [] : [{ kind: 'archive', label: 'Archive…' } as MenuItem]),
+                      ...transitions(agent).map((move): MenuItem => ({
+                          kind: 'move',
+                          move,
+                          label: t(`agent.menu.move.${move}`),
+                      })),
+                      ...(agent.status === 'archived'
+                          ? []
+                          : [{ kind: 'archive', label: t('agent.menu.archive') } as MenuItem]),
                   ]),
         ],
         own.filter((each) => each.kind !== 'remove' && each.kind !== 'folder' && each.kind !== 'session'),

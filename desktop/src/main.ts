@@ -636,7 +636,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
     // on the label the page drew and only while the item still says it. The answer carries what the person's last check
     // found, wherever it was asked from; a press from the page raises no notification, since the page says it.
-    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null), refused);
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer()), refused);
     handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
