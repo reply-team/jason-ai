@@ -7,8 +7,9 @@ namespace Jason.Runtime.Harness;
 /// The name of a campaign's folder: the moment the campaign was made, in the local time of the computer the runtime runs
 /// on, to the second, and the last six characters of its public id, lowercase — <c>2026-11-21-084507-7h5nrd</c> for
 /// <c>cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD</c> made at 08:45:07 there. It is made from the campaign's <c>created_at</c>, never
-/// from its name, so a name is free to change and the folder is never renamed; the same campaign always has the same
-/// leaf (<c>docs/projects.md</c>, §8).
+/// from its name, so a name is free to change and the folder is never renamed. The leaf is the one <c>created_at</c>
+/// makes in the runtime's zone when the folder is made, so a folder made again after a change of zone, or after an
+/// import onto a computer in another zone, may take another leaf (<c>docs/projects.md</c>, §8).
 /// </summary>
 public static partial class CampaignLeaf
 {

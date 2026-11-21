@@ -36,7 +36,7 @@ public sealed class CampaignLeafTests
         Assert.Equal("2027-01-02-030405-7h5nrd", CampaignLeaf.Of(Id, early, TimeZoneInfo.Utc));
     }
 
-    /// <summary>The moment as the database gives it back, with no kind, is the same UTC moment: the same campaign always has the same leaf.</summary>
+    /// <summary>The moment as the database gives it back, with no kind, is the same UTC moment, so it makes the same leaf in the same zone.</summary>
     [Fact]
     public void A_moment_read_back_with_no_kind_is_read_as_UTC()
     {

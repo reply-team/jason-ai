@@ -64,4 +64,48 @@ public sealed class FixtureScrubberLeafTests
             ],
             scrubbed);
     }
+
+    [Fact]
+    public void A_text_of_a_leaf_s_shape_is_rewritten_only_as_the_segment_after_campaigns()
+    {
+        var scrubber = new FixtureScrubber(Data);
+        var answer = new JsonArray(
+            "2026-11-21-084507-7h5nrd",
+            "notes/2026-11-21-084507-7h5nrd",
+            "The folder 2026-11-21-084507-7h5nrd is named in words.",
+            "projects/default/campaigns/2026-11-21-084507-7h5nrd/AGENTS.md");
+
+        var scrubbed = scrubber.Scrub(answer)!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+
+        Assert.Equal(
+            [
+                "2026-11-21-084507-7h5nrd",
+                "notes/2026-11-21-084507-7h5nrd",
+                "The folder 2026-11-21-084507-7h5nrd is named in words.",
+                $"projects/default/campaigns/{FixtureScrubber.FixedLeafMoment}-leaf01/AGENTS.md",
+            ],
+            scrubbed);
+    }
+
+    [Fact]
+    public void A_leaf_is_named_after_a_campaign_id_alone_never_another_kind_s_id_that_ends_the_same()
+    {
+        var scrubber = new FixtureScrubber(Data);
+        var answer = new JsonObject
+        {
+            ["work_item_id"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["folder_path"] = "projects/default/campaigns/2026-11-21-084507-7h5nrd",
+        };
+
+        var scrubbed = scrubber.Scrub(answer)!.AsObject();
+
+        Assert.Equal($"projects/default/campaigns/{FixtureScrubber.FixedLeafMoment}-leaf01", scrubbed["folder_path"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void The_leaf_moment_is_the_fixed_moment_written_as_a_leaf_writes_one()
+    {
+        Assert.Equal("2026-10-16-090000", FixtureScrubber.FixedLeafMoment);
+        Assert.StartsWith("2026-10-16T09:00:00", FixtureScrubber.FixedMoment, StringComparison.Ordinal);
+    }
 }

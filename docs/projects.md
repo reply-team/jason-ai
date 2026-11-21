@@ -114,7 +114,7 @@ All three are lines of the installation, naming no campaign: a project is not a 
 `journal.append` refuses them. A project's name is a value somebody gave, so it never reaches a log, and
 `jason doctor --include-journal` names "project names as they changed" and "the folders a project link recorded" among
 what it carries: a project's folder is named by its slug, which is made from its name, and a campaign made before
-0.49.4 keeps a folder named from its name.
+this rule keeps a folder named from its name.
 
 ## 6. From the command line
 
@@ -342,9 +342,11 @@ is not there, and the folders the request needs:
   the campaign was made, its `created_at`, to the second, in the local time of the computer the runtime runs on, then
   the last six characters of its id, lowercase: `cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD`, made at 08:45:07 there on
   21 November 2026, is `2026-11-21-084507-7h5nrd`. It is never made from the name, so a name is free to change, a
-  placeholder included, and nothing ever asks for the folder to be renamed. The same campaign always has the same leaf:
-  a folder `project.link` makes for a campaign that has none ("Linking a folder", below) takes the leaf its
-  `created_at` makes. A campaign made before 0.49.4 keeps the folder it has, named from its name. A campaign has no
+  placeholder included, and nothing ever asks for the folder to be renamed. The leaf is the one its `created_at` makes
+  in the runtime's zone when the folder is made: a folder `project.link` makes for a campaign that has none ("Linking a
+  folder", below) takes the leaf its `created_at` makes then, which after a change of the computer's zone, or a
+  `jason import` onto a computer in another zone, is not the leaf the first folder had. A campaign made before this
+  rule keeps the folder it has, named from its name. A campaign has no
   slug, and only the path is recorded: campaigns are addressed by id, and the end of the id in a leaf is what leads
   from a folder to its campaign, as the marker in it does. `jason campaign get --human` says the folder.
 
@@ -505,7 +507,7 @@ itself.
 | `harness_folder_present` | 409 | A link named a folder for a project whose recorded folder is still there and still carries its marker. Nothing was written; a link records where a folder went and never moves or copies one, so the person removes or renames one of the two, then links again. |
 
 Each message names the folder, so the person who reads it knows where to look. No folder's path reaches the runtime's
-log: a project's folder is named by its slug, made from its name, and a campaign made before 0.49.4 keeps a folder
+log: a project's folder is named by its slug, made from its name, and a campaign made before this rule keeps a folder
 named from its name.
 
 ## 9. A role's notes, by project
