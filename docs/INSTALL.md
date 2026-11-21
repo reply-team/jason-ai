@@ -380,7 +380,7 @@ Mac, from the candidate that carries it, Homebrew's cask installs the same Jason
 brew install --cask reply-team/tap/jason
 ```
 
-Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
+If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
 and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and
 the harness root stay. Homebrew's older formula is the command line alone, without Jason Desktop: where it is
 installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the

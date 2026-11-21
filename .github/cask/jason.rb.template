@@ -16,8 +16,8 @@ cask "jason" do
 
   auto_updates true
   depends_on arch: :arm64
-  # Electron 44.10.2's README: "macOS (Ventura and up)".
-  depends_on macos: ">= :ventura"
+  # Electron 44.10.2's README: "macOS (Ventura and up)". A release named alone is the floor (Homebrew/OSDependsOn).
+  depends_on macos: :ventura
 
   app "Jason.app"
   binary "#{appdir}/Jason.app/Contents/Resources/bundle/jason"
@@ -29,17 +29,17 @@ cask "jason" do
               must_succeed: false,
             }
 
-  zap script:    {
+  zap script: {
         executable:   "#{appdir}/Jason.app/Contents/Resources/bundle/jason",
         args:         ["uninstall", "--keep-application"],
         must_succeed: false,
       },
-      delete:    [
+      delete: [
         "~/.local/bin/jason",
         "~/Library/LaunchAgents/ai.jason.runtime.plist",
         "~/Library/LaunchAgents/ai.jasonharness.desktop.plist",
       ],
-      trash:     [
+      trash:  [
         "~/Library/Application Support/ai.jasonharness.desktop",
         "~/Library/Caches/ai.jasonharness.desktop",
         "~/Library/HTTPStorages/ai.jasonharness.desktop",

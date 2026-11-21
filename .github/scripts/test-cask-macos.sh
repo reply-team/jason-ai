@@ -8,7 +8,8 @@
 #   taps <feed> <version>          the tap jasonproof/audit, holding the cask as the real tap renders it, and the tap
 #                                  jasonproof/test, holding it with its url naming the feed's zip on this machine
 #   audit                          brew style and brew audit --strict on the cask as the real tap renders it; what
-#                                  Homebrew says about trusting the tap is printed
+#                                  Homebrew says about trusting the tap is printed; each test tap is trusted by brew trust
+#                                  right after brew tap-new makes it, and a brew with no brew trust fails the step
 #   render <zip> <version>         jasonproof/test's cask rendered again, at <version>, for <zip>
 #   install <version>              brew install --cask: the application in /Applications names Jason Desktop's identifier
 #                                  at <version>, the link in Homebrew's bin leads into it and answers --version before any
@@ -113,7 +114,17 @@ taps)
     [ -f "$zip" ] || fail "no $ZIP_NAME in $feed"
     for tap in "$AUDIT_TAP" "$TEST_TAP"; do
         brew tap-new --no-git "$tap" > /dev/null
+        # A tap brew tap-new makes is not trusted: Homebrew ignores its casks and formulae until it is (rc.3's dry run said
+        # so, and brew style then read the cask as an untrusted tap's). Each test tap is trusted whole, before style, audit
+        # and install, and what Homebrew answers is printed.
+        brew help trust > /dev/null 2>&1 || fail "this runner's brew has no brew trust, so the test tap $tap cannot be trusted: $(brew --version | head -n 1)"
+        status=0
+        brew trust "$tap" > "$OUT/cask-trust-${tap//\//-}.txt" 2>&1 || status=$?
+        cat "$OUT/cask-trust-${tap//\//-}.txt"
+        [ "$status" = 0 ] || fail "brew trust $tap exited $status: $(tr '\n' ' ' < "$OUT/cask-trust-${tap//\//-}.txt")"
+        say "brew trust $tap: $(tr '\n' ' ' < "$OUT/cask-trust-${tap//\//-}.txt" | cut -c1-200)"
     done
+    say "$(brew --version | head -n 1)"
     render "$version" "$(sha_of "$zip")" "" "$(tap_dir "$AUDIT_TAP")/Casks/$TOKEN.rb"
     render "$version" "$(sha_of "$zip")" "file://$zip" "$(tap_dir "$TEST_TAP")/Casks/$TOKEN.rb"
     say "the taps $AUDIT_TAP and $TEST_TAP made in this job, the cask rendered from .github/cask/jason.rb.template at $version; never the real tap"

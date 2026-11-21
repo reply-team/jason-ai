@@ -136,7 +136,7 @@ public sealed partial class HomebrewCaskTests : IDisposable
     {
         var zap = Between(Template(), "zap script:", "trash:");
 
-        Assert.Contains($"delete:    [\n        \"~/.local/bin/jason\",\n        \"~/Library/LaunchAgents/{Jason.Cli.Autostart.AutostartArtifacts.Label}.plist\",\n        \"~/Library/LaunchAgents/{DesktopRemoval.Identifier}.plist\",\n      ]", zap, StringComparison.Ordinal);
+        Assert.Contains($"delete: [\n        \"~/.local/bin/jason\",\n        \"~/Library/LaunchAgents/{Jason.Cli.Autostart.AutostartArtifacts.Label}.plist\",\n        \"~/Library/LaunchAgents/{DesktopRemoval.Identifier}.plist\",\n      ]", zap, StringComparison.Ordinal);
         Assert.DoesNotContain("launchctl", zap, StringComparison.Ordinal);
     }
 
