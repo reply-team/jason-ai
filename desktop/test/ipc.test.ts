@@ -183,7 +183,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['mode.get', []],
         ['mode.set', ['demo']],
         ['openIn.targets', ['cmp_01', 'conv_01']],
-        ['openIn.open', ['vscode', 'cmp_01']],
+        ['openIn.open', ['vscode', 'cmp_01', { keep: false }]],
         ['openIn.continueChat', ['conv_01']],
         ['openIn.changeJason', []],
         ['setup.status', []],

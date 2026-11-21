@@ -59,7 +59,8 @@ const desktop = {
     },
     openIn: {
         targets: (campaignId?: string, chatId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId, chatId),
-        open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
+        open: (target: string, campaignId?: string, options?: { keep?: boolean }) =>
+            ipcRenderer.invoke('jason:openIn.open', target, campaignId, options),
         continueChat: (chatId: string) => ipcRenderer.invoke('jason:openIn.continueChat', chatId),
         changeJason: () => ipcRenderer.invoke('jason:openIn.changeJason'),
     },

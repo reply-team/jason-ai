@@ -218,7 +218,9 @@ describe('The menu on a row of Recent', () => {
         const desktop = await renderConsole();
         const opened = () => desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args);
         await pick('Autumn', folder);
-        await waitFor(() => expect(opened()).toEqual([['files', 'cmp_2']]));
+        await waitFor(() => expect(opened()).toEqual([['files', 'cmp_2', { keep: false }]]));
+        // The window's Open in keeps the place it had: one agent's item never moves it.
+        expect(desktop.openInKept.default).toBe('claude');
         // Nothing else was opened or shown, and nothing was said.
         expect(document.querySelector(`[data-pane="chat:${autumn}"]`)).toBeNull();
         expect(within(side()).queryByRole('alert')).toBeNull();
@@ -226,7 +228,7 @@ describe('The menu on a row of Recent', () => {
         await pick('Spring', folder);
         const said = await waitFor(() => within(side()).getByRole('alert'));
         expect(said.textContent).toBe('This agent’s folder is not on this computer.');
-        expect(opened().at(-1)).toEqual(['files', 'cmp_1']);
+        expect(opened().at(-1)).toEqual(['files', 'cmp_1', { keep: false }]);
         fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
         await waitFor(() => expect(within(side()).queryByRole('alert')).toBeNull());
         // A chat about no agent has no folder of its own to open.

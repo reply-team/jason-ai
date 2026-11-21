@@ -2,11 +2,8 @@ import { computed, effect } from '@preact/signals-react';
 import {
     useCallback,
     useEffect,
-    useLayoutEffect,
     useMemo,
     useRef,
-    useState,
-    type DragEvent,
     type FormEvent,
     type KeyboardEvent,
     type MouseEvent,
@@ -82,9 +79,6 @@ import {
     takenBack,
     told,
     noteClosed,
-    noPathDropped,
-    somePathsDropped,
-    withPaths,
     turnOptions,
     typed,
     type Answer,
@@ -98,6 +92,7 @@ import { atFoot, followedTop } from './follow';
 import { html, type Html } from './html';
 import { copied, markdownView } from './markdown-view';
 import { barMarks, svg } from './icons';
+import { useDroppedPaths } from './dropped-paths';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { repeated } from '../screens/attention/store';
@@ -1607,21 +1602,6 @@ function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, c
     });
 }
 
-/** Whether a drag carries files from the system, rather than words dragged from a page. */
-const carriesFiles = (transfer: DataTransfer | null): transfer is DataTransfer =>
-    transfer !== null && [...transfer.types].includes('Files');
-
-/** Where a dropped file is on this computer, as the desktop reads it; empty where this place, or the file, has none. */
-function pathOfDropped(file: File): string {
-    if (!can('chat.pathOf')) return '';
-    // A desktop of an earlier version has no such member, and a file it cannot place throws: neither has a path here.
-    try {
-        return here().desktop.chat.pathOf(file);
-    } catch {
-        return '';
-    }
-}
-
 /**
  * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
  * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
@@ -1678,16 +1658,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
     }, [draftCampaignId]);
     useFit(messageBox, record?.draft ?? '');
-    // A file dropped on the box: what the box says when a path could not be put in, until the next drop or word typed,
-    // and where the caret goes once the box shows the paths that were.
-    const [dropSaid, setDropSaid] = useState<string | null>(null);
-    const caretAfterDrop = useRef<number | null>(null);
-    useLayoutEffect(() => {
-        const at = caretAfterDrop.current;
-        if (at === null) return;
-        caretAfterDrop.current = null;
-        messageBox.current?.setSelectionRange(at, at);
-    }, [record?.draft]);
+    // A file dropped on the box puts its path in at the caret (`dropped-paths.ts`).
+    const drop = useDroppedPaths(messageBox, record?.draft ?? '', (next) =>
+        changeChat(chatId, (each) => typed(each, next)),
+    );
     // An agent's chat whose last choice may still be live reads, once while it is drawn, whether the person acted on the
     // agent after it was asked; the journal's stream keeps that current (`heardLine`). A chat of no agent reads nothing.
     const api = useApi();
@@ -1832,33 +1806,6 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         here()
             .desktop.chat.stop(chatId)
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
-    };
-    // A file dropped on the box puts its path in, quoted, at the caret, as a terminal does; several files, several paths.
-    // The page never goes to a dropped file, and a path it could not read is said, never passed over.
-    const draggedOver = (event: DragEvent<HTMLTextAreaElement>) => {
-        if (!carriesFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-    };
-    const dropped = (event: DragEvent<HTMLTextAreaElement>) => {
-        if (!carriesFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        const files = [...event.dataTransfer.files];
-        const paths = files.map(pathOfDropped).filter((each) => each !== '');
-        // A drag that carries no file it can read, none at all included, is said too.
-        setDropSaid(
-            files.length > 0 && paths.length === files.length
-                ? null
-                : paths.length === 0
-                  ? noPathDropped
-                  : somePathsDropped,
-        );
-        if (paths.length === 0) return;
-        const box = event.currentTarget;
-        const next = withPaths(box.value, box.selectionStart, box.selectionEnd, paths);
-        caretAfterDrop.current = next.caret;
-        changeChat(chatId, (each) => typed(each, next.text));
-        box.focus();
     };
     // Enter sends, or adds to what waits while a turn runs; Shift+Enter makes a new line. Escape stops the running turn
     // when nothing else on the page takes that key (`escapeTaken`), and never while a stop is already asked for; what is
@@ -2053,9 +2000,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         </div>
                     )}
                     {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
-                    {dropSaid !== null && (
+                    {drop.said !== null && (
                         <div className="note am" role="status">
-                            {dropSaid}
+                            {drop.said}
                         </div>
                     )}
                     {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
@@ -2067,12 +2014,12 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         aria-label="Your message"
                         value={chat.draft}
                         onChange={(event) => {
-                            setDropSaid(null);
+                            drop.typed();
                             changeChat(chatId, (each) => typed(each, event.target.value));
                         }}
                         onKeyDown={keys}
-                        onDragOver={draggedOver}
-                        onDrop={dropped}
+                        onDragOver={drop.draggedOver}
+                        onDrop={drop.dropped}
                     />
                     <div
                         className="crow"

@@ -4,7 +4,8 @@ import { here, inTab } from './state';
 
 // An agent's folder in the system's file manager, from the agent's "…" and the menu on a row of Recent: through Open in's
 // own bridge (`openIn.open('files', …)`), which opens the folder the runtime recorded for the agent and never takes a path
-// from the page. The place is named as Open in names it: a product's name is the desktop's, and the page's own word
+// from the page, asked not to keep the file manager as Open in's default, so one agent's item never moves the window's
+// button. The place is named as Open in names it: a product's name is the desktop's, and the page's own word
 // stands in where the system has none (`open-in.tsx`).
 
 /**
@@ -28,7 +29,7 @@ export async function openFolder(campaignId: string): Promise<void> {
     const openIn = earlier(here().desktop).openIn;
     if (!can('openIn.open') || openIn === undefined) return;
     folderRefusal.value = null;
-    folderRefusal.value = await openIn.open('files', campaignId).then(
+    folderRefusal.value = await openIn.open('files', campaignId, { keep: false }).then(
         (answer) => (answer === null ? null : answer.refused),
         (error: unknown) => (error instanceof Error ? error.message : String(error)),
     );

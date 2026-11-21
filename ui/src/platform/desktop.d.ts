@@ -775,9 +775,14 @@ export interface JasonDesktop {
          * Opens that folder in the place `target` names, which the desktop holds against its own list; `campaignId` is the
          * campaign of the chat that is open, or absent. The page never sends a path. Null once opened (or copied); a refusal
          * for a place not on this computer, a campaign whose folder is not there, or a program that could not be started. The
-         * place is kept as the next default, Copy path excepted.
+         * place is kept as the next default, Copy path excepted, unless `options` says `keep: false`: an agent's Open folder,
+         * which leaves the window's Open in where it was.
          */
-        open(target: DesktopOpenInPlace, campaignId?: string): Promise<DesktopRefusal | null>;
+        open(
+            target: DesktopOpenInPlace,
+            campaignId?: string,
+            options?: { keep?: boolean },
+        ): Promise<DesktopRefusal | null>;
         /**
          * Continues the chat `chatId` names in a new terminal, with the host's own conversation: the desktop reads the host
          * and the session from its own record of the chat and opens the terminal in the folder the chat's turns run in. The

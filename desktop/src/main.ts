@@ -795,7 +795,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
     });
     handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
-    handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
+    handle(seam, 'openIn.open', origin, (target, campaignId, options) => openIn.open(target, campaignId, options), refused);
     handle(seam, 'openIn.continueChat', origin, (chatId) => openIn.continueChat(chatId), refused);
     handle(seam, 'openIn.changeJason', origin, () => openIn.changeJason(), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".

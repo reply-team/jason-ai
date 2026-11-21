@@ -787,10 +787,12 @@ describe('The conversation’s acts in the agent’s “…”', () => {
         fireEvent.click(within(head()!).getByRole('menuitem', { name: 'Open in File manager' }));
         await waitFor(() =>
             expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
-                ['files', 'cmp_1'],
+                ['files', 'cmp_1', { keep: false }],
             ]),
         );
         expect(within(head()!).queryByRole('menu')).toBeNull();
+        // The window's Open in keeps the place it had: one agent's item never moves it.
+        expect(desktop.openInKept.default).toBe('claude');
     });
 
     it('in a tab the desktop opened holds Rename conversation alone', async () => {

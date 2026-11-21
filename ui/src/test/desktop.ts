@@ -252,7 +252,8 @@ export interface StubDesktop extends JasonDesktop {
     preparing(on: boolean): void;
     /**
      * What `openIn.targets` answers: the places this computer has, the default and the folder's name. `openIn.open` of a
-     * place keeps it as the default (Copy path excepted), as the desktop does, and answers null or the refusal a test set.
+     * place keeps it as the default (Copy path excepted, and an opening asked with `keep: false`), as the desktop does, and
+     * answers null or the refusal a test set.
      * It carries no Change Jason itself unless a test sets `changeJason`, which `openIn.changeJason` answers with null or
      * the refusal a test set, changing no default.
      */
@@ -448,8 +449,9 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                     offered === undefined ? stub.openInKept : { ...stub.openInKept, continue: offered },
                 );
             }),
-            open: answering('openIn.open', (target) => {
-                if (target !== 'copy') stub.openInKept.default = target as DesktopOpenInPlace;
+            open: answering('openIn.open', (target, _campaignId, options) => {
+                const kept = (options as { keep?: boolean } | undefined)?.keep !== false;
+                if (target !== 'copy' && kept) stub.openInKept.default = target as DesktopOpenInPlace;
                 return null;
             }),
             continueChat: answering('openIn.continueChat', () => null),

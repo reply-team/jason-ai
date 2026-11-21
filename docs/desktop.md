@@ -297,7 +297,8 @@ On Windows and macOS, the row of an installed application shows that application
 and for rows with no application of their own, the menu keeps its glyphs.
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
+otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. An agent's folder opened from
+its **…** menu or its row's menu leaves the default as it was. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
