@@ -247,8 +247,14 @@ apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { ap
 # Only what apt asks from here on counts: the install line fetched the same deb through the same hops above.
 asked=$(wc -l < "$work/served.log")
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
-grep -qxF 'Open Jason Desktop to start Jason.' "$work/reinstall.log"   || { cat "$work/reinstall.log"; fail "The deb installed by apt did not end with its one line, Open Jason Desktop to start Jason."; }
-echo "The deb installed by apt ends with its line: Open Jason Desktop to start Jason."
+# apt and dpkg may write around a maintainer script's line when their output is a file, so the line is looked for in it,
+# and a miss prints the bytes of what came closest.
+grep -qF 'Open Jason Desktop to start Jason.' "$work/reinstall.log" || {
+  cat "$work/reinstall.log"
+  grep -F 'Open Jason' "$work/reinstall.log" | od -c | head -n 20 || true
+  fail "The deb installed by apt did not print its one line, Open Jason Desktop to start Jason."
+}
+echo "The deb installed by apt printed its line: Open Jason Desktop to start Jason."
 tail -n "+$((asked + 1))" "$work/served.log" \
   | grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"agent\": \"Debian APT[^\"]*\", \"served\": \"v$release/jason-desktop-linux-x64.deb\"" \
   || { cat "$work/served.log"; fail "apt's own download of the deb did not come through the chain from the release's asset address."; }
