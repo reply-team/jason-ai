@@ -1812,22 +1812,34 @@ interface ReadCommand {
 /** The PowerShell commands that run a text or a script block they are given, or start a program of the agent's choosing. */
 const powerShellRuns: ReadonlySet<string> = new Set(['invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start-job', 'sajb', 'start-threadjob', '.', '&']);
 
+/** The programs whose code is given as text but run no shell and no other program of it: awk's and sed's. */
+const textPrograms: ReadonlySet<string> = new Set(['awk', 'gawk', 'mawk', 'nawk', 'sed', 'gsed']);
+/** The builtins that hand the shell a text to run: a trap's and an alias's later, zsh's `emulate -c` at once. */
+const shellTextBuiltins: ReadonlySet<string> = new Set(['trap', 'alias', 'emulate']);
+
 /**
  * True when a command may run a text it is given as commands: one whose program the shell builds; a program that runs
  * another (`runsAnotherProgram`), a shell and an interpreter among them, or takes words from its input (`inputRunners`);
- * `eval`, `.` and `source`; PowerShell's own (`powerShellRuns`); and one the literal reader holds by what runs
- * (`heldByWhatRuns`): code given as text or fed to a program that reads it, a runner, git's execute options, find's
- * `-exec` and their like.
+ * `eval`, `.` and `source`, and the builtins that hand the shell a text (`shellTextBuiltins`); PowerShell's own
+ * (`powerShellRuns`); and one the literal reader holds by what runs (`heldByWhatRuns`): a runner, git's execute options,
+ * find's `-exec`, an editor's or a debugger's commands and their like. awk's and sed's code (`textPrograms`), and the
+ * value a builtin sets, declares, prints or tests, run no shell of their text, so it is data, except what the shell
+ * evaluates of it: an array's subscript that holds an expansion, and a value given the trace prompt (`PS4`), which the
+ * shell expands before each command it traces.
  */
 function runsText(each: ReadCommand, powershell: boolean): boolean {
     const { program } = each;
+    if (!powershell && each.command.words.some((word) => /^(?:PS4|PROMPT4)=/.test(word.text))) return true;
     if (program === null) return false;
     const at = each.command.words.length - each.args.length - 1;
     if (each.command.words[at]?.built === true) return true;
     if (program === 'eval' || program === '.' || program === 'source' || inputRunners.has(program) || runsAnotherProgram(program)) return true;
     if (powershell) return powerShellRuns.has(program);
+    if (shellTextBuiltins.has(program)) return true;
     const input = each.command.piped ? 'pipe' : each.command.bodies.length > 0 ? 'here_document' : 'none';
-    return heldByWhatRuns([{ words: each.command.words.slice(at).map((word) => word.text), targets: [], input, cwd: null }]) !== null;
+    const held = heldByWhatRuns([{ words: each.command.words.slice(at).map((word) => word.text), targets: [], input, cwd: null }]);
+    if (held === 'builtin' || held === 'expansion') return each.args.some((arg) => /\[[^]*[$`]/.test(arg.text));
+    return held !== null && !(held === 'inline_code' && textPrograms.has(program));
 }
 
 /**

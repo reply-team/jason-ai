@@ -793,6 +793,15 @@ test('a quoted text or a here-document is read again as commands only where a sh
             "git commit -F - <<'EOF'\nmove a / b\nEOF",
             "echo 'a / b' | sort",
             "echo 'jq env'",
+            // awk's and sed's code and the value a builtin sets are neither a shell's text nor another program's.
+            "awk '{s+=$1} END {print s / NR}' data.csv",
+            "sed 's/ a / b /' notes.txt",
+            "export MSG='a / b'",
+            "export MSG='du -sh ~'",
+            "declare -r MSG='a / b'",
+            "printf '%s / %s\\n' \"$a\" \"$b\"",
+            "set -euxo pipefail; awk '{s+=$1} END {print s / NR}' data.csv",
+            "[ \"$x\" = 'a / b' ] && echo same",
         ]) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
             for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'deny', `${scope.platform}: ${command}`);
@@ -803,6 +812,24 @@ test('a quoted text or a here-document is read again as commands only where a sh
             ["echo 'du -sh ~' | sh", searchRefusal],
             ["sh -c 'jq env'", jqRefusal],
             ["eval 'jq env'", jqRefusal],
+            // An interpreter's code is read as a shell's is, a division in it among the words.
+            ['python3 -c "print(a / b)"', searchRefusal],
+            ['node -e "console.log(a / b)"', searchRefusal],
+            // A text a builtin runs later, a shell a program runs, and a runner's text are read.
+            ["trap 'du -sh ~' EXIT", searchRefusal],
+            ["alias x='du -sh ~'\nx", searchRefusal],
+            ["emulate sh -c 'du -sh ~'", searchRefusal],
+            ["find . -name '*.md' -exec sh -c 'du -sh ~' \\;", searchRefusal],
+            ["git -c alias.x='!du -sh ~' x", searchRefusal],
+            // What the shell evaluates of a builtin's words is its own text: an array's subscript and the trace prompt.
+            ["declare 'a[$(du -sh ~)]=1'", searchRefusal],
+            ["local -i n='a[$(du -sh ~)]'", searchRefusal],
+            ["read 'a[$(du -sh ~)]' <<< 1", searchRefusal],
+            ["printf -v 'a[$(du -sh ~)]' %s 1", searchRefusal],
+            ["test -v 'a[$(du -sh ~)]'", searchRefusal],
+            ["unset 'a[$(du -sh ~)]'", searchRefusal],
+            ["PS4='$(du -sh ~) '; set -x; true", searchRefusal],
+            ["export PS4='$(du -sh ~) '; set -x; true", searchRefusal],
         ] as const) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
         }
