@@ -91,6 +91,25 @@ public class ReplyEmailLimitClockTests
     }
 
     /// <summary>
+    /// A daily-limit wait that ends before the next midnight UTC is kept as it is: the cap moves no moment earlier than
+    /// midnight, only one past it.
+    /// </summary>
+    [Theory]
+    [InlineData("1")]
+    [InlineData("36889.5")]
+    public void A_daily_limit_wait_ending_before_the_midnight_is_kept(string wait)
+    {
+        var block = BlockAt("2026-11-18T13:45:10.250Z", "email.limit_reached", 429, "contact.dailyLimitReached", wait);
+        var clears = DateTimeOffset.Parse("2026-11-18T13:45:10.250Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+            .AddMilliseconds(double.Parse(wait, CultureInfo.InvariantCulture) * 1000);
+
+        Assert.True(clears < DateTimeOffset.Parse("2026-11-19T00:00:00.000Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+        Assert.Equal(
+            $$"""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"{{clears.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}}"}""",
+            block);
+    }
+
+    /// <summary>
     /// The cap is the daily limit's alone: the active contacts renew on a day Reply knows and the package does not, so a
     /// wait reply-cli names past the next midnight is kept.
     /// </summary>
