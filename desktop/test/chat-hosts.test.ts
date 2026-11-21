@@ -542,12 +542,18 @@ test('a key provider\'s turn is started without the provider and credentials the
     }
 });
 
-test('a Claude Code turn on macOS and Windows asks the host to scrub credentials from the commands it runs; on Linux no turn does, nor carries one inherited', () => {
+test('a Claude Code turn in Ask first, Auto-edit or Plan only, and a run of no mode, asks the host to scrub credentials from the commands it runs on macOS and Windows; no Full access turn does on any system, nor does any turn on Linux, and none carries one inherited', () => {
     for (const platform of ['darwin', 'win32', 'linux'] as const) {
         for (const keyed of [false, true]) {
-            const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform, bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
-            const scrub = Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
-            assert.deepEqual(scrub, platform === 'linux' ? [] : [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']], `${platform} keyed ${keyed}`);
+            for (const mode of [undefined, 'ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
+                const env = hostEnvironment(
+                    { PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1', claude_code_subprocess_env_scrub: '0' },
+                    { platform, bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {}, ...(mode === undefined ? {} : { mode }) },
+                );
+                const scrub = Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
+                const scrubs = platform !== 'linux' && mode !== 'full_access';
+                assert.deepEqual(scrub, scrubs ? [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']] : [], `${platform} keyed ${keyed} ${mode ?? 'no mode'}`);
+            }
         }
     }
 });
