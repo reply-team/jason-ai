@@ -2598,7 +2598,7 @@ internal static partial class StatusChecks
                 // The switch read fresh is on, and the last send's answer was off: the toast reaches the person again as far
                 // as anything here can tell, and what is said is what happened, dated, and that the next one will tell.
                 reaching.Add(channel.Channel);
-                switchedOn = $"Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then; the next one will tell.";
+                switchedOn = $"Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the toast before they came on, at {When(channel.At)}, was not shown, because Windows had them switched off then; the next one will tell.";
             }
             else if (outcome == ChannelResults.Silenced)
             {

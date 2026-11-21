@@ -25,11 +25,11 @@ public sealed class NotificationsCheckTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static NotificationChannelInfo Toast(string? outcome = null, string? reason = null, string? detail = null, bool on = true, string presence = "available", string? presenceDetail = null) =>
-        new("toast", "toast", on, outcome, reason, null, null, detail, outcome is null ? null : NineOhSix, presence, presenceDetail);
+    private static NotificationChannelInfo Toast(string? outcome = null, string? reason = null, string? detail = null, bool on = true, string presence = "available", string? presenceDetail = null, DateTimeOffset? at = null) =>
+        new("toast", "toast", on, outcome, reason, null, null, detail, outcome is null ? null : at ?? NineOhSix, presence, presenceDetail);
 
-    private static NotificationChannelInfo Ntfy(string? outcome = null, string? reason = null, string? code = null, string? @class = null, string? detail = null, string? readiness = null, string? readinessDetail = null) =>
-        new("ntfy", "plugin", true, outcome, reason, code, @class, detail, outcome is null ? null : NineOhSix, Readiness: readiness, ReadinessDetail: readinessDetail);
+    private static NotificationChannelInfo Ntfy(string? outcome = null, string? reason = null, string? code = null, string? @class = null, string? detail = null, string? readiness = null, string? readinessDetail = null, DateTimeOffset? at = null) =>
+        new("ntfy", "plugin", true, outcome, reason, code, @class, detail, outcome is null ? null : at ?? NineOhSix, Readiness: readiness, ReadinessDetail: readinessDetail);
 
     /// <summary>A runtime started an hour after the outcomes the tests write: everything it reports is an earlier runtime's.</summary>
     private static readonly DateTimeOffset AnHourLater = NineOhSix.AddHours(1);
@@ -352,7 +352,7 @@ public sealed class NotificationsCheckTests
         "A group policy on this machine switches Windows' notifications off now, so none of Jason's is shown: only an administrator can change it.";
 
     private const string AllowsNow =
-        "Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the last one, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then; the next one will tell.";
+        "Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the toast before they came on, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then; the next one will tell.";
 
     /// <summary>Windows' switches as a test sets them: never this machine's own, and counted, so a read that was not needed shows.</summary>
     private sealed class FakeToastSetting(ToastSwitch? now) : IToastSetting
@@ -468,9 +468,9 @@ public sealed class NotificationsCheckTests
 
         // Beside a plugin that delivers, both are counted, the plugin's delivery is the last one named, and the toast's sentence comes after.
         Is(
-            await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason), Ntfy("delivered")], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(ToastSwitch.NotOff)),
+            await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason), Ntfy("delivered", at: NineOhSix.AddMinutes(34))], "ntf_01L", NineOhSix.AddMinutes(34)), toastSetting: new FakeToastSetting(ToastSwitch.NotOff)),
             CheckState.Ok,
-            "Notifications reach you by toast and ntfy; the last one was delivered at 2026-10-01 09:06 UTC. " + AllowsNow);
+            "Notifications reach you by toast and ntfy; the last one was delivered at 2026-10-01 09:40 UTC. " + AllowsNow);
     }
 
     /// <summary>A program's own manifest is no switch a person reads in Settings: a toast it silenced is said as it was.</summary>
