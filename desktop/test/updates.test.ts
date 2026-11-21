@@ -902,6 +902,78 @@ test('the end of a download the person asked for asks once to install now; Not N
     assert.equal(installs(broken), 0);
 });
 
+// A Download pressed after the step moved on, a terminal's request having downloaded the update meanwhile, makes no
+// download of its own and asks nothing.
+test('a Download pressed after the update was already downloaded asks nothing and installs nothing', async (t) => {
+    const asked: unknown[] = [];
+    const ask = async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return 0;
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    // Downloaded by another word, a terminal's request say, while the menu still showed Download.
+    await updates.download();
+    assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    await pressItem(updates, 'download', false, ask);
+    await pressItem(updates, 'download', true, ask);
+    assert.equal(asked.length, 0);
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+});
+
+// While the install question is open, the key pressed again raises no second box, at the download's end and at the
+// install alike; once it is answered, the next press asks again.
+test('one install question at a time: a press while the box is open asks nothing', async (t) => {
+    let opened = 0;
+    let answer: (button: number) => void = () => undefined;
+    const ask = () => {
+        opened += 1;
+        return new Promise<number>((resolve) => {
+            answer = resolve;
+        });
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    const download = pressItem(updates, 'download', true, ask);
+    for (let turn = 0; turn < 4; turn++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(opened, 1, 'the download’s end asks');
+    await pressItem(updates, 'install', true, ask);
+    assert.equal(opened, 1, 'the key again while the box is open: no second box');
+    answer(1);
+    await download;
+    const install = pressItem(updates, 'install', true, ask);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(opened, 2, 'answered, the next press asks again');
+    await pressItem(updates, 'install', true, ask);
+    assert.equal(opened, 2);
+    answer(1);
+    await install;
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+});
+
+// After Not Now on a download the key brought, the key on the install item asks the question again: Not Now is for
+// now only, and the key, which shows no label, always asks before it installs.
+test('after Not Now on a download the key brought, the key asks again at the install, and installs on yes', async (t) => {
+    const asked: ReturnType<typeof installQuestion>[] = [];
+    const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return button;
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    await pressItem(updates, 'download', true, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0')]);
+    await pressItem(updates, 'install', true, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0'), installQuestion('0.35.0')], 'asked again');
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+    await pressItem(updates, 'install', true, answer(0));
+    assert.equal(asked.length, 3);
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 1);
+});
+
 // The mark's life: a version the desktop knows of and has not installed, from the look that found it until the install,
 // kept through a later look while it is still offered; none once a look finds nothing newer, and none for a version the
 // person went back from.

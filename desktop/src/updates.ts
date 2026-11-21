@@ -138,19 +138,39 @@ export async function pressItem(
 ): Promise<string | null> {
     if (act === 'check') return updates.check(true);
     if (act === 'download') {
+        // Only a download this press makes asks: a Download pressed after the step moved on, a terminal's request having
+        // downloaded it meanwhile, downloads nothing and asks nothing.
+        const before: UpdateState = updates.current;
         await updates.download();
         const ready = updates.current;
-        if (ready.step !== 'downloaded') return null;
-        if ((await ask(installQuestion(ready.version))) !== 0) return null;
+        if (before.step !== 'offered' || ready.step !== 'downloaded') return null;
+        if ((await askOnce(updates, installQuestion(ready.version), ask)) !== 0) return null;
         const still = updates.current;
         if (still.step === 'downloaded' && still.version === ready.version) await updates.install();
     } else if (act === 'install' && !byKey) await updates.install();
     else if (act === 'install') {
         const state = updates.current;
         if (state.step !== 'downloaded') return null;
-        if ((await ask(installQuestion(state.version))) === 0) await updates.install();
+        if ((await askOnce(updates, installQuestion(state.version), ask)) === 0) await updates.install();
     }
     return null;
+}
+
+/** The updaters whose install question is open: one box at a time for each. */
+const asking = new WeakSet<object>();
+
+/**
+ * Asks the install question unless it is already open for this updater, as when the key is pressed again while the box
+ * waits; that press asks nothing and answers null, which installs nothing.
+ */
+async function askOnce(updates: object, question: ReturnType<typeof installQuestion>, ask: (question: ReturnType<typeof installQuestion>) => Promise<number>): Promise<number | null> {
+    if (asking.has(updates)) return null;
+    asking.add(updates);
+    try {
+        return await ask(question);
+    } finally {
+        asking.delete(updates);
+    }
 }
 
 /** Why a check failed, by the kind of failure; the error's own text is never shown or logged. */
