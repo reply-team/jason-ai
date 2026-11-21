@@ -775,17 +775,27 @@ function givenBackAfterFailure(before: Chat, after: Chat): Chat {
 /** What is typed in the box. */
 export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text });
 
+/** The single quotes PowerShell reads: the plain one and the typographic ones, U+2018 to U+201B. */
+const singleQuotes = /['\u2018\u2019\u201a\u201b]/;
+
+/** What double quotes do not keep as it is, in PowerShell or in Bash: `$`, a backtick, and a double quote of any kind. */
+const unsafeInDouble = /[$`"\u201c\u201d\u201e]/;
+
 /**
- * A path quoted so that a shell reads it back whole: on macOS and Linux, a path from the root, in single quotes, inside
- * which every sign is taken as it is, a quote written as one closed, escaped and opened again; on Windows in single
- * quotes as PowerShell, the system's shell, reads them, inside which no `$` or backtick is expanded, each quote of the
- * name doubled, the typographic ones among them, which PowerShell takes as a quote too. Double quotes would serve cmd,
- * but PowerShell expands `$` and a backtick inside them, and both are legal in a Windows name; no one form serves both.
+ * A path quoted so that a shell reads it back whole. On macOS and Linux, a path from the root: in single quotes, inside
+ * which every sign is taken as it is, a quote written as one closed, escaped and opened again. On Windows the path may
+ * meet PowerShell, the system's shell, or Git Bash, the shell of Claude Code there, and in neither do single quotes
+ * expand a `$` or a backtick, nor do they lose the backslashes of a UNC path, as Bash's double quotes do; so a name with
+ * no single quote goes in single quotes. A name with one, typographic ones among them, goes in double quotes, which both
+ * shells read back as it is while it holds no `$`, backtick or double quote and is not a UNC path. Beyond that, for a
+ * quote together with one of these, no form serves both: the quotes are doubled as PowerShell reads them, and Bash reads
+ * that name back wrong.
  */
-const quotedPath = (path: string): string =>
-    path.startsWith('/')
-        ? `'${path.split("'").join("'\\''")}'`
-        : `'${path.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&')}'`;
+function quotedPath(path: string): string {
+    if (path.startsWith('/')) return `'${path.split("'").join("'\\''")}'`;
+    if (singleQuotes.test(path) && !unsafeInDouble.test(path) && !path.startsWith('\\\\')) return `"${path}"`;
+    return `'${path.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&')}'`;
+}
 
 /**
  * The box's text with the paths of files dropped on it put in at the caret, or over the words selected, as a terminal
