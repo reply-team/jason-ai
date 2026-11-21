@@ -1126,24 +1126,25 @@ public class ReplyStubDirectSendTests
 
     /// <summary>
     /// A mailbox at a limit Reply counts — its daily limit of direct emails, or the account's active contacts for its
-    /// billing period — refuses an email at 429 under Reply's code, which reply-cli has no word of its own for and prints as
-    /// <c>rate_limited</c>, Reply's code and sentence carried and no wait named. An email that goes under no key names no
-    /// record of Reply's, and nothing is sent.
+    /// billing period — refuses an email at 429 under Reply's code, which reply-cli 0.22.0 prints as
+    /// <c>email.limit_reached</c>, its own sentence for the limit, which limit under <c>details.limit</c>, Reply's code
+    /// and sentence carried, and no wait named where Reply sent none. An email that goes under no key names no record of
+    /// Reply's, and nothing is sent.
     /// </summary>
     [Theory]
-    [InlineData("daily", "contact.dailyLimitReached")]
-    [InlineData("active_contacts", "contact.activeContactsLimitReached")]
-    public async Task A_mailbox_at_a_limit_reply_counts_refuses_the_email_as_reply_cli_prints_it(string limit, string replyCode)
+    [InlineData("daily", "contact.dailyLimitReached", "The mailbox reached its daily limit, so nothing was sent.")]
+    [InlineData("active_contacts", "contact.activeContactsLimitReached", "The account reached its active contacts limit for the billing period, so nothing was sent.")]
+    public async Task A_mailbox_at_a_limit_reply_counts_refuses_the_email_as_reply_cli_prints_it(string limit, string replyCode, string title)
     {
         using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: limit);
 
         var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
 
         var error = Error(said);
-        Assert.Equal((1, "rate_limited", 429, replyCode), (exit, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"]));
+        Assert.Equal((1, "email.limit_reached", 429, replyCode, title), (exit, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"], (string?)error["title"]));
         Assert.False(string.IsNullOrWhiteSpace((string?)error["detail"]));
         Assert.False(error.ContainsKey("retry_after"));
-        Assert.False(error.ContainsKey("details"));
+        Assert.Equal($$"""{"limit":"{{limit}}"}""", error["details"]!.ToJsonString());
         Assert.Empty(account.Sent);
         Assert.Empty(account.DirectSends);
     }
@@ -1166,11 +1167,39 @@ public class ReplyStubDirectSendTests
         var (again, againOut, _) = await account.RunAsync(Email("--message", "-", "--idempotency-key", Key), """{"subject":"Tuesday","body":"Hi"}""", Ct);
 
         var error = Error(said);
-        Assert.Equal((1, "rate_limited", 429, replyCode), (refused, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"]));
-        Assert.Equal("""{"reference":"email-1001","state":"failed"}""", error["details"]!.ToJsonString());
+        Assert.Equal((1, "email.limit_reached", 429, replyCode), (refused, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"]));
+        Assert.Equal($$"""{"limit":"{{limit}}","reference":"email-1001","state":"failed"}""", error["details"]!.ToJsonString());
         Assert.Equal((0, "failed", replyCode), (read, (string?)JsonNode.Parse(readOut)!["state"], (string?)JsonNode.Parse(readOut)!["failure_code"]));
         Assert.Equal((0, "email-1002", "sent"), (again, (string?)JsonNode.Parse(againOut)!["reference"], (string?)JsonNode.Parse(againOut)!["state"]));
         Assert.Single(account.Sent);
+    }
+
+    /// <summary>
+    /// A mailbox Reply says cannot send direct emails at all — its daily limit is 0, or its team's plan sends nothing — is
+    /// refused at 403 under <c>contact.emailAccountSendingDisabled</c>, which reply-cli 0.22.0 prints as
+    /// <c>email.sending_disabled</c> with its own sentence and hint, Reply's code and sentence carried and no wait named,
+    /// with a key or without one: no record of Reply's is named, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_mailbox_that_cannot_send_refuses_the_email_as_reply_cli_0_22_0_prints_it(bool keyed)
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: "sending_disabled");
+
+        var line = keyed ? Email("--message", "-", "--idempotency-key", Key) : Email("--message", "-");
+        var (exit, _, said) = await account.RunAsync(line, """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        var error = Error(said);
+        Assert.Equal(
+            (1, "email.sending_disabled", 403, "contact.emailAccountSendingDisabled", "The mailbox or its team cannot send direct emails now, so nothing was sent."),
+            (exit, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"], (string?)error["title"]));
+        Assert.Equal("Reply says the mailbox's daily limit is 0, or the team's plan does not send; no retry can help until that changes.", (string?)error["hint"]);
+        Assert.False(string.IsNullOrWhiteSpace((string?)error["detail"]));
+        Assert.False(error.ContainsKey("retry_after"));
+        Assert.False(error.ContainsKey("details"));
+        Assert.Empty(account.Sent);
+        Assert.Empty(account.DirectSends);
     }
 
     /// <summary>
@@ -1333,6 +1362,36 @@ public class ReplyStubDirectSendTests
         Assert.Equal((0, 0), (coded, plain));
         Assert.Equal("directSend.dispatchInterrupted", (string?)JsonNode.Parse(codedOut)!["failure_code"]);
         Assert.False(JsonNode.Parse(plainOut)!.AsObject().ContainsKey("failure_code"));
+    }
+
+    /// <summary>
+    /// A send's bounce is printed as reply-cli 0.22.0 prints it (src/operations/direct-sends.ts:42-48, :64): its members in
+    /// the order <c>direct_send_of</c> builds them, <c>bounced</c>, <c>bounce_type</c> and <c>bounced_at</c> last, each only
+    /// where Reply gave it in its shape — <c>bounced</c> as true or false, the kind and the moment as text or null — so a
+    /// <c>bounced</c> of another shape is left out while the kind beside it is printed, and a send Reply gave no member
+    /// for prints none.
+    /// </summary>
+    [Fact]
+    public async Task Direct_send_get_prints_a_bounce_as_reply_cli_0_22_0_prints_it()
+    {
+        using var account = new ReplyAccount()
+            .WithDirectSend("email-1001", "sent", sendAfter: "2026-11-03T14:00:00Z", sentAt: "2026-11-20T10:00:00Z", messageId: "<m1@example.com>", bounced: true, bounceType: "mailboxFull", bouncedAt: "2026-11-20T10:05:00Z")
+            .WithDirectSend("email-1002", "sent", bounced: JsonValue.Create("yes"), bounceType: "hard")
+            .WithDirectSend("email-1003", "sent");
+
+        var (_, bouncedOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1001"), Ct);
+        var (_, oddOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1002"), Ct);
+        var (_, plainOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1003"), Ct);
+
+        var printed = JsonNode.Parse(bouncedOut)!.AsObject();
+        var expected = JsonNode.Parse(
+            """{"reference":"email-1001","channel":"email","contact_id":1001,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":true,"bounce_type":"mailboxFull","bounced_at":"2026-11-20T10:05:00Z"}""")!.AsObject();
+        Assert.Equal(expected.Select(member => member.Key), printed.Select(member => member.Key));
+        Assert.True(JsonNode.DeepEquals(expected, printed), bouncedOut);
+        var odd = JsonNode.Parse(oddOut)!.AsObject();
+        Assert.Equal((false, "hard", true), (odd.ContainsKey("bounced"), (string?)odd["bounce_type"], odd.ContainsKey("bounced_at") && odd["bounced_at"] is null));
+        var plain = JsonNode.Parse(plainOut)!.AsObject();
+        Assert.All(["bounced", "bounce_type", "bounced_at"], name => Assert.False(plain.ContainsKey(name)));
     }
 
     /// <summary>

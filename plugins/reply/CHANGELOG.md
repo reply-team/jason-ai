@@ -3,6 +3,15 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.19.0
+
+- Needs reply-cli 0.22.0 or newer, the release that prints a mailbox's two limits on a direct email, its daily limit and
+  the account's active contacts for its billing period, by a code of their own, `email.limit_reached`, with which limit
+  under `details.limit`; a mailbox that cannot send direct emails at all as `email.sending_disabled`; and whether a send
+  bounced, its kind and its moment, on `reply direct-send get`. With an older reply-cli the reload refuses the program,
+  `executable_incompatible`, and the package is `unavailable` until reply-cli is updated (`npm install -g reply-cli`);
+  the other packages load as before. Nothing the package does with what reply-cli prints has changed.
+
 ## 0.18.0
 
 - `events.read` now reports a message the account itself sent, for example a step of a Reply sequence sent on its own

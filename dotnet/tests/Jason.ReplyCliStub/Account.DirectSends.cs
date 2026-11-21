@@ -327,6 +327,7 @@ internal static partial class Account
             return Refused("direct_send.not_found", $"Reply holds no direct send {reference}.", status: 404, replyCode: "directSend.notFound");
         }
 
+        // The members in the order reply-cli 0.22.0 builds them (src/operations/direct-sends.ts, `direct_send_of`).
         var record = new JsonObject
         {
             ["reference"] = Text(held, "reference"),
@@ -334,10 +335,6 @@ internal static partial class Account
             ["contact_id"] = held["contactId"]!.DeepClone(),
             ["state"] = Text(held, "state"),
             ["send_after"] = held["sendAfter"]?.DeepClone(),
-            ["sent_at"] = held["sentAt"]?.DeepClone(),
-            ["message_id"] = held["messageId"]?.DeepClone(),
-            ["failure_reason"] = held["failureReason"]?.DeepClone(),
-            ["cancelled_at"] = held["cancelledAt"]?.DeepClone(),
         };
 
         // The moment Reply expects to send a send waiting for its schedule, only where it gave one, and null in every
@@ -347,20 +344,14 @@ internal static partial class Account
             record["estimated_send_at"] = Text(held, "state") == "waitingForSchedule" ? held["estimatedSendAt"]?.DeepClone() : null;
         }
 
+        record["sent_at"] = held["sentAt"]?.DeepClone();
+        record["message_id"] = held["messageId"]?.DeepClone();
+        record["failure_reason"] = held["failureReason"]?.DeepClone();
+
         // Reply's own code for a failure, only where it gave one, as reply-cli passes it on.
         if (held["failureCode"] is { } code)
         {
             record["failure_code"] = code.DeepClone();
-        }
-
-        // Whether an email bounced, its kind and its moment, only where a test planted them: a reply-cli that prints them
-        // passes Reply's `bounced`, `bounceType` and `bouncedAt` on as `bounced`, `bounce_type` and `bounced_at`, and the
-        // release this stand-in answers as prints none of them.
-        if (held["bounced"] is { } bounced)
-        {
-            record["bounced"] = bounced.DeepClone();
-            record["bounce_type"] = held["bounceType"]?.DeepClone();
-            record["bounced_at"] = held["bouncedAt"]?.DeepClone();
         }
 
         // The message as it went, only where Reply kept that copy: a send it rendered names both.
@@ -368,6 +359,27 @@ internal static partial class Account
         {
             record["rendered_subject"] = subject.DeepClone();
             record["rendered_body"] = held["renderedBody"]?.DeepClone();
+        }
+
+        record["cancelled_at"] = held["cancelledAt"]?.DeepClone();
+
+        // Whether an email bounced, its kind and its moment, only where a test planted them, each as reply-cli 0.22.0
+        // passes Reply's `bounced`, `bounceType` and `bouncedAt` on (src/operations/direct-sends.ts, `bounce_of`): only in
+        // Reply's shape, `bounced` as true or false and the kind and the moment as text or null, and left out otherwise.
+        if (held["bounced"] is { } bounced)
+        {
+            if (bounced.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
+            {
+                record["bounced"] = bounced.DeepClone();
+            }
+
+            foreach (var (from, to) in new[] { ("bounceType", "bounce_type"), ("bouncedAt", "bounced_at") })
+            {
+                if (held.TryGetPropertyValue(from, out var value) && (value is null || value.GetValueKind() == System.Text.Json.JsonValueKind.String))
+                {
+                    record[to] = value?.DeepClone();
+                }
+            }
         }
 
         return Done(record);

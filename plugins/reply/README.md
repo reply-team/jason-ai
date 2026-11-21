@@ -77,8 +77,11 @@ trace, the key and the moment included.
   Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own:
   install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin`
   on the search path the runtime sees, as "A runtime that can find it" below says.
-- **Version 0.20.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.20.0 is the release with Live Data and the contact lists a search fills — `reply live-data preview`,
+- **Version 0.22.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.22.0 is the release that prints a mailbox's two limits on a direct email by a code of their own,
+  `email.limit_reached`, with which limit under `details.limit`, a mailbox that cannot send direct emails at all as
+  `email.sending_disabled`, and whether a send bounced, its kind and its moment, on `reply direct-send get`; 0.20.0 the
+  release with Live Data and the contact lists a search fills — `reply live-data preview`,
   `start`, `get`, `list`, `delete` and `filter-values`, and `reply contact-list create`, `delete` and `contacts` — which
   the audience family runs; 0.18.0 the one that names a cancel of a send Reply is sending, a cancel Reply could not confirm
   and a sending schedule that cannot time a send each by a code of its own, and passes on the moment Reply expects to

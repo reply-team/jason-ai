@@ -456,6 +456,36 @@ public class ReplyMessageStatusTests
     }
 
     /// <summary>
+    /// The bounced send exactly as reply-cli 0.22.0 prints it for <c>direct-send get</c> — its members in the order its
+    /// <c>direct_send_of</c> builds them, the three bounce members last, the kind as Reply's word, given as it came
+    /// (src/operations/direct-sends.ts:42-48 and :64, and the test "prints whether the email bounced" in
+    /// src/__tests__/operations/direct-sends.test.ts at v0.22.0) — is read by this package as a soft bounce, at its
+    /// moment, with Reply's word carried; and the same send printed as not bounced says false.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        """{"reference":"email-1001","channel":"email","contact_id":456,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":true,"bounce_type":"mailboxFull","bounced_at":"2026-11-20T10:05:00Z"}""",
+        true, "soft", "2026-11-20T10:05:00Z", "mailboxFull")]
+    [InlineData(
+        """{"reference":"email-1001","channel":"email","contact_id":456,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":true,"bounce_type":"hard","bounced_at":null}""",
+        true, "hard", null, "hard")]
+    [InlineData(
+        """{"reference":"email-1001","channel":"email","contact_id":456,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":false,"bounce_type":null,"bounced_at":null}""",
+        false, null, null, null)]
+    public async Task A_bounced_send_as_reply_cli_0_22_0_prints_it_is_read_as_a_bounce(string printed, bool bounced, string? bounce, string? at, string? word)
+    {
+        using var account = new ReplyAccount().Prints("direct-send get", 0, printed);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+
+        Assert.Equal(
+            ("sent", (bool?)bounced, bounce, at, word),
+            ((string?)read["state"], (bool?)read["bounced"], (string?)read["bounce"], (string?)read["bounced_at"], (string?)read["bounce_code"]));
+    }
+
+    /// <summary>
     /// A send Reply says did not bounce says false and nothing more, whatever else the record holds; a reply-cli that prints
     /// none of the members, and a member in a shape the document does not take, say null: the read cannot tell, which is
     /// never told as false.

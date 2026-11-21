@@ -1207,12 +1207,14 @@ internal static partial class Account
         string? replyCode = null,
         string? detail = null,
         JsonObject? ids = null,
-        JsonObject? details = null) =>
-        new(exit, null, ErrorOf(code, title, status, replyCode, detail, ids, details));
+        JsonObject? details = null,
+        string? hint = null) =>
+        new(exit, null, ErrorOf(code, title, status, replyCode, detail, ids, details, hint));
 
     /// <summary>reply-cli's <c>--json</c> error envelope, its empty members left out as reply-cli leaves them out.</summary>
     private static JsonObject ErrorOf(
-        string code, string title, int? status, string? replyCode, string? detail, JsonObject? ids, JsonObject? details)
+        string code, string title, int? status, string? replyCode, string? detail, JsonObject? ids, JsonObject? details,
+        string? hint = null)
     {
         var error = new JsonObject { ["code"] = code, ["title"] = title };
         if (status is { } answered)
@@ -1228,6 +1230,11 @@ internal static partial class Account
         if (detail is not null)
         {
             error["detail"] = detail;
+        }
+
+        if (hint is not null)
+        {
+            error["hint"] = hint;
         }
 
         if (ids is { Count: > 0 })
