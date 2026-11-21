@@ -248,9 +248,11 @@ public static class AutostartRegistrars
         var made = Missing(Path.GetDirectoryName(path));
         var before = Existing(path);
 
-        Write(path, artifact, encoding);
+        // The write is inside: one that made the directories and then could not write the document (permissions, a full
+        // disk) takes them away again too.
         try
         {
+            Write(path, artifact, encoding);
             ask();
         }
         catch
@@ -302,7 +304,13 @@ public static class AutostartRegistrars
                 return;
             }
 
-            File.Delete(path);
+            // A write that never made the document leaves nothing to delete, and a name the file system refused would
+            // refuse the delete too, before the directories it made are taken away.
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
             foreach (var directory in made)
             {
                 if (!Directory.Exists(directory) || Directory.EnumerateFileSystemEntries(directory).Any())

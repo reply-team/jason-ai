@@ -75,6 +75,27 @@ public sealed class AutostartRefusalTests : IDisposable
     }
 
     /// <summary>
+    /// A write that made the directories and then could not write the document, here a name no file system takes, never
+    /// reaches the tool and leaves none of them.
+    /// </summary>
+    [Fact]
+    public void A_write_that_fails_after_making_the_directories_leaves_none()
+    {
+        var home = Path.Combine(_root, "home");
+        Directory.CreateDirectory(home);
+        var unit = Path.Combine(home, ".config", "systemd", "user", new string('j', 300) + ".service");
+        var asked = 0;
+
+        var refused = Assert.Throws<AutostartException>(
+            () => AutostartRegistrars.WriteThen(unit, "[Service]\n", new UTF8Encoding(false), () => asked++));
+
+        Assert.Equal(AutostartCodes.Refused, refused.Code);
+        Assert.Contains("could not be written", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(0, asked);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(home));
+    }
+
+    /// <summary>
     /// A parent that was there before stays, and so does one somebody else put a file in while the tool was asked: the
     /// put-back stops at the first directory that is not empty.
     /// </summary>
