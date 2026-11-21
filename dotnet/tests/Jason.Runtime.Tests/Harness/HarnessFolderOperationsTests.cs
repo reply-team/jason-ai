@@ -277,6 +277,28 @@ public sealed class HarnessFolderOperationsTests
         await AssertUnmovedAsync(api, leads, disk);
     }
 
+    /// <summary>
+    /// A move whose leaf in the new project is taken by a folder another campaign's marker names — one a person brought
+    /// over, or a create that failed after its folder stood — is refused naming that folder, with nothing changed. The leaf
+    /// is the campaign's own, known from its creation, so no id is planted to reach it.
+    /// </summary>
+    [Fact]
+    public async Task A_move_whose_leaf_is_taken_in_the_new_project_is_refused_naming_it_with_nothing_changed()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var (leads, beta) = await TwoProjectsAsync(api);
+        var taken = Path.Combine(beta.FolderPath!, "campaigns", TestHarness.LeafOf(leads));
+        Directory.CreateDirectory(Path.Combine(taken, ".jason"));
+        File.WriteAllText(Path.Combine(taken, ".jason", "marker.json"), """{"marker_version":1,"kind":"campaign","id":"cmp_01K7QN000000000000000GHOST"}""");
+        var disk = Snapshot(RootOf(api));
+
+        var refused = await api.PostErrorAsync(Operations.CampaignUpdate, new { campaign_id = leads.Id, project_id = beta.Id }, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal(("harness_folder_taken", false), (refused.Code, refused.Retryable));
+        Assert.Contains(taken, refused.Message, StringComparison.Ordinal);
+        await AssertUnmovedAsync(api, leads, disk);
+    }
+
     [Fact]
     [Critical(Family.X2, "a move the disk refuses leaves the database and the disk as they were")]
     public async Task A_move_into_a_project_whose_campaigns_are_blocked_by_a_file_is_refused_with_nothing_changed()
