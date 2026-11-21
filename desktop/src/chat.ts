@@ -16,7 +16,8 @@
  * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn and kept on its record:
  * Full access where the record names none, which every new chat starts in with no box, and Ask first, Auto-edit or Plan
  * only once the person chose one from the menu, through a restart and Start fresh alike. A turn the mode cannot apply to
- * (Full access on Codex, on a Claude Code below its floor or sent from a browser tab; Auto-edit on Codex) runs in Ask
+ * (Full access while this version does not offer it, on a Claude Code below its floor or sent from a browser tab;
+ * Auto-edit on Codex) runs in Ask
  * first, the chat says why once, and the record keeps the mode. Leaving Full access stops the turn that runs in it. The
  * first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes back to Ask
  * first. Every turn of a conversation runs in its own folder, `<data>/desktop/chats/<id>/` beside the shared chat folder,
@@ -979,9 +980,9 @@ export class Chat {
 
     /**
      * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to,
-     * kept on its record. Full access is given with no confirmation, and refused where it cannot apply: on Codex, on a
-     * host that does not drive the chat, and on a Claude Code older than its floor or whose version cannot be read, read
-     * now as a turn reads it. Auto-edit is refused on Codex and on a host that does not drive the chat. A change to a
+     * kept on its record. Full access is given with no confirmation, Codex's with no floor, and refused where it cannot
+     * apply: while this version does not offer it, on a host that does not drive the chat, and on a Claude Code older than
+     * its floor or whose version cannot be read, read now as a turn reads it. Auto-edit is refused on Codex and on a host that does not drive the chat. A change to a
      * narrower mode stops a turn that runs in a wider one.
      */
     async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
