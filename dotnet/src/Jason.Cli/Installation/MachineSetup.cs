@@ -211,6 +211,17 @@ public static class MachineSetup
             }).ConfigureAwait(false);
         }
 
+        // A logon start registered in Homebrew's formula's time names the formula's link, or its keg: while the formula is
+        // linked it would start that older Jason at every logon, so it moves to this jason, as a retired install's does.
+        if (places.Platform is not SetupSystem.Windows)
+        {
+            await run.Step("Taking the logon start over from Homebrew's formula", () =>
+            {
+                run.RepointFormula();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
         // An AppImage's copy is per version: a logon start registered from another version's copy moves to this one, as the
         // application's own start moves it, since a terminal's update finishes here before the application starts again.
         if (places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable))
@@ -911,6 +922,49 @@ public static class MachineSetup
                 && string.Equals(Path.GetDirectoryName(Path.GetDirectoryName(named)), bundles, StringComparison.Ordinal))
             {
                 Reregister(named);
+            }
+        }
+
+        /// <summary>
+        /// macOS and Linux, Homebrew's older formula linked beside this jason: the logon registration, where it names the
+        /// formula's link (<c>&lt;prefix&gt;/bin/jason</c>, what <c>jason runtime autostart enable</c> registered under the
+        /// formula) or its keg's jason, registered again naming this jason, by the rule <see cref="Reregister"/> keeps. One
+        /// naming anything else is left; once the formula is gone nothing here moves it, since the link it names is then the
+        /// cask's, which leads to this jason.
+        /// </summary>
+        public void RepointFormula()
+        {
+            if ((Formula ?? HomebrewFormula.Linked(env)) is not { } formula)
+            {
+                return;
+            }
+
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            if ((string.Equals(named, Path.GetFullPath(formula.Link), PathCase) || string.Equals(named, Path.GetFullPath(formula.Owner.Executable), PathCase))
+                && Reregister(named))
+            {
+                Done.Add($"The logon start named Homebrew's formula jason {formula.Version} at {named}, so it would have started that older Jason at every logon; it names this jason now.");
             }
         }
 
