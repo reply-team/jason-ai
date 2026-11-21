@@ -22,7 +22,7 @@ import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath
 import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
-const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
+const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 const values = (args: string[], flag: string) => {
     const rest = args.slice(args.indexOf(flag) + 1);
@@ -118,30 +118,40 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
 
 test('Full access starts Claude Code in its own bypass mode, named, every deny rule kept, the PowerShell tool kept, and its settings in the turn\'s own file', () => {
     const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
-    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile });
+    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile, version: fullAccessFloor });
     assert.equal(after(args, '--permission-mode'), 'bypassPermissions');
     assert.equal(after(args, '--settings'), settingsFile);
     const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell' && rule !== 'Bash(jason -*)');
     assert.deepEqual(others(values(args, '--disallowedTools')), others(values(claudeArguments(base), '--disallowedTools')));
     assert.ok(!values(args, '--disallowedTools').includes('Bash(jason -*)'), 'the hook rides the turn, and a jason that starts with an option is none of its three kinds');
     assert.ok(!values(args, '--disallowedTools').includes('PowerShell') && values(args, '--disallowedTools').includes('Monitor'));
-    for (const kept of ['--strict-mcp-config', '--permission-prompt-tool']) assert.ok(args.includes(kept), kept);
-    assert.equal(after(args, '--setting-sources'), 'project');
+    for (const kept of ['--permission-prompt-tool', '--mcp-config']) assert.ok(args.includes(kept), kept);
+    // The person's own configuration loads in Full access, as in a terminal's session in Claude Code's bypass mode.
+    for (const left of ['--strict-mcp-config', '--setting-sources', '--no-chrome']) assert.ok(!args.includes(left), left);
     assert.ok(!args.includes('--dangerously-skip-permissions'));
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the settings of a turn the hook rides: no block of reads outside the folders, no project file can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and a page asked about outside Full access', () => {
+test('the settings of a turn the hook rides: no block of reads outside the folders, no settings file of yours or a project\'s can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and outside Full access a page asked about and the server defences', () => {
     const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
+    // Ask first and Auto-edit are sealed as Plan only is, so their settings keep the person's servers, connectors, browser
+    // and skills' shell commands out; a Full access turn loads the person's own configuration.
     for (const mode of ['ask_first', 'auto_edit'] as const) {
-        assert.deepEqual(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), { permissions: { ask: ['WebFetch(domain:*)'] }, ...settings }, mode);
+        assert.deepEqual(
+            hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'),
+            {
+                ...settings,
+                permissions: { ask: ['WebFetch(domain:*)'] },
+                disableClaudeAiConnectors: true,
+                deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
+                disableSkillShellExecution: true,
+            },
+            mode,
+        );
     }
     assert.deepEqual(settings, {
-        disableSkillShellExecution: true,
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],
-        disableClaudeAiConnectors: true,
-        deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
         hooks: {
             PreToolUse: [
                 {
@@ -153,11 +163,26 @@ test('the settings of a turn the hook rides: no block of reads outside the folde
     });
 });
 
+test('the settings of a turn the hook rides set, as `env`, what the desktop decides of the turn\'s environment, in every mode the hook rides, and the file written for the turn carries it', (t) => {
+    const env = { PATH: '/b:/usr/bin', JASON_CHAT_TURN: '1', JASON_DATA_DIR: '', CLAUDE_CODE_SIMPLE: '' };
+    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+        const settings = hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret', { env }) as Record<string, unknown>;
+        assert.deepEqual(settings['env'], env, mode);
+        assert.deepEqual({ ...settings, env: undefined }, { ...hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), env: undefined }, `${mode}: nothing else changes`);
+    }
+    const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
+    t.after(() => rmSync(turns, { recursive: true, force: true }));
+    for (const mode of ['full_access', 'ask_first'] as const) {
+        const file = writeTurnSettings(turns, newTurnId(), 'http://127.0.0.1:1/hook', 's', mode, { env });
+        assert.deepEqual((JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)['env'], env, mode);
+    }
+});
+
 test('the turn\'s settings file sits beside its MCP file, readable by its user alone, and goes with it', (t) => {
     const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
     t.after(() => rmSync(turns, { recursive: true, force: true }));
     const id = newTurnId();
-    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', 's');
+    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', 's', 'jason_desktop_0123456789abcdef');
     const file = writeTurnSettings(turns, id, 'http://127.0.0.1:1/hook', 's');
     assert.equal(file, turnSettingsPath(turns, id));
     assert.match(file, /turn-[0-9a-f]{24}\.settings\.json$/);
@@ -765,10 +790,11 @@ test('Full access is offered, and keeps the PowerShell tool every other mode tak
     assert.deepEqual(fullAccessRemovedTools, ['Monitor']);
 });
 
-test('the settings of every turn, in every mode, turn off the shell commands a skill carries', () => {
-    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+test('every turn\'s settings but a Full access turn\'s turn off the shell commands a skill carries: the person\'s skills run theirs in Full access alone, as in a terminal', () => {
     assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
-    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true, mode);
+    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+    for (const mode of ['ask_first', 'auto_edit'] as const) assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true, mode);
+    assert.equal('disableSkillShellExecution' in hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 's'), false);
 });
 
 test('Plan only says the AI how it is left, the plan card included, and a go approved for another mode says why it was not sent', () => {

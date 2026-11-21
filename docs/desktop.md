@@ -545,9 +545,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
-  runs with your own settings. The chat runs without them in this version, but for a Codex chat in Full access, which
-  reads your config.toml as Codex in a terminal does. Servers of the folder Open in opens, of a
-  plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
+  runs with your own settings, and in the chat in Full access, which loads them on either program as a terminal
+  does; the chat's other modes run without them, and so does a turn on a provider's key, which runs with Jason
+  Desktop's own folder for the program. Servers of the folder Open in opens, of a plugin, and claude.ai connectors or
+  ChatGPT apps are not listed here and work there all the same.
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
   roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
   answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
@@ -643,8 +644,23 @@ Claude Code.
   and in Ask first and Auto-edit on a Claude Code older than 2.1.322, carries
   `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders the chat
   works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
-  From 2.1.285 on a turn also passes `--no-chrome`, the first version whose changelog names the flag; below it the
-  turn's settings alone keep the browser out.
+  From 2.1.285 on a turn that does not run in Full access also passes `--no-chrome`, the first version whose changelog
+  names the flag; below it that turn's settings alone keep the browser out.
+- **In Full access on your own Claude Code sign-in the chat loads your own Claude Code configuration: your skills,
+  hooks, MCP servers and rules; on a provider's key set in Jason, and in the other modes, it does not.** A turn that runs in Full access uses them as a terminal does, with your claude.ai
+  connectors, the browser integration and the commands your skills run. The chat names Full access to Claude Code every
+  time, so your `defaultMode` never decides the mode; your deny and ask rules still work, an ask being a card, and your
+  hooks run beside Jason's check, which still sees every tool the AI asks for; a hook of yours that rewrites a tool's
+  input is your configuration acting. Your hooks run in a Full access turn even where your `disableAllHooks` switches
+  them off, since Jason's check is one of them, and an HTTP hook of yours runs there only where your own
+  `allowedHttpHookUrls` names its address. A hook or a rule that a Full access turn leaves in your Claude Code
+  configuration acts in every later Full access turn, and in your own terminal. A PATH set under `env` in your own
+  Claude Code settings does not apply in the chat; the chat runs with the PATH Jason Desktop started with, Jason's own
+  folder first. Nor does a value there of another variable Jason Desktop sets for the turn; your other variables there
+  apply. Your configuration comes from where your own Claude Code keeps it: Jason puts the chat's own folder back as it placed it before each turn, a `.mcp.json` there included,
+  and touches no other. A turn of a Full access chat that Jason starts in Ask first (see Full access) loads none of it,
+  and neither does a Full access turn on a provider's key set in Jason: it runs sealed as the other modes do, with Jason
+  Desktop's own Claude Code folder.
 - **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn outside Full access leaves your
   `config.toml` unread (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that
   cannot be read, the turn is refused before Codex starts, with a sentence that says to update Codex. Outside Full
@@ -653,7 +669,7 @@ Claude Code.
   it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which every
   Codex turn turns off; its sign-in is still used. A Full access turn reads your `config.toml`, its MCP servers,
   providers and profiles with it; the connectors stay off and the search stays on the cached index, both set for the
-  run.
+  run. A turn on a provider's key reads Jason Desktop's own Codex folder in its place, so none of yours.
 - **On Windows, a read-only Codex turn needs its elevated sandbox.** Every such turn names it
   (`windows.sandbox="elevated"`), since a command in Codex's other Windows sandbox can read the runtime's run file, and
   with it the token that lets a program act as you through Jason's API. A Full access turn runs in no sandbox, names
@@ -958,8 +974,9 @@ and then is not run, and the turn goes on; one line under its title says that Cl
 program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
 can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
 Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
-here follows its campaign's send mode; the AI approves when you tell it to." None of your own MCP servers or connectors
-reaches a turn. A folder an earlier version gave a chat in Full access is moved aside when Jason starts; the chat says
+here follows its campaign's send mode; the AI approves when you tell it to." A turn in Full access uses your own Claude
+Code configuration, and a turn in any other mode does not (see Hosts); Jason's check does not see the commands a skill
+of yours runs from its `!` lines, which Claude Code runs itself. A folder an earlier version gave a chat in Full access is moved aside when Jason starts; the chat says
 where it is, with an Open folder button, and Jason removes it after seven days.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
@@ -1099,11 +1116,12 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A
   path that begins with `~` or is spelled in a way the system would read differently is a card too, but from 2.1.322
   on a path that begins with your home folder's `~`, and for a read one spelled differently, is read where it leads.
-- **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
-  What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
-  input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`, the data directory). Full access
-  runs it, and refuses one whose input names what Full access refuses. "Allow for this chat" is never offered for it.
+- **A tool of an MCP server of yours runs in Full access, the one mode your servers reach.** Full access refuses one
+  whose input names what Full access refuses. In the other modes none reaches a turn; the fence stands anyway: such a
+  tool is a card each time, "Use one of your own tools", with the server and the tool, and the input exactly as the host
+  would send it, never cut: an input too long to show whole is refused, and so is one any of whose texts would be
+  refused as a command (in Plan only a verb of the deny list, `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`,
+  the data directory). "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
   pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
@@ -1364,8 +1382,8 @@ version's demo made (see [the demo](#the-demo)) are not your data: the removal t
 
 ## What is not here
 
-Managing Reply accounts beyond connecting and reconnecting one, your own tools in a Claude Code chat, a marketplace
-and plugins in frames, and a Linux build for arm64 are not here. A Claude Code turn loads none of your MCP servers,
-claude.ai connectors or browser, and a Codex turn outside Full access does not read your `config.toml`, so the MCP
-servers it names are not loaded either; a Codex turn in Full access reads it, as Codex in a terminal does. Everything in this
+Managing Reply accounts beyond connecting and reconnecting one, a marketplace and plugins in frames, and a Linux build
+for arm64 are not here. Outside Full access a Claude Code turn loads none of your own configuration, and a Codex turn
+does not read your `config.toml`, so the MCP servers it names are not loaded either; in Full access a turn on either
+loads yours, as in a terminal, except a turn on a provider's key. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

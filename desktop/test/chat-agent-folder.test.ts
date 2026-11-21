@@ -1,6 +1,7 @@
 // The chat folder's agent settings, which the desktop owns at the top: before each turn `.claude/` and `.agents/` hold
 // only the skills the desktop recorded, outside the chat folder, as placed; the memory files the desktop does not write
-// are gone; nothing below the top is looked at; and nothing outside the chat folder is ever deleted or written.
+// and a `.mcp.json` are gone; nothing below the top is looked at; and nothing outside the chat folder is ever deleted or
+// written, the person's own `.claude` anywhere else among it.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -8,7 +9,7 @@ import { existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, r
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, copyOwn, ownAgentFolder, realSkillsFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
+import { AgentFolderUnowned, afterSkillsDeploy, beforeSkillsDeploy, copyOwn, ownAgentFolder, ownConversationFolder, realSkillsFolder, recordReplySkills, skillsFolders, skillsRecordFile } from '../src/chat-agent-folder.ts';
 import { deployReplySkills } from '../src/reply-skills.ts';
 import { desktopPaths } from '../src/paths.ts';
 
@@ -43,6 +44,40 @@ test('a planted settings file, agent, command or local memory file, and .codex a
     assert.deepEqual(readdirSync(join(chat, '.claude')), []);
     assert.deepEqual(readdirSync(join(chat, '.agents')), []);
     assert.deepEqual(readdirSync(chat).sort(), ['.agents', '.claude', 'notes.md']);
+});
+
+test('a .mcp.json at the top of the turn\'s folder is removed before the turn, in the chat folder and in a conversation\'s own; one below the top stays', (t) => {
+    const { chat, records, root } = folders(t);
+    const servers = '{"mcpServers":{"jason_desktop":{"type":"http","url":"http://127.0.0.1:1/mcp"}}}';
+    put(join(chat, '.mcp.json'), servers);
+    put(join(chat, 'notes', '.mcp.json'), servers);
+    ownAgentFolder(chat, records);
+    assert.equal(existsSync(join(chat, '.mcp.json')), false);
+    assert.ok(existsSync(join(chat, 'notes', '.mcp.json')), 'nothing below the top is looked at');
+    const chats = join(root, 'chats');
+    const own = join(chats, 'c1');
+    put(join(own, '.mcp.json'), servers);
+    ownConversationFolder(chats, own, chat, records);
+    assert.equal(existsSync(join(own, '.mcp.json')), false);
+});
+
+test('the person\'s own .claude, .mcp.json and memory file outside the turn\'s folder are never touched: there their configuration enters a turn', (t) => {
+    const { chat, records, root } = folders(t);
+    // Above the chat folder, as a home folder is, and in a campaign's folder beside it: none of them is the desktop's.
+    const theirs = [
+        join(root, '.claude', 'settings.json'),
+        join(root, '.claude', 'skills', 'mine', 'SKILL.md'),
+        join(root, '.claude', 'agents', 'helper.md'),
+        join(root, '.mcp.json'),
+        join(root, 'CLAUDE.local.md'),
+        join(root, 'campaign', '.claude', 'commands', 'go.md'),
+        join(root, 'campaign', '.mcp.json'),
+    ];
+    for (const file of theirs) put(file, 'theirs');
+    const chats = join(root, 'chats');
+    ownAgentFolder(chat, records);
+    ownConversationFolder(chats, join(chats, 'c1'), chat, records);
+    for (const file of theirs) assert.equal(readFileSync(file, 'utf8'), 'theirs', file);
 });
 
 test('the skills the desktop\'s records name with their bytes stay in both skills folders; a record in the chat folder is never read', (t) => {

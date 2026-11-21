@@ -817,8 +817,10 @@ const ownServersShown = 5;
 
 /**
  * The one line under Claude Code or Codex naming the person's own MCP servers, as the desktop read them from that
- * program's own settings: the first five in the file's order, then how many more. Nothing for a host with none, a host
- * not found, or a file the desktop could not read. The names are the person's own text, drawn as text and nothing else.
+ * program's own settings: the first five in the file's order, then how many more, and where they work: in the chat in
+ * Full access, the one mode whose turns load the person's own configuration on either program, and when Jason is opened
+ * in that program from Open in. Nothing for a host with none, a host not found, or a file the desktop could not read.
+ * The names are the person's own text, drawn as text and nothing else.
  */
 export function ownServersLine(host: DesktopHost): string | null {
     const names = Array.isArray(host.ownServers) ? host.ownServers : [];

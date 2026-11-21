@@ -168,6 +168,8 @@ test('a turn with nothing to ask starts Claude Code in the conversation\'s own f
     assert.ok(host.args.every((arg) => !arg.includes(words)), 'the words are never on the command line');
     assert.ok(same(host.cwd, join(r.b.paths.chats, r.chat.idOf('c1') as string)), `started in ${host.cwd}`);
     for (const flag of ['-p', '--strict-mcp-config', '--permission-prompt-tool', '--mcp-config', '--setting-sources', '--settings', '--allowedTools', '--disallowedTools']) assert.ok(host.args.includes(flag), flag);
+    // An Ask first turn loads none of the person's own Claude Code configuration: only a turn that runs in Full access does.
+    assert.equal(host.args[host.args.indexOf('--setting-sources') + 1], 'project');
     assert.ok(!host.args.includes('--bare'));
     assert.ok(!host.args.includes('--resume'), 'a first turn resumes nothing');
     assert.ok(!host.args.includes('--add-dir'), 'a turn with no campaign adds no folder');
@@ -674,7 +676,7 @@ test('a turn refused on a held Claude Code keeps the chat\'s session, and the tu
     assert.deepEqual(r.started.map((each) => each.resumed), [false, true]);
 });
 
-test('a Claude Code turn on a host that knows --no-chrome carries it', async (t) => {
+test('a Claude Code turn that does not run in Full access carries --no-chrome on a host that knows it', async (t) => {
     const r = rig(t);
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
     assert.ok(r.hosts()[0]?.args.includes('--no-chrome'), 'the stand-in says a version above the one that added it');
