@@ -8,7 +8,7 @@ import { begin, factsOf, placeGates } from './conversation-acts';
 import { rowItems, type MenuItem } from './conversation-items';
 import { setVariable } from './html';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
-import { openFolder } from './open-folder';
+import { openFolder, openSession } from './open-folder';
 import { closeRowMenu, focusRow, rowDrawn, rowElement, rowMenu } from './recent';
 import { openRow } from './side';
 import { conversations, here } from './state';
@@ -100,9 +100,10 @@ export function RowMenu() {
         // The focus goes back to the row, where the act shows nothing that takes it: never to the page itself.
         focusRow(row);
         if (item.kind === 'open') openRow(row);
-        else if (item.kind === 'folder') {
+        else if (item.kind === 'folder' || item.kind === 'session') {
             const campaign = conversations.value.find((each) => each.id === row)?.campaignId ?? null;
-            if (campaign !== null) void openFolder(campaign);
+            if (campaign !== null)
+                void (item.kind === 'folder' ? openFolder(campaign) : openSession(campaign, item.host));
         } else if (item.kind === 'move' && agent) setDialog({ row, agent, kind: 'move', move: item.move });
         else if (item.kind === 'archive' && agent) setDialog({ row, agent, kind: 'archive' });
         else if (item.kind === 'rename' || item.kind === 'fresh' || item.kind === 'remove')

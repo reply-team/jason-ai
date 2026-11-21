@@ -292,8 +292,11 @@ conversation, and an approval or a question opening Needs you. A line carries no
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. An agent's header holds in **…** the agent's folder in the file
-manager, named as Open in names that place (the menu on the agent's row under **Recent** holds it right after **Open**),
-except in a tab, then its conversation's acts:
+manager, named as Open in names that place, and after it **Open Claude Code in terminal** (or **Open Codex in
+terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat is set to use
+where Open in found it, else the first found, Claude Code before Codex, one item even where both are found, none where
+neither is, none in the demo, and it leaves the window's Open in where it was. The menu on the agent's row under
+**Recent** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts:
 **Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own

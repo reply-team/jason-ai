@@ -402,6 +402,8 @@ export const en = {
     'modes.system.note': 'An agent may set its own; it is shown under its Settings tab.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
+    'agent.openHost': 'Open {host} in terminal',
+    'agent.openHostTitle': "Opens a new {host} session in a terminal at this agent's folder",
     'agent.kind.sequence': 'Sequence',
     'agent.kind.adaptive': 'Adaptive',
     'agent.kind.paths': 'Paths',

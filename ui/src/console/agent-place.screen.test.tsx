@@ -539,6 +539,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
             place === 'window'
                 ? [
                       ['Open in File manager', false],
+                      ['Open Claude Code in terminal', false],
                       ['Rename conversation', true],
                       ['Start conversation fresh', true],
                       ['Remove conversation', true],
@@ -655,6 +656,21 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
+describe('An archived agent’s “…”', () => {
+    it('keeps the host in a terminal beside its folder', async () => {
+        const { desktop } = await renderAt('window', '#/campaigns/cmp_4/chat');
+        const header = await headOf('Winter');
+        await waitFor(() => expect(within(header).getByText('Archived')).toBeTruthy());
+        fireEvent.click(within(head()!).getByRole('button', { name: "More for this agent's conversation" }));
+        fireEvent.click(within(head()!).getByRole('menuitem', { name: 'Open Claude Code in terminal' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['claude', 'cmp_4', { keep: false }],
+            ]),
+        );
+    });
+});
+
 describe.each<Place>(['window', 'tab'])('An archived agent with no conversation, in the %s', (place) => {
     it('says on its Chat tab that it is archived, and draws nothing that could make a conversation', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_4/chat');
@@ -678,10 +694,14 @@ describe.each<Place>(['window', 'tab'])('An archived agent with no conversation,
             expect(within(shownPane).queryByRole('button')).toBeNull();
             expect(area.querySelector('[data-pane^="chat:"]')).toBeNull();
             expect(shownPane.querySelector('.sug, .crow, [aria-haspopup="menu"]')).toBeNull();
-            // Open in the file manager opens the agent's folder, which is there, and makes nothing.
+            // Open in the file manager opens the agent's folder, which is there, and the host in a terminal opens a
+            // session there: neither makes a conversation.
             expect(
                 [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some(
-                    (each) => !each.disabled && each.textContent !== 'Open in File manager',
+                    (each) =>
+                        !each.disabled &&
+                        each.textContent !== 'Open in File manager' &&
+                        each.textContent !== 'Open Claude Code in terminal',
                 ),
             ).toBe(false);
         };
@@ -771,10 +791,18 @@ describe('The conversation’s acts in the agent’s “…”', () => {
             within(menu)
                 .getAllByRole('menuitem')
                 .map((each) => each.textContent),
-        ).toEqual(['Open in File manager', 'Rename conversation', 'Start conversation fresh', 'Remove conversation']);
+        ).toEqual([
+            'Open in File manager',
+            'Open Claude Code in terminal',
+            'Rename conversation',
+            'Start conversation fresh',
+            'Remove conversation',
+        ]);
         expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Open in File manager' }));
         fireEvent.keyDown(menu, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Rename conversation' }));
+        expect(document.activeElement).toBe(
+            within(menu).getByRole('menuitem', { name: 'Open Claude Code in terminal' }),
+        );
         fireEvent.keyDown(menu, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more());
@@ -793,6 +821,31 @@ describe('The conversation’s acts in the agent’s “…”', () => {
         expect(within(head()!).queryByRole('menu')).toBeNull();
         // The window's Open in keeps the place it had: one agent's item never moves it.
         expect(desktop.openInKept.default).toBe('claude');
+    });
+
+    it('opens the host the chat is set to use in a terminal at the agent’s folder, silently, leaving Open in where it was', async () => {
+        const { desktop } = await renderAt('window');
+        desktop.openInKept.default = 'vscode';
+        await openSpring();
+        fireEvent.click(more());
+        const offered = within(head()!).getByRole('menuitem', { name: 'Open Claude Code in terminal' });
+        expect(offered.title).toBe("Opens a new Claude Code session in a terminal at this agent's folder");
+        // The chat is set to Codex now: the item follows it.
+        await flush(async () => {
+            chats.value = { ...chats.value, [spring]: { ...chats.value[spring]!, host: 'codex' } };
+        });
+        const codex = await waitFor(() => within(head()!).getByRole('menuitem', { name: 'Open Codex in terminal' }));
+        fireEvent.click(codex);
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['codex', 'cmp_1', { keep: false }],
+            ]),
+        );
+        expect(within(head()!).queryByRole('menu')).toBeNull();
+        expect(desktop.openInKept.default).toBe('vscode');
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(document.querySelector('.side [role="alert"]')).toBeNull();
+        expect(document.querySelector('.open-in-toast')).toBeNull();
     });
 
     it('in a tab the desktop opened holds Rename conversation alone', async () => {
