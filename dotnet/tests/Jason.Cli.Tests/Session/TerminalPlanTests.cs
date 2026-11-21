@@ -862,14 +862,16 @@ public sealed class TerminalPlanTests : IDisposable
 
     /// <summary>
     /// The program's path is judged full by Windows' own rules on every system, since it is a Windows path whichever system
-    /// reads the bytes: a drive letter and a separator, or a UNC start. A drive with no separator, a rooted path with no
-    /// drive and a relative one are none.
+    /// reads the bytes: a drive letter and a separator, or a UNC, device or NT start. A drive with no separator, a rooted
+    /// path with no drive and a relative one are none.
     /// </summary>
     [Theory]
     [InlineData(@"C:\Program Files\WindowsApps\wt.exe", true)]
     [InlineData(@"d:/Apps/wt.exe", true)]
     [InlineData(@"\\server\share\wt.exe", true)]
     [InlineData(@"\\?\C:\Apps\wt.exe", true)]
+    [InlineData(@"\\.\C:\Apps\wt.exe", true)]
+    [InlineData(@"\??\C:\x", true)]
     [InlineData(@"C:foo\wt.exe", false)]
     [InlineData(@"C:", false)]
     [InlineData(@"\Apps\wt.exe", false)]
