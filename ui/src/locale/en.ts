@@ -29,6 +29,8 @@ export const en = {
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
     'settings.notifications': 'Notifications',
+    'settings.update': 'Update',
+    'settings.update.newer': 'Jason Desktop {version} is available',
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',

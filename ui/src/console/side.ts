@@ -15,6 +15,7 @@ import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
 import { closeFilterMenu, closeRowMenu, recentView, rowMenu } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
+import { updateMark } from '../screens/settings/update-state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent and the one under it that makes a chat
 // about no agent, Search, Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More
@@ -190,6 +191,8 @@ export function sideView(): Html {
     };
     const full = mode.value === 'demo';
     const settings = pageOf('settings');
+    // One quiet mark on Settings while the desktop knows of a version it has not installed; no count.
+    const newer = updateMark();
     return html`${
             menu === null
                 ? null
@@ -306,6 +309,7 @@ export function sideView(): Html {
                 : html`<div class="sfoot">
                       <button class="item" type="button" ${marked('settings')} ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
+                          ${newer === null ? null : html`<span class="dot w" role="img" aria-label="${t('settings.update.newer', { version: newer })}" title="${t('settings.update.newer', { version: newer })}"></span>`}
                       </button>
                   </div>`
         }`;
