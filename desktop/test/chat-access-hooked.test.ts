@@ -433,6 +433,26 @@ test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell 
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
 });
 
+test('a brace group outside quotes is read over the words it expands into: a hidden option, a hidden folder, a hidden program and a hidden --files0-from are refused as written out; a group of plain names reads as before', () => {
+    for (const scope of scopes) {
+        for (const [command, sentence] of [
+            ['grep {-r,} api_key ~', searchRefusal],
+            ['ls {-R,} ~', searchRefusal],
+            ['grep -r api_key {~,}', searchRefusal],
+            ['{ls,-R} ~', searchRefusal],
+            ['du -sh {/,x}', searchRefusal],
+            ['sort {--files0-from=-,}', filesFromRefusal],
+            ['wc {--files0-from=list,}', filesFromRefusal],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['ls ~/{Desktop,Downloads}', 'cat ~/Desktop/{a,b}.txt', 'echo {a,b}']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
 test('a command that removes or descends from a folder that holds the data directory is refused with the walk\'s sentence, and another program run in such a folder with the sentence that says to run it in a narrower folder or name the folder it should work on; a plain form there runs', () => {
     for (const scope of scopes) {
         for (const command of ['du -sh ~', 'rm -rf ~/', 'rm -r ~', 'cd ~ && rm -rf .', 'cd / && grep -r api_key .']) {

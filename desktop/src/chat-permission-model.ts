@@ -1606,9 +1606,25 @@ function wordNamesRoot(text: string, cwd: string, reading: WalkReading, literal:
     return !literal && words.some((word) => word.split(/[=@,]/).some((piece) => builtRoot(piece, at)));
 }
 
-/** True when a word the walk reads is one the shell builds and no home spelling: a variable, a substitution, an expression. */
+/**
+ * True when a word the walk reads is one the shell builds and no home spelling: a variable, a substitution, an
+ * expression, and a brace group with more expansions than are read (`braceLimit`).
+ */
 function unknownWord(word: WrittenWord, scope: ChatScope): boolean {
-    return word.built && /[$`(]/.test(homeExpanded(word.text, scope));
+    return (word.built && /[$`(]/.test(homeExpanded(word.text, scope))) || (word.braced === true && braces(word.text) === null);
+}
+
+/**
+ * A command's words with each brace group outside quotes expanded into the words the shell makes of it (`braces`), an
+ * empty one dropped as the shell drops it; a word with more expansions than are read stays as written (`unknownWord`).
+ */
+function expandedWords(words: readonly WrittenWord[]): WrittenWord[] {
+    return words.flatMap((word) => {
+        if (word.braced !== true) return [word];
+        const expansions = braces(word.text);
+        if (expansions === null || (expansions.length === 1 && expansions[0] === word.text)) return [word];
+        return expansions.filter((text) => text !== '').map((text) => ({ ...word, text, braced: false }));
+    });
 }
 
 /** A command as the walk reads it: its words, their texts, its program and the words after it. */
@@ -1642,11 +1658,13 @@ function runsText(each: ReadCommand, powershell: boolean): boolean {
 }
 
 /**
- * The commands of a text, each with its program, and whether none of them may run a text it is given (`runsText`): a
- * text with no shell, runner or `eval` in it runs none of its quoted words and none of its bodies, so they are data.
+ * The commands of a text, each with its program and its brace groups expanded (`expandedWords`), and whether none of
+ * them may run a text it is given (`runsText`): a text with no shell, runner or `eval` in it runs none of its quoted
+ * words and none of its bodies, so they are data.
  */
 function readCommands(text: string, reading: ShellReading): { commands: ReadCommand[]; pure: boolean } {
-    const commands = writtenCommands(text, reading.powershell).map((command) => {
+    const commands = writtenCommands(text, reading.powershell).map((written) => {
+        const command = { ...written, words: expandedWords(written.words) };
         const texts = command.words.map((each) => each.text);
         const { at, assigned } = programIndex(texts, reading.powershell);
         const word = texts[at];
