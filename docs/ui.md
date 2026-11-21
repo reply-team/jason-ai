@@ -400,7 +400,7 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   (`%LOCALAPPDATA%\Microsoft\WindowsApps`, where Windows keeps its alias; never one found on the search path), of
   version 1.18.2681.0 or later, the first that hands a new tab the environment of the start that ran `wt.exe`. The version
   is read from the package folder the alias names, without starting it. It runs as
-  `wt -w new new-tab --inheritEnvironment -d <folder> -- <host> <words>`, a new window at the folder, and `wt.exe` is
+  `wt -w new new-tab -d <folder> -- <host> <words>`, a new window at the folder, and `wt.exe` is
   started with the same environment the console host is: `JASON_DATA_DIR` and this `jason` first on `PATH`. Windows Terminal joins the words after
   `--` into one command line itself and splits its own arguments at every `;`, so each word is handed over in the form
   that join turns back into the word, and each `;` as `\;`: a folder or a brief with spaces, quotes, `;`, `$` or `^`

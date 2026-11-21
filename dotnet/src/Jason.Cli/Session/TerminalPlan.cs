@@ -185,9 +185,10 @@ public static class TerminalPlan
         switch (os)
         {
             case TerminalPlatform.Windows when IsWindowsTerminal(terminal.Program):
-                // The tab is asked to inherit the environment of wt's start, the one the console host's start is given
-                // (TerminalStartInfo.For), which is the default with a command line and is said here in so many words.
-                IReadOnlyList<string> opened = [terminal.Program, "-w", "new", "new-tab", "--inheritEnvironment", "-d", WindowsTerminalDelimited(folder), "--", .. host.Select(WindowsTerminalWord)];
+                // With a command line given, the tab inherits the environment of wt's start, the one the console host's
+                // start is given (TerminalStartInfo.For): Windows Terminal's default, measured on 1.24, and asked for by no
+                // flag, since a flag an older Terminal does not know is an error it shows while its start succeeds.
+                IReadOnlyList<string> opened = [terminal.Program, "-w", "new", "new-tab", "-d", WindowsTerminalDelimited(folder), "--", .. host.Select(WindowsTerminalWord)];
                 var fallback = terminal.Fallback is { } console ? Compose(os, console, folder, host, itemId, own) : null;
                 return new TerminalLaunch(terminal.Name, opened, folder, null, null, own is null ? null : Variables(os, own), fallback);
             case TerminalPlatform.Windows:

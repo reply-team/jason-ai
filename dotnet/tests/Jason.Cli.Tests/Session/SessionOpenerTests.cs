@@ -382,8 +382,8 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
 
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([wt, "-w", "new", "new-tab", "--inheritEnvironment", "-d", _run.CampaignFolder, "--", claude], launch.Argv.Take(9));
-        Assert.Equal(10, launch.Argv.Count);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", _run.CampaignFolder, "--", claude], launch.Argv.Take(8));
+        Assert.Equal(9, launch.Argv.Count);
         Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
         Assert.Equal(_run.WindowsVariables, launch.Variables);
         Assert.Equal("Windows Terminal", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);

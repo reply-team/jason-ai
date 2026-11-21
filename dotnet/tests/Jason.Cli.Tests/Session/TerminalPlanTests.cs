@@ -575,7 +575,7 @@ public sealed class TerminalPlanTests : IDisposable
         var launch = TerminalPlan.Compose(TerminalPlatform.Windows, found, "C:/Jason/campaigns/Spring launch", ["C:/Tools/claude.exe", "Go."], Item, own);
 
         Assert.Equal("Windows Terminal", launch.Terminal);
-        Assert.Equal([wt, "-w", "new", "new-tab", "--inheritEnvironment", "-d", "C:/Jason/campaigns/Spring launch", "--", "C:/Tools/claude.exe", "Go."], launch.Argv);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", "C:/Jason/campaigns/Spring launch", "--", "C:/Tools/claude.exe", "Go."], launch.Argv);
         Assert.Equal("C:/Jason/campaigns/Spring launch", launch.WorkingDirectory);
         Assert.Null(launch.Script);
         var fallback = launch.Fallback;
@@ -671,10 +671,10 @@ public sealed class TerminalPlanTests : IDisposable
         }
 
         var read = argv.Skip(1).Select(word => word.Replace("\\;", ";", StringComparison.Ordinal)).ToList();
-        Assert.Equal(["-w", "new", "new-tab", "--inheritEnvironment", "-d"], read.Take(5));
-        Assert.Equal("--", read[6]);
-        var line = string.Join(' ', read.Skip(7).Select(word => word.Contains(' ', StringComparison.Ordinal) ? "\"" + word + "\"" : word));
-        return (read[5], line);
+        Assert.Equal(["-w", "new", "new-tab", "-d"], read.Take(4));
+        Assert.Equal("--", read[5]);
+        var line = string.Join(' ', read.Skip(6).Select(word => word.Contains(' ', StringComparison.Ordinal) ? "\"" + word + "\"" : word));
+        return (read[4], line);
     }
 
     private static string[] CommandLineToArgv(string commandLine)
