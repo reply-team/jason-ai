@@ -187,25 +187,30 @@ public class AutostartTurnOffTests
         using var dir = new TempPaths();
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
         var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NOW")) };
-        var registrar = new LoadStarts(dir, registered);
+        // With no job registered the load's start loses the data directory's lock to the runtime that answers, as on a
+        // real Mac, and publishes nothing; a re-enable's unload stops launchd's runtime, and the load's publishes itself.
+        var registrar = new LoadStarts(dir, registered, startsNothing: !registered);
         var output = new StringWriter();
         var error = new StringWriter();
         var env = new CliEnvironment(output, error, dir.Paths, RuntimeVerbs.EchoesTheDescriptor(dir), null, processes, InstallPath: Installed, Autostart: registrar);
+        var loadWait = TimeSpan.FromSeconds(5);
         var waited = System.Diagnostics.Stopwatch.StartNew();
 
-        Assert.Equal(ExitCodes.Success, await RuntimeAutostartCommands.EnableAsync(env, human: false, Ct, TimeSpan.FromSeconds(30)));
+        Assert.Equal(ExitCodes.Success, await RuntimeAutostartCommands.EnableAsync(env, human: false, Ct, loadWait));
 
+        var answered = new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read()!.InstanceId;
+        waited.Stop();
         Assert.Empty(processes.Launches);
         Assert.Contains("The runtime runs now", error.ToString(), StringComparison.Ordinal);
         if (registered)
         {
-            // Waited past rt_LIVE for the load's runtime.
-            SpinWait.SpinUntil(() => new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read()?.InstanceId == "rt_LOAD", TimeSpan.FromSeconds(5));
-            Assert.Equal("rt_LOAD", new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read()!.InstanceId);
+            // Waited past rt_LIVE for the load's runtime, which had published itself when enable returned.
+            Assert.Equal("rt_LOAD", answered);
         }
         else
         {
-            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), $"enable waited {waited.Elapsed} for a load where a runtime answered and no job was registered");
+            Assert.Equal("rt_LIVE", answered);
+            Assert.True(waited.Elapsed < loadWait / 2, $"enable waited {waited.Elapsed} for a load where a runtime answered and no job was registered");
         }
     }
 
@@ -336,7 +341,8 @@ public class AutostartTurnOffTests
     }
 
     /// <summary>A macOS machine whose load starts the runtime, as <c>RunAtLoad</c> does: the descriptor appears a moment after <c>Apply</c>.</summary>
-    private sealed class LoadStarts(TempPaths dir, bool registered = false) : IAutostartRegistrar
+    /// <param name="startsNothing">The load's start loses the data directory's lock and publishes nothing.</param>
+    private sealed class LoadStarts(TempPaths dir, bool registered = false, bool startsNothing = false) : IAutostartRegistrar
     {
         private AutostartState _state = registered ? new(true, [Installed, "runtime", "run"], null) : new(false, [], null);
 
@@ -347,6 +353,11 @@ public class AutostartTurnOffTests
         public void Apply(AutostartRegistration registration)
         {
             _state = new AutostartState(true, registration.Run, registration.ArtifactPath, registration.SearchPath);
+            if (startsNothing)
+            {
+                return;
+            }
+
             var thread = new Thread(() =>
             {
                 Thread.Sleep(100);
