@@ -468,9 +468,9 @@ applies to the turns a person starts by sending, from the next one on.
   `allowedHttpHookUrls`, so no project file can switch the hook off or filter it. The hook posts each tool use to the
   turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
   judgement (`fullAccessJudgement`), the same in every mode the hook rides:
-  - **refused**, with no card, for three kinds alone, each by a sentence that says what is closed, that it is Jason's own
-    and not one of the person's files, and the `jason` verb that does the act where one does, never that it cannot: the
-    installation's settings files and run file, under
+  - **refused**, with no card, for three kinds alone, each by a sentence that says what is closed, that it is Jason's
+    own and not one of the person's files, and the `jason` verb that does the act where one does, never that it cannot:
+    the installation's settings files and run file, under
     every layout (`settingsRefusal`); its data directory outside the turn's folder (`dataRefusal`), and in a demo run the
     person's own installation (`personsRefusal`); and what Jason itself sets for the turn: its variables and its
     permission tool, that is `JASON_CONFINED` and `JASON_CHAT_TURN` (`confinedRefusal`), `JASON_ATTEMPT_ID`
@@ -480,31 +480,30 @@ applies to the turns a person starts by sending, from the next one on.
     by every route a path can take, on Windows a path that names this computer as another computer would (`localhost`,
     a loopback address or its own name) through a drive's share (`C$`) as that drive's path, and one in a device's or a
     volume's namespace, or through another share of this computer, by the sentence that says Jason could not place where
-    it leads (`hookPlace`, `unplacedRefusal`); in the text a
-    writer tool would put in a file; and in every string of an MCP tool's input. A command is also read as the shell would
-    lead it (`readKinds`): a relative path from the folder a change of folder led to, a variable the reading knows (the
-    home folder's and the profile's, the drive's, the folder the shell is in, and a value the text gives one of its
-    own, `assignedValues`), a `~` followed by the home's own account name, and a pattern by every name it can match,
-    a name that begins with a dot only by a pattern that does too unless the text sets an option that says otherwise
-    (`patternKind`), for a read and a listing alike. **The limit:** a variable the reading does not know, and a path a
-    program builds while it runs, are not seen: such a command runs in Full access. A command that names another link
-    to a settings file or the run file, as a word or as a redirect's source, is refused as that file, and in a demo
-    run another link to the person's own settings file or run file as the person's own (`linksPersonsOwn`). With no
-    read blocked, a walk of a folder that
-    holds the data directory (the home folder, a drive's top, the data directory's parents) is the data's kind: a search
-    of it by the Grep or Glob tool (`walkKind`), and a command that names such a folder, takes a word the shell builds
-    from one, or takes a word that begins with a variable the reading does not know (`unfixedVariable`; the profile's
-    drive and path, the system's drive and PowerShell's call for a folder of the account's are such folders), in any
-    form but the few known not to descend (`plainWalkForm`: a listing or a search with only its table's options and
-    only words it can read, a read of a file, a look at a path, a print, a folder change), a removal among them, are
-    refused by the
-    sentence that says to name a narrower folder (`searchRefusal`, `walksRoot`); a command in any other form that runs in
-    such a folder, or where a change led that the walk did not follow, by the sentence that says to run it in a narrower
-    folder or name the folder it should work on (`inRootRefusal`). So is a command that reads what no word
-    of it shows (`unseenReadRefusal`): a jq program that holds `env`, `$ENV`, `import`, `include` or `modulemeta`, takes
-    its program from a file or is given a word the shell builds (`jqRefusal`), and `sort`, `wc`, `du` or `find` told the
-    files it reads by `--files0-from` (`filesFromRefusal`). A plain listing of such a folder runs. A Glob pattern is read where it can lead, its fixed folders climbed once for each `..` after
-    them, and one whose brace group can name a place is refused (`braceRefusal`). A judgement that fails refuses;
+    it leads (`hookPlace`, `unplacedRefusal`); in the text a writer tool would put in a file; and in every string of an
+    MCP tool's input. A command is also read as the shell would lead it (`readKinds`): a relative path from the folder a
+    change of folder led to, a variable the reading knows (the home folder's and the profile's, the drive's, the folder
+    the shell is in, and a value the text gives one of its own, `assignedValues`), a `~` followed by the home's own
+    account name, and a pattern by every name it can match, a name that begins with a dot only by a pattern that does
+    too unless the text sets an option that says otherwise (`patternKind`), for a read and a listing alike. **The
+    limit:** a variable the reading does not know, and a path a program builds while it runs, are not seen: such a
+    command runs in Full access. A command that names another link to a settings file or the run file, as a word or as a
+    redirect's source, is refused as that file, and in a demo run another link to the person's own settings file or run
+    file as the person's own (`linksPersonsOwn`). With no read blocked, a walk of a folder that holds the data directory
+    (the home folder, a drive's top, the data directory's parents) is the data's kind: a search of it by the Grep or
+    Glob tool (`walkKind`), and a command that names such a folder, takes a word the shell builds from one, or takes a
+    word that begins with a variable the reading does not know (`unfixedVariable`; the profile's drive and path, the
+    system's drive and PowerShell's call for a folder of the account's are such folders), in any form but the few known
+    not to descend (`plainWalkForm`: a listing or a search with only its table's options and only words it can read, a
+    read of a file, a look at a path, a print, a folder change), a removal among them, are refused by the sentence that
+    says to name a narrower folder (`searchRefusal`, `walksRoot`); a command in any other form that runs in such a
+    folder, or where a change led that the walk did not follow, by the sentence that says to run it in a narrower folder
+    or name the folder it should work on (`inRootRefusal`). So is a command that reads what no word of it shows
+    (`unseenReadRefusal`): a jq program that holds `env`, `$ENV`, `import`, `include` or `modulemeta`, takes its program
+    from a file or is given a word the shell builds (`jqRefusal`), and `sort`, `wc`, `du` or `find` told the files it
+    reads by `--files0-from` (`filesFromRefusal`). A plain listing of such a folder runs. A Glob pattern is read where
+    it can lead, its fixed folders climbed once for each `..` after them, and one whose brace group can name a place is
+    refused (`braceRefusal`). A judgement that fails refuses;
   - **nothing** for everything else, the deny list's verbs, a jason that starts with an option, PowerShell and a
     command Jason does not read literally among them: the host's own mode and rules decide it.
 - **What Claude Code still asks about in its bypass mode is a card.** It reaches the permission tool, which refuses the

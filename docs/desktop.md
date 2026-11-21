@@ -345,8 +345,9 @@ editor is not started with a changed PATH. The desktop and the command line shar
 another installation's or none; the sentence after an editor's open says which. Open in is the page's
 own act, through the window's one object. In a chat turn the `jason session` commands, which start a session on your
 computer, are refused in Plan only, run with no card in Ask first and Auto-edit from Claude Code 2.1.322 on, as every
-`jason` command does but the few that keep a card (see Access modes), and are a card there on an older Claude Code, as every command that
-changes the installation is, and run in Full access as they would in a terminal. It does not open the data directory; the folders of it a
+`jason` command does but the few that keep a card (see Access modes), and are a card there on an older Claude Code, as
+every command that changes the installation is, and run in Full access as they would in a terminal. It does not open the
+data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
 it, to change Jason itself.
 
@@ -932,10 +933,9 @@ at a path, a print or a change of folder, an option those do not take included),
 it, so it is refused with the words to name a narrower folder, Documents or Desktop say, and so is such a command on a
 folder a variable names that the check does not know; any other program run in such a folder is refused with the words
 to run it in a narrower folder or to name the folder it should work on. A listing of such a folder's names runs. A `jq`
-program
-that reads the environment or a file by its own words (`env`, `$ENV`, `import`, `include`, a program from a file), and a
-command told on its input which files to read (`--files0-from`), are refused too. A Glob pattern is read where it can lead, and one whose brace group
-can name another folder is refused. On
+program that reads the environment or a file by its own words (`env`, `$ENV`, `import`, `include`, a program from a
+file), and a command told on its input which files to read (`--files0-from`), are refused too. A Glob pattern is read
+where it can lead, and one whose brace group can name another folder is refused. On
 Windows a path that names this computer as another computer would, `\\localhost\C$\` say, is read as the drive it
 leads to, and one in a device's or a volume's namespace, or on a share of this computer that names no drive, is
 refused with the words that Jason could not place where it leads. The check reads a
@@ -1003,14 +1003,15 @@ asks only about a change and about a few of Jason's own commands:
   too: `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, in every
   form; and a verb that changes the installation in a form that names another source, place, ref or version, while its
   plain form, which takes the release's own, runs with no card: `jason update apply` with `--version` or `--feed`;
-  `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with
-  `--source`, `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire` or
+  `jason plugin install` with `--feed` or `--replace`; `jason skills install` and `jason skills update` with `--source`,
+  `--feed`, `--root` or `--ref`; `jason ui install` with `--feed`; and `jason install` with `--retire` or
   `--terminal-path`. A `jason` whose words do not begin with a verb of the CLI, or with a noun's help, is a card too:
-  one with another word before the noun, and the executable's own modes that are no verb (`runtime run`,
-  `plugin-host`, `toast-host`, `host-hook` and a link it is handed). Full access runs them, as it runs any program. An act of your word is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the
-  agent's own words, each in single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`,
-  `jason --version` and the help of any noun or verb run with no card, those of the commands above included; any other
-  `jason` that starts with an option is refused, with the words to put the verb first.
+  one with another word before the noun, and the executable's own modes that are no verb (`runtime run`, `plugin-host`,
+  `toast-host`, `host-hook` and a link it is handed). Full access runs them, as it runs any program. An act of your word
+  is written as the chat's instructions say, `--actor human:<you>` and a `--reason` in the agent's own words, each in
+  single quotes where it holds letters outside ASCII. `jason --help`, `jason -h`, `jason --version` and the help of any
+  noun or verb run with no card, those of the commands above included; any other `jason` that starts with an option is
+  refused, with the words to put the verb first.
 - **A pipeline or a sequence runs with no card** when every part of it is such a `jason` command or one of `jq`, `grep`,
   `head`, `tail`, `wc`, `sort`, `uniq`, `cut`, `tr`, `cat`, `ls` and `echo`, each with only the options Jason knows it
   takes, none that walks a folder, reads a file it is told of on its input or by another file, writes a file or starts a
@@ -1049,9 +1050,9 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
   standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
   written plainly with no card, as the rule would (above). The chat's instructions name
-  the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an option,
-  in Plan only and on an older Claude Code; from 2.1.322 on Ask first and Auto-edit run it (above), and so does Full
-  access.
+  the nouns whose help it reads, and `jason --help` itself stays refused, as is every `jason` that starts with an
+  option, in Plan only and on an older Claude Code; from 2.1.322 on Ask first and Auto-edit run it (above), and so does
+  Full access.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
@@ -1062,11 +1063,11 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
   names an operation these verbs call is refused there too. In every other mode none of them is refused: those the bullet
   above names run with no card; every other one, a standing approval, another preference and a campaign's send mode
-  among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason` command
-  that no allowed verb begins does; from 2.1.322 on, in Ask first and Auto-edit every `jason` command runs with no card
-  but `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, and a form of a
-  verb that changes the installation that names another source, place, ref or version, each named above; the plain
-  form of such a verb, which takes the release's own, runs with no card. Pausing an agent, adding
+  among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason`
+  command that no allowed verb begins does; from 2.1.322 on, in Ask first and Auto-edit every `jason` command runs with
+  no card but `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and `jason plugin grant`, and a
+  form of a verb that changes the installation that names another source, place, ref or version, each named above; the
+  plain form of such a verb, which takes the release's own, runs with no card. Pausing an agent, adding
   someone to the do-not-contact register and cancelling work are the AI's, since each stops reaching a person. Recording
   a verdict on a reply is a card in Ask first and Auto-edit on an older Claude Code, and runs with no card from 2.1.322
   on and in Full access: a verdict of yours can lift the lock
@@ -1083,8 +1084,9 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
   puts its own files back before the next turn.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included on
-  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the turn's folder and the
-  added folders, in Plan only and on an older Claude Code; a write outside them, or in a campaign's or a project's folder to a file the host loads
+  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the turn's
+  folder and the added folders, in Plan only and on an older Claude Code; a write outside them, or in a campaign's or a
+  project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
   Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
   each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A
