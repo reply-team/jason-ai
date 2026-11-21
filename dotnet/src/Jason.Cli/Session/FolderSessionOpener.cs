@@ -58,7 +58,7 @@ public static class FolderSessionOpener
         ArgumentNullException.ThrowIfNull(request);
 
         var host = request.Host;
-        if (host is { } given && CannotResume(env, request, given) is { } refusedAtOnce)
+        if (host is { } given && CannotResume(env, human, request, given) is { } refusedAtOnce)
         {
             return refusedAtOnce;
         }
@@ -71,7 +71,7 @@ public static class FolderSessionOpener
         {
             if (env.WorkingDirectory is not { Length: > 0 } working)
             {
-                return Refuse(env, CliErrors.FolderMissing, "The folder this command runs in cannot be named, so nothing was started.");
+                return Refuse(env, human, CliErrors.FolderMissing, "The folder this command runs in cannot be named, so nothing was started.");
             }
 
             (level, path, scriptName) = (HereLevel, working, HereLevel);
@@ -79,7 +79,7 @@ public static class FolderSessionOpener
         }
         else
         {
-            var (resolved, folder, recordedName) = await ResolveAsync(env, request.CampaignId, request.Project, cancellationToken).ConfigureAwait(false);
+            var (resolved, folder, recordedName) = await ResolveAsync(env, human, request.CampaignId, request.Project, cancellationToken).ConfigureAwait(false);
             if (folder is null)
             {
                 return resolved;
@@ -98,9 +98,10 @@ public static class FolderSessionOpener
         {
             var (chosenExit, chosen) = await SessionOpener.ChooseHostAsync(
                 env,
+                human,
                 host,
                 $"The preference {SessionOpener.PreferenceKey} could not be read, so no host was chosen and nothing was started; --host <host> names one, or --shell opens a plain shell.",
-                preferred => CannotResume(env, request, preferred),
+                preferred => CannotResume(env, human, request, preferred),
                 cancellationToken).ConfigureAwait(false);
             if (chosen is null)
             {
@@ -117,7 +118,7 @@ public static class FolderSessionOpener
 
         if (!Directory.Exists(path))
         {
-            return Refuse(env, CliErrors.FolderMissing, missing);
+            return Refuse(env, human, CliErrors.FolderMissing, missing);
         }
 
         var terminals = env.Terminals;
@@ -127,7 +128,7 @@ public static class FolderSessionOpener
         var what = hostWord ?? "a shell";
         if (terminals is null || terminal is null)
         {
-            return Refuse(env, CliErrors.TerminalNotFound, $"No terminal was found to start {what} in, so nothing was started; in a terminal of your own, go to {path}.");
+            return Refuse(env, human, CliErrors.TerminalNotFound, $"No terminal was found to start {what} in, so nothing was started; in a terminal of your own, go to {path}.");
         }
 
         if (request.Shell)
@@ -135,20 +136,20 @@ public static class FolderSessionOpener
             program = TerminalPlan.Shell(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "SHELL"));
             if (program is null)
             {
-                return Refuse(env, CliErrors.ShellNotFound, "Windows PowerShell is not in the system folder, where it is always looked for, so nothing was started.");
+                return Refuse(env, human, CliErrors.ShellNotFound, "Windows PowerShell is not in the system folder, where it is always looked for, so nothing was started.");
             }
         }
 
         if (TerminalPlan.Uncarried(terminals.Platform, program!, SessionOpener.Own(env), SessionOpener.Inherited(env)) is { } uncarried)
         {
             var byHand = typed is null ? $"open a terminal of your own at {path}" : $"run `{typed}` in a terminal of your own at {path}";
-            return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started; to do the same by hand, {byHand}.");
+            return Refuse(env, human, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started; to do the same by hand, {byHand}.");
         }
 
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.Own(env));
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
-            return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
+            return Refuse(env, human, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
         }
 
         var continuing = request.Resume is { } continued ? $", continuing its conversation {continued}" : string.Empty;
@@ -162,10 +163,11 @@ public static class FolderSessionOpener
     /// The refusal of a resume the host has no words for, or null where nothing is to be resumed or the host has them:
     /// decided as soon as the host is known, before its program or a terminal is looked for.
     /// </summary>
-    private static int? CannotResume(CliEnvironment env, Request request, AgentHostKind host) =>
+    private static int? CannotResume(CliEnvironment env, bool human, Request request, AgentHostKind host) =>
         request.Resume is not null && AgentHosts.Of(host).ResumeWord is null
             ? Refuse(
                 env,
+                human,
                 CliErrors.HostCannotResume,
                 $"{AgentHosts.Word(host)} has no way this jason knows to continue one of its own conversations, so nothing was started; --resume is taken by {AgentHosts.ResumeVocabulary}.")
             : null;
@@ -174,13 +176,13 @@ public static class FolderSessionOpener
     /// The folder, by the reads the flags call for, and the name macOS's script takes from its level. A refusal the runtime
     /// gave is printed as it came; no runtime is the exit code the read ended with.
     /// </summary>
-    private static async Task<(int Exit, PromptFolder? Folder, string ScriptName)> ResolveAsync(CliEnvironment env, string? campaignId, string? project, CancellationToken cancellationToken)
+    private static async Task<(int Exit, PromptFolder? Folder, string ScriptName)> ResolveAsync(CliEnvironment env, bool human, string? campaignId, string? project, CancellationToken cancellationToken)
     {
         string? projectId = null;
         string? slug = null;
         if (campaignId is not null)
         {
-            var (exit, campaign) = await ReadAsync<CampaignDto>(env, Operations.CampaignGet, RequestBody.Empty().Set("campaign_id", campaignId), cancellationToken).ConfigureAwait(false);
+            var (exit, campaign) = await ReadAsync<CampaignDto>(env, human, Operations.CampaignGet, RequestBody.Empty().Set("campaign_id", campaignId), cancellationToken).ConfigureAwait(false);
             if (campaign is null)
             {
                 return (exit, null, string.Empty);
@@ -212,7 +214,7 @@ public static class FolderSessionOpener
 
         if (projectId is not null || slug is not null)
         {
-            var (exit, read) = await ReadAsync<ProjectDto>(env, Operations.ProjectGet, RequestBody.Empty().Set("project_id", projectId).Set("slug", slug), cancellationToken).ConfigureAwait(false);
+            var (exit, read) = await ReadAsync<ProjectDto>(env, human, Operations.ProjectGet, RequestBody.Empty().Set("project_id", projectId).Set("slug", slug), cancellationToken).ConfigureAwait(false);
             if (read is null)
             {
                 return (exit, null, string.Empty);
@@ -224,7 +226,7 @@ public static class FolderSessionOpener
             }
         }
 
-        var (infoExit, info) = await ReadAsync<SystemInfoResponse>(env, Operations.SystemInfo, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        var (infoExit, info) = await ReadAsync<SystemInfoResponse>(env, human, Operations.SystemInfo, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
         if (info is null)
         {
             return (infoExit, null, string.Empty);
@@ -237,7 +239,7 @@ public static class FolderSessionOpener
 
         var named = campaignId is not null ? "The campaign and its project have no folder recorded, and " : projectId is not null || slug is not null ? "The project has no folder recorded, and " : string.Empty;
         var why = RootNotAPlace(info.Harness);
-        return (Refuse(env, CliErrors.FolderNotRecorded, $"{named}{(named.Length == 0 ? char.ToUpperInvariant(why[0]) + why[1..] : why)}, so there is nowhere to start and nothing was started."), null, string.Empty);
+        return (Refuse(env, human, CliErrors.FolderNotRecorded, $"{named}{(named.Length == 0 ? char.ToUpperInvariant(why[0]) + why[1..] : why)}, so there is nowhere to start and nothing was started."), null, string.Empty);
     }
 
     /// <summary>
@@ -256,10 +258,10 @@ public static class FolderSessionOpener
     };
 
     /// <summary>One read: the answer, or null with the exit code, the runtime's own refusal printed as it came.</summary>
-    private static async Task<(int Exit, T? Answer)> ReadAsync<T>(CliEnvironment env, string operation, JsonObject body, CancellationToken cancellationToken)
+    private static async Task<(int Exit, T? Answer)> ReadAsync<T>(CliEnvironment env, bool human, string operation, JsonObject body, CancellationToken cancellationToken)
         where T : class
     {
-        var (exit, response) = await OperationRunner.SendAsync(env, operation, body, cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, operation, body, human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return (exit, null);
@@ -267,7 +269,7 @@ public static class FolderSessionOpener
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return (ExitCodes.ApiError, null);
         }
 
@@ -276,10 +278,10 @@ public static class FolderSessionOpener
             return (ExitCodes.Success, answer);
         }
 
-        return (Refuse(env, CliErrors.RuntimeError, $"The runtime's answer to {operation} could not be read, so nothing was started."), null);
+        return (Refuse(env, human, CliErrors.RuntimeError, $"The runtime's answer to {operation} could not be read, so nothing was started."), null);
     }
 
-    private static int Refuse(CliEnvironment env, string code, string message) => SessionOpener.Refuse(env, code, message);
+    private static int Refuse(CliEnvironment env, bool human, string code, string message) => SessionOpener.Refuse(env, human, code, message);
 
     /// <summary>
     /// The answer: <c>program</c> is the program's path, as in the item form's answer (the shell's under <c>--shell</c>),

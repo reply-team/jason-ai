@@ -39,7 +39,7 @@ public static class SessionOpener
         var approval = kind == PromptKind.Approval;
         var noun = approval ? "approval" : "question";
         var body = RequestBody.Empty().Set(approval ? "approval_id" : "decision_id", id);
-        var (exit, response) = await OperationRunner.SendAsync(env, approval ? Operations.ApprovalGet : Operations.DecisionGet, body, cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, approval ? Operations.ApprovalGet : Operations.DecisionGet, body, human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exit;
@@ -47,7 +47,7 @@ public static class SessionOpener
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -67,7 +67,7 @@ public static class SessionOpener
         }
 
         var folder = await PromptFolderResolver.ResolveAsync(env, item.CampaignId, cancellationToken).ConfigureAwait(false);
-        var (preferenceExit, word, _) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+        var (preferenceExit, word, _) = await PreferredHostAsync(env, human, cancellationToken).ConfigureAwait(false);
         if (preferenceExit != ExitCodes.Success)
         {
             if (preferenceExit == ExitCodes.ApiError)
@@ -185,9 +185,9 @@ public static class SessionOpener
     /// true where the exit was already written on stdout by the read itself (no runtime, a request that timed out), so a
     /// caller writes no second envelope.
     /// </summary>
-    internal static async Task<(int Exit, string? Word, bool Said)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)
+    internal static async Task<(int Exit, string? Word, bool Said)> PreferredHostAsync(CliEnvironment env, bool human, CancellationToken cancellationToken)
     {
-        var (exit, response) = await OperationRunner.SendAsync(env, Operations.PreferenceList, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, Operations.PreferenceList, RequestBody.Empty(), human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return (exit, null, true);
@@ -231,6 +231,7 @@ public static class SessionOpener
     /// </summary>
     internal static async Task<(int Exit, ChosenHost? Chosen)> ChooseHostAsync(
         CliEnvironment env,
+        bool human,
         AgentHostKind? named,
         string unreadable,
         Func<AgentHostKind, int?>? refusedFor,
@@ -239,7 +240,7 @@ public static class SessionOpener
         var host = named;
         if (host is null)
         {
-            var (preferenceExit, word, said) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+            var (preferenceExit, word, said) = await PreferredHostAsync(env, human, cancellationToken).ConfigureAwait(false);
             if (said)
             {
                 return (preferenceExit, null);
@@ -247,7 +248,7 @@ public static class SessionOpener
 
             if (preferenceExit == ExitCodes.ApiError)
             {
-                return (Refuse(env, CliErrors.PreferenceUnreadable, unreadable), null);
+                return (Refuse(env, human, CliErrors.PreferenceUnreadable, unreadable), null);
             }
 
             host = word is null ? DefaultHost : AgentHosts.Parse(word);
@@ -255,6 +256,7 @@ public static class SessionOpener
             {
                 return (Refuse(
                     env,
+                    human,
                     CliErrors.HostUnknown,
                     $"The preference {PreferenceKey} names '{word}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}. Nothing was started. {ChooseAnother}"), null);
             }
@@ -267,18 +269,21 @@ public static class SessionOpener
 
         var (found, lookup) = HostProgram(env, host.Value);
         return found is null
-            ? (Refuse(env, CliErrors.HostNotFound, NotFound(AgentHosts.Word(host.Value), AgentHosts.Of(host.Value).CommandWord, lookup)), null)
+            ? (Refuse(env, human, CliErrors.HostNotFound, NotFound(AgentHosts.Word(host.Value), AgentHosts.Of(host.Value).CommandWord, lookup)), null)
             : (ExitCodes.Success, new ChosenHost(host.Value, found));
     }
 
     /// <summary>
-    /// A refusal of a session with no item: the API's error envelope on stdout with <paramref name="code"/>, the sentence
-    /// on stderr, and exit 1.
+    /// A refusal of a session with no item: the API's error envelope on stdout with <paramref name="code"/> and the
+    /// sentence on stderr; under <c>--human</c> once, its <see cref="CliErrors.Sentence"/> on stdout alone; exit 1.
     /// </summary>
-    internal static int Refuse(CliEnvironment env, string code, string message)
+    internal static int Refuse(CliEnvironment env, bool human, string code, string message)
     {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
-        env.Error.WriteLine(message);
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(code, message, retryable: false));
+        if (!human)
+        {
+            env.Error.WriteLine(message);
+        }
         return ExitCodes.ApiError;
     }
 

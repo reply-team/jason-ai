@@ -105,11 +105,11 @@ public static class RuntimeStopCommand
         var look = reader.Look();
         if (look.Descriptor is not { } descriptor)
         {
-            env.Out.WriteLine(CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
+            CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
             return ExitCodes.RuntimeUnavailable;
         }
 
-        var (exitCode, response) = await OperationRunner.SendAsync(env, Operations.SystemShutdown, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        var (exitCode, response) = await OperationRunner.SendAsync(env, Operations.SystemShutdown, RequestBody.Empty(), human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exitCode;
@@ -118,7 +118,7 @@ public static class RuntimeStopCommand
         if (!response.IsSuccess)
         {
             answered?.Invoke(false);
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -141,7 +141,7 @@ public static class RuntimeStopCommand
             return ExitCodes.Success;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             CliErrors.ShutdownTimeout,
             $"The runtime acknowledged the shutdown but had not exited after {Seconds(waited)} s.",
             retryable: true));
