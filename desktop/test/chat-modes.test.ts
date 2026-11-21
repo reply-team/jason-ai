@@ -132,7 +132,7 @@ test('Full access starts Claude Code in its own bypass mode, named, every deny r
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the settings of a turn the hook rides: no block of reads outside the folders, no settings file of yours or a project's can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and outside Full access a page asked about and the server defences', () => {
+test('the settings of a turn the hook rides: no block of reads outside the folders, no settings file of yours or a project\'s can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and outside Full access a page asked about and the server defences', () => {
     const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
     // Ask first and Auto-edit are sealed as Plan only is, so their settings keep the person's servers, connectors, browser
     // and skills' shell commands out; a Full access turn loads the person's own configuration.
