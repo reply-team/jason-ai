@@ -10,15 +10,17 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
-import { personsWordForms, readFence } from '../src/chat-deny.ts';
+import { askingCardedForms, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { attemptRefusal, dataRefusal, settingsRefusal } from '../src/chat-permission-model.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { fileLogger } from '../src/log.ts';
 import type { Programs } from '../src/programs.ts';
+import { claudeFloor, compareVersions } from '../src/host-version.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
+import { plantedMarkers } from './planted-session.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -135,6 +137,13 @@ const modes = (events: ChatEvent[]) => events.flatMap((event) => (event.kind ===
 const notices = (events: ChatEvent[]) => events.flatMap((event) => (event.kind === 'notice' ? [event.text] : []));
 const done = (events: ChatEvent[]) => events.at(-1);
 const claude = { host: 'claude' };
+/** A Claude Code turn's command line sealed whole: project settings alone, the turn's MCP file alone and no browser, the stand-in saying a version that knows the flag. */
+const sealedLine = (args: string[]) => flag(args, '--setting-sources') === 'project' && args.includes('--strict-mcp-config') && args.includes('--no-chrome');
+/** A Claude Code turn's command line that loads the person's own configuration: none of the three. */
+const openLine = (args: string[]) => !args.includes('--setting-sources') && !args.includes('--strict-mcp-config') && !args.includes('--no-chrome');
+/** What the stand-in says of a turn's settings (`{ "defences": true }`): every server defence, or none. */
+const sealedSettings = 'defences: disableClaudeAiConnectors deniedMcpServers disableSkillShellExecution';
+const openSettings = 'defences: none';
 /** The scrub variable a host was started with, by any spelling of its name. */
 const scrubOf = (host: Recorded | undefined) => Object.entries(host?.env ?? {}).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
 /**
@@ -174,6 +183,72 @@ test('Ask first\'s hook stands in front of the host\'s allow rules: a verb the h
     assert.deepEqual(texts(said).filter((text) => text.startsWith('tool ')), [`tool refused: ${settingsRefusal}`, `tool refused: ${settingsRefusal}`, `tool refused: ${settingsRefusal}`, 'tool ran']);
     assert.deepEqual(cards(said), [], 'no card');
     assert.equal(r.chat.open(id).mode, 'ask_first');
+});
+
+test('each mode\'s turn, end to end, at 2.1.257, 2.1.300, 2.1.322 and current: a turn that runs in Full access starts Claude Code with the person\'s own configuration and its hook, every other turn with the sealed line whole, a Full access chat\'s turn below the floor among them; every turn\'s prompt tool is on a server of its own, the one its MCP file names', async (t) => {
+    const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+    t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.329 (Claude Code)' }));
+    const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
+    const servers: string[] = [];
+    for (const version of [claudeFloor, '2.1.300', fullAccessFloor, '2.1.329']) {
+        writeFileSync(versionFile, JSON.stringify({ stdout: `${version} (Claude Code)` }));
+        const { id, mode: chosen } = await r.chat.create();
+        assert.equal(chosen, 'full_access');
+        const atFloor = compareVersions(version, fullAccessFloor) >= 0;
+        for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+            if (mode !== 'full_access') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+            plan(r, [{ servers: true }, { defences: true }]);
+            const said = await r.turn(id, mode, claude);
+            const ran = mode === 'full_access' && !atFloor ? 'ask_first' : mode;
+            const at = `${version} ${mode}`;
+            assert.equal(r.started.at(-1), ran, `${at}: the mode the turn ran in`);
+            const open = ran === 'full_access';
+            const args = r.hosts().at(-1)?.args ?? [];
+            assert.equal(flag(args, '--setting-sources'), open ? undefined : 'project', at);
+            assert.equal(args.includes('--strict-mcp-config'), !open, at);
+            assert.equal(args.includes('--no-chrome'), !open && version !== claudeFloor, `${at}: the flag from 2.1.285 on`);
+            // The hook rides every turn but Plan only's from the floor of Full access on, its settings in the turn's own file.
+            assert.equal(/turn-[0-9a-f]{24}\.settings\.json$/.test(flag(args, '--settings') ?? ''), ran !== 'plan_only' && atFloor, at);
+            assert.ok(texts(said).includes(open ? openSettings : sealedSettings), `${at}: ${texts(said).join(' | ')}`);
+            const server = /^mcp__(jason_desktop_[0-9a-f]{16})__decide$/.exec(flag(args, '--permission-prompt-tool') ?? '')?.[1] ?? '';
+            assert.notEqual(server, '', `${at}: ${flag(args, '--permission-prompt-tool')}`);
+            assert.ok(texts(said).includes(`servers: ${server}`), `${at}: the turn's MCP file names that server alone`);
+            servers.push(server);
+        }
+    }
+    assert.equal(new Set(servers).size, servers.length, `no two turns share a server: ${servers.join(' ')}`);
+});
+
+test('a Full access chat\'s turn sent from a browser tab runs in Ask first with the sealed line whole, and its next turn from the desktop runs in Full access with the person\'s own configuration', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    plan(r, [{ defences: true }]);
+    const tab = await r.turn(id, 'from a tab', { ...claude, fromTab: true });
+    const desk = await r.turn(id, 'from the desktop', claude);
+    assert.deepEqual(r.started, ['ask_first', 'full_access']);
+    const [first, second] = r.hosts();
+    assert.ok(sealedLine(first?.args ?? []), JSON.stringify(first?.args));
+    assert.ok(texts(tab).includes(sealedSettings), texts(tab).join(' | '));
+    assert.ok(openLine(second?.args ?? []), JSON.stringify(second?.args));
+    assert.ok(texts(desk).includes(openSettings), texts(desk).join(' | '));
+});
+
+test('a Full access turn on a provider\'s key runs in Claude Code\'s bypass with the sealed line whole and settings that keep the server defences, in Jason Desktop\'s own Claude Code folder; a turn on the person\'s own sign-in loads their configuration', async (t) => {
+    const r = rig(t, { chat: { keyFor: (id) => (id === 'claude-api-key' ? 'sk-planted-anthropic' : undefined) } });
+    const { id } = await r.chat.create();
+    const other = await r.chat.create();
+    plan(r, [{ defences: true }]);
+    const keyed = await r.turn(id, 'on a key', { host: 'claude-api-key' });
+    const plain = await r.turn(other.id, 'on my sign-in', claude);
+    assert.deepEqual(r.started, ['full_access', 'full_access']);
+    const [onKey, onSignIn] = r.hosts();
+    assert.equal(flag(onKey?.args ?? [], '--permission-mode'), 'bypassPermissions');
+    assert.ok(sealedLine(onKey?.args ?? []), JSON.stringify(onKey?.args));
+    assert.ok(texts(keyed).includes(sealedSettings), texts(keyed).join(' | '));
+    assert.equal(onKey?.env.CLAUDE_CONFIG_DIR, join(r.b.paths.desktop, 'claude-keyed', 'claude-api-key'));
+    assert.ok(openLine(onSignIn?.args ?? []), JSON.stringify(onSignIn?.args));
+    assert.ok(texts(plain).includes(openSettings), texts(plain).join(' | '));
 });
 
 test('Plan only is kept on the conversation\'s record, survives a restart, and starts Claude Code in plan mode', async (t) => {
@@ -229,7 +304,9 @@ test('a Full access turn starts Claude Code in its bypass mode, with every deny 
     assert.ok(settings.startsWith(r.b.paths.turns));
     const rest = args.slice(args.indexOf('--disallowedTools') + 1);
     const disallowed = rest.slice(0, rest.findIndex((arg) => arg.startsWith('--')));
-    for (const rule of ['Bash(jason -*)', 'Bash(*JASON_CONFINED*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), rule);
+    for (const rule of ['Bash(*JASON_CONFINED*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), rule);
+    // A jason that starts with an option is none of the three kinds the hook refuses, so the host refuses it no more.
+    assert.ok(!disallowed.includes('Bash(jason -*)'));
     assert.ok(!existsSync(settings), 'the settings file goes with the turn');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
     assert.deepEqual(r.started, ['full_access']);
@@ -272,6 +349,8 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
     plan(r, [{ say: 'next' }]);
     const next = await r.turn(id, 'again', claude);
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default');
+    assert.ok(openLine(r.hosts()[0]?.args ?? []), 'the Full access turn loaded the person\'s own configuration');
+    assert.ok(sealedLine(r.hosts().at(-1)?.args ?? []), 'a Full access chat\'s turn that runs in Ask first keeps the sealed line whole');
     assert.deepEqual(notices(next), []);
     const other = await r.chat.create();
     const first = await r.turn(other.id, 'hello', claude);
@@ -538,10 +617,16 @@ test('Claude Code names its default mode on the first line of a Full access star
     assert.equal(texts(said).filter((text) => text === 'after the card').length, 1, 'the plan ran once, in the turn started again');
     assert.deepEqual(cards(said).map((card) => card.title), ['Run a command'], 'the card is Ask first\'s');
     // Ask first's own shape: no PowerShell, every page asked about, and the host's rules over the folder's own names.
-    const removed = (args: string[]) => args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--setting-sources'));
+    const removed = (args: string[]) => args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--settings'));
     assert.ok(!removed(asked?.args ?? []).includes('PowerShell'), 'the first start was Full access\'s');
     assert.ok(removed(again?.args ?? []).includes('PowerShell'), 'the start again is Ask first\'s: no PowerShell');
     assert.deepEqual((settings[1] as { permissions?: { ask?: string[] } }).permissions?.ask, ['WebFetch(domain:*)'], 'every page asks');
+    // The first start, Full access's, loaded the person's own configuration; the start again keeps the sealed line whole,
+    // its settings carrying the server defences.
+    assert.ok(openLine(asked?.args ?? []), JSON.stringify(asked?.args));
+    assert.ok(sealedLine(again?.args ?? []), JSON.stringify(again?.args));
+    assert.equal((settings[1] as { disableSkillShellExecution?: unknown }).disableSkillShellExecution, true);
+    assert.equal('disableSkillShellExecution' in (settings[0] as object), false);
     assert.ok((again?.args ?? []).some((arg) => /^Edit\(.*CLAUDE\.md\)$/.test(arg)), 'the host is denied edits of the folder\'s own names');
     assert.deepEqual(scrubOf(asked), [], 'the Full access start carried no scrub');
     assert.deepEqual(scrubOf(again), scrubbed, 'the start again carries Ask first\'s');
@@ -554,6 +639,7 @@ test('Claude Code names its default mode on the first line of a Full access star
     assert.deepEqual(notices(next), [], 'said once while the cause holds');
     assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'default', 'the next turn, within the minute, asks for no bypass');
     assert.deepEqual(scrubOf(r.hosts().at(-1)), scrubbed, 'and carries Ask first\'s environment');
+    assert.ok(sealedLine(r.hosts().at(-1)?.args ?? []), 'and keeps the sealed line whole');
 });
 
 test('a Full access start that names a third mode, or one Jason does not know, says which mode it named and leads where the default mode does', async (t) => {
@@ -588,11 +674,14 @@ test('Claude Code refuses its bypass mode before it starts: the turn starts agai
     const gone: [string, string | null][] = [];
     const r = rig(t, { env: { STUB_BYPASS: 'refused' }, chat: { bypassGone: (why, named) => void gone.push([why, named]) } });
     const { id } = await r.chat.create();
-    plan(r, [{ say: 'answered' }]);
+    plan(r, [{ say: 'answered' }, { defences: true }]);
     const said = await r.turn(id, 'hello', claude);
     assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.ok(texts(said).includes('answered'));
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    // Started again with the sealed line whole, its settings written again for Ask first with the server defences.
+    assert.deepEqual(r.hosts().map((host) => sealedLine(host.args)), [false, true]);
+    assert.ok(texts(said).includes(sealedSettings), texts(said).join(' | '));
     // Each start has its own mode's environment: the Full access start no scrub, the start again in Ask first the scrub
     // off Linux.
     assert.deepEqual(scrubOf(r.hosts()[0]), []);
@@ -603,6 +692,52 @@ test('Claude Code refuses its bypass mode before it starts: the turn starts agai
     const next = await r.turn(id, 'again', claude);
     assert.deepEqual(notices(next), []);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default', 'default'], 'within the minute no bypass is asked for again');
+    assert.ok(sealedLine(r.hosts().at(-1)?.args ?? []));
+});
+
+/** The `env` a turn's settings set, as the stand-in said it (`{ "pins": true }`), one per start that spoke. */
+const pinsOf = (said: ChatEvent[]) => texts(said).flatMap((text) => (text.startsWith('pins: ') && text !== 'pins: none' ? [JSON.parse(text.slice('pins: '.length)) as Record<string, string>] : []));
+
+/** Holds a turn's settings `env` to the environment its start was given: every name the value it holds, or empty where it holds none. */
+function pinsHold(host: Recorded | undefined, pins: Record<string, string> | undefined, at: string) {
+    assert.ok(pins !== undefined && host !== undefined, `${at}: the settings set an env`);
+    for (const [name, value] of Object.entries(pins)) assert.equal(value, Object.entries(host.env).find(([each]) => each.toUpperCase() === name)?.[1] ?? '', `${at}: ${name}`);
+    for (const name of ['PATH', 'JASON_CHAT_TURN', 'JASON_DATA_DIR', 'JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) {
+        assert.ok(name in pins, `${at}: ${name}`);
+    }
+    assert.equal(pins.JASON_CHAT_TURN, '1', at);
+    for (const name of ['JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${at}: ${name}`);
+    assert.ok(!('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' in pins), `${at}: never the scrub`);
+}
+
+test('the settings of every turn the hook rides set what the desktop decides of its environment, name by name the values its start was given, whatever the desktop inherited: in Full access, Ask first and Auto-edit, and in a start narrowed to Ask first', async (t) => {
+    const inherited = { ...plantedMarkers, JASON_CHAT_TURN: '0', JASON_ATTEMPT_ID: 'att_planted', CLAUDE_AUTO_BACKGROUND_TASKS: '1' };
+    const r = rig(t, { env: inherited });
+    const { id } = await r.chat.create();
+    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+        if (mode !== 'full_access') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        plan(r, [{ pins: true }]);
+        const said = await r.turn(id, mode, claude);
+        assert.equal(r.started.at(-1), mode, mode);
+        const [pins] = pinsOf(said);
+        pinsHold(r.hosts().at(-1), pins, mode);
+        // HOME where the turn names one, a Full access turn.
+        assert.equal(pins !== undefined && 'HOME' in pins, mode === 'full_access', `${mode}: HOME`);
+    }
+    // Plan only rides no hook and has no settings file to set it in: its settings are inline and set none.
+    await r.chat.setMode(id, 'plan_only');
+    plan(r, [{ pins: true }]);
+    assert.ok(texts(await r.turn(id, 'plan', claude)).includes('pins: none'));
+    // A Full access start whose bypass Claude Code refused is started again in Ask first, its settings written again with
+    // that start's own environment.
+    const n = rig(t, { env: { ...inherited, STUB_BYPASS: 'refused' } });
+    const fresh = await n.chat.create();
+    plan(n, [{ pins: true }]);
+    const narrowed = await n.turn(fresh.id, 'hello', claude);
+    assert.deepEqual(n.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    const [again] = pinsOf(narrowed);
+    pinsHold(n.hosts()[1], again, 'narrowed');
+    assert.equal(again !== undefined && 'HOME' in again, false, 'narrowed: no HOME, as Ask first names none');
 });
 
 test('a new chat\'s first send runs in Full access, in Claude Code\'s bypass, on every system: no Full access turn carries the scrub, under which Claude Code 2.1.329 starts in its default mode, nor one the desktop inherited, and an Ask first turn keeps it off Linux', async (t) => {
@@ -701,6 +836,7 @@ test('a desktop that runs as root says so to the log once, as it starts, starts 
     clock += 2 * bypassHeldMs;
     const second = await r.turn(id, 'hello again', claude);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['default', 'default']);
+    assert.deepEqual(r.hosts().map((host) => sealedLine(host.args)), [true, true]);
     assert.deepEqual(r.hosts().map(scrubOf), [scrubbed, scrubbed], 'each start is Ask first\'s, its environment included');
     assert.deepEqual(notices([...first, ...second]), [askFirstThisTurn(bypassSentences.root, 'full_access')]);
     assert.deepEqual(lines(), [{ Cause: 'root', Named: 'none' }], 'and once');
@@ -874,6 +1010,22 @@ test('on a Claude Code below the floor of Full access, a verb that reads a reque
             );
             assert.deepEqual(cards(said), [], `${version} ${mode}: no card`);
         }
+    }
+});
+
+test('on a Claude Code below the floor of Full access, a here-document followed by a second command is no plain form: it is a card in Ask first and in Auto-edit, and nothing runs before the answer', async (t) => {
+    for (const mode of ['ask_first', 'auto_edit'] as const) {
+        const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+        t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+        writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
+        const r = rig(t, { env: { STUB_CLAUDE_VERSION_FILE: versionFile } });
+        const { id } = await r.chat.create();
+        await r.chat.setMode(id, mode, 'claude');
+        const command = 'jason workitem create cmp_1 --file - <<\'EOF\'\n{"title":"Call Ada"}\nEOF\nrm item.json';
+        plan(r, [{ ask: { tool: 'Bash', input: { command } } }]);
+        const said = await answered(r, id, [false]);
+        assert.deepEqual(cards(said).map((card) => card.detail), [command], mode);
+        assert.ok(!texts(said).includes('decision allow'), `${mode}: ${JSON.stringify(texts(said))}`);
     }
 });
 
@@ -1345,8 +1497,9 @@ test('Auto-edit is given with no box, and its turn starts Claude Code exactly as
     await r.chat.setMode(id, 'ask_first');
     await r.turn(id, 'hello again', claude);
     const asked = r.hosts()[1]?.args ?? [];
-    // The two turns differ only by the turn's own files and the session resumed.
-    const without = (args: string[]) => args.filter((arg, at) => !arg.endsWith('.mcp.json') && !arg.endsWith('.settings.json') && arg !== '--resume' && args[at - 1] !== '--resume');
+    // The two turns differ only by the turn's own files, the name of the turn's own permission server and the session resumed.
+    const without = (args: string[]) =>
+        args.filter((arg, at) => !arg.endsWith('.mcp.json') && !arg.endsWith('.settings.json') && !/^mcp__jason_desktop_[0-9a-f]{16}__decide$/.test(arg) && arg !== '--resume' && args[at - 1] !== '--resume');
     assert.deepEqual(without(edited), without(asked));
 });
 
@@ -1659,7 +1812,7 @@ for (const mode of fenceModes) {
         await r.turn(id, 'hello', claude);
         assert.deepEqual(r.started, [mode]);
         const args = r.hosts()[0]?.args ?? [];
-        const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+        const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--settings'));
         for (const name of ['setup', 'layout.json', 'config', 'plugins']) {
             const rule = rulePath(platformOf(), join(r.b.paths.data, name));
             for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${mode}: ${each}`);
@@ -1786,7 +1939,10 @@ test('outside Plan only a turn\'s host rules let the forms of a person\'s word r
         }
         for (const verb of ['approval set-standing', 'reply record', 'preference set', 'preference unset']) assert.ok(!allowed.includes(`Bash(jason ${verb}:*)`), `${mode}: ${verb} is not allowed whole`);
         for (const entry of fence.commands) assert.equal(disallowed.includes(`Bash(jason ${entry}:*)`), mode === 'plan_only', `${mode}: ${entry}`);
-        for (const rule of ['Bash(jason -*)', 'Bash(*JASON_CONFINED*)', 'Bash(*JASON_CHAT_TURN*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), `${mode}: ${rule}`);
+        for (const rule of ['Bash(*JASON_CONFINED*)', 'Bash(*JASON_CHAT_TURN*)', 'Bash(*JASON_ATTEMPT_ID*)']) assert.ok(disallowed.includes(rule), `${mode}: ${rule}`);
+        // Where the hook rides the turn, here every mode but Plan only on a Claude Code at the floor of Full access, the
+        // model judges a jason that starts with an option, and runs jason's own help and version.
+        assert.equal(disallowed.includes('Bash(jason -*)'), mode === 'plan_only', `${mode}: Bash(jason -*)`);
     }
 });
 
@@ -1815,18 +1971,28 @@ test('every turn, on either host and in every mode, carries the chat\'s variable
     }
 });
 
-test('in Ask first and Auto-edit each installation verb and each act that lets sends go unapproved is the person\'s card, never a refusal; in Plan only each is refused with no card', async (t) => {
+test('in Ask first and Auto-edit, where the hook rides the turn, each installation verb and each act that lets sends go unapproved runs with no card but uninstall, export, import and plugin grant, each the person\'s card; below the floor of Full access each is a card, never a refusal; in Plan only each is refused with no card', async (t) => {
     const carded = [...installationVerbs, ...releasingActs, replyRecord];
-    for (const mode of ['ask_first', 'auto_edit'] satisfies ChatMode[]) {
-        const r = rig(t);
-        const { id } = await r.chat.create();
-        // A new chat starts in Full access, so Ask first is chosen as Auto-edit is.
-        await r.chat.setMode(id, mode, 'claude');
-        plan(r, carded.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
-        const said = await answered(r, id, carded.map(() => false));
-        assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), carded.map((command) => `Run a command: ${command}`), mode);
-        assert.ok(!texts(said).some((text) => text.includes('person\'s own act')), `${mode}: ${JSON.stringify(texts(said))}`);
+    const keepsCard = (command: string) =>
+        askingCardedForms.some(({ verb, options }) => (command === `jason ${verb}` || command.startsWith(`jason ${verb} `)) && (options === undefined || options.some((option) => command.split(' ').includes(option))));
+    const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
+    t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
+    writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
+    for (const [floor, env] of [['at the floor', {}], ['below the floor', { STUB_CLAUDE_VERSION_FILE: versionFile }]] as const) {
+        for (const mode of ['ask_first', 'auto_edit'] satisfies ChatMode[]) {
+            const r = rig(t, { env });
+            const { id } = await r.chat.create();
+            // A new chat starts in Full access, so Ask first is chosen as Auto-edit is.
+            await r.chat.setMode(id, mode, 'claude');
+            plan(r, carded.map((command) => ({ ask: { tool: 'Bash', input: { command } } })));
+            const asked = floor === 'at the floor' ? carded.filter(keepsCard) : carded;
+            const said = await answered(r, id, asked.map(() => false));
+            assert.deepEqual(cards(said).map((card) => `${card.title}: ${card.detail}`), asked.map((command) => `Run a command: ${command}`), `${floor}, ${mode}`);
+            assert.ok(!texts(said).some((text) => text.includes('person\'s own act')), `${floor}, ${mode}: ${JSON.stringify(texts(said))}`);
+            assert.equal(texts(said).filter((text) => text === 'decision allow').length, carded.length - asked.length, `${floor}, ${mode}: the rest ran with no card`);
+        }
     }
+    assert.deepEqual(carded.filter(keepsCard), ['jason uninstall', 'jason export out.zip', 'jason import in.zip', 'jason plugin grant reply --http api.example.com']);
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'plan_only');

@@ -838,7 +838,7 @@ test('the data directory\'s variable is refused by its name, whatever wraps it, 
         for (const scope of [windows(), mac()]) {
             const judged = run(scope, command);
             assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
-            assert.match(judged.verdict === 'deny' ? judged.message : '', /installation's own data/, command);
+            assert.match(judged.verdict === 'deny' ? judged.message : '', /Jason's own data/, command);
         }
     }
     // Case folded where the platform folds it.
@@ -962,7 +962,7 @@ test('a value joined to @, = or , or to a one-dash option is located on its own,
         for (const scope of [windows(), mac()]) {
             const judged = run(scope, command);
             assert.equal(judged.verdict, 'deny', `${scope.platform} ${command}`);
-            assert.match(judged.verdict === 'deny' ? judged.message : '', /installation's own data/, command);
+            assert.match(judged.verdict === 'deny' ? judged.message : '', /Jason's own data/, command);
         }
     }
     // A climb that leaves the data directory is not refused, but it is a card each time.
@@ -1302,7 +1302,7 @@ test('a command that changes where the shell finds a program is refused: PATH, P
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
 /** A command's refusal of the chat's own names: the write's sentence, and that the file tools read them. */
 const byCommand = (refusal: string) =>
-    refusal.replace(/ Nothing was done\.$/, ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools, Read, Grep and Glob. Nothing was run.');
+    refusal.replace(/ Nothing was done\.$/, ' A command that names it is refused, since it cannot be told apart as a read or a write: read it with the file tools. Nothing was run.');
 const winChat = 'C:\\Users\\someone\\.jason\\desktop\\chat';
 const winCampaign = 'C:\\Users\\someone\\Jason\\Northwind\\campaigns\\spring';
 const winProject = 'C:\\Users\\someone\\Jason\\Northwind';

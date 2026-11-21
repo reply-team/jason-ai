@@ -114,9 +114,10 @@ export interface HostState {
      */
     belowFloor: string | null;
     /**
-     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: Codex has none, and a Claude Code
-     * older than the oldest version a Full access turn runs on, or whose version could not be read, says so
-     * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
+     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: while this version does not offer
+     * it (`fullAccessNotYet`), and on a Claude Code older than the oldest version a Full access turn runs on, or whose
+     * version could not be read (`fullAccessSentence`). Null where it can be chosen, on Codex with no floor of it, and for
+     * a host that does not drive the chat.
      */
     fullAccess: string | null;
     /**

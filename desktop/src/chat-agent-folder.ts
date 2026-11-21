@@ -4,13 +4,15 @@
 // is recorded outside the chat folder, under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the
 // CLI's own record of each deployment, moved there from the folder it deployed into, and the Reply skills' files with
 // their digests. Before each turn, at the top: `.claude/` and `.agents/` hold their `skills/` and nothing else, and in it
-// only the files recorded there with the bytes recorded; `.codex/` and the memory files the desktop does not write
-// (`CLAUDE.local.md`, `AGENTS.override.md`) are removed. Nothing below the top is looked at in this version: an agent
-// folder or a memory file a host may read from a subfolder it works in is not removed. Nothing is followed: a link is
-// removed as a link, a skills folder is deployed into only once it is a real folder, so nothing outside the chat folder is
-// ever deleted or written. A turn does not start on a top or a skills folder this could not put right. A conversation's
-// own folder, where its turns run, is put right the same way before each of them, the recorded skills copied in from the
-// chat folder (`ownConversationFolder`).
+// only the files recorded there with the bytes recorded; `.codex/`, the memory files the desktop does not write
+// (`CLAUDE.local.md`, `AGENTS.override.md`) and a `.mcp.json`, which would name MCP servers for the folder Claude Code
+// runs in, are removed. Nothing below the top is looked at in this version: an agent folder or a memory file a host may
+// read from a subfolder it works in is not removed. Nothing is followed: a link is removed as a link, a skills folder is
+// deployed into only once it is a real folder, so nothing outside the chat folder is ever deleted or written, the
+// person's own `.claude` anywhere else among it: that is where their own configuration enters a turn that runs in Full access.
+// A turn does not start on a top or a skills folder this could not put right. A conversation's own folder, where its
+// turns run, is put right the same way before each of them, the recorded skills copied in from the chat folder
+// (`ownConversationFolder`).
 
 import { createHash } from 'node:crypto';
 import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,6 +20,12 @@ import { join } from 'node:path';
 
 /** The memory files a host reads in the chat folder beside the two the desktop writes, which it never writes. */
 export const unwrittenMemoryFiles = ['CLAUDE.local.md', 'AGENTS.override.md'] as const;
+
+/**
+ * The project's MCP server file at the folder Claude Code runs in, which the desktop never writes: a turn outside Plan
+ * only reads it, and a server it named could stand under a name the turn uses.
+ */
+const projectServersFile = '.mcp.json';
 
 /** The record `jason skills install` keeps in the root it deploys into. */
 export const skillsRecordFile = '.jason-skills.json';
@@ -122,7 +130,7 @@ function removed(path: string): void {
 export function ownAgentFolder(chat: string, records: string, remove: (path: string) => void = removed): boolean {
     let changed = false;
     try {
-        for (const name of [...unwrittenMemoryFiles, '.codex']) if (kind(join(chat, name)) !== null) remove(join(chat, name));
+        for (const name of [...unwrittenMemoryFiles, '.codex', projectServersFile]) if (kind(join(chat, name)) !== null) remove(join(chat, name));
         for (const host of skillsFolders) {
             const top = join(chat, host.folder);
             const what = kind(top);

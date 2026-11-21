@@ -1488,24 +1488,38 @@ describe('the console', () => {
             return waitFor(() => panel('Connect'));
         };
 
+        const where = (host: string) =>
+            `They work in the chat in Full access, and when you open Jason in ${host} from Open in.`;
+
         it('names them in one line under each host that has them: one, five, and the first five then how many more', async () => {
             const connect = await openConnect(
                 chatDesktop(withServers(['github'], ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'])),
             );
             expect(rowOf(connect, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: github. For now they work when you open Jason in Claude Code, from Open in.',
+                `Your MCP servers: github. ${where('Claude Code')}`,
             );
             expect(rowOf(connect, 'Codex').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: one, two, three, four, five and 3 more. For now they work when you open Jason in Codex, from Open in.',
+                `Your MCP servers: one, two, three, four, five and 3 more. ${where('Codex')}`,
             );
             cleanup();
             const five = await openConnect(
                 chatDesktop(withServers(['github', 'linear', 'sentry', 'notion', 'figma'], [])),
             );
             expect(rowOf(five, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: github, linear, sentry, notion, figma. For now they work when you open Jason in Claude Code, from Open in.',
+                `Your MCP servers: github, linear, sentry, notion, figma. ${where('Claude Code')}`,
             );
             expect(rowOf(five, 'Codex').querySelector('.own-servers')).toBeNull();
+        });
+
+        it('says on each host where they work: in the chat in Full access, and from Open in', async () => {
+            const connect = await openConnect(chatDesktop(withServers(['github'], ['linear'])));
+            expect(rowOf(connect, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: github. They work in the chat in Full access, and when you open Jason in Claude Code from Open in.',
+            );
+            expect(rowOf(connect, 'Codex').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: linear. They work in the chat in Full access, and when you open Jason in Codex from Open in.',
+            );
+            expect(connect.textContent).not.toContain('For now');
         });
 
         it('says nothing at all for a host with none, a host not found, or another host', async () => {

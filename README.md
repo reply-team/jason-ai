@@ -310,7 +310,7 @@ Linux: it carries that `jason`, and sets the installation up itself. The first s
 found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command
 Line item of its menu says what that placed and puts it back. It is not a second Jason: it works on the data directory
 the CLI uses and starts the runtime through `jason runtime start`. Its chat is a session with your own agent, started
-for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads and advises.
+for you on this computer: Claude Code or Codex. A new chat opens in Full access and does what a session in a terminal does, except that on Claude Code it leaves Jason's own settings, run files and data to the `jason` commands; a menu beside the message box chooses a mode that asks first, only reads, or applies file changes in its own folder.
 Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification channels and your AI
 provider's key.
 
