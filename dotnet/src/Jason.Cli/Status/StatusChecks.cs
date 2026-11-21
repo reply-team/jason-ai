@@ -2494,7 +2494,7 @@ internal static partial class StatusChecks
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
             : Jason.Cli.Autostart.AutostartOff.Stands(env.Paths, registrar)
-                ? new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`.", Repair.EnableAutostart)
+                ? new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", Repair.EnableAutostart)
                 : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 

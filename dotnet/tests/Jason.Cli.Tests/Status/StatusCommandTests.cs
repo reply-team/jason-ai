@@ -156,7 +156,7 @@ public class StatusCommandTests
 
         Assert.Equal(CheckState.Absent, check.State);
         Assert.False(check.Required);
-        Assert.Equal("No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`.", check.Fact);
+        Assert.Equal("No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", check.Fact);
         Assert.Equal("jason runtime autostart enable", check.Fix);
     }
 

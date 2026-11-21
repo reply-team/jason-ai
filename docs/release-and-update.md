@@ -1615,7 +1615,8 @@ and where the runtime is registered the stop says on stderr that it holds until 
 so that nothing which turns the start at logon on by default turns it on again; on macOS launchd's own record of the label
 as disabled, which `disable` leaves, counts as the same word. `enable` removes the file, `autostart status` says
 `turned_off`, and `jason status`'s optional `autostart` check says the start was turned off by you. `disable` says on
-stderr that after a restart of this computer nothing of Jason runs until `jason runtime start`. `jason uninstall` removes
+stderr that after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.
+`jason uninstall` removes
 `off.json`, and `default.json` beside it, also where it keeps the data, and `jason export` carries neither: an import is a
 new machine, where the default holds. On macOS `disable`, and
 `jason uninstall` with it, take the job out of launchd before its file goes — `launchctl unload -w` on the file where it is

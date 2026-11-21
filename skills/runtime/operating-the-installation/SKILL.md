@@ -149,7 +149,7 @@ different directory replaces the registration rather than adding one.
 stderr; `disable` stops nothing now. `disable` is recorded as the person's word, in `autostart/off.json` in the data
 directory, so nothing turns the start at logon on again by default; `enable` takes it back, and `autostart status` says
 `turned_off`. Tell the person what `disable` says: after a restart of the computer nothing of Jason runs until
-`jason runtime start`. Stopping the runtime today is still `jason runtime stop`; where it is registered, the stop holds only
+`jason runtime start`, or until they open Jason Desktop. Stopping the runtime today is still `jason runtime stop`; where it is registered, the stop holds only
 until the next logon.
 
 **`status` is how you check it.** It reads back what the operating system holds for this account. Leave the
