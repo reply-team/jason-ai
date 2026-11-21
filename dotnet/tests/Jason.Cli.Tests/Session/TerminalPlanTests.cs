@@ -608,6 +608,31 @@ public sealed class TerminalPlanTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A folder holding a <c>%</c> is opened by the console host for that start, since Windows Terminal may expand a
+    /// <c>%NAME%</c> in the folder it is given; any other folder is opened by Windows Terminal.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Jason\100%done", false)]
+    [InlineData(@"C:\Jason\%USERNAME%", false)]
+    [InlineData(@"C:\Jason\%", false)]
+    [InlineData(@"C:\Jason\done", true)]
+    public void A_folder_holding_a_percent_sign_is_opened_by_the_console_host(string folder, bool windowsTerminal)
+    {
+        var console = new TerminalFound("conhost", "C:/Windows/System32/conhost.exe");
+        var terminal = new TerminalFound("Windows Terminal", "C:/WindowsApps/wt.exe", console);
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, terminal, folder, ["C:/Tools/claude.exe", "Go."], Item);
+
+        Assert.Equal(windowsTerminal ? "Windows Terminal" : "conhost", launch.Terminal);
+        if (!windowsTerminal)
+        {
+            Assert.Equal(["C:/Windows/System32/conhost.exe", "--", "C:/Tools/claude.exe", "Go."], launch.Argv);
+            Assert.Equal(folder, launch.WorkingDirectory);
+            Assert.Null(launch.Fallback);
+        }
+    }
+
     /// <summary>Windows Terminal found where the console host is not is started alone: there is nothing to fall back to.</summary>
     [Fact]
     public void Windows_terminal_without_the_console_host_has_no_fallback()

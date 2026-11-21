@@ -184,6 +184,10 @@ public static class TerminalPlan
 
         switch (os)
         {
+            case TerminalPlatform.Windows when IsWindowsTerminal(terminal.Program) && folder.Contains('%', StringComparison.Ordinal) && terminal.Fallback is { } plain:
+                // Windows Terminal may expand a %NAME% in the folder it is given, in its own process, which the scan of
+                // the host's words does not read, so a folder holding a % is opened by the console host for this start.
+                return Compose(os, plain, folder, host, itemId, own);
             case TerminalPlatform.Windows when IsWindowsTerminal(terminal.Program):
                 // With a command line given, the tab inherits the environment of wt's start, the one the console host's
                 // start is given (TerminalStartInfo.For): Windows Terminal's default, measured on 1.24, and asked for by no
