@@ -9,7 +9,7 @@ import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
-import { fixtures, type FixtureName } from '../test/fixtures';
+import type { FixtureName } from '../test/fixtures';
 import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -26,8 +26,6 @@ const spring = 'conv_01JDKEPT0000000000000000S1';
 const autumn = 'conv_01JDKEPT0000000000000000A1';
 const winter = 'conv_01JDKEPT0000000000000000W1';
 const setupChat = 'conv_01JDKEPT0000000000000000U1';
-
-const archivedWinter = fixtures['campaign.get/archived'].response;
 
 /** Spring is live, Autumn a draft, Winter archived. */
 const agents: Record<string, FixtureName> = {
@@ -59,7 +57,18 @@ function api(): FakeApi {
         .answerAnyRequest('system.info', 'system.info/with-ui');
 }
 
-async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefined): Promise<StubDesktop> {
+/** Holds the runtime's answer to the read of one agent on its own until the test lets it go. */
+const holdAgent = (fake: FakeApi, id: string) =>
+    fake.hold('campaign.get', (body) => (body as { campaign_id?: string }).campaign_id === id);
+
+/**
+ * The console over the four conversations; `adjust` changes what the runtime answers before it is drawn, and `seed`
+ * what the desktop does.
+ */
+async function renderConsole(
+    adjust: (fake: FakeApi) => void = () => undefined,
+    seed: (desktop: StubDesktop) => void = () => undefined,
+): Promise<StubDesktop> {
     const desktop = stubDesktop({ ...setupFound });
     seed(desktop);
     desktop.keep({ id: spring, campaignId: 'cmp_1', title: 'Spring' });
@@ -69,6 +78,7 @@ async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefi
     setPlace('window');
     await loadMode(desktop);
     const fake = api();
+    adjust(fake);
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -194,7 +204,10 @@ describe('The menu on a row of Recent', () => {
     });
 
     it('offers each agent the move its state allows and Archive…, an archived one neither, and a chat about no agent its conversation’s acts', async () => {
-        await renderConsole();
+        let readWinter: () => void = () => undefined;
+        await renderConsole((fake) => {
+            readWinter = holdAgent(fake, 'cmp_4');
+        });
         const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Pause', 'Archive…', ...rest]));
@@ -202,15 +215,13 @@ describe('The menu on a row of Recent', () => {
         fireEvent.contextMenu(await row('Autumn'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Start', 'Archive…', ...rest]));
         closeMenus();
-        // Winter, archived, is not among the agents listed: the menu asks nothing, and offers no move and no Archive…;
-        // its folder is there all the same.
+        // Winter, archived, is not among the agents listed: while its own read has not answered, its row has Open, its
+        // folder and the conversation's acts alone; read as archived, the row leaves Recent, and its menu with it.
         fireEvent.contextMenu(await row('Winter'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, ...rest]));
-        flush(() => {
-            agentFacts.value = { cmp_4: { campaign: { ...archivedWinter }, creating: false } };
-        });
-        expect(words(menu()!)).toEqual(['Open', folder, ...rest]);
-        closeMenus();
+        await flush(async () => readWinter());
+        await waitFor(() => expect(menu()).toBeNull());
+        expect(within(recent()).queryByRole('button', { name: 'Winter' })).toBeNull();
         fireEvent.contextMenu(await row('Set-up'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', ...rest]));
     });
@@ -240,14 +251,14 @@ describe('The menu on a row of Recent', () => {
 
     it('offers the agent’s folder before Open in has read its places, by the page’s word for the file manager', async () => {
         // The desktop has not answered which places this computer has, so Open in has drawn none.
-        await renderConsole((desktop) => (desktop.openIn.targets = () => new Promise(() => undefined)));
+        await renderConsole(undefined, (desktop) => (desktop.openIn.targets = () => new Promise(() => undefined)));
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => menu()!);
         expect(item(folder)).toBeTruthy();
     });
 
     it('keeps the agent’s folder in every agent’s menu, whatever place Open in read last', async () => {
-        const desktop = await renderConsole((desktop) => {
+        const desktop = await renderConsole(undefined, (desktop) => {
             const all = desktop.openIn.targets;
             // Autumn's place answers with no file manager among its places.
             desktop.openIn.targets = async (campaignId, chatId) => {
@@ -431,7 +442,7 @@ describe('The menu on a row of Recent', () => {
             ['Spring', 'Open'],
             ['Autumn', 'Rename conversation'],
             ['Set-up', 'Start conversation fresh'],
-            ['Winter', 'Remove conversation'],
+            ['Spring', 'Remove conversation'],
         ] as const;
         for (const [name, act] of acts) {
             await pick(name, act);
@@ -493,7 +504,10 @@ describe('The menu on a row of Recent', () => {
     });
 
     it('stands where it was opened, inside the window, measured again when its acts change', async () => {
-        await renderConsole();
+        let readSpring: () => void = () => undefined;
+        await renderConsole((fake) => {
+            readSpring = holdAgent(fake, 'cmp_1');
+        });
         const size = { width: window.innerWidth, height: window.innerHeight };
         Object.defineProperty(window, 'innerWidth', { value: 800, configurable: true });
         Object.defineProperty(window, 'innerHeight', { value: 600, configurable: true });
@@ -511,7 +525,7 @@ describe('The menu on a row of Recent', () => {
             // Seven acts, 210 high: kept 4 inside the right and the bottom.
             expect(opened.style.getPropertyValue('--row-menu-x')).toBe('566px');
             expect(opened.style.getPropertyValue('--row-menu-y')).toBe('386px');
-            // The agent is no longer listed: five acts, 150 high, placed again.
+            // The agent is no longer listed, and its own read has not answered: five acts, 150 high, placed again.
             flush(() => {
                 consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.filter(
                     (each) => each.id !== 'cmp_1',
@@ -523,6 +537,7 @@ describe('The menu on a row of Recent', () => {
             spy.mockRestore();
             Object.defineProperty(window, 'innerWidth', { value: size.width, configurable: true });
             Object.defineProperty(window, 'innerHeight', { value: size.height, configurable: true });
+            await flush(async () => readSpring());
         }
     });
 
