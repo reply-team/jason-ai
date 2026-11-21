@@ -26,6 +26,7 @@ public static class CampaignRenderers
             Line("Name:", campaign.Name),
             Line("Status:", RenderText.Snake(campaign.Status)),
             Line("Project:", $"{campaign.ProjectSlug} ({campaign.ProjectId})"),
+            Line("Folder:", campaign.FolderPath ?? "none"),
             Line("Created:", RenderText.Moment(campaign.CreatedAt)),
             Line("Updated:", RenderText.Moment(campaign.UpdatedAt)),
         };

@@ -913,7 +913,7 @@ public sealed class SessionOpenerTests : IDisposable
 
             // The recorded exchange names a folder under a home of its own; a start needs one that is there, so the answer
             // names a real one in its place, written with forward slashes so the JSON needs no escape.
-            CampaignFolder = Path.Combine(_dir.Paths.Root, "Jason", "projects", "acme-corp", "campaigns", "q3-leads").Replace('\\', '/');
+            CampaignFolder = Path.Combine(_dir.Paths.Root, "Jason", "projects", "acme-corp", "campaigns", "2026-10-16-090000-cmp001").Replace('\\', '/');
             Directory.CreateDirectory(CampaignFolder);
             Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder").Replace(RecordedFolder, CampaignFolder, StringComparison.Ordinal);
         }
@@ -953,7 +953,7 @@ public sealed class SessionOpenerTests : IDisposable
         public string[] LinuxEnv => ["/usr/bin/env", JasonPaths.DataDirectoryVariable + "=" + DataDirectory, "PATH=" + InstalledFolder + ":" + (SearchPath ?? Programs.Root)];
 
         /// <summary>The campaign's folder as the recorded exchange names it.</summary>
-        public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/q3-leads";
+        public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/2026-10-16-090000-cmp001";
 
         /// <summary>The campaign's folder this machine has, which the default answer names.</summary>
         public string CampaignFolder { get; }

@@ -24,8 +24,8 @@ namespace Jason.Runtime.Harness;
 /// <para>
 /// A folder already at a level's path is never walked around: one with no marker is taken as the level's by writing its
 /// marker, as the root is; one marked for anything else is refused, naming the path, for the person to rename or move.
-/// The one exception is a campaign's leaf taken by another campaign this runtime holds, since campaign names are not
-/// unique: that leaf is numbered. Whether something is there is always asked as a directory: a file where a folder
+/// The one exception is a campaign's leaf taken by another campaign this runtime holds, made in the same second with the
+/// same end of its id: that leaf is numbered. Whether something is there is always asked as a directory: a file where a folder
 /// belongs is refused as being in the way, never taken for nothing.
 /// </para>
 /// <para>
@@ -151,22 +151,26 @@ public sealed class HarnessFolders(LiveSettings<HarnessOptions> settings, Harnes
     }
 
     /// <summary>
-    /// Makes a campaign's folder in its project's folder and answers its full path. The leaf is made from the campaign's
-    /// name as a project's slug is; a leaf another campaign this runtime holds has is followed by <c>-2</c>, <c>-3</c>. A
-    /// folder there with no marker becomes the campaign's; one marked as another level, or for an id no campaign here
-    /// holds, is refused as taken. Only the path is recorded.
+    /// Makes a campaign's folder in its project's folder and answers its full path. The leaf is the campaign's
+    /// (<see cref="CampaignLeaf"/>): when it was made and the end of its id, never its name; a leaf another campaign this
+    /// runtime holds has, made in the same second with the same end, is followed by <c>-2</c>, <c>-3</c>. A folder there
+    /// with no marker becomes the campaign's; one marked as another level, or for an id no campaign here holds, is refused
+    /// as taken. Only the path is recorded.
     /// </summary>
+    /// <param name="leaf">The campaign's leaf, <see cref="CampaignLeaf.Of"/>.</param>
     /// <param name="held">Whether a campaign of that id is one this runtime holds.</param>
-    public async Task<string> MakeCampaignFolderAsync(string projectFolder, string campaignId, string name, Func<string, Task<bool>> held)
+    public async Task<string> MakeCampaignFolderAsync(string projectFolder, string campaignId, string leaf, Func<string, Task<bool>> held)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectFolder);
         ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
-        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(held);
+        if (!CampaignLeaf.IsLeaf(leaf))
+        {
+            throw new ArgumentException("A campaign's folder is named by its leaf (CampaignLeaf.Of).", nameof(leaf));
+        }
 
         var campaigns = Path.Combine(projectFolder, CampaignsDirectory);
         var mine = new HarnessMarker(HarnessMarker.Campaign, campaignId);
-        var leaf = ProjectSlug.Leaf(name, HarnessMarker.Campaign);
         Disk(campaigns, () => EnsureDirectory(campaigns));
         foreach (var candidate in Names(leaf))
         {
