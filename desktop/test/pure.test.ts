@@ -93,16 +93,23 @@ test('the pairing link is taken only when it is a UI page at the runtime’s ori
 
 // ---- What the CLI said ---------------------------------------------------------------------------------------------
 
-test('jason status is read by its checks: the runtime up, whether it is the bundle’s version, and whether its UI needs installing', () => {
-    const status = (runtime: string, version: string, ui = 'ok') =>
-        JSON.stringify({ ready: false, checks: [{ name: 'runtime', state: runtime }, { name: 'runtime_version', state: version }, { name: 'ui_module', state: ui }] });
-    assert.deepEqual(statusFacts(status('ok', 'ok')), { runtimeUp: true, sameVersion: true, uiNeeded: false, uiServed: true });
-    assert.deepEqual(statusFacts(status('ok', 'failed')), { runtimeUp: true, sameVersion: false, uiNeeded: false, uiServed: true });
+test('jason status is read by its checks: the runtime up, whether it is the bundle’s version, whether its UI needs installing, and whether the role root holds a deployment', () => {
+    const recorded = { name: 'role_skills', state: 'ok', details: { ref: 'v0.34.0-rc.1', source: 'bundle', commit: '' } };
+    const status = (runtime: string, version: string, ui = 'ok', roles: object | null = recorded) =>
+        JSON.stringify({ ready: false, checks: [{ name: 'runtime', state: runtime }, { name: 'runtime_version', state: version }, { name: 'ui_module', state: ui }, ...(roles === null ? [] : [roles])] });
+    assert.deepEqual(statusFacts(status('ok', 'ok')), { runtimeUp: true, sameVersion: true, uiNeeded: false, uiServed: true, roleSkillsUnrecorded: false });
+    assert.deepEqual(statusFacts(status('ok', 'failed')), { runtimeUp: true, sameVersion: false, uiNeeded: false, uiServed: true, roleSkillsUnrecorded: false });
     // ui_module is failed only while a UI is served (with a problem, for another API, or a stale default); absent is none.
-    assert.deepEqual(statusFacts(status('ok', 'ok', 'failed')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: true });
-    assert.deepEqual(statusFacts(status('ok', 'ok', 'absent')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: false });
-    assert.deepEqual(statusFacts(status('failed', 'unknown', 'unknown')), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false });
-    assert.deepEqual(statusFacts('jason: not json'), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false });
+    assert.deepEqual(statusFacts(status('ok', 'ok', 'failed')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: true, roleSkillsUnrecorded: false });
+    assert.deepEqual(statusFacts(status('ok', 'ok', 'absent')), { runtimeUp: true, sameVersion: true, uiNeeded: true, uiServed: false, roleSkillsUnrecorded: false });
+    assert.deepEqual(statusFacts(status('failed', 'unknown', 'unknown')), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false, roleSkillsUnrecorded: false });
+    assert.deepEqual(statusFacts('jason: not json'), { runtimeUp: false, sameVersion: false, uiNeeded: true, uiServed: false, roleSkillsUnrecorded: false });
+    // role_skills carries details exactly where the role root holds a record, whatever its state: none, and the roles were
+    // taken off (a data-kept uninstall) or never deployed; a failed check with its record is something else's to repair.
+    assert.equal(statusFacts(status('ok', 'ok', 'ok', { name: 'role_skills', state: 'failed', fix: 'jason skills install --roles-only' })).roleSkillsUnrecorded, true);
+    assert.equal(statusFacts(status('failed', 'unknown', 'unknown', { name: 'role_skills', state: 'unknown' })).roleSkillsUnrecorded, true);
+    assert.equal(statusFacts(status('ok', 'ok', 'ok', { ...recorded, state: 'failed' })).roleSkillsUnrecorded, false);
+    assert.equal(statusFacts(status('ok', 'ok', 'ok', null)).roleSkillsUnrecorded, false);
     assert.equal(runtimeVersionIn(JSON.stringify({ runtime_version: '0.34.0-rc.1' })), '0.34.0-rc.1');
     assert.equal(runtimeVersionIn(''), null);
     assert.equal(pluginValid(JSON.stringify({ plugins: [{ id: 'reply', status: 'valid' }] }), 'reply'), true);
