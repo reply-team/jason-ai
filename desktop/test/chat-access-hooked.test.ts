@@ -7,7 +7,7 @@
 // nothing changes. Every path here is made up or a temporary one, every command a neutral one or a made-up one.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
@@ -36,7 +36,7 @@ import {
     type Judgement,
     type Platform,
 } from '../src/chat-permission-model.ts';
-import { entryOf, realPathOf, textOf } from '../src/chat-real-path.ts';
+import { entryOf, identityOf, realPathOf, textOf } from '../src/chat-real-path.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const asking = modeFence(fence, 'ask_first');
@@ -483,6 +483,39 @@ test('the three kinds are refused through a link or a junction, from outside the
     for (const [tool, input] of [['Glob', { pattern: '*', path: join(home, 'Desktop', 'shortcut') }], ['Grep', { pattern: 'x', path: join(home, 'Desktop', 'shortcut') }], ['Glob', { pattern: 'out/*' }]] as const) {
         assert.deepEqual(fullAccessJudgement(tool, input, scope), { outcome: 'refused', message: dataRefusal }, `${tool} ${JSON.stringify(input)}`);
     }
+});
+
+test('a file tool\'s target that is another link to a settings file or the run file is refused as that file, by the hook and by the model; a file with one link, and another link to a file of no kind, are not', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-hooked-'));
+    t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+    const home = realPathOf(root) ?? root;
+    const data = join(home, '.jason');
+    const documents = join(home, 'Documents');
+    for (const folder of [join(data, 'config'), join(data, 'run'), join(data, 'desktop', 'chats', 'c1'), documents]) mkdirSync(folder, { recursive: true });
+    writeFileSync(join(data, 'config', 'settings.json'), '{}');
+    writeFileSync(join(data, 'run', 'runtime.json'), '{}');
+    writeFileSync(join(documents, 'plain.md'), 'x');
+    writeFileSync(join(documents, 'copy.json'), '{}');
+    linkSync(join(data, 'config', 'settings.json'), join(documents, 'notes.json'));
+    linkSync(join(data, 'run', 'runtime.json'), join(documents, 'state.json'));
+    linkSync(join(documents, 'plain.md'), join(documents, 'plain-again.md'));
+    const platform = process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux';
+    const scope = hookedScope(platform, home, { real: realPathOf, entry: entryOf, text: textOf, identity: identityOf });
+    for (const path of [join(documents, 'notes.json'), join(documents, 'state.json')]) {
+        for (const [tool, input] of shapes) {
+            if (tool === 'Glob' || tool === 'Bash') continue;
+            const name = `${tool} ${path}`;
+            assert.deepEqual(fullAccessJudgement(tool, input(path), scope), { outcome: 'refused', message: settingsRefusal }, name);
+            for (const judged of both(tool, input(path), scope)) assert.deepEqual(judged, { verdict: 'deny', message: settingsRefusal }, name);
+        }
+    }
+    for (const file of ['plain.md', 'plain-again.md', 'copy.json']) {
+        const path = join(documents, file);
+        assert.deepEqual(fullAccessJudgement('Read', { file_path: path }, scope), { outcome: 'runs' }, file);
+        assert.deepEqual(judge('Read', { file_path: path }, scope), { verdict: 'allow' }, file);
+    }
+    assert.equal(identityOf(documents), null, 'a folder has no identity of a file');
+    assert.equal(identityOf(join(documents, 'missing.md')), null, 'nothing is there');
 });
 
 test('a role\'s attempt and the chat\'s own variables stay refused where the hook rides: JASON_CHAT_TURN, JASON_CONFINED and JASON_ATTEMPT_ID, by the hook and by the model', () => {

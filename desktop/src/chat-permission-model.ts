@@ -82,6 +82,19 @@ export interface ChatScope {
      * nothing readable is there. Absent, an edit is judged by its replacement alone.
      */
     text?: (path: string) => string | null;
+    /**
+     * An existing file's identity (`FileIdentity`), so a file tool's target that is another link to a settings file or the
+     * run file is refused as that file (`linksProtected`); null when nothing is there, it is no file, or it cannot be read.
+     * Absent, paths alone are compared.
+     */
+    identity?: (path: string) => FileIdentity | null;
+}
+
+/** A file's identity on this machine: its volume, its file number on that volume, and how many links it has. */
+export interface FileIdentity {
+    volume: bigint;
+    file: bigint;
+    links: bigint;
 }
 
 export type Judgement =
@@ -587,7 +600,9 @@ function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgeme
     const path = located(value, scope);
     const key = keyOf(scope.platform, path);
     if (inPersonsOwn(scope, path)) return { verdict: 'deny', message: personsRefusal };
-    if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key)) return { verdict: 'deny', message: settingsRefusal };
+    if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key) || linksProtected(scope, path)) {
+        return { verdict: 'deny', message: settingsRefusal };
+    }
     const chat = located(scope.chat, scope);
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
     if (writes) return judgeWrite(scope, path);
@@ -2723,15 +2738,32 @@ function isProtected(scope: ChatScope, path: string): boolean {
 }
 
 /**
+ * Whether a file tool's located target is a settings file or the run file by another of its links: an existing file with
+ * more than one link, on the volume and with the file number of one of them (`ChatScope.identity`). That is the one way a
+ * path names such a file that no comparison of paths sees. A network path is never looked up.
+ */
+function linksProtected(scope: ChatScope, path: string): boolean {
+    const identify = scope.identity;
+    if (identify === undefined || network(scope.platform, path)) return false;
+    const target = identify(path);
+    if (target === null || target.links < 2n) return false;
+    return scope.protectedFiles.some((file) => {
+        const own = identify(located(file, scope));
+        return own !== null && own.volume === target.volume && own.file === target.file;
+    });
+}
+
+/**
  * The kind a path a file tool names is: the person's own installation in a demo, whose settings and run files among it
- * are the person's; a settings or run file; the data directory. It is read where it leads (`hookPlace`), and a path whose
- * end is not read is refused by the sentence that says so (`unplacedRefusal`).
+ * are the person's; a settings or run file, by its path or by another of its links (`linksProtected`); the data
+ * directory. It is read where it leads (`hookPlace`), and a path whose end is not read is refused by the sentence that
+ * says so (`unplacedRefusal`).
  */
 function pathKind(value: string, scope: ChatScope): string | null {
     const path = hookPlace(located(value, scope), scope);
     if (path === null) return unplacedRefusal;
     if (inPersonsOwn(scope, path)) return personsRefusal;
-    if (isProtected(scope, path)) return settingsRefusal;
+    if (isProtected(scope, path) || linksProtected(scope, path)) return settingsRefusal;
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, located(scope.chat, scope), path)) return dataRefusal;
     return null;
 }

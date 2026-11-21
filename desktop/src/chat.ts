@@ -74,7 +74,7 @@ import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permiss
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
-import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
+import { entryOf, identityOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
@@ -1987,6 +1987,7 @@ export class Chat {
                     real: realPathOf,
                     entry: entryOf,
                     text: textOf,
+                    identity: identityOf,
                 };
                 this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();
