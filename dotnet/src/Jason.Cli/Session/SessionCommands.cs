@@ -35,7 +35,7 @@ public static class SessionCommands
         + "On Windows the terminal is Windows Terminal, in a new window, where the account's WindowsApps folder holds wt.exe of "
         + "version 1.18.2681.0 or later, read from its package folder without starting it, and "
         + "the console window where it does not; a Windows Terminal that does not start is followed once by the console window, "
-        + "and stderr says so. "
+        + "and stderr says so; a folder holding % is opened by the console window where there is one. "
         + "Every form opens a terminal that runs this installation's own jason: it is given the data directory this command runs "
         + "on as JASON_DATA_DIR, set or not, and the folder of this jason's executable first on PATH, so another jason earlier on "
         + "PATH does not answer there as the window starts (on Windows in the environment the terminal is started with, on Linux through /usr/bin/env before the "
