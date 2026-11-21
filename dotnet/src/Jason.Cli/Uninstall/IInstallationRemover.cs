@@ -207,6 +207,21 @@ public interface IInstallationRemover
     }
 
     /// <summary>
+    /// macOS: the job <paramref name="label"/> in this account's login domain, as <c>launchctl print gui/&lt;uid&gt;/&lt;label&gt;</c>
+    /// answers (<see cref="Jason.Cli.Autostart.LaunchdJobs.Read"/>). No such job on every other system.
+    /// </summary>
+    Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label) => Jason.Cli.Autostart.LaunchdJob.Absent;
+
+    /// <summary>
+    /// macOS: takes the job <paramref name="label"/> out of this account's login domain, <c>launchctl bootout
+    /// gui/&lt;uid&gt;/&lt;label&gt;</c> and then by its label, as a LaunchAgent's job is taken out
+    /// (<see cref="Jason.Cli.Autostart.LaunchdJobs.BootOut"/>). Nothing it is answered is an error; nothing elsewhere.
+    /// </summary>
+    void BootOutLaunchdJob(string label)
+    {
+    }
+
+    /// <summary>
     /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
     /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
     /// application's steps are done; where that run ends 3 it runs it once more for a person to see, and where the last run
@@ -896,6 +911,28 @@ public static class InstallationRemovers
             // the ... unload subcommand"), and would keep a later Open at Login from starting it; then by its label. Each
             // waited for ten seconds at most, and neither's answer read: a job that is not loaded is the ordinary case.
             Jason.Cli.Autostart.LaunchdJobs.TakeOut([[Jason.Cli.Autostart.LaunchdJobs.Launchctl, "unload", file]], label);
+        }
+
+        public Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return Jason.Cli.Autostart.LaunchdJob.Absent;
+            }
+
+            return Jason.Cli.Installation.AccountDatabase.UserId() is { } account
+                ? Jason.Cli.Autostart.LaunchdJobs.Read(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label)
+                : new Jason.Cli.Autostart.LaunchdJob(Jason.Cli.Autostart.LaunchdJobState.Unread, Why: "this account's user id could not be read");
+        }
+
+        public void BootOutLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (OperatingSystem.IsMacOS() && Jason.Cli.Installation.AccountDatabase.UserId() is { } account)
+            {
+                Jason.Cli.Autostart.LaunchdJobs.BootOut(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label);
+            }
         }
 
         public void RemoveExtractedLibraries(string directory)

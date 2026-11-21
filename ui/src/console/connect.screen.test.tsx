@@ -473,31 +473,22 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
     });
 
-    it('offers the shared mailbox page only after the desktop said one-mailbox links are not available, and asks it on a click', async () => {
+    it('says the plain refusal where this Reply makes no one-mailbox link, and offers nothing after it', async () => {
         const desktop = renderConnect(withAccounts([]));
-        const sentence =
-            'This Reply does not make a link for one mailbox yet. Its shared mailbox page can be opened instead.';
-        desktop.actAnswers.set('setup.replyConnect', [
-            refusal(sentence, 'email_link.not_available', 'shared_page'),
-            {
-                opened: true,
-                channel: 'email',
-                kind: 'connect',
-                linkKind: 'shared_page',
-                expiresAt: null,
-                pendingId: null,
-            },
-        ]);
+        const sentence = 'Reply did not do it: the Reply CLI answered email_link.not_available.';
+        desktop.actAnswers.set('setup.replyConnect', refusal(sentence, 'email_link.not_available'));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         await addAccount(card, 'Gmail');
         const alert = await waitFor(() => within(dialogOf(card)).getByRole('alert'));
         expect(words(alert)).toBe(sentence);
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'email', { provider: 'gmail' }]]);
-        fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Open the shared mailbox page…' }));
-        await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
-        expect(actCalls(desktop)[1]).toEqual(['setup.replyConnect', 'email', { provider: 'gmail', sharedPage: true }]);
-        expect(words(dialogOf(card))).toContain('shared mailbox page, which does not expire');
+        expect(
+            within(dialogOf(card))
+                .getAllByRole('button')
+                .map((button) => button.textContent?.trim()),
+        ).toEqual(['Close']);
+        expect(words(dialogOf(card))).not.toContain('shared mailbox page');
     });
 
     it('copies a new link instead of opening it where the person ticks so, and says until when it works', async () => {
@@ -530,33 +521,6 @@ describe('the Reply card, its acts', () => {
         expect(actCalls(desktop)).toEqual([
             ['setup.replyConnect', 'email', { provider: 'gmail', copy: true }],
             ['setup.replyReconnect', 'linkedin', '14', { copy: true }],
-        ]);
-    });
-
-    it('opens the shared mailbox page even where a copy was ticked, and never asks the desktop to copy it', async () => {
-        const desktop = renderConnect(withAccounts([]));
-        desktop.actAnswers.set('setup.replyConnect', [
-            refusal('Its shared mailbox page can be opened instead.', 'email_link.not_available', 'shared_page'),
-            {
-                opened: true,
-                channel: 'email',
-                kind: 'connect',
-                linkKind: 'shared_page',
-                expiresAt: null,
-                pendingId: null,
-            },
-        ]);
-        const connect = await openConnect();
-        const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('checkbox'));
-        await addAccount(card, 'Outlook');
-        fireEvent.click(
-            await waitFor(() => within(dialogOf(card)).getByRole('button', { name: 'Open the shared mailbox page…' })),
-        );
-        await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
-        expect(actCalls(desktop)).toEqual([
-            ['setup.replyConnect', 'email', { provider: 'office365', copy: true }],
-            ['setup.replyConnect', 'email', { provider: 'office365', sharedPage: true }],
         ]);
     });
 
@@ -716,12 +680,12 @@ describe('the Reply card, its acts', () => {
     });
 
     it('below the Reply CLI the acts need, says so once, offers the desktop’s update and no act', async () => {
-        const below = 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.';
+        const below = 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.';
         const desktop = renderConnect({
             ...setupFound,
             reply: {
                 ...setupFound.reply,
-                cli: { found: true, version: '0.20.0', install: 'reply' },
+                cli: { found: true, version: '0.21.0', install: 'reply' },
                 accounts: [account('2', 'email', 'disconnected')],
                 belowMinimum: below,
             },
@@ -730,7 +694,7 @@ describe('the Reply card, its acts', () => {
         const card = () => replyCard(connect);
         expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([`${below} Update`]);
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
-        expect(words(card())).not.toContain('Reply CLI 0.20.0');
+        expect(words(card())).not.toContain('Reply CLI 0.21.0');
         expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
@@ -747,9 +711,9 @@ describe('the Reply card, its acts', () => {
             ...setupFound,
             reply: {
                 ...setupFound.reply,
-                cli: { found: true, version: '0.20.0', install: null },
+                cli: { found: true, version: '0.21.0', install: null },
                 accounts: [],
-                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.',
+                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.',
             },
         });
         const card = replyCard(await openConnect());

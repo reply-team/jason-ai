@@ -27,6 +27,12 @@ public static class ApplicationFates
 
     /// <summary>The carried jason is not inside a folder shaped as the application's, so no application is planned.</summary>
     public const string NotFound = "not_found";
+
+    /// <summary>
+    /// macOS: Homebrew's cask placed the application (<see cref="Installation.HomebrewCask"/>), so it is left to Homebrew, with
+    /// its link and its own state under <c>~/Library</c>: <c>brew uninstall --zap --cask jason</c> takes them off.
+    /// </summary>
+    public const string LeftToHomebrew = "left_to_homebrew";
 }
 
 /// <summary>
@@ -75,6 +81,21 @@ public sealed record DesktopPlan(
     /// jason and the one an update kept, the record of where the file is, and its support folder.
     /// </summary>
     public IReadOnlyList<string> ApplicationState { get; init; } = [];
+
+    /// <summary>
+    /// macOS: the launchd job Squirrel submits for ShipIt on an update (<see cref="DesktopRemoval.ShipItLabel"/>), where
+    /// launchd says it is loaded when the plan is read: taken out at its step where it is not running then. Null where it
+    /// is not loaded, or launchd could not be asked, which its step says.
+    /// </summary>
+    public string? UpdaterJob { get; init; }
+
+    /// <summary>The ShipIt job as the plan read it, for the look before anything is removed; never written out.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal Autostart.LaunchdJob ShipIt { get; init; } = Autostart.LaunchdJob.Absent;
+
+    /// <summary>The Homebrew prefix whose cask placed the application, where the fate is <see cref="ApplicationFates.LeftToHomebrew"/>; never written out.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal string? HomebrewPrefix { get; init; }
 }
 
 /// <summary>
@@ -121,6 +142,12 @@ public static partial class DesktopRemoval
 
     /// <summary>Squirrel.Mac's ShipIt state under <c>~/Library/Caches</c>: the bundle identifier and <c>.ShipIt</c>.</summary>
     public const string ShipItCacheName = Identifier + ".ShipIt";
+
+    /// <summary>
+    /// The label of the launchd job Squirrel.Mac submits for ShipIt on an update the application installs: the bundle
+    /// identifier and <c>.ShipIt</c>, as its cache is named.
+    /// </summary>
+    public const string ShipItLabel = Identifier + ".ShipIt";
 
     /// <summary>Linux: the name dpkg knows the deb by, which electron-builder gives it.</summary>
     public const string DebPackage = "jason-desktop";
@@ -284,8 +311,12 @@ public static partial class DesktopRemoval
             application = null;
         }
 
+        var homebrew = application is not null && !keepApplication && places.Platform is SetupSystem.MacOs
+            ? Installation.HomebrewCask.Placed(application, env)
+            : null;
         var fate = application is null ? ApplicationFates.NotFound
             : keepApplication ? ApplicationFates.Kept
+            : homebrew is not null ? ApplicationFates.LeftToHomebrew
             : places.Platform switch
             {
                 SetupSystem.Windows => ApplicationFates.AfterExit,
@@ -294,6 +325,7 @@ public static partial class DesktopRemoval
             };
         var windows = places.Platform is SetupSystem.Windows;
         var bundle = Path.GetDirectoryName(carried.Executable)!;
+        var shipIt = places.Platform is SetupSystem.MacOs ? env.Removes!.ReadLaunchdJob(ShipItLabel) : Autostart.LaunchdJob.Absent;
 
         return new DesktopPlan(
             application,
@@ -310,6 +342,9 @@ public static partial class DesktopRemoval
             ApplicationState = fate != ApplicationFates.Deleted ? []
                 : places.Platform is SetupSystem.Linux ? AppImageFiles(places, carried, application!, left)
                 : ApplicationStateOf(places, left),
+            UpdaterJob = shipIt.State is Autostart.LaunchdJobState.Loaded or Autostart.LaunchdJobState.Running ? ShipItLabel : null,
+            ShipIt = shipIt,
+            HomebrewPrefix = homebrew,
         };
     }
 
@@ -1096,14 +1131,109 @@ public static partial class DesktopRemoval
         }
     }
 
-    /// <summary>The demo's marked folders and the updater's caches.</summary>
-    public static void RemoveDemoAndCaches(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> problems)
+    /// <summary>
+    /// macOS, before the updater's caches: the launchd job Squirrel.Mac submits for ShipIt when the application installs an
+    /// update (<see cref="ShipItLabel"/>), which launchd keeps loaded once ShipIt has ended. Read at this step, and taken out
+    /// of this account's login domain only where launchd says it is loaded and not running, then read again: gone, it is
+    /// said done; still there, it is a problem with the command that takes it out. One running, or set to run, is an update
+    /// being installed, begun since the uninstall's own look: it is left, never ended part-way, and so are ShipIt's cache,
+    /// the application and its own state, which their steps keep and say kept; this says that an update was being
+    /// installed, names what of those <paramref name="plan"/> holds, so only what was there and was left, and says what to
+    /// do; it returns true. One launchd could not be asked about, in a login domain it says is there, is left as it was, and
+    /// said. One not loaded is nothing to say, and nor is one whose login domain launchd says is not there, as an account
+    /// with no login session has none (<see cref="Autostart.LaunchdJobs.Read"/>).
+    /// </summary>
+    public static bool TakeOutUpdaterJob(CliEnvironment env, SetupPlaces places, DesktopPlan plan, List<string> done, List<string> problems)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(places);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (places.Platform is not SetupSystem.MacOs)
+        {
+            return false;
+        }
+
+        var takeOut = $"`launchctl bootout gui/$(id -u)/{ShipItLabel}`";
+        var job = env.Removes!.ReadLaunchdJob(ShipItLabel);
+        switch (job.State)
+        {
+            case Autostart.LaunchdJobState.Absent:
+                return false;
+            case Autostart.LaunchdJobState.Running:
+                var left = new List<string> { "the job" };
+                if (plan.Caches.Any(IsShipItCache))
+                {
+                    left.Add("ShipIt's state");
+                }
+
+                if (plan.Application is not null && plan.ApplicationFate == ApplicationFates.Deleted)
+                {
+                    left.Add("the application");
+                    if (plan.ApplicationState.Count > 0)
+                    {
+                        left.Add("its own state under ~/Library");
+                    }
+                }
+
+                problems.Add($"{BeingInstalled(job)}, and an update is never ended part-way, so these were left: {Listed(left)}. {UninstallAgain(env)}");
+                return true;
+            case Autostart.LaunchdJobState.Unread:
+                problems.Add($"launchd could not be asked about the job {ShipItLabel} ({job.Why?.TrimEnd('.')}), so it was left as it was: `launchctl print gui/$(id -u)/{ShipItLabel}` says whether it is loaded, and {takeOut} takes it out.");
+                return false;
+        }
+
+        env.Removes!.BootOutLaunchdJob(ShipItLabel);
+        if (env.Removes!.ReadLaunchdJob(ShipItLabel).State is Autostart.LaunchdJobState.Absent)
+        {
+            done.Add($"Took the launchd job {ShipItLabel}, which Squirrel submits for ShipIt when Jason Desktop installs an update, out of launchd.");
+        }
+        else
+        {
+            problems.Add($"The launchd job {ShipItLabel} is still loaded after `launchctl bootout`: {takeOut} takes it out.");
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// What a problem says of ShipIt found running: that an update was being installed, by which process of which job. In
+    /// the past, as the report is read once the uninstall has ended, and the update may have ended by then.
+    /// </summary>
+    private static string BeingInstalled(Autostart.LaunchdJob job)
+    {
+        var process = job.Pid is { } pid ? string.Create(CultureInfo.InvariantCulture, $"process {pid}, ") : string.Empty;
+        return $"An update of Jason Desktop was being installed by ShipIt ({process}the launchd job {ShipItLabel})";
+    }
+
+    /// <summary>A list as a sentence says it: "a", "a and b", "a, b and c".</summary>
+    private static string Listed(IReadOnlyList<string> items) =>
+        items.Count < 2 ? string.Concat(items) : $"{string.Join(", ", items.Take(items.Count - 1))} and {items[^1]}";
+
+    /// <summary>Whether a folder of the plan's caches is ShipIt's state.</summary>
+    private static bool IsShipItCache(string folder) => string.Equals(Path.GetFileName(folder), ShipItCacheName, StringComparison.Ordinal);
+
+    /// <summary>What to do once the update ShipIt was installing has ended: the one uninstall again, from either door.</summary>
+    private static string UninstallAgain(CliEnvironment env) =>
+        "Once the update has ended, uninstall again: from the Jason menu, reopen Jason and choose Uninstall Jason again, or run "
+        + $"`\"{StartInFlight.Image(env) ?? "jason"}\" uninstall`; what is already gone is not an error the second time.";
+
+    /// <summary>
+    /// The demo's marked folders and the updater's caches; ShipIt's own state kept, and said kept, where ShipIt was found
+    /// installing an update at the job's step (<paramref name="shipItInstalling"/>).
+    /// </summary>
+    public static void RemoveDemoAndCaches(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems, bool shipItInstalling = false)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
 
         foreach (var (folder, what) in plan.Demo.Select(folder => (folder, "an earlier version's demo folder")).Concat(plan.Caches.Select(folder => (folder, "the updater's cache"))))
         {
+            if (shipItInstalling && IsShipItCache(folder))
+            {
+                kept.Add($"Kept {folder}, ShipIt's state: an update of Jason Desktop was being installed.");
+                continue;
+            }
+
             try
             {
                 env.Removes!.RemoveTree(folder);
@@ -1152,13 +1282,21 @@ public static partial class DesktopRemoval
     }
 
     /// <summary>
-    /// The last look, just before the application is deleted: the window opened again, or a jason of this installation
-    /// started since the runtime stopped, both of which run from what goes next. Either keeps the application, and its state
-    /// under ~/Library or an AppImage's files, and is the problem this returns, with <paramref name="byHand"/> the way to
-    /// remove it then; null where neither runs.
+    /// The last look, just before the application is deleted: on macOS, ShipIt installing an update of it, begun since the
+    /// job's own step, which is never ended part-way; the window opened again, or a jason of this installation started since
+    /// the runtime stopped, both of which run from what goes next. Any of them keeps the application, and its state under
+    /// ~/Library or an AppImage's files, and is the problem this returns, with <paramref name="byHand"/> the way to remove it
+    /// then; null where none runs. A job launchd could not be asked about keeps nothing here: its step said so.
     /// </summary>
     private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application, SetupSystem platform, string byHand)
     {
+        if (platform is SetupSystem.MacOs && env.Removes!.ReadLaunchdJob(ShipItLabel) is { State: Autostart.LaunchdJobState.Running } installing)
+        {
+            var state = plan.ApplicationState.Count > 0 ? " and its own state under ~/Library" : string.Empty;
+            return $"{BeingInstalled(installing)} when the application was to go, and an update is never ended part-way, so these were left: "
+                + $"the application at {application}{state}. {UninstallAgain(env)}";
+        }
+
         var window = env.Removes!.RunningFrom(ApplicationExecutable(application, platform));
         if (StartInFlight.Image(env) is not { } image)
         {
@@ -1177,8 +1315,18 @@ public static partial class DesktopRemoval
                 byHand);
     }
 
-    /// <summary>The application itself, the last act: kept, handed to its uninstaller, or deleted.</summary>
-    public static void RemoveApplication(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems)
+    /// <summary>The command that takes off an application Homebrew's cask placed, with what Jason left to it.</summary>
+    public const string HomebrewZap = "brew uninstall --zap --cask jason";
+
+    /// <summary>What the report keeps, where Homebrew's cask placed the application.</summary>
+    public static string LeftToHomebrewLine(string application, string prefix) =>
+        $"The application at {application} was placed by Homebrew and is left to it, with its link {Installation.HomebrewCask.Link(prefix)} and its state under ~/Library: `{HomebrewZap}` takes them off.";
+
+    /// <summary>
+    /// The application itself, the last act: kept, left to Homebrew, handed to its uninstaller, or deleted; on macOS kept with its own state,
+    /// and said kept, where ShipIt was found installing an update of it at the job's step (<paramref name="shipItInstalling"/>).
+    /// </summary>
+    public static void RemoveApplication(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems, bool shipItInstalling = false)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
@@ -1191,6 +1339,9 @@ public static partial class DesktopRemoval
         {
             case ApplicationFates.Kept:
                 kept.Add($"The application at {application} is kept here: the uninstaller that asked for this removes it next.");
+                return;
+            case ApplicationFates.LeftToHomebrew:
+                kept.Add(LeftToHomebrewLine(application, plan.HomebrewPrefix!));
                 return;
             case ApplicationFates.AfterExit:
                 if (!File.Exists(Path.Combine(application, UninstallerName)))
@@ -1215,6 +1366,13 @@ public static partial class DesktopRemoval
                 RemoveAppImage(env, plan, application, done, problems);
                 return;
             case ApplicationFates.Deleted:
+                if (shipItInstalling)
+                {
+                    var state = plan.ApplicationState.Count > 0 ? " and its own state under ~/Library" : string.Empty;
+                    kept.Add($"Kept the application at {application}{state}: an update of it was being installed.");
+                    return;
+                }
+
                 if (!IsJasonsBundle(application))
                 {
                     problems.Add($"{application} no longer names Jason Desktop's bundle identifier, {Identifier}, in its Contents/Info.plist, so it was not deleted: it is not known to be Jason's.");

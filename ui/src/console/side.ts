@@ -4,31 +4,35 @@ import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
-import { act, define } from './actions';
+import { act, define, menuPointer, systemMenuAfterKey } from './actions';
 import { html, type Html } from './html';
 import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
+import { supersede } from './conversation-acts';
 import { needsInput } from './needs';
 import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
-import { closeFilterMenu, recentView } from './recent';
+import { closeFilterMenu, closeRowMenu, recentView, rowMenu } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
+import { updateMark } from '../screens/settings/update-state';
 
-// The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
-// Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot. The menu and Recent scroll between the button and the foot, so
-// Settings stays at the foot of the window. Live draws the essentials alone: the brand, the button, Search, Needs you,
-// Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds
-// every page in both modes. Demo draws the whole list.
+// The console's sidebar, top to bottom: the brand, the button that makes an agent and the one under it that makes a chat
+// about no agent, Search, Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More
+// (the screens with no row of their own), the conversations under "Recent", and Settings in the foot. The menu and
+// Recent scroll between the buttons and the foot, so Settings stays at the foot of the window. Live draws the
+// essentials alone, in the same order: the brand, the two buttons, Search, Needs you, the Feed, Accounts, Recent and
+// Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds every page in
+// both modes. Demo draws the whole list.
 
-/** Which of the sidebar's two menus is open. */
-const open = signal<'create' | 'more' | null>(null);
+/** Whether the sidebar's menu, More, is open. */
+const open = signal<'more' | null>(null);
 
 /** Closes whichever menu is open. */
 export function closeMenus(): void {
     open.value = null;
     closeFilterMenu();
+    closeRowMenu();
 }
 
 /** The address of a screen the browser shell registers, or null when this build has none. */
@@ -93,7 +97,7 @@ export function waitingCount(): Count {
 }
 
 define('side.menu', ([which]) => {
-    if (which !== 'create' && which !== 'more') return;
+    if (which !== 'more') return;
     open.value = open.value === which ? null : which;
 });
 define('side.close', () => closeMenus());
@@ -119,11 +123,35 @@ define('side.feed', () => {
         here().dock.showChat(held);
     });
 });
-define('side.chat', ([id]) => {
-    if (typeof id !== 'string') return;
+/** Shows a conversation of Recent, as a click on its row does. */
+export function openRow(id: string): void {
+    supersede();
     void openConversation(id).then((held) => {
         if (held !== null) here().dock.showChat(held);
     });
+}
+
+define('side.chat', ([id]) => {
+    if (typeof id === 'string') openRow(id);
+});
+
+/**
+ * Opens the menu on a row of Recent, and nothing else: the row is neither opened nor shown. A right-click places it at
+ * the pointer; the keyboard, Shift+F10 or the menu key, under the row. A menu the keyboard opened on a row already is not
+ * opened again by the system's own event that follows the key.
+ */
+define('side.rowmenu', ([id], element, event) => {
+    if (typeof id !== 'string') return;
+    if (systemMenuAfterKey(event) && rowMenu.value?.id === id) return;
+    const pointer = menuPointer(event);
+    const box = element.getBoundingClientRect();
+    closeMenus();
+    rowMenu.value = {
+        id,
+        title: element.getAttribute('aria-label') ?? '',
+        x: pointer?.x ?? box.left + 12,
+        y: pointer?.y ?? box.bottom,
+    };
 });
 define('side.show', ([panel]) => {
     closeMenus();
@@ -162,8 +190,9 @@ export function sideView(): Html {
               </button>`;
     };
     const full = mode.value === 'demo';
-    const accounts = pageOf('accounts');
     const settings = pageOf('settings');
+    // One quiet mark on Settings while the desktop knows of a version it has not installed; no count.
+    const newer = updateMark();
     return html`${
             menu === null
                 ? null
@@ -181,66 +210,19 @@ export function sideView(): Html {
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
             <span class="alpha">Alpha</span>
         </div>
-        <div class="menuwrap create">
-            <div class="newrow">
-                <button
-                    class="newbtn"
-                    type="button"
-                    ${marked('start')}
-                    ${act('side.start')}
-                    ${offUnless('chat.create')}
-                >
-                    ${svg('plusc', 15)}New GTM agent
-                </button>
-                <button
-                    class="caret"
-                    type="button"
-                    aria-label="More to create"
-                    title="Create an agent or a chat, or connect an account"
-                    aria-haspopup="menu"
-                    aria-expanded="${menu === 'create' ? 'true' : 'false'}"
-                    ${act('side.menu', 'create')}
-                >
-                    ${svg('chev', 15)}
-                </button>
-            </div>
-            ${
-                menu === 'create'
-                    ? html`<div class="menu" role="menu" aria-label="Create">
-                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus', offUnless('chat.create'))}
-                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat', offUnless('chat.create'))}
-                          ${
-                              accounts === null
-                                  ? null
-                                  : entry(
-                                        'Connect an account',
-                                        'Link the accounts Jason works through',
-                                        act('side.page', accounts),
-                                        'plug',
-                                    )
-                          }
-                      </div>`
-                    : null
-            }
+        <div class="newstack">
+            <button class="newbtn" type="button" ${marked('start')} ${act('side.start')} ${offUnless('chat.create')}>
+                ${svg('plusc', 15)}New GTM agent
+            </button>
+            <button class="newbtn" type="button" ${act('side.new')} ${offUnless('chat.create')}>
+                ${svg('chat', 15)}${t('side.newChat')}
+            </button>
         </div>
         <div class="sscroll">
             <nav class="list" aria-label="Menu">
                 <button class="item find" type="button" aria-keyshortcuts="${paletteShortcut()}" ${act('side.search')}>
                     ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
                 </button>
-                ${
-                    !full || feed === null
-                        ? null
-                        : html`<button
-                              class="item"
-                              type="button"
-                              ${feed === currentChat.value ? html`aria-current="true"` : null}
-                              ${act('side.feed')}
-                          >
-                              ${svg('pulse', 15)}<span>Feed</span>
-                              ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
-                          </button>`
-                }
                 ${
                     full
                         ? html`<button
@@ -257,6 +239,19 @@ export function sideView(): Html {
                     ${svg('needs', 15)}<span>Needs you</span>
                     ${count.n > 0 ? html`<span class="count" aria-label="${countWords(count)} waiting">${countWords(count)}</span>` : null}
                 </button>
+                ${
+                    feed === null
+                        ? null
+                        : html`<button
+                              class="item"
+                              type="button"
+                              ${feed === currentChat.value ? html`aria-current="true"` : null}
+                              ${act('side.feed')}
+                          >
+                              ${svg('pulse', 15)}<span>Feed</span>
+                              ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
+                          </button>`
+                }
                 ${full ? pageRow('people', 'People', 'people') : null}
                 ${
                     full
@@ -270,7 +265,7 @@ export function sideView(): Html {
                           </button>`
                         : null
                 }
-                ${full ? pageRow('accounts', 'Accounts', 'plug') : null}
+                ${pageRow('accounts', 'Accounts', 'plug')}
                 ${
                     full
                         ? html`<div class="menuwrap">
@@ -314,6 +309,7 @@ export function sideView(): Html {
                 : html`<div class="sfoot">
                       <button class="item" type="button" ${marked('settings')} ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
+                          ${newer === null ? null : html`<span class="dot w" role="img" aria-label="${t('settings.update.newer', { version: newer })}" title="${t('settings.update.newer', { version: newer })}"></span>`}
                       </button>
                   </div>`
         }`;

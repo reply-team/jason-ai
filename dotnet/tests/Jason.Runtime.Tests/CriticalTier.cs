@@ -51,9 +51,9 @@ internal static partial class CriticalTier
         [Family.B4] =  [  0,   0,   0,   0,   7],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
-        [Family.B7] =  [  4,   4,   4,   4,  20],
+        [Family.B7] =  [  4,   4,   4,   4,  21],
         [Family.B8] =  [  0,   0,   0,   0,   1],
-        [Family.B9] =  [  3,   0,   0,   0,   5],
+        [Family.B9] =  [  4,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
         [Family.W2] =  [  0,   2,   0,   0,  19],
         [Family.W3] =  [  0,   0,   0,   0,  15],
@@ -69,20 +69,20 @@ internal static partial class CriticalTier
         [Family.P2] =  [  0,   5,   0,   0, 104],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  25],
-        [Family.S2] =  [  2,   1,  10,   0,  92],
+        [Family.S2] =  [  2,   1,  10,   0,  93],
         [Family.S3] =  [  0,   3,   3,   9,  27],
         [Family.S4] =  [  0,  30,   0,   0,   3],
         [Family.S5] =  [  0,   0,   0,   0,  23],
         [Family.S6] =  [  0,   0,   0,   0, 133],
         [Family.R1] =  [  0,   0,  12,   9,  31],
-        [Family.R2] =  [  0,  29,  10,   0,  22],
+        [Family.R2] =  [  0,  30,  10,   0,  22],
         [Family.R3] =  [  0,   1,  30,   0,  15],
         [Family.R4] =  [  0,   0,   0,   8,   0],
         [Family.R5] =  [  0,   0,   0,   9,   7],
         [Family.I1] =  [  0,  18,   5,   0,  12],
         [Family.I2] =  [  0,  54,  10,   0,   2],
         [Family.I3] =  [  1,  55,   0,   0,   0],
-        [Family.I4] =  [  0,  12,   0,   0,   0],
+        [Family.I4] =  [  0,  16,   0,   0,   0],
         [Family.E1] =  [  0,   0,   0,   0,   1],
         [Family.E2] =  [  1,   0,   0,   0,   0],
         [Family.F1] =  [  0,   0,   9,   1,  14],
@@ -115,11 +115,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
-        (30, 415, 676, 32),      // Jason.App.Tests
-        (202, 3316, 6246, 461),  // Jason.Cli.Tests
+        (31, 444, 722, 34),      // Jason.App.Tests
+        (206, 3449, 6567, 465),  // Jason.Cli.Tests
         (105, 864, 4589, 136),   // Jason.Contracts.Tests
         (48, 302, 479, 54),      // Jason.PluginHost.Tests
-        (748, 6335, 13047, 952), // Jason.Runtime.Tests
+        (749, 6338, 13053, 954), // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>

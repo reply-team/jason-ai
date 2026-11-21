@@ -19,7 +19,6 @@ const top = {
     chat: true,
     links: true,
     setup: true,
-    fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
 // The update item's key, where the item can act: read by the System screen's notice of an update. The desktop's version
@@ -55,15 +54,12 @@ const chat = {
     feed: true,
     // A card the AI asked for that did not draw: its kind and why, for the desktop's log, never what it held.
     cardRefused: true,
+    // Where a file dropped on the message box is on this computer, read by the desktop from the file itself, for the box.
+    pathOf: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
 // The window's pairing: the page reports its token's id, never the token.
 const pairing = { paired: true } as const satisfies Record<keyof JasonDesktop['pairing'], true>;
-// The standing choice of Full access: read and taken back by the page, never given by it.
-const fullAccess = { standing: true, takeBack: true, onChanged: true } as const satisfies Record<
-    keyof JasonDesktop['fullAccess'],
-    true
->;
 const setup = {
     status: true,
     connectReply: true,
@@ -104,13 +100,12 @@ const held: [
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
-    Exactly<keyof typeof fullAccess, keyof JasonDesktop['fullAccess']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
@@ -122,8 +117,7 @@ describe('the desktop seam', () => {
                     name !== 'pairing' &&
                     name !== 'chat' &&
                     name !== 'links' &&
-                    name !== 'setup' &&
-                    name !== 'fullAccess',
+                    name !== 'setup',
             ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
             ...Object.keys(updates).map((name) => `updates.${name}`),
@@ -134,7 +128,6 @@ describe('the desktop seam', () => {
             ...Object.keys(chat).map((name) => `chat.${name}`),
             ...Object.keys(links).map((name) => `links.${name}`),
             ...Object.keys(setup).map((name) => `setup.${name}`),
-            ...Object.keys(fullAccess).map((name) => `fullAccess.${name}`),
         ]).toEqual([
             'platform',
             'onCommand',
@@ -169,6 +162,7 @@ describe('the desktop seam', () => {
             'chat.openFolder',
             'chat.feed',
             'chat.cardRefused',
+            'chat.pathOf',
             'links.take',
             'links.onOpen',
             'setup.status',
@@ -187,9 +181,6 @@ describe('the desktop seam', () => {
             'setup.replyUnblock',
             'setup.replyDelete',
             'setup.onChanged',
-            'fullAccess.standing',
-            'fullAccess.takeBack',
-            'fullAccess.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([
             'hosts',

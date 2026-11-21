@@ -1,6 +1,6 @@
-// A chat's access modes, short of a whole turn: what each mode starts Claude Code with, the Full access turn's hook file,
-// the confirmation's words and the floor, what the broker answers in each mode, and the refusals that must hold under Full
-// access, each driven through the hook's own endpoint as Claude Code calls it.
+// A chat's access modes, short of a whole turn: what each mode starts Claude Code with, the hooked turn's settings file,
+// the floor, what the broker answers in each mode, and what the hook refuses and leaves under Full access, each driven
+// through the hook's own endpoint as Claude Code calls it.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -8,19 +8,21 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
-import { helpNouns, readFence } from '../src/chat-deny.ts';
-import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { Chat } from '../src/chat.ts';
+import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
+import * as modesModule from '../src/chat-modes.ts';
+import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedTools, claudeTurnSettings, fullAccessRemovedTools, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
-import { fullAccessJudgement, heldSentence, judge, toolsThatRunNothing, type ChatScope } from '../src/chat-permission-model.ts';
+import { confinedRefusal, fullAccessJudgement, judge, searchRefusal, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
 import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
-const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
+const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 const values = (args: string[], flag: string) => {
     const rest = args.slice(args.indexOf(flag) + 1);
@@ -34,16 +36,69 @@ test('the four modes, Ask first first, then narrow to wide with Full access last
     assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
 });
 
-test('Auto-edit says in one sentence why Codex and the Feed have none', () => {
-    assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
-    assert.equal(feedAutoEdit, 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
+/** Each cause the bypass is not available for, with the mode Claude Code named where it named one. */
+const causes: readonly Bypass[] = [
+    { why: 'root', named: null },
+    { why: 'bypass_off', named: 'default' },
+    { why: 'bypass_off', named: 'auto' },
+    { why: 'bypass_off', named: 'another' },
+    { why: 'forced_default', named: 'default' },
+    { why: 'bypass_refused', named: null },
+    { why: 'unguarded', named: null },
+];
+
+test('a turn runs in the mode its chat keeps, on Codex Full access included, but Full access in Ask first from a tab, while not offered, where Claude Code\'s bypass is not available or below its floor, and Auto-edit in Ask first on Codex, each with its sentence', () => {
+    const at = { fromTab: false, offered: true, claudeVersion: fullAccessFloor };
+    for (const mode of chatModes) assert.deepEqual(turnMode(mode, 'claude', at), { mode, why: null }, mode);
+    const askFirst = (kind: string, text: string | null) => ({ mode: 'ask_first', why: { kind, text } });
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, fromTab: true }), askFirst('tab', tabFullAccess));
+    assert.deepEqual(turnMode('full_access', 'codex', at), { mode: 'full_access', why: null }, 'Codex acts in Full access, with no sandbox');
+    assert.deepEqual(turnMode('full_access', 'codex', { ...at, claudeVersion: '2.1.200' }), { mode: 'full_access', why: null }, 'Claude Code\'s floor is no floor of Codex');
+    // Only Codex is spared Claude Code's floor: a program of any other name is held to it, never given Full access free.
+    for (const program of ['gemini', 'cursor', 'codex-api-key', '']) {
+        assert.deepEqual(turnMode('full_access', program, { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')), program);
+    }
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, offered: false }), askFirst('not_offered', fullAccessNotYet));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: '2.1.200' }), askFirst('floor', fullAccessSentence('2.1.200')));
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: null }), askFirst('floor', fullAccessSentence(null)), 'a version that could not be read');
+    assert.deepEqual(turnMode('full_access', 'claude', { ...at, claudeVersion: undefined }), { mode: 'full_access', why: null }, 'a version not read is no floor yet');
+    assert.deepEqual(turnMode('auto_edit', 'codex', at), askFirst('codex_auto_edit', codexAutoEdit));
+    assert.deepEqual(turnMode('auto_edit', 'codex', { ...at, fromTab: true }), askFirst('codex_auto_edit', codexAutoEdit));
+    // The first cause that holds is the one said: a tab before the switch, the switch before the floor.
+    assert.equal(turnMode('full_access', 'codex', { ...at, fromTab: true, offered: false }).why?.kind, 'tab');
+    assert.equal(turnMode('full_access', 'codex', { ...at, offered: false }).why?.kind, 'not_offered');
+    assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, claudeVersion: '2.1.200' }).why?.kind, 'not_offered');
+    for (const cause of causes) {
+        assert.deepEqual(turnMode('full_access', 'claude', { ...at, bypass: cause }), askFirst(cause.why, bypassSentence(cause)), cause.why);
+        const { mode, why } = bypassLeadsTo(cause);
+        assert.deepEqual(turnMode('full_access', 'claude', { ...at, bypass: cause }), { mode, why }, 'what a cause leads to is decided in one place');
+        assert.equal(turnMode('full_access', 'claude', { ...at, bypass: cause, claudeVersion: '2.1.200' }).why?.kind, cause.why, 'the bypass before the floor');
+        assert.deepEqual(turnMode('auto_edit', 'claude', { ...at, bypass: cause }), { mode: 'auto_edit', why: null }, 'no other mode runs in the bypass');
+        assert.deepEqual(turnMode('full_access', 'codex', { ...at, bypass: cause }), { mode: 'full_access', why: null }, 'Claude Code\'s bypass is no bypass of Codex');
+    }
+    assert.equal(turnMode('full_access', 'claude', { ...at, offered: false, bypass: { why: 'root', named: null } }).why?.kind, 'not_offered', 'the switch before the bypass');
+    for (const mode of ['ask_first', 'plan_only'] as const) {
+        for (const program of ['claude', 'codex']) assert.deepEqual(turnMode(mode, program, { fromTab: true, offered: false, claudeVersion: null }), { mode, why: null }, `${mode} on ${program}`);
+    }
 });
 
-test('Ask first starts Claude Code as every turn did before the modes: no permission mode, the settings inline', () => {
+test('Auto-edit says in one sentence why Codex has none; the Feed is refused no mode, so it has no sentence of refusal', () => {
+    assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
+    for (const gone of ['feedAutoEdit', 'feedFullAccess']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
+});
+
+test('Ask first starts Claude Code in its default mode, named, with the settings inline, or in the turn\'s own file where the hook rides', () => {
     const asked = claudeArguments({ ...base, mode: 'ask_first' });
     assert.deepEqual(asked, claudeArguments(base));
-    assert.ok(!asked.includes('--permission-mode'));
+    assert.equal(after(asked, '--permission-mode'), 'default');
     assert.equal(after(asked, '--settings'), claudeTurnSettings);
+    const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
+    const hooked = claudeArguments({ ...base, mode: 'ask_first', settingsFile });
+    assert.equal(after(hooked, '--settings'), settingsFile);
+    // The host's refusal of a jason that starts with an option aside: where the hook rides, the model judges that, and
+    // runs jason's own help and version.
+    assert.deepEqual(values(hooked, '--disallowedTools'), values(asked, '--disallowedTools').filter((rule) => rule !== 'Bash(jason -*)'), 'the same rules as without the hook');
+    assert.ok(values(asked, '--disallowedTools').includes('Bash(jason -*)'));
 });
 
 test('Plan only starts Claude Code in plan mode, with the classifier kept out, the plan list in place of the allow list and no way out of planning', () => {
@@ -61,28 +116,42 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     for (const verb of ['plugin grant', 'plugin revoke']) assert.ok(denied.includes(`Bash(jason ${verb}:*)`), `Plan only refuses ${verb}`);
 });
 
-test('Full access starts Claude Code in the host\'s default mode, with no permission mode, every deny rule kept and its settings in the turn\'s own file', () => {
+test('Full access starts Claude Code in its own bypass mode, named, every deny rule kept, the PowerShell tool kept, and its settings in the turn\'s own file', () => {
     const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
-    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile });
-    assert.ok(!args.includes('--permission-mode'), 'no permission mode: the host\'s default');
-    assert.ok(!args.includes('bypassPermissions'));
+    const args = claudeArguments({ ...base, mode: 'full_access', settingsFile, version: fullAccessFloor });
+    assert.equal(after(args, '--permission-mode'), 'bypassPermissions');
     assert.equal(after(args, '--settings'), settingsFile);
-    assert.deepEqual(values(args, '--disallowedTools'), values(claudeArguments(base), '--disallowedTools'));
-    for (const kept of ['--strict-mcp-config', '--permission-prompt-tool']) assert.ok(args.includes(kept), kept);
-    assert.equal(after(args, '--setting-sources'), 'project');
+    const others = (rules: string[]) => rules.filter((rule) => rule !== 'PowerShell' && rule !== 'Bash(jason -*)');
+    assert.deepEqual(others(values(args, '--disallowedTools')), others(values(claudeArguments(base), '--disallowedTools')));
+    assert.ok(!values(args, '--disallowedTools').includes('Bash(jason -*)'), 'the hook rides the turn, and a jason that starts with an option is none of its three kinds');
+    assert.ok(!values(args, '--disallowedTools').includes('PowerShell') && values(args, '--disallowedTools').includes('Monitor'));
+    for (const kept of ['--permission-prompt-tool', '--mcp-config']) assert.ok(args.includes(kept), kept);
+    // The person's own configuration loads in Full access, as in a terminal's session in Claude Code's bypass mode.
+    for (const left of ['--strict-mcp-config', '--setting-sources', '--no-chrome']) assert.ok(!args.includes(left), left);
     assert.ok(!args.includes('--dangerously-skip-permissions'));
     assert.throws(() => claudeArguments({ ...base, mode: 'full_access' }), /settings file/);
 });
 
-test('the Full access turn\'s settings: reads outside the folders still blocked, no project file can switch the hook off or filter it, and a hook on every tool that blocks it when it fails', () => {
-    const settings = fullAccessSettings('http://127.0.0.1:4100/hook', 'the-secret');
+test('the settings of a turn the hook rides: no block of reads outside the folders, no settings file of yours or a project\'s can switch the hook off or filter it, a hook on every tool that blocks it when it fails, and outside Full access a page asked about and the server defences', () => {
+    const settings = hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 'the-secret');
+    // Ask first and Auto-edit are sealed as Plan only is, so their settings keep the person's servers, connectors, browser
+    // and skills' shell commands out; a Full access turn loads the person's own configuration.
+    for (const mode of ['ask_first', 'auto_edit'] as const) {
+        assert.deepEqual(
+            hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'),
+            {
+                ...settings,
+                permissions: { ask: ['WebFetch(domain:*)'] },
+                disableClaudeAiConnectors: true,
+                deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
+                disableSkillShellExecution: true,
+            },
+            mode,
+        );
+    }
     assert.deepEqual(settings, {
-        permissions: { blockReadsOutsideWorkingDirectories: true },
-        disableSkillShellExecution: true,
         disableAllHooks: false,
         allowedHttpHookUrls: ['http://127.0.0.1:4100/hook'],
-        disableClaudeAiConnectors: true,
-        deniedMcpServers: [{ serverName: 'claude-in-chrome' }],
         hooks: {
             PreToolUse: [
                 {
@@ -94,15 +163,33 @@ test('the Full access turn\'s settings: reads outside the folders still blocked,
     });
 });
 
+test('the settings of a turn the hook rides set, as `env`, what the desktop decides of the turn\'s environment, in every mode the hook rides, and the file written for the turn carries it', (t) => {
+    const env = { PATH: '/b:/usr/bin', JASON_CHAT_TURN: '1', JASON_DATA_DIR: '', CLAUDE_CODE_SIMPLE: '' };
+    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+        const settings = hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret', { env }) as Record<string, unknown>;
+        assert.deepEqual(settings['env'], env, mode);
+        assert.deepEqual({ ...settings, env: undefined }, { ...hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), env: undefined }, `${mode}: nothing else changes`);
+    }
+    const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
+    t.after(() => rmSync(turns, { recursive: true, force: true }));
+    for (const mode of ['full_access', 'ask_first'] as const) {
+        const file = writeTurnSettings(turns, newTurnId(), 'http://127.0.0.1:1/hook', 's', mode, { env });
+        assert.deepEqual((JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)['env'], env, mode);
+    }
+});
+
 test('the turn\'s settings file sits beside its MCP file, readable by its user alone, and goes with it', (t) => {
     const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
     t.after(() => rmSync(turns, { recursive: true, force: true }));
     const id = newTurnId();
-    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', 's');
+    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', 's', 'jason_desktop_0123456789abcdef');
     const file = writeTurnSettings(turns, id, 'http://127.0.0.1:1/hook', 's');
     assert.equal(file, turnSettingsPath(turns, id));
     assert.match(file, /turn-[0-9a-f]{24}\.settings\.json$/);
-    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), fullAccessSettings('http://127.0.0.1:1/hook', 's'));
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), hookedSettings('full_access', 'http://127.0.0.1:1/hook', 's'));
+    const asked = writeTurnSettings(turns, newTurnId(), 'http://127.0.0.1:1/hook', 's', 'ask_first');
+    assert.deepEqual(JSON.parse(readFileSync(asked, 'utf8')), hookedSettings('ask_first', 'http://127.0.0.1:1/hook', 's'), 'in the mode it is written for');
+    rmSync(asked);
     if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.throws(() => writeTurnSettings(turns, id, 'http://127.0.0.1:1/hook', 's'), 'a file already there is never overwritten');
     removeTurnFiles(turns, id);
@@ -120,36 +207,81 @@ test('Full access is offered from Claude Code 2.1.322, read as the floor is read
     assert.notEqual(fullAccessSentence('2.1.295'), null, 'the version that first blocks on a failed hook is below it');
     assert.notEqual(fullAccessSentence('2.1.322-beta.1'), null, 'a pre-release of the floor is below it');
     assert.match(fullAccessSentence(null) ?? '', /could not be read/);
-    assert.equal(codexFullAccess, 'Full access runs on Claude Code only.');
 });
 
-test('the confirmation says in plain words what Full access does, whose risk it is and what it cannot see; Cancel is focused and Escape cancels', () => {
-    const dialog = fullAccessDialog();
-    assert.equal(dialog.message, 'Give this chat full access?');
-    assert.equal(
-        dialog.detail,
-        'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
-            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run. ' +
-            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving. " +
-            'The risk is yours. ' +
-            'This time, Full access lasts until you change it or close Jason. ' +
-            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too. ' +
-            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
-    );
-    assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
-    assert.equal(dialog.defaultId, 2);
-    assert.equal(dialog.cancelId, 2);
-});
-
-test('a tool that ran unchecked takes Always back as well, and says so only where Always stood', () => {
+test('Full access not available says so in one shape, its cause after it: right now where the cause holds a minute, until Jason Desktop starts again where a tool ran unchecked, and that tool\'s turn ends in the box\'s own words', () => {
+    assert.deepEqual(bypassSentences, {
+        root: 'Full access is not available here: Claude Code does not run in its bypass mode as root or under sudo.',
+        forced_default: 'Full access is not available here right now: Claude Code said it forced its permission mode to default.',
+        bypass_refused: 'Full access is not available here right now: Claude Code refused its bypass mode, in its restricted mode or under a policy.',
+        unguarded: 'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out.',
+    });
+    // A cause that holds a minute says "right now", and only a tool that ran unchecked, which holds for the run, says the
+    // desktop starts again; running as root is said as it is.
+    for (const cause of causes) {
+        assert.equal(bypassSentence(cause).includes('right now'), bypassLeadsTo(cause).held === 'one_minute', cause.why);
+        assert.equal(bypassSentence(cause).includes('until Jason Desktop starts again'), cause.why === 'unguarded', cause.why);
+    }
     assert.equal(
         unguardedSentence,
-        'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+        'Full access is not available here until Jason Desktop starts again: a tool ran without the check Jason makes before each one, which a policy can filter out. The turn was stopped there, and the menu shows the mode each next turn runs in; the chat stays set to Full access.',
     );
+    assert.doesNotMatch(unguardedSentence, /keeps its mode/);
     assert.equal(
-        unguardedStandingSentence,
-        'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+        hookFilteredSentence,
+        "Jason's check before each tool did not run in this turn, which a policy can filter out: the cards and Claude Code's own rules still decide what runs, without Jason's refusals in front of them.",
     );
+    for (const cause of causes) if (cause.why !== 'bypass_off') assert.equal(bypassSentence(cause), bypassSentences[cause.why], cause.why);
+    const named = causes.filter((cause) => cause.why === 'bypass_off').map(bypassSentence);
+    for (const sentence of [...Object.values(bypassSentences), ...named, unguardedSentence, hookFilteredSentence]) assert.doesNotMatch(sentence, /Plan only|Auto-edit/, sentence);
+});
+
+test('Claude Code\'s own words that it forced its default mode are read by a closed match on those words, and nothing else of what it wrote is said', () => {
+    assert.equal(forcedDefaultWords, 'Permission mode forced to default');
+    // As Claude Code 2.1.329 writes it on its standard error where CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set.
+    const seen = '⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.';
+    assert.equal(forcedDefault(`${seen}\n`), true);
+    assert.equal(forcedDefault(`a warning first\n${seen}\nand a line after\n`), true, 'among other lines');
+    for (const other of ['', 'permission mode forced to default', 'Permission mode forced to plan', 'Permission mode set to default', 'Error: bypassPermissions not supported in restricted mode']) {
+        assert.equal(forcedDefault(other), false, other);
+    }
+    assert.doesNotMatch(bypassSentence({ why: 'forced_default', named: 'default' }), /SUBPROCESS|allowedTools|hardening|⚠/);
+});
+
+test('a Full access start that names another mode than the bypass says that Claude Code did not start in its bypass mode and which mode it named, never a cause that was not read', () => {
+    for (const [named, phrase] of [
+        ['default', 'its default mode'],
+        ['acceptEdits', 'its acceptEdits mode'],
+        ['plan', 'its plan mode'],
+        ['auto', 'its auto mode'],
+        ['dontAsk', 'its dontAsk mode'],
+        ['another', 'a mode Jason does not know'],
+    ] as const) {
+        const sentence = bypassSentence({ why: 'bypass_off', named });
+        assert.equal(sentence, `Full access is not available here right now: Claude Code did not start in its bypass mode, and named ${phrase} instead.`);
+        assert.doesNotMatch(sentence, /disableBypassPermissionsMode|setting|policy|administrator/, named);
+    }
+});
+
+test('the mode Claude Code names is read from a closed table of its modes, and any other word is another', () => {
+    assert.deepEqual([...claudeModeWords], ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk']);
+    for (const word of claudeModeWords) assert.equal(namedMode(word), word);
+    for (const word of ['bypassPermissions', 'Default', 'someNewMode', 'x']) assert.equal(namedMode(word), 'another', word);
+});
+
+test('what a cause the bypass is not available for leads to is decided in one place, for the turn that found it and the turns after it: Ask first, the cause said, held a minute where a turn found it and for this run of the desktop as root or where a tool ran unchecked', () => {
+    for (const cause of causes) {
+        const held = cause.why === 'root' || cause.why === 'unguarded' ? 'this_run' : 'one_minute';
+        assert.deepEqual(bypassLeadsTo(cause), { mode: 'ask_first', why: { kind: cause.why, text: bypassSentence(cause) }, held }, cause.why);
+    }
+    assert.equal(bypassHeldMs, 60_000, 'a minute');
+});
+
+test('the box a turn in Ask first says is what the menu draws: this turn runs in Ask first, the menu shows the mode each next turn runs in, and the chat stays set to its own mode', () => {
+    const why = bypassSentence({ why: 'bypass_off', named: 'default' });
+    assert.equal(askFirstThisTurn(why, 'full_access'), `${why} This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to Full access.`);
+    assert.equal(askFirstThisTurn(codexAutoEdit, 'auto_edit'), `${codexAutoEdit} This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat stays set to Auto-edit.`);
+    assert.doesNotMatch(askFirstThisTurn(why, 'full_access'), /keeps its mode/);
 });
 
 test('a tool use and a tool\'s result are read from Claude Code\'s lines by their id, so a tool the hook never saw is known', () => {
@@ -173,7 +305,11 @@ interface Wired {
     id: string;
 }
 
-async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mode: ChatMode): Promise<Wired> {
+/**
+ * A turn's broker and hook in a mode, under the fence a real turn of that mode runs under (`modeFence`); a row may name
+ * another fence, said where it does.
+ */
+async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mode: ChatMode, turnFence: ChatFence = modeFence(fence, mode)): Promise<Wired> {
     const root = mkdtempSync(join(tmpdir(), 'jason-modes-'));
     const paths = desktopPaths(root);
     mkdirSync(paths.chat, { recursive: true });
@@ -189,9 +325,9 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         data: root,
         home: root,
         protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
-        denied: fence.commands,
-        deniedOperations: fence.operations,
-        help: helpNouns(fence.allowed, fence.reads),
+        denied: turnFence.commands,
+        deniedOperations: turnFence.operations,
+        help: helpNouns(turnFence.allowed, turnFence.reads),
         real: realPathOf,
     };
     const id = newTurnId();
@@ -224,58 +360,78 @@ function post(url: string, body: string, headers: Record<string, string>): Promi
 }
 
 /**
- * What Claude Code's hook says for a tool use, as Claude Code posts it in the default mode: null for an allow, the
- * refusal's reason for a deny, and `ask: ` before the reason for an ask.
+ * What Claude Code's hook says for a tool use, as Claude Code posts it: null where it decides nothing, which leaves the
+ * tool use to the host's own mode and rules, and the refusal's reason for a deny. It never allows and never asks.
  */
 async function hooked(w: Wired, tool: string, input: Record<string, unknown>, use = `toolu_${Math.random().toString(36).slice(2)}`): Promise<string | null> {
-    const body = JSON.stringify({ session_id: 's', hook_event_name: 'PreToolUse', permission_mode: 'default', tool_name: tool, tool_input: input, tool_use_id: use });
+    const body = JSON.stringify({ session_id: 's', hook_event_name: 'PreToolUse', permission_mode: 'bypassPermissions', tool_name: tool, tool_input: input, tool_use_id: use });
     const answered = await post(w.endpoint.hookUrl, body, { authorization: `Bearer ${w.secret}` });
     assert.equal(answered.status, 200);
     const output = JSON.parse(answered.body) as { hookSpecificOutput?: { hookEventName?: string; permissionDecision?: string; permissionDecisionReason?: string } };
-    assert.equal(output.hookSpecificOutput?.hookEventName, 'PreToolUse');
-    const decision = output.hookSpecificOutput?.permissionDecision;
-    if (decision === 'allow') return null;
-    assert.ok(decision === 'deny' || decision === 'ask', String(decision));
-    return `${decision === 'ask' ? 'ask: ' : ''}${output.hookSpecificOutput?.permissionDecisionReason ?? ''}`;
+    if (output.hookSpecificOutput === undefined) {
+        assert.deepEqual(output, {});
+        return null;
+    }
+    assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
+    assert.equal(output.hookSpecificOutput.permissionDecision, 'deny');
+    return output.hookSpecificOutput.permissionDecisionReason ?? '';
 }
 
-test('under Full access the hook refuses a deny-list verb in a command, however it is wrapped', async (t) => {
+test('in Plan only a deny-list verb in a command is refused however it is wrapped; under Full access the hook answers nothing to one in any form, a verb in a file being written and an operation by its dot included; Ask first refuses one put after an option under either fence', async (t) => {
+    const plan = await wired(t, 'plan_only');
+    for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
+        const answered = await plan.broker.ask(plan.id, 'Bash', { command });
+        assert.equal(answered.behavior, 'deny', command);
+        assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/, command);
+    }
+    assert.deepEqual(plan.cards, []);
     const w = await wired(t, 'full_access');
-    for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
+    for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1',
+        'jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN', `cat > run.sh <<'EOF'\njason approval approve apr_1\nEOF`,
+        'curl -X POST http://127.0.0.1:4011/v1/approval.approve -d @body.json', 'jason campaign set-send-mode cmp_1 --cold automatic --actor human:me',
+        'sh -c "jason preference set send_mode.cold --value x"', 'jason preference unset send_mode.warm --actor human:me', 'jason campaign list', 'git status']) {
+        assert.equal(await hooked(w, 'Bash', { command }), null, command);
     }
-    for (const command of ['jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
-        assert.equal(fullAccessJudgement('Bash', { command }, w.scope).outcome, 'refused', command);
-        assert.notEqual(await hooked(w, 'Bash', { command }), null, command);
+    const file = join(w.scope.chat, 'run.sh');
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\njason approval approve apr_1\n' }), null);
+    assert.equal(await hooked(w, 'Edit', { file_path: file, old_string: 'x', new_string: 'jason decision answer dec_1' }), null);
+    assert.equal(await hooked(w, 'MultiEdit', { file_path: file, edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'jason block clear blk_1' }] }), null);
+    assert.equal(await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/decision.answer", body)' }), null);
+    assert.deepEqual(w.decided, [], 'nothing was refused');
+    for (const scope of [plan.scope, w.scope]) {
+        const judged = judge('Bash', { command: 'jason --actor human:me approval reject apr_1' }, scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /write the verb first and its options after it/);
     }
-    assert.equal(await hooked(w, 'Bash', { command: 'jason campaign list' }), null, 'an allow-list verb goes on');
-    assert.equal(await hooked(w, 'Bash', { command: 'git status' }), null, 'any other command goes on: Full access asks nothing');
 });
 
-test('under Full access the hook refuses the same verb inside the content of a file being written', async (t) => {
+test('under Full access the hook refuses Jason\'s own variables inside the content of a file being written, and a script that runs a person\'s word is written', async (t) => {
     const w = await wired(t, 'full_access');
     const file = join(w.scope.chat, 'run.sh');
-    assert.match((await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\njason approval approve apr_1\n' })) ?? 'not refused', /Nothing was written/);
-    assert.match((await hooked(w, 'Edit', { file_path: file, old_string: 'x', new_string: 'jason decision answer dec_1' })) ?? 'not refused', /Nothing was written/);
-    assert.match((await hooked(w, 'MultiEdit', { file_path: file, edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'jason block clear blk_1' }] })) ?? 'not refused', /Nothing was written/);
-    assert.match((await hooked(w, 'Bash', { command: `cat > run.sh <<'EOF'\njason approval approve apr_1\nEOF` })) ?? 'not refused', /person's own act/);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\nunset JASON_CHAT_TURN\njason rolenote set cmp_1 researcher --note-file n.json\n' }), confinedRefusal);
+    assert.equal(await hooked(w, 'Edit', { file_path: file, old_string: 'x', new_string: 'export JASON_CONFINED=' }), confinedRefusal);
+    assert.equal(await hooked(w, 'MultiEdit', { file_path: file, edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: 'env -u jason_chat_turn jason status' }] }), confinedRefusal);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: '#!/bin/sh\njason approval approve apr_1\n' }), null);
     assert.equal(await hooked(w, 'Write', { file_path: file, content: 'a plan for the spring campaign\n' }), null);
 });
 
-test('under Full access the hook refuses an operation named by its dot, in a command or in a file\'s content', async (t) => {
-    const w = await wired(t, 'full_access');
-    assert.match((await hooked(w, 'Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval.approve -d @body.json' })) ?? 'not refused', /person's own act/);
-    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/decision.answer", body)' })) ?? 'not refused', /Nothing was written/);
+test('in Plan only an operation named by its dot is refused in a command; in Ask first it is the person\'s card, as any command is', async (t) => {
+    const plan = await wired(t, 'plan_only');
+    const command = 'curl -X POST http://127.0.0.1:4011/v1/approval.approve -d @body.json';
+    const answered = await plan.broker.ask(plan.id, 'Bash', { command });
+    assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/);
+    const asked = await wired(t, 'ask_first');
+    const judged = judge('Bash', { command }, asked.scope);
+    assert.equal(judged.verdict === 'ask' ? judged.title : judged.verdict, 'Run a command');
 });
 
-test('under Full access the hook refuses a campaign\'s send mode and the send-mode preferences, in a command and in a file\'s content', async (t) => {
+test('under Full access a campaign\'s send mode and the send-mode preferences run, as a terminal\'s do; in Ask first each is the person\'s card', async (t) => {
     const w = await wired(t, 'full_access');
-    for (const command of ['jason campaign set-send-mode cmp_1 --cold automatic --actor human:me', 'sh -c "jason preference set send_mode.cold --value x"',
-        'jason preference unset send_mode.warm --actor human:me', 'curl -X POST http://127.0.0.1:4011/v1/campaign.set_send_mode -d @body.json']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
+    const asked = await wired(t, 'ask_first');
+    for (const command of ['jason campaign set-send-mode cmp_1 --cold automatic --actor human:me', 'jason preference set send_mode.cold --value x', 'jason preference unset send_mode.warm --actor human:me']) {
+        assert.equal(await hooked(w, 'Bash', { command }), null, command);
+        const judged = judge('Bash', { command }, asked.scope);
+        assert.equal(judged.verdict === 'ask' ? judged.title : judged.verdict, 'Run a command', command);
     }
-    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'run.sh'), content: '#!/bin/sh\njason campaign set-send-mode cmp_1 --cold automatic\n' })) ?? 'not refused', /Nothing was written/);
-    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/preference.set", body)' })) ?? 'not refused', /Nothing was written/);
 });
 
 test('in Plan only a campaign\'s send mode and the send-mode preferences are refused with no card, and reading the preferences stays on the plan list', async (t) => {
@@ -303,7 +459,7 @@ test('under Full access the hook refuses the attempt\'s variable in any letter c
     for (const command of ['JASON_ATTEMPT_ID=att_1 jason workitem create cmp_1 --kind ai_role --role writer', 'export jason_attempt_id=att_1', 'env Jason_Attempt_Id=att_1 jason workitem update wi_1 --file -']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /JASON_ATTEMPT_ID/, command);
     }
-    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'export JASON_ATTEMPT_ID=att_1\njason workitem create cmp_1\n' })) ?? 'not refused', /Nothing was written/);
+    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'export JASON_ATTEMPT_ID=att_1\njason workitem create cmp_1\n' })) ?? 'not refused', /JASON_ATTEMPT_ID/);
 });
 
 test('under Full access the hook refuses a read of the turns folder and of the key folders, by a file tool or a command', async (t) => {
@@ -311,9 +467,9 @@ test('under Full access the hook refuses a read of the turns folder and of the k
     const desktop = join(w.root, 'desktop');
     for (const folder of ['turns', 'claude-keyed', 'codex-keyed', 'provider-keys']) {
         const path = join(desktop, folder, 'held.json');
-        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /installation's own data/, `Read ${folder}`);
-        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /installation's own data/, `cat ${folder}`);
-        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /installation's own data/, `Grep ${folder}`);
+        assert.match((await hooked(w, 'Read', { file_path: path })) ?? 'not refused', /Jason's own data/, `Read ${folder}`);
+        assert.match((await hooked(w, 'Bash', { command: `cat "${path}"` })) ?? 'not refused', /Jason's own data/, `cat ${folder}`);
+        assert.match((await hooked(w, 'Grep', { pattern: 'key', path: join(desktop, folder) })) ?? 'not refused', /Jason's own data/, `Grep ${folder}`);
     }
 });
 
@@ -341,7 +497,7 @@ test('an unreachable hook: the endpoint is gone with the turn, and the turn\'s s
     const url = w.endpoint.hookUrl;
     await w.endpoint.close();
     await assert.rejects(post(url, '{}', { authorization: `Bearer ${w.secret}` }), /ECONNREFUSED|ECONNRESET|socket hang up/);
-    assert.equal(fullAccessSettings(url, w.secret).hooks.PreToolUse[0]?.hooks[0]?.onFailure, 'block');
+    assert.equal(hookedSettings('full_access', url, w.secret).hooks.PreToolUse[0]?.hooks[0]?.onFailure, 'block');
 });
 
 test('the hook records each tool use it saw, by its id, for its turn alone', async (t) => {
@@ -352,7 +508,7 @@ test('the hook records each tool use it saw, by its id, for its turn alone', asy
     assert.ok(!w.broker.hooked('not-a-turn', 'toolu_seen'));
 });
 
-test('under Full access a request that reaches the prompt tool is the card Ask first shows, titled for Full access, and a refusal stays a refusal', async (t) => {
+test('under Full access a request Claude Code asks about is a card titled for Full access, and a refusal of the hook stays a refusal', async (t) => {
     const w = await wired(t, 'full_access');
     const card = w.broker.ask(w.id, 'Bash', { command: 'git push' });
     assert.equal((await w.broker.ask(w.id, 'Read', { file_path: join(w.root, 'desktop', 'turns', 'x.json') })).behavior, 'deny');
@@ -393,72 +549,60 @@ test('in Ask first the broker answers as it always did, and a hook call refuses 
     await card;
 });
 
-test('the main process asks the person itself, with the confirmation\'s own box, and reads its answer by its buttons alone', () => {
+test('the main process asks the person nothing before Full access: no box of its own, no answer to read, and no standing choice to keep or take back', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /const \{ response, checkboxChecked \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return fullAccessAnswer\(response, checkboxChecked\);/);
-    assert.equal(fullAccessDialog().buttons[0], 'Give full access this time');
+    assert.deepEqual(['fullAccessDialog', 'fullAccessAnswer', 'confirmFullAccess'].filter((name) => main.includes(name)), [], 'main.ts shows no box before Full access');
+    for (const gone of ['fullAccessDialog', 'fullAccessAnswer', 'fullAccessConsent']) assert.equal(gone in modesModule, false, `chat-modes.ts has no ${gone}`);
+    for (const gone of ['fullAccessStanding', 'takeBackFullAccess']) assert.equal(gone in Chat.prototype, false, `the chat has no ${gone}`);
 });
 
-// Attempts at getting past Full access's refusals, each through the hook as Claude Code calls it, and the same refusals in Ask first.
+// What Plan only refuses before it reads a word literally, and what Full access's hook does with the same spellings: it
+// answers nothing to each, and refuses only the three kinds.
 
-const held = /^ask: /;
-
-test('under Full access a jason handed to xargs is held: the hook asks', async (t) => {
+test('under Full access the hook answers nothing to a quoted, an escaped or a wrapped deny-list verb, an interpreter\'s list form, a variable as the program or a re-spelled operation', async (t) => {
     const w = await wired(t, 'full_access');
-    assert.match((await hooked(w, 'Bash', { command: 'echo approval approve apr_1 | xargs jason' })) ?? 'ran', held);
-    assert.match((await hooked(w, 'Bash', { command: 'echo amFzb24K | base64 -d | sh' })) ?? 'ran', held);
-    assert.match((await hooked(w, 'Bash', { command: 'printf "jason approval approve apr_1" | sh' })) ?? 'ran', /person's own act/);
+    for (const command of ['jason approval appro\\ve apr_1', "jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1', 'jason decision ans\\wer dec_1 --option a',
+        `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`, "curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json",
+        'curl http://127.0.0.1:4011/v1/decision.ans\\wer', 'printf "jason approval approve apr_1" | sh', 'echo approval approve apr_1 | xargs jason', 'echo amFzb24K | base64 -d | sh',
+        `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`, 'sh -c "jason campaign list"', 'j=jason; $j decision answer dec_1 --option a', '${J} campaign list',
+        '$(which jason) campaign list', 'eval "$CMD"']) {
+        assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
+    }
 });
 
-test('a quoted or an escaped deny-list verb is refused in every mode: Full access refuses what Ask first refuses before it reads a word literally', async (t) => {
-    const w = await wired(t, 'full_access');
+test('in Plan only a quoted or an escaped deny-list verb is refused as its plain spelling is, by the same sentence', async (t) => {
+    const w = await wired(t, 'plan_only');
     for (const command of ['jason approval appro\\ve apr_1', "jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1', 'jason decision ans\\wer dec_1 --option a']) {
-        assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
-    }
-    for (const command of ["jason approval approv''e apr_1", 'jason approval ap"pr"ove apr_1']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /person's own act/, command);
-    }
-    for (const command of ['jason approval appro\\ve apr_1', 'jason decision ans\\wer dec_1 --option a']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /person's own act/, command);
+        const judged = judge('Bash', { command }, w.scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /person's own act/, command);
+        const answered = await w.broker.ask(w.id, 'Bash', { command });
+        assert.match(answered.behavior === 'deny' ? answered.message : '', /person's own act/, command);
     }
 });
 
-test('a jason in an interpreter\'s list form is refused for a deny-list verb in every mode, and held for any other verb under Full access', async (t) => {
-    const w = await wired(t, 'full_access');
+test('a jason in an interpreter\'s list form is refused for a deny-list verb in Plan only', async (t) => {
+    const plan = await wired(t, 'plan_only');
     const approve = `python3 -c "import subprocess; subprocess.run(['jason','approval','approve','apr_1'])"`;
-    // What Ask first refuses is refused first; any other code given as text is held, whatever it says.
-    const asked = judge('Bash', { command: approve }, w.scope);
-    assert.equal(asked.verdict, 'deny');
-    assert.equal(await hooked(w, 'Bash', { command: approve }), asked.verdict === 'deny' ? asked.message : '');
-    const list = `python3 -c "import subprocess; subprocess.run(['jason','campaign','list'])"`;
-    assert.match((await hooked(w, 'Bash', { command: list })) ?? 'ran', held);
-    assert.match((await hooked(w, 'Bash', { command: 'sh -c "jason campaign list"' })) ?? 'ran', held);
+    const refused = judge('Bash', { command: approve }, plan.scope);
+    assert.match(refused.verdict === 'deny' ? refused.message : '', /person's own act/);
 });
 
-test('under Full access a variable, an expansion or eval as the program is held', async (t) => {
-    const w = await wired(t, 'full_access');
-    for (const command of ['j=jason; $j decision answer dec_1 --option a', '${J} campaign list', '$(which jason) campaign list', 'eval "$CMD"']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', held, command);
-    }
-});
-
-test('an operation re-spelled by a quote or a backslash is refused in every mode', async (t) => {
-    const w = await wired(t, 'full_access');
+test('in Plan only an operation re-spelled by a quote or a backslash is refused as its plain spelling is', async (t) => {
+    const w = await wired(t, 'plan_only');
     for (const command of ["curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json", 'curl http://127.0.0.1:4011/v1/decision.ans\\wer']) {
-        assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
+        const judged = judge('Bash', { command }, w.scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : '', /person's own act/, command);
     }
-    assert.match((await hooked(w, 'Bash', { command: "curl -X POST http://127.0.0.1:4011/v1/approval.appr''ove -d @b.json" })) ?? 'ran', /person's own act/);
-    assert.match((await hooked(w, 'Bash', { command: 'curl http://127.0.0.1:4011/v1/decision.ans\\wer' })) ?? 'ran', /person's own act/);
 });
 
-test('a script written with an escaped verb or a re-spelled operation is refused', async (t) => {
-    const w = await wired(t, 'full_access');
+test('under Full access a script written with an escaped verb or a re-spelled operation is written, the hook answering nothing whatever fence the turn carries', async (t) => {
+    const w = await wired(t, 'full_access', fence);
     const file = join(w.scope.chat, 'go.sh');
-    assert.match((await hooked(w, 'Write', { file_path: file, content: 'jason approval appro\\ve apr_1\n' })) ?? 'written', /Nothing was written/);
-    assert.match((await hooked(w, 'Write', { file_path: file, content: "curl $U/v1/approval.appr''ove" })) ?? 'written', /Nothing was written/);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: 'jason approval appro\\ve apr_1\n' }), null);
+    assert.equal(await hooked(w, 'Write', { file_path: file, content: "curl $U/v1/approval.appr''ove" }), null);
 });
 
-test('env -i or env -u around a jason clears the confinement without naming it, and is refused in every mode', async (t) => {
+test('env -i or env -u around a jason drops the chat\'s environment without naming it, and is refused in every mode', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ['env -i HOME="$HOME" /usr/local/bin/jason campaign list', 'env - jason campaign list', 'exec -c jason campaign list']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /JASON_CONFINED/, command);
@@ -475,32 +619,25 @@ function homeScope(platform: 'win32' | 'linux' | 'darwin', home: string): ChatSc
     return { platform, cwd: chat, chat, added: [], data, home, protectedFiles: [], denied: fence.commands, deniedOperations: fence.operations, real: () => null };
 }
 
-test('under Full access a glob or a ~ that could expand into the data directory is held, in each platform\'s spelling', () => {
+test('under Full access a command that is not literal is read by its text alone: a glob runs, and a literal spelling of the data directory is refused, in each platform\'s spelling', () => {
     const windows = homeScope('win32', 'C:\\Users\\someone');
-    for (const command of ['cat ~/.jas?n/desktop/provider-keys/*', 'cat /c/Users/someone/.ja?on/run/runtime.json', 'type C:\\Users\\someone\\.ja*\\run\\runtime.json', 'cat ../*/held.json', 'ls ~other/x']) {
-        assert.notEqual(fullAccessJudgement('Bash', { command }, windows).outcome, 'runs', `win32: ${command}`);
-    }
     const linux = homeScope('linux', '/home/someone');
-    for (const command of ['cat ~/.jas?n/run/runtime.json', 'cat /home/someone/.j*/desktop/turns/*', 'cat ../tu*/x']) {
-        assert.notEqual(fullAccessJudgement('Bash', { command }, linux).outcome, 'runs', `linux: ${command}`);
+    for (const command of ['cat /c/Users/someone/.jason/run/runtime.json', 'type C:\\Users\\someone\\.jason\\run\\runtime.json']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, windows).outcome, 'refused', `win32: ${command}`);
     }
-    // The glob spellings the plain reading misses are held, not refused: no literal path names the data there.
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat ~/.jas?n/run/runtime.json' }, linux), { outcome: 'held', message: heldSentence, reason: 'glob' });
-    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /c/Users/someone/.ja?on/run/runtime.json' }, windows), { outcome: 'held', message: heldSentence, reason: 'glob' });
-    // A glob is never literal, wherever it points.
-    for (const command of ['ls *.md', 'cat notes/*.txt', 'jq .items[0] out.json']) {
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'held', message: heldSentence, reason: 'glob' }, `held: ${command}`);
+    for (const command of ['cat ~/.jason/run/runtime.json', 'cat /home/someone/.jason/desktop/turns/x.json']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, linux).outcome, 'refused', `linux: ${command}`);
     }
-    for (const command of ['jason campaign list', 'git status', "jq '.items[0]' out.json"]) {
+    for (const command of ['ls *.md', 'cat notes/*.txt', 'jq .items[0] out.json', 'jason campaign list', 'git status', "jq '.items[0]' out.json"]) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'runs' }, `runs: ${command}`);
     }
 });
 
-test('the chat\'s own instructions and agent settings are refused to a shell command in every mode', async (t) => {
+test('the chat\'s own instructions and agent settings are refused to a shell command in Ask first; under Full access the hook answers nothing to one, the next turn starting from Jason\'s files again', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ["mkdir -p .claude && printf '%s' '{\"disableAllHooks\":true}' > .claude/settings.json", 'echo planted >> CLAUDE.md', 'cp evil.md .claude/agents/x.md', 'rm -rf .claude']) {
-        assert.match((await hooked(w, 'Bash', { command })) ?? 'ran', /the chat never changes it/, command);
         assert.equal(judge('Bash', { command }, w.scope).verdict, 'deny', `Ask first: ${command}`);
+        assert.equal(await hooked(w, 'Bash', { command }), null, `Full access: ${command}`);
     }
     assert.equal(judge('Bash', { command: 'mkdir -p notes && echo x > notes/a.md' }, w.scope).verdict, 'ask', 'a folder of its own is a card as before');
 });
@@ -512,7 +649,7 @@ test('the host is denied edits of the chat\'s own names directly in the chat fol
     }
 });
 
-test('another guarded name keeps its card in Ask first and is held under Full access', async (t) => {
+test('another guarded name keeps its card in Ask first and runs under Full access, the hook answering nothing', async (t) => {
     const w = await wired(t, 'full_access');
     const campaign = mkdtempSync(join(tmpdir(), 'jason-campaign-'));
     t.after(() => rmSync(campaign, { recursive: true, force: true }));
@@ -523,7 +660,7 @@ test('another guarded name keeps its card in Ask first and is held under Full ac
         ['Write', { file_path: join(campaign, '.jason', 'marker.json'), content: '{}' }],
     ] as const) {
         assert.equal(judge(tool, input, w.scope).verdict, 'ask', `Ask first: ${tool}`);
-        assert.match((await hooked(w, tool, input)) ?? 'ran', held, tool);
+        assert.equal(await hooked(w, tool, input), null, tool);
     }
 });
 
@@ -542,16 +679,22 @@ test('under Full access the plain acts run with no question', async (t) => {
         ['TodoWrite', { todos: [] }],
     ];
     for (const [tool, input] of plain) assert.equal(await hooked(w, tool, input), null, tool);
-    assert.match((await hooked(w, 'AskUserQuestion', { questions: [] })) ?? 'ran', held, 'a tool the model does not know is held');
+    assert.equal(await hooked(w, 'AskUserQuestion', { questions: [] }), null, 'a tool the model does not know is Claude Code\'s to ask about');
 });
 
-test('every tool the host allows without asking runs with no question under Full access', () => {
-    for (const tool of claudeAllowedTools.filter((rule) => !rule.includes('('))) assert.ok(toolsThatRunNothing.has(tool), tool);
+test('every tool the host allows without asking runs under Full access, the hook answering nothing', () => {
+    const scope = homeScope('linux', '/home/someone');
+    for (const tool of claudeAllowedTools.filter((rule) => !rule.includes('('))) assert.deepEqual(fullAccessJudgement(tool, {}, scope), { outcome: 'runs' }, tool);
 });
 
-test('what the host still asks under Full access is carded as in Ask first: a held command and a deletion are cards, never refused unasked', async (t) => {
+test('what Claude Code still asks under Full access is a card titled for Full access: a command and a deletion are cards, never refused unasked, but for a deletion of a folder that holds the data directory, which is refused by the walk\'s sentence as the hook refuses it', async (t) => {
     const w = await wired(t, 'full_access');
-    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf /', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
+    const deletion = w.broker.ask(w.id, 'Bash', { command: 'rm -rf /' });
+    assert.deepEqual(w.cards, [], 'a deletion of the drive\'s top is no card');
+    const answered = await deletion;
+    assert.equal(answered.behavior === 'deny' ? answered.message : answered.behavior, searchRefusal);
+    assert.equal(await hooked(w, 'Bash', { command: 'rm -rf /' }), searchRefusal);
+    const commands = ['echo approval approve apr_1 | xargs jason', 'rm -rf build', 'rm notes.md', 'find . -name "*.tmp" -delete', 'rmdir old'];
     const answers = commands.map((command) => w.broker.ask(w.id, 'Bash', { command }));
     assert.deepEqual((w.cards as BrokerEvent[]).map((each) => (each.kind === 'permission' ? each.detail : each.kind)), commands);
     assert.ok((w.cards as BrokerEvent[]).every((each) => each.kind === 'permission' && each.title === 'Full access asks about this one'));
@@ -559,20 +702,22 @@ test('what the host still asks under Full access is carded as in Ask first: a he
     for (const answer of answers) assert.equal((await answer).behavior, 'deny');
 });
 
-test('each refusal and each hold of the hook is said to the log, by the model, in Full access; a run is not', async (t) => {
+test('each refusal of the hook is said to the log, by the model, in Full access; what runs is not', async (t) => {
     const w = await wired(t, 'full_access');
-    await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
+    await hooked(w, 'Bash', { command: 'echo $JASON_ATTEMPT_ID' });
+    await hooked(w, 'Bash', { command: 'unset JASON_CONFINED' });
     await hooked(w, 'Bash', { command: 'echo x | xargs jason' });
     await hooked(w, 'Bash', { command: 'git status' });
+    await hooked(w, 'Bash', { command: 'jason approval approve apr_1' });
     assert.deepEqual(w.decided, [
         { outcome: 'refused', by: 'model', mode: 'full_access' },
-        { outcome: 'held', by: 'model', mode: 'full_access', reason: 'runner' },
+        { outcome: 'refused', by: 'model', mode: 'full_access' },
     ]);
 });
 
 // The second look's further spellings, in Ask first and under Full access alike.
 
-const judgedConfined = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
+const judgedConfined = confinedRefusal;
 
 test('env and exec clear the environment only in the part they begin: an ordinary command list is no refusal', () => {
     const scope = homeScope('linux', '/home/someone');
@@ -599,7 +744,7 @@ test('an empty $\'\' or $"" inside a word, a $\'\\xNN\' string, a line continuat
     ]) {
         assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${JSON.stringify(command)}`);
     }
-    // Full access refuses each, as Ask first does, before its literal reading, which would hold them all.
+    // Full access's hook leaves each to the host's rules and the CLI: none names the three kinds.
     for (const command of [
         "jason approval appro$''ve apr_1",
         'jason approval appro$""ve apr_1',
@@ -610,10 +755,9 @@ test('an empty $\'\' or $"" inside a word, a $\'\\xNN\' string, a line continuat
         '{jason,} approval approve apr_1',
         'jason approval appro{v,}e apr_1',
     ]) {
-        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${JSON.stringify(command)}`);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `Full access: ${JSON.stringify(command)}`);
     }
-    // A script the agent writes and then runs is a program running, but this one Ask first refuses, so Full access does.
-    assert.equal(fullAccessJudgement('Bash', { command: "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh" }, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: "printf '\\njason approval approve apr_1\\n' > go.sh; sh go.sh" }, scope), { outcome: 'runs' });
     assert.deepEqual(judge('Bash', { command: "cat ~/.jas$''on/run/runtime.json" }, scope).verdict, 'deny', 'the data directory by an empty string');
     assert.deepEqual(judge('Bash', { command: "curl http://127.0.0.1:4011/v1/approval.appr$''ove" }, scope).verdict, 'deny');
     // What the plain spelling would not refuse stays a card.
@@ -640,15 +784,17 @@ test('a word with more brace expansions than the second look reads is refused, n
     assert.equal(judge('Bash', { command: 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}' }, scope).verdict, 'ask', 'sixty-four are read, and a card');
 });
 
-test('Full access is offered, and the PowerShell tool still runs nothing unasked in it', () => {
+test('Full access is offered, and keeps the PowerShell tool every other mode takes out', () => {
     assert.equal(fullAccessOffered, true);
-    assert.equal(powerShellRunsInFullAccess, false);
+    assert.deepEqual(claudeRemovedTools, ['PowerShell', 'Monitor']);
+    assert.deepEqual(fullAccessRemovedTools, ['Monitor']);
 });
 
-test('the settings of every turn, in all three modes, turn off the shell commands a skill carries', () => {
-    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+test('every turn\'s settings but a Full access turn\'s turn off the shell commands a skill carries: the person\'s skills run theirs in Full access alone, as in a terminal', () => {
     assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
-    assert.equal(fullAccessSettings('http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true);
+    assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
+    for (const mode of ['ask_first', 'auto_edit'] as const) assert.equal(hookedSettings(mode, 'http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true, mode);
+    assert.equal('disableSkillShellExecution' in hookedSettings('full_access', 'http://127.0.0.1:4100/hook', 's'), false);
 });
 
 test('Plan only says the AI how it is left, the plan card included, and a go approved for another mode says why it was not sent', () => {
@@ -665,24 +811,26 @@ test('Plan only says the AI how it is left, the plan card included, and a go app
     assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
 });
 
-test('a noun\'s help runs with no card in Plan only, Ask first, Auto-edit and Full access, and root help and the other forms are refused as before', async (t) => {
+test('a noun\'s help runs with no card in Plan only, Ask first and Auto-edit, and root help and the other forms are refused as before; under Full access the hook answers nothing to any of them', async (t) => {
     const nouns = helpNouns(fence.allowed, fence.reads);
-    for (const mode of ['plan_only', 'ask_first', 'auto_edit', 'full_access'] as const) {
+    for (const mode of ['plan_only', 'ask_first', 'auto_edit'] as const) {
         const w = await wired(t, mode);
         for (const noun of nouns) {
             const command = `jason ${noun} --help`;
             assert.equal((await w.broker.ask(w.id, 'Bash', { command })).behavior, 'allow', `${mode}: ${command}`);
-            if (mode === 'full_access') assert.equal(await hooked(w, 'Bash', { command }), null, `${mode} hook: ${command}`);
         }
         assert.deepEqual(w.cards, [], mode);
         const root = await w.broker.ask(w.id, 'Bash', { command: 'jason --help' });
         assert.equal(root.behavior, 'deny', mode);
         assert.match(root.behavior === 'deny' ? root.message : '', /run `jason <noun> --help`/, mode);
-        assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'jason approval approve --help' })).behavior, 'deny', mode);
-        if (mode === 'full_access') {
-            assert.match((await hooked(w, 'Bash', { command: 'jason --help' })) ?? 'not refused', /run `jason <noun> --help`/);
-            assert.match((await hooked(w, 'Bash', { command: 'jason -h' })) ?? 'not refused', /person's own act/);
-        }
+        // A verb's help: refused in Plan only, where the verb is; elsewhere the host's own rule for the verb runs it, and the
+        // model, never asked by the host, would show the card any jason command it is asked about gets.
+        if (mode === 'plan_only') assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'jason approval approve --help' })).behavior, 'deny', mode);
+        else assert.equal(judge('Bash', { command: 'jason approval approve --help' }, w.scope).verdict, 'ask', mode);
+    }
+    const full = await wired(t, 'full_access');
+    for (const command of [...nouns.map((noun) => `jason ${noun} --help`), 'jason --help', 'jason -h', 'jason approval approve --help']) {
+        assert.equal(await hooked(full, 'Bash', { command }), null, `Full access: ${command}`);
     }
     // In Plan only a form that is not exactly a noun's help is refused, as any jason command off the plan list is.
     const plan = await wired(t, 'plan_only');
@@ -692,7 +840,7 @@ test('a noun\'s help runs with no card in Plan only, Ask first, Auto-edit and Fu
     assert.deepEqual(plan.cards, []);
 });
 
-test('the help form of the PowerShell tool or another tool with a command is a card in Ask first, refused in Plan only and held in Full access, as before', async (t) => {
+test('the help form of the PowerShell tool or another tool with a command is a card in Ask first and refused in Plan only, as before; under Full access the hook answers nothing', async (t) => {
     for (const tool of ['PowerShell', 'SomeTool']) {
         const asked = await wired(t, 'ask_first');
         void asked.broker.ask(asked.id, tool, { command: 'jason campaign --help' });
@@ -702,6 +850,19 @@ test('the help form of the PowerShell tool or another tool with a command is a c
         const plan = await wired(t, 'plan_only');
         assert.equal((await plan.broker.ask(plan.id, tool, { command: 'jason campaign --help' })).behavior, 'deny', `${tool} Plan only`);
         const full = await wired(t, 'full_access');
-        assert.match((await hooked(full, tool, { command: 'jason campaign --help' })) ?? 'ran', /^ask: /, `${tool} Full access`);
+        assert.equal(await hooked(full, tool, { command: 'jason campaign --help' }), null, `${tool} Full access`);
     }
+});
+
+test('our sentence follows a Codex refusal only on a Full access Codex turn that ended in Codex\'s own words, not stopped, before any line, with a failing exit, and not in the desktop\'s sentence for a refused key', () => {
+    const refused = { program: 'codex', mode: 'full_access', ended: 'Error: no', stopped: false, heard: false, startError: null, code: 1, ours: false } as const;
+    assert.equal(followsCodexRefusal(refused), true);
+    assert.equal(followsCodexRefusal({ ...refused, ours: true }), false, 'a keyed turn ended in the desktop\'s refused-key sentence');
+    assert.equal(followsCodexRefusal({ ...refused, program: 'claude' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, mode: 'ask_first' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, ended: null }), false);
+    assert.equal(followsCodexRefusal({ ...refused, stopped: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, heard: true }), false);
+    assert.equal(followsCodexRefusal({ ...refused, startError: 'ENOENT' }), false);
+    assert.equal(followsCodexRefusal({ ...refused, code: 0 }), false);
 });

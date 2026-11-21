@@ -7,22 +7,24 @@
 import type { MenuItem } from './updates.ts';
 
 /**
- * What the seam's `updates.item` answers: the desktop's version, the update item as the menu shows it, or none, and what
- * the person's last check found (`Updater.said`), or null. This desktop always sends `said`; it is optional because the
- * type is held equal to the page's, which an earlier desktop answers without it.
+ * What the seam's `updates.item` answers: the desktop's version, the update item as the menu shows it, or none, what
+ * the person's last check found (`Updater.said`), or null, and the version the desktop knows of and has not installed
+ * (`Desk.updateNewer`), or null, which the page marks Settings with. This desktop always sends `said` and `newer`; they
+ * are optional because the type is held equal to the page's, which an earlier desktop answers without them.
  */
 export interface UpdateItemAnswer {
     version: string;
     item: { label: string; enabled: boolean } | null;
     said?: string | null;
+    newer?: string | null;
 }
 
 /**
  * The answer of `updates.item`: the item's label and whether it is enabled, never its act, which the press reads again,
- * and the sentence of the person's last check, wherever it was asked from.
+ * the sentence of the person's last check, wherever it was asked from, and the version known and not installed.
  */
-export function updateAnswerOf(version: string, item: MenuItem | null, said: string | null): UpdateItemAnswer {
-    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled }, said };
+export function updateAnswerOf(version: string, item: MenuItem | null, said: string | null, newer: string | null): UpdateItemAnswer {
+    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled }, said, newer };
 }
 
 /**

@@ -369,6 +369,71 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Contains("approval get apr_1 --prompt", said, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// On Windows with Windows Terminal there, the item opens in a new window of it at the campaign's folder, with the same
+    /// host, the same brief and the same variables the console host is given, and the answer names it.
+    /// </summary>
+    [Fact]
+    public async Task On_windows_with_windows_terminal_an_approval_opens_in_it()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        var wt = _run.WithWindowsTerminal();
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", _run.CampaignFolder, "--", claude], launch.Argv.Take(8));
+        Assert.Equal(9, launch.Argv.Count);
+        Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
+        Assert.Equal(_run.WindowsVariables, launch.Variables);
+        Assert.Equal("Windows Terminal", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);
+        Assert.Empty(_run.Error.ToString());
+
+        _run.Output.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1", "--human"));
+        Assert.Equal("Started claude_code in Windows Terminal at " + _run.CampaignFolder + ".", _run.Output.ToString().TrimEnd());
+    }
+
+    /// <summary>A Windows Terminal older than the floor, 1.18.2681.0, is passed over for the console host, as before.</summary>
+    [Fact]
+    public async Task On_windows_a_windows_terminal_below_the_floor_is_passed_over_for_the_console_host()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        _run.WithWindowsTerminal("1.17.11461.0");
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+
+        Assert.Equal([_run.ConsoleHost, "--", claude], Assert.Single(_run.Terminals.Launches).Argv.Take(3));
+        Assert.Equal("conhost", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);
+        Assert.Empty(_run.Error.ToString());
+    }
+
+    /// <summary>
+    /// A Windows Terminal that does not start is followed by the console host, once, with the same words, and stderr says
+    /// so in one line; the answer names the console host. One that fails after it is the refusal it always was.
+    /// </summary>
+    [Fact]
+    public async Task On_windows_a_windows_terminal_that_does_not_start_opens_the_console_host_instead()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        var wt = _run.WithWindowsTerminal();
+        _run.Terminals.Refused = [wt];
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([_run.ConsoleHost, "--", claude], launch.Argv.Take(3));
+        Assert.Equal("conhost", (string?)JsonNode.Parse(_run.Output.ToString())!["terminal"]);
+        Assert.Equal("Windows Terminal did not start (it was refused), so the console window was opened instead.", _run.Error.ToString().TrimEnd());
+
+        _run.Output.GetStringBuilder().Clear();
+        _run.Error.GetStringBuilder().Clear();
+        _run.Terminals.Refused = [wt, _run.ConsoleHost];
+        Assert.Equal(ExitCodes.ApiError, await _run.Cli("session", "open", "--approval", "apr_1"));
+        Assert.Single(_run.Terminals.Launches);
+        Assert.StartsWith("The terminal Windows Terminal did not start (it was refused; conhost did not start either: it was refused).", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_says_what_was_started_and_where()
     {
@@ -856,6 +921,18 @@ public sealed class SessionOpenerTests : IDisposable
         /// <summary>The data directory the CLI under test runs on.</summary>
         public string DataDirectory => _dir.Paths.Root;
 
+        /// <summary>Puts a stand-in of Windows Terminal's program in a WindowsApps folder the recorder names, and returns its path.</summary>
+        public string WithWindowsTerminal(string version = "1.24.12741.0")
+        {
+            var apps = Path.Combine(_dir.Paths.Root, "WindowsApps");
+            Directory.CreateDirectory(apps);
+            var wt = Path.Combine(apps, "wt.exe");
+            File.WriteAllBytes(wt, []);
+            Terminals.WindowsAppsDirectory = apps;
+            Terminals.AliasTargets[wt] = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_" + version + @"_x64__8wekyb3d8bbwe\wt.exe";
+            return wt;
+        }
+
         /// <summary>The file this jason is installed as, which a launch puts the folder of first on PATH; null asks the process.</summary>
         public string? InstallPath { get; set; }
 
@@ -1005,19 +1082,29 @@ public sealed class SessionOpenerTests : IDisposable
 
         public string? SystemDirectory { get; set; }
 
+        public string? WindowsAppsDirectory { get; set; }
+
+        /// <summary>The program each alias stands for, by its path; an alias not named reads as none.</summary>
+        public Dictionary<string, string> AliasTargets { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public string? AliasTarget(string path) => AliasTargets.GetValueOrDefault(path);
+
         public string? Refusal { get; set; }
+
+        /// <summary>Programs whose start is refused as "it was refused", each launch of them recorded nowhere.</summary>
+        public string[] Refused { get; set; } = [];
 
         public List<TerminalLaunch> Launches { get; } = [];
 
         public bool Start(TerminalLaunch launch, out string? problem)
         {
-            problem = Refusal;
-            if (Refusal is null)
+            problem = Refusal ?? (Refused.Contains(launch.Argv[0]) ? "it was refused" : null);
+            if (problem is null)
             {
                 Launches.Add(launch);
             }
 
-            return Refusal is null;
+            return problem is null;
         }
     }
 }

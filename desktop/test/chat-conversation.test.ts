@@ -115,7 +115,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     r.b.env.STUB_CAMPAIGN_FOLDER = folder;
     const made = await r.chat.create('cmp_01ABC');
     assert.match(made.id, /^conv_[0-9A-HJKMNP-TV-Z]{26}$/);
-    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' });
+    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false, mode: 'full_access', ownFolder: true });
     assert.equal((await r.chat.create('cmp_01ABC')).id, made.id, 'a campaign has one conversation');
     // The page's own campaignId on a known conversation is not read: the record decides.
     await r.turn(made.id, 'How is it doing?', { host: 'claude', campaignId: 'cmp_99OTHER' });
@@ -148,6 +148,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
     const r = rig(t);
     plan(r, [{ say: 'Here it is.' }, { use: { tool: 'Read', input: { file_path: '/x/notes.md' } } }, { ask: { tool: 'Bash', input: { command: 'git status' } } }]);
     const chat = await r.chat.create();
+    // In Ask first, where the command is a card the person answers.
+    await r.chat.setMode(chat.id, 'ask_first');
     const done = r.until(chat.id, (event) => event.kind === 'done');
     const card = r.until(chat.id, (event) => event.kind === 'permission');
     await r.chat.send(chat.id, 'Show me <b>everything</b>', { host: 'claude' });
@@ -169,6 +171,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
         { kind: 'text', text: 'heard' },
         { kind: 'text', text: 'Here it is.' },
         { kind: 'step', text: 'Read a file', detail: '/x/notes.md' },
+        // The stub says what the turn's hook let run: the hook rides Ask first as well.
+        { kind: 'text', text: 'tool ran' },
         { kind: 'step', text: 'Ran a command', detail: 'git status' },
         { kind: 'permission', title: asked.title, detail: asked.detail, answer: 'deny' },
         { kind: 'text', text: 'decision deny' },

@@ -256,6 +256,33 @@ describe('a choice the AI asked for', () => {
         expect(sends(again.desktop)[0]!.args[1]).toBe('From our sales lead');
     });
 
+    it('never exports: an option or its field that says /export is sent as nothing, and only the message box exports', async () => {
+        const exporting = {
+            kind: 'choice',
+            question: 'What now?',
+            options: [{ label: '/export x.md' }, { label: 'From me' }],
+        };
+        const { desktop } = renderConsole([setUp(opened)]);
+        const pane = await openChat('Sending');
+        ask(desktop, setupChat, fenced(exporting));
+        await live(pane);
+        fireEvent.click(option(pane, '/export x.md'));
+        await waitFor(() => within(pane).getByText('Type /export in the message box yourself.'));
+        expect(sends(desktop)).toHaveLength(0);
+        // Nor its field: the sentence is said again, and nothing is sent.
+        fireEvent.input(own(pane)!, { target: { value: '/export y.md' } });
+        fireEvent.keyDown(own(pane)!, { key: 'Enter' });
+        await waitFor(() =>
+            expect(within(pane).getAllByText('Type /export in the message box yourself.')).toHaveLength(2),
+        );
+        expect(sends(desktop)).toHaveLength(0);
+        // The words typed in the message box go to the desktop, saying they were typed there.
+        fireEvent.change(box(), { target: { value: '/export z.md' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        expect(sends(desktop)[0]!.args).toEqual([setupChat, '/export z.md', { host: 'claude', typed: true }]);
+    });
+
     it('draws its field only while it is open: never on a locked choice, an earlier one, or one opened again', async () => {
         const { desktop } = renderConsole([setUp(opened)]);
         const pane = await openChat('Sending');
@@ -335,7 +362,7 @@ describe('a choice the AI asked for', () => {
         const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
         setPlace('tab', tab);
         await loadMode(tab);
-        desktop.keep({ ...setUp(opened), mode: 'full_access' });
+        desktop.keep({ ...setUp(opened), mode: 'auto_edit' });
         const fake = new FakeApi()
             .answer('plugin.list', 'plugin.list/none')
             .answer('route.list', 'route.list/empty')

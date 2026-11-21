@@ -164,7 +164,7 @@ to.
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One installation on macOS, Windows and Linux, Jason Desktop and the `jason` it carries. No admin rights on macOS and Windows: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows all of it is. On Linux the deb asks for your password once and then updates with the system; the AppImage is your account's own. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 987 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1198 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1214 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -310,7 +310,7 @@ Linux: it carries that `jason`, and sets the installation up itself. The first s
 found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command
 Line item of its menu says what that placed and puts it back. It is not a second Jason: it works on the data directory
 the CLI uses and starts the runtime through `jason runtime start`. Its chat is a session with your own agent, started
-for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads and advises.
+for you on this computer: Claude Code or Codex. A new chat opens in Full access and does what a session in a terminal does, except that on Claude Code it leaves Jason's own settings, run files and data to the `jason` commands; a menu beside the message box chooses a mode that asks first, only reads, or applies file changes in its own folder.
 Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification channels and your AI
 provider's key.
 
@@ -357,12 +357,13 @@ Jason does as much as it can on its own, and nothing that should be yours.
 
 - **Every message waits for you until you choose otherwise.** Every operation that reaches a real person is parked
   with a record of exactly what would be done, until you decide. Approve in Jason Desktop, where you see
-  the person, the account it goes from and the full message.
+  the person, the account it goes from and the full message, or say it in its chat in your own words: approve or reject
+  what waits, answer a question or start a campaign, and the AI does it on your word, recorded as yours.
 - **Or it goes on its own, where you say so.** You choose, separately for people who have not answered and for people
   who have, that messages go automatically, for every campaign or for one. A critic reads each such message before it
-  goes, and a message it or another role doubts, one to a person whose reply has not been judged yet, one written in the
-  desktop's chat and any past the campaign's daily limit still wait for you. Only a named person turns it on, a role
-  never can, and every message it lets go is logged under that person's name.
+  goes, and a message it or another role doubts, one to a person whose reply has not been judged yet and any past the
+  campaign's daily limit still wait for you. Only a named person turns it on, a role never can, and every message it
+  lets go is logged under that person's name.
 - **A yes in advance, only if you give one.** You can pre-approve drafted replies to one category of reply in one
   campaign, such as `interested`, with an expiry and a ceiling if you want them. A search for people sends nothing, but
   it spends your provider's credits, so the first search for a new audience always waits for you; after it, you can let
@@ -673,7 +674,7 @@ yourself. Nothing else. No telemetry.
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
 **In numbers:** 21 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 987 contract fixtures and
-634 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 9 runtime skills and 9 role
+635 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 9 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |
@@ -699,8 +700,9 @@ skills · release notes on every release.
 **Does it ever send on its own?**
 Only where you say so. Until you choose otherwise, every message to a real person waits for your approval. You can
 choose, separately for people who have not answered and for people who have, that messages go automatically; a critic
-reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the
-desktop's chat and any past the campaign's daily limit still wait for you. One nuance, said plainly: if a campaign
+reads each one first, and a doubted message, one to a person whose reply has not been judged yet and any past the
+campaign's daily limit still wait for you; in Jason Desktop's chat you can approve them in your own words, and the AI
+records the approval as yours. One nuance, said plainly: if a campaign
 enrols someone into your provider's own sequence, you approve that enrolment once for that person, and the provider then
 sends the sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one
 campaign, and let the searches that top up one of a campaign's audiences find more people up to a number you set: a

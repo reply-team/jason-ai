@@ -19,6 +19,11 @@
 //   { "end": "no_result" }                            exit 0 with no result
 //   { "end": "error", "text": "words" }               end with a failed result
 //   { "jam": true }                                   Claude Code only: put a folder where the turn's MCP file is, so its removal fails
+//   { "servers": true }                               Claude Code only: say "servers: " and the names the turn's MCP file gives its servers
+//   { "defences": true }                              Claude Code only: say "defences: " and the server defences the turn's settings
+//                                                    carry, inline or in their file, in a fixed order, or "none"
+//   { "pins": true }                                  Claude Code only: say "pins: " and the JSON of the `env` the turn's
+//                                                    settings set, inline or in their file, or "none"
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
@@ -28,18 +33,34 @@
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
+// STUB_INIT_MODE is the mode Claude Code's init line names; without it the line names none. STUB_FORCED_DEFAULT has Claude
+// Code force its default mode and say so on stderr, as 2.1.329 does under CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1: "scrub"
+// where the start's environment sets that, "always" on every start that asks for another mode. STUB_BYPASS "refused"
+// refuses the bypass mode before anything starts; STUB_BYPASS_HOLD holds that refusal until its file exists, so a test
+// decides when it comes.
+// STUB_SESSIONS names a folder where Claude Code keeps what each session was given: every start that is not refused writes
+// the turn it was given to <folder>/<session> as it starts, before its init line, so a start stopped at that line has
+// kept the person's message all the same, as Claude Code does; a start with no resume opens a session of a new id there.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
-// session other than the one asked for and goes on as a turn would.
+// session other than the one asked for and goes on as a turn would. A resume with `--fork-session` answers with a session
+// of a new id, as Claude Code does: the next one in STUB_SESSIONS, which holds what the one resumed held and then this
+// turn, the one resumed left as it was; with no folder, the id asked for and `-fork`.
 // A naming run (`naming` below) answers by STUB_NAMING, a JSON object: { "say": "words" } says them, { "use": true }
 // uses a tool first, { "block": "type" } (Claude Code) or { "item": "type" } (Codex) says a content block or an item of
 // that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "hold": "<file>" } waits until the file exists, { "touch": true } leaves a
 // file in the folder it runs in, { "stuck": "<file>" } never answers, outlives the first signal and writes its ids there. With none it ends well and says nothing. STUB_NAMING_LOG, when set, has a line appended
 // as each naming run starts and ends.
+// STUB_CODEX_REFUSE has Codex refuse to start: it writes those words to stderr and exits 1 before any event, as Codex does
+// when its configuration cannot be built.
+// STUB_CODEX_WARNING has Codex say a configuration warning before its thread, as a completed item of type `error`, the
+// shape codex exec --json gives one (codex-rs/exec/src/event_processor_with_jsonl_output.rs).
+// STUB_INIT_HOLD holds a Claude Code start before its init line until that file exists, so a test decides when the start
+// names its session. STUB_FAIL_START has Claude Code write those words to stderr and exit 1 before its init line.
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { decide } = require('./mcp-http.cjs');
 
@@ -124,10 +145,20 @@ async function askHook(hook, session, mode, tool, input, id) {
     }
 }
 
+/**
+ * The permission prompt tool's server and tool, as Claude Code resolves `--permission-prompt-tool`: `mcp__<server>__<tool>`,
+ * the tool after the last `__`.
+ */
+function promptToolOf(args) {
+    const named = args[args.indexOf('--permission-prompt-tool') + 1] || '';
+    const at = named.lastIndexOf('__');
+    return { server: named.slice('mcp__'.length, at), tool: named.slice(at + 2) };
+}
+
 /** Asks the permission prompt tool, as Claude Code does under -p: the tool result's content and whether it is an error. */
-async function prompted(config, tool, input) {
+async function prompted(config, prompt, tool, input) {
     try {
-        const decision = await decide(config, 'jason_desktop', 'decide', tool, input);
+        const decision = await decide(config, prompt.server, prompt.tool, tool, input);
         return decision.behavior === 'allow' ? ['ran', false] : [`refused: ${decision.message}`, true];
     } catch (error) {
         return [`refused: the prompt tool failed: ${error.message}`, true];
@@ -141,9 +172,48 @@ async function claude(args, stdin) {
         process.stderr.write(`No conversation found with session ID: ${asked}\n`);
         process.exit(1);
     }
-    const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || 'stub-session-1');
+    if (process.env.STUB_FAIL_START) {
+        process.stderr.write(`${process.env.STUB_FAIL_START}\n`);
+        process.exit(1);
+    }
+    const store = process.env.STUB_SESSIONS || null;
+    const opened = store === null ? 'stub-session-1' : `stub-session-${readdirSync(store).length + 1}`;
+    const forking = asked !== null && args.includes('--fork-session');
+    const session = forking
+        ? store === null ? `${asked}-fork` : opened
+        : asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || opened);
     const config = args[args.indexOf('--mcp-config') + 1];
-    print({ type: 'system', subtype: 'init', session_id: session, ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+    const prompt = promptToolOf(args);
+    // The bypass mode refused before anything starts, in Claude Code's restricted mode or under a policy (seen on 2.1.329).
+    if (permissionMode(args) === 'bypassPermissions' && process.env.STUB_BYPASS === 'refused') {
+        const hold = process.env.STUB_BYPASS_HOLD;
+        if (hold) while (!existsSync(hold)) await new Promise((resolve) => setTimeout(resolve, 20));
+        process.stderr.write('Error: bypassPermissions not supported in restricted mode\n');
+        process.exit(1);
+    }
+    // Claude Code 2.1.329 starts in its default mode, whatever mode the start asked for, while CLAUDE_CODE_SUBPROCESS_ENV_SCRUB
+    // is set, and says so on standard error before its init line (seen with a scratch configuration directory):
+    // STUB_FORCED_DEFAULT "scrub" does that where the start's environment sets the variable to 1, "always" on every start
+    // that asks for another mode than the default.
+    const scrubbed = Object.entries(process.env).some(([name, value]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' && value === '1');
+    const forcing = process.env.STUB_FORCED_DEFAULT;
+    const forced = permissionMode(args) !== 'default' && (forcing === 'always' || (forcing === 'scrub' && scrubbed));
+    if (forced) {
+        process.stderr.write(
+            '⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.\n',
+        );
+    }
+    // Otherwise the mode the init line names is the row's to say (`STUB_INIT_MODE`), never an echo of the mode the start
+    // asked for: what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names
+    // none.
+    const named = forced ? 'default' : process.env.STUB_INIT_MODE;
+    const initHold = process.env.STUB_INIT_HOLD;
+    if (initHold) while (!existsSync(initHold)) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (store !== null) {
+        if (forking && existsSync(join(store, asked))) writeFileSync(join(store, session), readFileSync(join(store, asked)));
+        appendFileSync(join(store, session), stdin);
+    }
+    print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
@@ -167,14 +237,14 @@ async function claude(args, stdin) {
                 const decided = await askHook(hook, session, permissionMode(args), step.use.tool, step.use.input, id);
                 if (decided.failed && hook.onFailure === 'block') [content, error] = ['blocked: the hook failed', true];
                 else if (decided.decision === 'deny') [content, error] = [`refused: ${decided.reason}`, true];
-                else if (decided.decision === 'ask' || step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
-            } else if (step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
+                else if (decided.decision === 'ask' || step.use.prompt) [content, error] = await prompted(config, prompt, step.use.tool, step.use.input);
+            } else if (step.use.prompt) [content, error] = await prompted(config, prompt, step.use.tool, step.use.input);
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             if (hook !== null) print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content}` }] } });
         } else if (step.unhooked !== undefined) {
             const id = `toolu_unhooked_${++n}`;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
-            const [content, error] = step.unhooked.prompt ? await prompted(config, step.unhooked.tool, step.unhooked.input) : ['ran', false];
+            const [content, error] = step.unhooked.prompt ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input) : ['ran', false];
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content} unhooked` }] } });
         }
@@ -183,12 +253,24 @@ async function claude(args, stdin) {
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_${n}`, name: step.ask.tool, input: step.ask.input }] } });
             let said;
             try {
-                const decision = await decide(config, 'jason_desktop', 'decide', step.ask.tool, step.ask.input);
+                const decision = await decide(config, prompt.server, prompt.tool, step.ask.tool, step.ask.input);
                 said = decision.behavior === 'allow' ? 'decision allow' : `decision deny: ${decision.message}`;
             } catch (error) {
                 said = `decision failed: ${error.message}`;
             }
             print({ type: 'assistant', message: { content: [{ type: 'text', text: said }] } });
+        } else if (step.servers !== undefined) {
+            const named = Object.keys(JSON.parse(readFileSync(config, 'utf8')).mcpServers || {});
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `servers: ${named.join(' ')}` }] } });
+        } else if (step.defences !== undefined) {
+            const given = args[args.indexOf('--settings') + 1];
+            const settings = JSON.parse(given.trimStart().startsWith('{') ? given : readFileSync(given, 'utf8'));
+            const carried = ['disableClaudeAiConnectors', 'deniedMcpServers', 'disableSkillShellExecution'].filter((key) => key in settings);
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `defences: ${carried.join(' ') || 'none'}` }] } });
+        } else if (step.pins !== undefined) {
+            const given = args[args.indexOf('--settings') + 1];
+            const settings = JSON.parse(given.trimStart().startsWith('{') ? given : readFileSync(given, 'utf8'));
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `pins: ${settings.env === undefined ? 'none' : JSON.stringify(settings.env)}` }] } });
         } else if (step.wait !== undefined) return wait(step.wait);
         else if (step.jam !== undefined) {
             rmSync(config, { force: true });
@@ -214,6 +296,11 @@ function codex(args, stdin) {
         process.exit(1);
     }
     const thread = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || '0199a213-81c0-7800-8aa1-bbab2a035a53');
+    if (process.env.STUB_CODEX_REFUSE) {
+        process.stderr.write(`${process.env.STUB_CODEX_REFUSE}\n`);
+        process.exit(1);
+    }
+    if (process.env.STUB_CODEX_WARNING) print({ type: 'item.completed', item: { id: 'item_0', type: 'error', message: process.env.STUB_CODEX_WARNING } });
     print({ type: 'thread.started', thread_id: thread });
     print({ type: 'turn.started' });
     if (!silent(asked)) {

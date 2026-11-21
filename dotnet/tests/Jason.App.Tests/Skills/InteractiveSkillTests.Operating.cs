@@ -8,7 +8,8 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// Moving the harness root is the installation's act, and the planner's first words send the person here for it. It
     /// is a change of the setting and then a link of each project whose folder moved, in that order: nothing moves by
-    /// itself, and a session that only edited the setting would leave every project recorded where it no longer is.
+    /// itself, and a session that only edited the setting would leave every project recorded where it no longer is. The
+    /// chat of Jason Desktop links a project too, with the folder named, since its turns run in a folder of their own.
     /// </summary>
     [Fact]
     public void The_operating_skill_moves_the_root_by_the_setting_and_then_a_link_per_project()
@@ -16,6 +17,8 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
         Assert.Contains("Move it only when the person asks: move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing moves by itself", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder of its own; where the chat's mode only reads and proposes, you do not run it: say that this mode does not.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("mode asks first, Jason shows", skill, StringComparison.Ordinal);
     }
 
     /// <summary>How every place that brings a session to a stop points at the one rule for it.</summary>
@@ -240,7 +243,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// An account whose events are read is a source, and its record is read, never its cursor. A span Jason did not read
-    /// is read again only on the person's yes, with their words as the reason — and the skill says what that does and does
+    /// is read again only on the person's yes, with a reason in its own words — and the skill says what that does and does
     /// not do, so that a session neither promises a reply was sent nor runs it on its own judgement because a gap showed.
     /// </summary>
     [Fact]
@@ -256,7 +259,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("A source never shows its cursor, and you do not need it.", skill, StringComparison.Ordinal);
         Assert.Contains("That column stays once a span asked for again has read it: the spans asked for again are listed below the table with how each ended, so read them before you offer to read a span again.", skill, StringComparison.Ordinal);
         Assert.Contains("It is read only when the person asks", skill, StringComparison.Ordinal);
-        Assert.Contains("Ask first, and run it on the person's yes, with their words as the reason.", skill, StringComparison.Ordinal);
+        Assert.Contains("Ask first, and run it on the person's yes, with a reason in your own words (in the chat, the reason of rule 13).", skill, StringComparison.Ordinal);
         Assert.Contains("It reads and sends nothing, and leaves the account's own reading where it stands.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "What it finds that a campaign was not told, and that happened after the campaign went live, wakes that campaign's manager; what happened before is kept and says nothing.",
@@ -540,7 +543,7 @@ public partial class InteractiveSkillTests
             "Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime sees.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("Those three verbs are the whole plugin vocabulary", skill, StringComparison.Ordinal);
+        Assert.Contains("`install`, `list`, `reload`, `grant` and `revoke` are the whole plugin vocabulary, and **there is no `jason plugin get`**.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>

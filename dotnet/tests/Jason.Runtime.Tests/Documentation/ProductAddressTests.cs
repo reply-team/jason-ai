@@ -29,7 +29,7 @@ public sealed partial class ProductAddressTests : IDisposable
     /// <c>.github/scripts/test-installation-macos.sh</c>, each naming the previous release by its tag in the pinned line
     /// the way-back leg runs.
     /// </summary>
-    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>|\$previousVersion|\$old)";
+    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>|\#\{version\}|\$previousVersion|\$old)";
 
     /// <summary>
     /// What the address answers, one row per shape. Each answers 302 with the same path under
@@ -93,8 +93,8 @@ public sealed partial class ProductAddressTests : IDisposable
             "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; and install.sh's requirement is held against the application the latest release published, taken the same way and checked against that release's checksums.txt; both are CI's reads and no person's install, so neither is ever a request to the address operated for the product"),
         new(
             ".github/workflows/release.yml",
-            2,
-            "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
+            5,
+            "the installation proof takes the previous release's and the one-installation release's published files from GitHub directly, on each platform it proves, and the cask's proof the previous release's application and the older formula's command line, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));

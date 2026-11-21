@@ -38,16 +38,22 @@ import {
     afresh,
     answered,
     autoEditLine,
+    choiceStops,
+    codexFullAccessLine,
     choiceState,
     codexConfigLine,
     codexHosts,
     codexReachLine,
+    drawnMode,
     failed,
     fromRecord,
     fullAccessLine,
     handed,
     kept,
     livePlan,
+    lastEntryOf,
+    isExport,
+    exportNotTyped,
     planElsewhere,
     lost,
     modeChoices,
@@ -62,6 +68,7 @@ import {
     planLine,
     codexPlanLine,
     planModeMoved,
+    removedFolder,
     joined,
     queued,
     said,
@@ -71,6 +78,7 @@ import {
     fullAccessWhyWords,
     takenBack,
     told,
+    noteClosed,
     turnOptions,
     typed,
     type Answer,
@@ -84,11 +92,12 @@ import { atFoot, followedTop } from './follow';
 import { html, type Html } from './html';
 import { copied, markdownView } from './markdown-view';
 import { barMarks, svg } from './icons';
+import { useDroppedPaths } from './dropped-paths';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { repeated } from '../screens/attention/store';
 import { Painted } from './painted';
-import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
+import { AccessButton, Glyph, ModeMark, ModelButton, modeSaysOn, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
@@ -106,7 +115,6 @@ import {
     messageOf,
     setup,
 } from './state';
-import { fullAccessStanding, standingKnown, takeBackStanding } from '../platform/full-access';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
@@ -219,25 +227,16 @@ async function hold(id: string): Promise<string> {
  * The conversation to show: the campaign's one, made on first use and opened with what it kept, or with no campaign
  * a new set-up chat. Resolves with its id, or with null when the desktop refused, which the sidebar says.
  */
-export async function startChat(
-    campaign?: { id: string; name: string },
-    options: { askFirst?: boolean } = {},
-): Promise<string | null> {
+export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
     try {
-        // Named Ask first where the person changed it before sending: no host is named, so the desktop starts it there.
-        const host = options.askFirst === true ? undefined : await newChatHost();
         const { desktop } = here();
         let id: string;
         if (campaign) {
-            const made = unless(
-                await (host === undefined ? desktop.chat.create(campaign.id) : desktop.chat.create(campaign.id, host)),
-            );
+            const made = unless(await desktop.chat.create(campaign.id));
             id = await hold(made.id);
         } else {
-            const made = unless(
-                await (host === undefined ? desktop.chat.create() : desktop.chat.create(undefined, host)),
-            );
-            // The mode the desktop made it in, Full access by the standing choice among them: its line shows at once.
+            const made = unless(await desktop.chat.create());
+            // The mode the desktop made it in: its line shows at once.
             chats.value = {
                 ...chats.value,
                 [made.id]: { ...newChat(made.id, null), title: made.title, mode: made.mode },
@@ -253,17 +252,6 @@ export async function startChat(
     }
 }
 
-/**
- * The host a new chat's first turn runs on, named to the desktop only while the standing choice says new chats start in
- * Full access, so it can tell whether that host takes Full access; otherwise nothing is named, as before.
- */
-async function newChatHost(): Promise<string | undefined> {
-    await standingKnown();
-    if (fullAccessStanding.value?.newChats !== true) return undefined;
-    if (setup.value === null) await listHosts();
-    return hostOf(newChat('', null))?.id;
-}
-
 /** What marks the id an agent's chat is drawn under before its conversation is made: never one the desktop gives. */
 const unmadeMark = 'unmade:';
 
@@ -273,7 +261,7 @@ export const isUnmade = (id: string): boolean => id.startsWith(unmadeMark);
 /** An unmade chat as it is drawn: named as the console's list names its agent, in the mode its conversation will take. */
 function unmadeAsDrawn(chat: Chat): Chat {
     const title = campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
-    const mode = newChatMode(chat);
+    const mode = newChatMode;
     return title === chat.title && mode === chat.mode ? chat : { ...chat, title, mode };
 }
 
@@ -290,14 +278,10 @@ export function unmadeChat(campaign: { id: string; name: string }): string {
 }
 
 /**
- * The mode a chat made now would start in, by the standing choices: Full access when the standing choice says new chats
- * start in it and the host it would run on can take it, Ask first otherwise. A tab never makes a chat in Full access: it
- * could send nothing to it, so the standing choice is not its default.
+ * The mode a chat not made yet is drawn in: the one the desktop makes every new chat in. Once made, a chat is drawn in
+ * the mode the desktop's answer says.
  */
-export function newChatMode(pick: Chat): DesktopChatMode {
-    if (inTab() || fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
-    return hostOf(pick)?.fullAccess === null ? 'full_access' : 'ask_first';
-}
+export const newChatMode: DesktopChatMode = 'full_access';
 
 /** The conversations being made for unmade chats, by the unmade chat's id: one at a time, whatever asks for it. */
 const making = new Map<string, Promise<string | null>>();
@@ -414,16 +398,6 @@ function whenDrawn(id: string, then: (panel: HTMLElement) => void, tries = 20): 
     if (tries > 0) setTimeout(() => whenDrawn(id, then, tries - 1), 0);
 }
 
-/** The take-back in the mode menu: the desktop forgets the standing choice; the chat stays in the mode it is in. */
-export function takeBackChoice(id: string): void {
-    if (!can('fullAccess.takeBack')) return;
-    takeBackStanding(here().desktop)
-        .then((refused) => {
-            if (refused !== null) changeChat(id, (chat) => told(chat, refused));
-        })
-        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
-}
-
 /** A conversation from the sidebar's list: the one held, else the one the desktop kept. Null when it refused. */
 export async function openConversation(id: string): Promise<string | null> {
     try {
@@ -437,9 +411,9 @@ export async function openConversation(id: string): Promise<string | null> {
 }
 
 /** "Start fresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
-export function restartChat(id: string): void {
-    if (!can('chat.restart')) return;
-    here()
+export function restartChat(id: string): Promise<void> {
+    if (!can('chat.restart')) return Promise.resolve();
+    return here()
         .desktop.chat.restart(id)
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
@@ -475,11 +449,11 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
     if (!can('chat.setMode')) return;
     const chat = chats.value[id];
     if (!chat) return;
-    // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access, leaving Auto-edit
-    // for Ask first or Plan only, or a change to Plan only; Auto-edit to Full access lets it finish. The waiting message is
-    // given back, and no turn follows by itself.
-    const stops = breadth[mode] < breadth[chat.mode];
-    if (chat.running && stops) changeChat(id, stopAsked);
+    // A change to a mode narrower than the one the running turn runs in stops that turn, as Stop does: leaving Full
+    // access, leaving Auto-edit for Ask first or Plan only, or a change to Plan only; Auto-edit to Full access lets it
+    // finish, and so does the mode the turn already runs in. The waiting message is given back, and no turn follows by
+    // itself.
+    if (choiceStops(chat, mode, hostOf(chat), inTab() ? 'tab' : 'window')) changeChat(id, stopAsked);
     here()
         .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
         .then((answer) => {
@@ -513,9 +487,6 @@ export function approvePlan(id: string): void {
         })
         .catch((error: unknown) => changeChat(id, (each) => told({ ...each, plan: null }, messageOf(error))));
 }
-
-/** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
-const breadth: Readonly<Record<DesktopChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
 
 /** The most characters a conversation's name keeps, as the desktop cuts it. */
 const nameLength = 60;
@@ -553,13 +524,19 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
 }
 
 /**
- * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `resent` says the words were the waiting message: a
+ * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `typed` says the words are
+ * the ones the person typed in the message box, the only ones an `/export` is taken from. `resent` says the words were the waiting message: a
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
-export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
+export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode, typed = false): void {
+    // Only the words typed in the message box export: a card's option or field that says /export is sent as nothing.
+    if (!typed && isExport(text)) {
+        changeChat(id, exportNotTyped);
+        return;
+    }
     if (isUnmade(id)) {
         void makeUnmade(id).then((real) => {
-            if (real !== null) return sendTurn(real, text, resent, mode);
+            if (real !== null) return sendTurn(real, text, resent, mode, typed);
             // Refused: the words go back to the box first, before anything sent or typed after them.
             changeChat(id, (each) => everyWordBack(each, text));
         });
@@ -585,10 +562,18 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         return;
     }
     // A chat that named no host yet is on the one its turn runs on from now, so a hold on that host later holds the chat.
-    // The host the turn goes to is the one whose session has its answer, a plan included (`livePlan`).
-    changeChat(id, (each) => said({ ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent));
+    // The host the turn goes to is the one whose session has its answer, a plan included (`livePlan`). An export is no
+    // turn, and leaves the chat on the host it was on.
+    changeChat(id, (each) =>
+        said(isExport(words) ? each : { ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent),
+    );
     here()
-        .desktop.chat.send(id, words, { ...turnOptions(onHost(chat, host.id), host), ...(mode ? { mode } : {}) })
+        .desktop.chat.send(id, words, {
+            ...turnOptions(onHost(chat, host.id), host),
+            ...(mode ? { mode } : {}),
+            // The desktop exports only the words the person typed in the message box, and is told so with them alone.
+            ...(typed && isExport(words) ? { typed: true as const } : {}),
+        })
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
             // From its first turn the desktop keeps the conversation, and lists it.
@@ -603,7 +588,7 @@ effect(() => {
     const ready = Object.values(chats.value).filter((chat) => chat.outbox !== null);
     for (const chat of ready) {
         changeChat(chat.id, handed);
-        sendTurn(chat.id, chat.outbox!, true);
+        sendTurn(chat.id, chat.outbox!, true, undefined, true);
     }
 });
 
@@ -664,6 +649,12 @@ define('chat.openFolder', ([id, name]) => {
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 });
 
+// A notice or an aside closed by its control: the page's own, so a tab closes it too.
+define('chat.closeNote', ([id, index]) => {
+    if (typeof id !== 'string' || typeof index !== 'number') return;
+    changeChat(id, (chat) => noteClosed(chat, index));
+});
+
 define('chat.attach', ([id, campaignId]) => {
     // A tab never says yes, and never reaches what only the desktop's window may.
     if (!can('chat.attach')) return;
@@ -685,12 +676,16 @@ const withCode = (sentence: string): Html[] =>
 /** In a browser tab a card is only shown: the desktop's own window answers it. */
 const answeredInDesktop = t('chat.tab.answered');
 
-/** A tab may send only to a chat in Ask first or Plan only, as the bridge does; any other mode, an unknown one too, is locked. */
-export const tabMaySend = (mode: string): boolean => mode === 'ask_first' || mode === 'plan_only';
+/**
+ * A tab may send only to a chat in Ask first, Plan only or Full access, as the bridge does, and a turn it sends to a chat
+ * in Full access runs in Ask first; any other mode, an unknown one too, is locked.
+ */
+export const tabMaySend = (mode: string): boolean =>
+    mode === 'ask_first' || mode === 'plan_only' || mode === 'full_access';
 
 /** The sentence beside a locked box: it names the mode. */
 export const tabLockedSentence = (mode: string): string =>
-    mode === 'full_access' ? t('chat.tab.full') : mode === 'auto_edit' ? t('chat.tab.auto') : t('chat.tab.other');
+    mode === 'auto_edit' ? t('chat.tab.auto') : t('chat.tab.other');
 
 function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
     // What the page has no words for is not drawn: the card stands without the line.
@@ -741,7 +736,7 @@ function planCard(
     drafts = false,
 ): Html {
     // Approve and run is offered over what a person can read: never over a plan of none.
-    const last = entry === chat.entries.at(-1) && (words.trim() !== '' || drawn !== null);
+    const last = entry === lastEntryOf(chat) && (words.trim() !== '' || drawn !== null);
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -821,6 +816,20 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
+
+/** The control that closes a notice or an aside of the chat, which it names by its place among the chat's entries. */
+const closeNote = (chatId: string, index: number | undefined): Html | null =>
+    index === undefined
+        ? null
+        : html`<button
+              class="note-close"
+              type="button"
+              aria-label="Close"
+              title="Close"
+              ${act('chat.closeNote', chatId, index)}
+          >
+              ${svg('close', 14)}
+          </button>`;
 
 /** A kind as the line of a card that did not hold what it needs names it: the card, by its kind or by where it leads. */
 const kindWords: Readonly<Record<CardKind, string>> = {
@@ -1111,6 +1120,18 @@ function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
     </div>`;
 }
 
+/**
+ * What the empty chat says about approval, one short sentence true of its mode: in Plan only nothing written reaches a
+ * person unapproved; in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves when the
+ * person tells it to. Full access, where a program the AI writes can act as the person, and a mode word this desktop
+ * does not know say nothing.
+ */
+function approvalSentence(mode: Chat['mode']): string | null {
+    if (mode === 'plan_only') return t('chat.empty.planOnly');
+    if (mode === 'ask_first' || mode === 'auto_edit') return t('chat.empty.onYourWord');
+    return null;
+}
+
 export function threadView(chat: Chat, host: DesktopHost | null): Html {
     if (chat.entries.length === 0 && chat.main)
         return html`<div class="hero">
@@ -1122,11 +1143,13 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 stopped, a provider block holding work. Ask about any of it below.
             </p>
         </div>`;
+    // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
+    const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
-                ${chat.mode === 'ask_first' || chat.mode === 'auto_edit' || chat.mode === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
+                ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);
@@ -1209,15 +1232,30 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         ? `${host?.label ?? 'This AI host'} has not seen this conversation; it was given the last messages.`
                         : "The AI's memory of this conversation was gone; it starts from the last messages.",
                 );
+            // A notice and an aside go once closed, by their control or as the next answer began.
             case 'notice':
-                return entry.folder === null || inTab()
-                    ? noteLine(entry.text)
-                    : html`<div class="note chat-note">
-                          ${entry.text}
-                          <button class="btn sm" type="button" ${act('chat.openFolder', chat.id, entry.folder)}>
-                              Open folder
-                          </button>
-                      </div>`;
+                if (entry.closed === true) return null;
+                return html`<div class="note chat-note closable">
+                    <span class="note-said">${entry.text}</span>
+                    ${
+                        entry.folder === null || inTab()
+                            ? null
+                            : html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${act('chat.openFolder', chat.id, entry.folder)}
+                              >
+                                  Open folder
+                              </button>`
+                    }
+                    ${closeNote(chat.id, indexOf.get(entry))}
+                </div>`;
+            case 'aside':
+                if (entry.closed === true) return null;
+                return html`<div class="note chat-note closable">
+                    <span class="note-said">${entry.text}</span>
+                    ${closeNote(chat.id, indexOf.get(entry))}
+                </div>`;
             case 'afresh':
                 return noteLine("Started fresh: the AI's next turn begins without its memory of this conversation.");
             case 'line':
@@ -1419,40 +1457,33 @@ function Queued({ text, boxEmpty, takeBack }: { text: string; boxEmpty: boolean;
  * The controls in a composer's row: the access mode on the left, and on the right what the next turn runs on (host,
  * model, effort). The chat's own composer and the start screen's draw the same two menus (`start-menus.tsx`); `change`
  * and `choose` say where a choice goes. Nothing here decides what a mode offers: `modeChoices` does. A tab cannot change
- * a chat's mode, and names it instead.
+ * a chat's mode, and names instead the mode a turn sent from it runs in, as the desktop hands it (`drawnMode`).
  */
 export function ChatControls({
     chat,
     change,
     choose,
-    takeBack: takeBackChosen,
     modeMenu,
 }: {
     chat: Chat;
     change: (next: (each: Chat) => Chat) => void;
     choose: (mode: DesktopChatMode) => void;
-    takeBack: () => void;
     modeMenu: RefObject<HTMLButtonElement>;
 }) {
+    const host = hostOf(chat);
+    const drawn = drawnMode(chat, host, 'tab').mode;
     return (
         <>
             {inTab() ? (
                 <span className="cpick acc mode mode-label" aria-label="Access mode">
-                    <ModeMark mode={chat.mode} />
-                    {modeChoices(hostOf(chat), chat.main === true).find((each) => each.mode === chat.mode)?.label ??
-                        chat.mode}
+                    <ModeMark mode={drawn} />
+                    {modeChoices(host).find((each) => each.mode === drawn)?.label ?? drawn}
                 </span>
             ) : (
-                <AccessButton
-                    chat={chat}
-                    choose={choose}
-                    takeBack={takeBackChosen}
-                    buttonRef={modeMenu}
-                    header="Access for this chat"
-                />
+                <AccessButton chat={chat} choose={choose} buttonRef={modeMenu} header="Access for this chat" />
             )}
             <span className="grow" />
-            <ModelButton chat={chat} change={change} choose={choose} header="Model for this chat" />
+            <ModelButton chat={chat} change={change} header="Model for this chat" />
         </>
     );
 }
@@ -1461,38 +1492,46 @@ export function ChatControls({
  * The words of the line under a composer for a mode the desktop holds: its name and what it does; none for a mode word
  * this page does not know, which a newer desktop may write.
  */
-const lineOf = (mode: DesktopChatMode, label: string): string | null => {
-    const said = (modeSays as Partial<Record<string, string>>)[mode];
+const lineOf = (mode: DesktopChatMode, label: string, host: DesktopHost | null): string | null => {
+    const said = modeSaysOn(host, mode);
     return said === undefined ? null : `${label} · ${said.charAt(0).toLowerCase()}${said.slice(1).replace(/\.$/, '')}`;
 };
 
 /**
- * The line under a composer: what the chat's access mode lets the AI do, the mode's name, a dot and what it does (Full
- * access and Auto-edit in their own words, as the desktop holds them), with no link, since the menu beside it changes
- * the mode; and what Codex reads and reaches where Codex runs the chat.
+ * The line under a composer: what the access mode the next turn runs in lets the AI do, the mode's name, a dot and what
+ * it does (Full access and Auto-edit in their own words), with no link, since the menu beside it changes the mode; where
+ * the chat keeps a mode that turn does not run in, the desktop's sentence why (`drawnMode`); and what Codex reads and
+ * reaches where Codex runs the chat.
  */
 export function ChatNotes({ chat }: { chat: Chat }) {
     const host = hostOf(chat);
-    const label = modeChoices(host, chat.main === true).find((each) => each.mode === chat.mode)?.label ?? chat.mode;
+    const { mode, why } = drawnMode(chat, host, inTab() ? 'tab' : 'window');
+    const label = modeChoices(host).find((each) => each.mode === mode)?.label ?? mode;
+    const codex = host !== null && codexHosts.has(host.id);
     return (
         <div className="under">
-            {chat.mode === 'full_access' ? (
+            {mode === 'full_access' ? (
                 <span className="accline full-access" role="status" aria-label="Full access is on">
-                    {fullAccessLine}
+                    {codex ? codexFullAccessLine : fullAccessLine}
                 </span>
-            ) : chat.mode === 'auto_edit' ? (
+            ) : mode === 'auto_edit' ? (
                 <span className="accline auto-edit" role="status" aria-label="Auto-edit is on">
                     {autoEditLine}
                 </span>
             ) : (
-                lineOf(chat.mode, label) !== null && <span className="accline">{lineOf(chat.mode, label)}</span>
+                lineOf(mode, label, host) !== null && <span className="accline">{lineOf(mode, label, host)}</span>
             )}
-            {host?.id === 'codex' && (
+            {why !== null && (
+                <span className="accwhy" role="note" aria-label={`Why the next turn runs in ${label}`}>
+                    {why.replaceAll('`', '')}
+                </span>
+            )}
+            {host?.id === 'codex' && mode !== 'full_access' && (
                 <span className="codex-config" role="note" aria-label="What Codex reads">
                     {codexConfigLine}
                 </span>
             )}
-            {host !== null && codexHosts.has(host.id) && (
+            {codex && mode !== 'full_access' && (
                 <span className="codex-reach" role="note" aria-label="What a Codex command can reach">
                     {codexReachLine((here().desktop as { platform?: string }).platform)}
                 </span>
@@ -1604,7 +1643,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         wasRemoving.current = removing;
     }, [removing]);
     const unmade = isUnmade(chatId);
-    // An unmade chat shows the mode the conversation will take by the standing choices, as a create would give it.
+    // An unmade chat is drawn in the mode its conversation will be made in (`newChatMode`), as a create gives it.
     const chat = record && unmade ? unmadeAsDrawn(record) : record;
     // Reply is offered unless the campaign's enrolment is routed to another plugin: read when the chat is of a draft campaign
     // while Reply is not connected, and read again if the campaign or what is connected changes.
@@ -1619,6 +1658,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
     }, [draftCampaignId]);
     useFit(messageBox, record?.draft ?? '');
+    // A file dropped on the box puts its path in at the caret (`dropped-paths.ts`).
+    const drop = useDroppedPaths(messageBox, chatId, record?.draft ?? '', (next) =>
+        changeChat(chatId, (each) => typed(each, next)),
+    );
     // An agent's chat whose last choice may still be live reads, once while it is drawn, whether the person acted on the
     // agent after it was asked; the journal's stream keeps that current (`heardLine`). A chat of no agent reads nothing.
     const api = useApi();
@@ -1640,11 +1683,17 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     // send: a message they send, and a permission card that asks them something, always go to the foot, the first
     // message of a conversation made at that send included. The foot is the conversation's (`followedOf`), not the
     // box's: the cards waiting under it stay under it, so following only ever moves the view down to that place, a
-    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. Opening a
-    // chat moves nothing. Where the person stands is noted as the box scrolls. The Demo's thread shares the measure.
+    // person reading the cards below it is at the foot, and cards coming or going under it are not followed. What is
+    // followed is the place, not only what is written: a change of size with no word added (the box made shorter by
+    // what stands outside it, a part of the thread that opens) is followed by the same rule. Opening a chat moves
+    // nothing; a pane shown again after it was hidden follows to the end of what came meanwhile when it was left at the
+    // foot, and keeps the place of one left scrolled up past the slack. Where the person stands is noted as the box
+    // scrolls, except at the place the follower itself set, whose scroll is its own and may be read only after the box
+    // changed size. The Demo's thread shares the measure.
     const scroller = useRef<HTMLDivElement>(null);
     const follow = useRef<{ chat: string; sent: ReadonlySet<string>; atFoot: boolean } | null>(null);
     const grown = useRef<MutationObserver | null>(null);
+    const put = useRef<number | null>(null);
     const shownChat = useRef(chatId);
     shownChat.current = chatId;
     const drawn = Boolean(chat);
@@ -1655,21 +1704,43 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         const box = scroller.current;
         if (box === null) return;
         const noted = () => {
+            if (put.current !== null && box.scrollTop === put.current) return;
+            put.current = null;
             if (follow.current) follow.current.atFoot = atFoot(box.scrollTop, followedOf(box));
         };
-        // What is added under the thread, the painter's words and React's cards alike, is followed while the person is
-        // at the foot of the chat shown; a chat being given to the panel is not followed until it is opened.
-        const observer = new MutationObserver(() => {
+        // What is added under the thread, the painter's words and React's cards alike, and what changes the size of the
+        // box or of what it holds, is followed while the person is at the foot of the chat shown; a chat being given to
+        // the panel is not followed until it is opened.
+        const followed = () => {
             const now = follow.current;
             if (now === null || now.chat !== shownChat.current || !now.atFoot) return;
-            const followed = followedOf(box);
-            if (box.scrollTop < followed) box.scrollTop = followed;
+            const place = followedOf(box);
+            if (box.scrollTop < place) {
+                box.scrollTop = place;
+                put.current = box.scrollTop;
+            }
+        };
+        // The sizes watched are the box's and those of the parts it holds now: the thread, the queued line, the cards.
+        const sized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(followed);
+        const watchParts = () => {
+            for (const part of Array.from(box.children)) sized?.observe(part);
+        };
+        sized?.observe(box);
+        watchParts();
+        const observer = new MutationObserver((records) => {
+            for (const record of records)
+                if (record.target === box)
+                    for (const node of Array.from(record.removedNodes))
+                        if (node instanceof Element) sized?.unobserve(node);
+            watchParts();
+            followed();
         });
         observer.observe(box, { childList: true, subtree: true, characterData: true });
         grown.current = observer;
         box.addEventListener('scroll', noted, { passive: true });
         return () => {
             observer.disconnect();
+            sized?.disconnect();
             box.removeEventListener('scroll', noted);
             grown.current = null;
         };
@@ -1686,12 +1757,16 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         if (before?.chat !== chatId && !made) {
             // Opened, or given another chat: its place is left alone, and decides whether what comes is followed.
             grown.current?.takeRecords();
+            put.current = null;
             follow.current = { chat: chatId, sent, atFoot: atFoot(box.scrollTop, followedOf(box)) };
             return;
         }
         const moved = made || moves.some((key) => !before!.sent.has(key));
         follow.current = { chat: chatId, sent, atFoot: moved || before!.atFoot };
-        if (moved) box.scrollTop = followedOf(box);
+        if (moved) {
+            box.scrollTop = followedOf(box);
+            put.current = box.scrollTop;
+        }
     }, [chatId, movesKey, drawn]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
@@ -1713,6 +1788,8 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         event?.preventDefault();
         const current = chats.value[chatId];
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
+        // What the box said of a drop goes with the words it was said beside.
+        drop.reset();
         // A message while the turn runs, or while the unmade chat's conversation is made, waits for it.
         if (current.running) {
             changeChat(chatId, kept);
@@ -1724,7 +1801,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         }
         if (!current.draft.trim()) return;
         changeChat(chatId, (each) => typed(each, ''));
-        sendTurn(chatId, current.draft);
+        sendTurn(chatId, current.draft, false, undefined, true);
     };
     const stop = () => {
         changeChat(chatId, stopAsked);
@@ -1754,6 +1831,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
+                {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
+                {chat.main || chat.campaignId !== null ? null : (
+                    <span className="chat-whose">{t('chat.whose.none')}</span>
+                )}
                 {chat.main ? null : chat.renaming === null ? (
                     !underHead && (
                         <button
@@ -1811,7 +1892,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         aria-label="Start fresh"
                         disabled={chat.running || chat.removing}
                         title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                        onClick={() => restartChat(chatId)}
+                        onClick={() => void restartChat(chatId)}
                     >
                         <BarMark name="restart" />
                     </button>
@@ -1845,6 +1926,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         {underHead
                             ? 'Remove this conversation? Only the chat goes: its record leaves this computer, and the AI host keeps its own transcript of it. The agent stays as it is, and keeps working if it is running. Pausing it is in its header; archiving it is at the end of its Settings tab.'
                             : 'Remove this conversation? Its record goes from this computer; the AI host keeps its own transcript of it.'}
+                        {conversations.value.find((each) => each.id === chatId)?.ownFolder === true
+                            ? ` ${removedFolder}`
+                            : null}
                     </div>
                     <div className="crow">
                         <button ref={keepButton} className="btn sm" type="button" onClick={keep}>
@@ -1871,7 +1955,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             {/* Reply is asked for only where the work needs a way to send: the chat of a campaign still a draft, while
                 Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
                 another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows
-                while the route is being read. */}
+                while the route is first read; read again, it stays as it was until the answer changes it. */}
             {!inTab() &&
                 chat.campaignId !== null &&
                 campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
@@ -1918,6 +2002,11 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         </div>
                     )}
                     {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
+                    {drop.said !== null && (
+                        <div className="note am" role="status">
+                            {drop.said}
+                        </div>
+                    )}
                     {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                     <textarea
                         ref={messageBox}
@@ -1926,8 +2015,13 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         placeholder={chat.running ? t('chat.queue.placeholder') : 'Ask Jason…'}
                         aria-label="Your message"
                         value={chat.draft}
-                        onChange={(event) => changeChat(chatId, (each) => typed(each, event.target.value))}
+                        onChange={(event) => {
+                            drop.reset();
+                            changeChat(chatId, (each) => typed(each, event.target.value));
+                        }}
                         onKeyDown={keys}
+                        onDragOver={drop.draggedOver}
+                        onDrop={drop.dropped}
                     />
                     <div
                         className="crow"
@@ -1938,7 +2032,6 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             chat={chat}
                             change={(next) => changeChat(chatId, next)}
                             choose={(mode) => chooseMode(chatId, mode)}
-                            takeBack={() => takeBackChoice(chatId)}
                             modeMenu={modeMenu}
                         />
                         {/* One round button. While a turn runs it is the arrow only where it can send the words typed to

@@ -347,6 +347,7 @@ public static partial class DoctorComposer
         ExecutionEnvironment.AttemptIdVariable,
         ExecutionEnvironment.WorkItemIdVariable,
         Confinement.Variable,
+        Confinement.ChatTurnVariable,
     };
 
     /// <summary>

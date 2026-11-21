@@ -41,7 +41,8 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         { use: { tool: 'Read', input: { file_path: planted.path } } },
         { ask: { tool: 'Bash', input: { command: planted.command } } },
         { ask: { tool: 'Read', input: { file_path: planted.path } } },
-        { ask: { tool: 'Bash', input: { command: 'jason approval approve apr_planted' } } },
+        { ask: { tool: 'Bash', input: { command: 'jason --actor human:planted runtime stop' } } },
+        { ask: { tool: 'Bash', input: { command: 'echo planted $JASON_CONFINED' } } },
     ]);
     const log = fileLogger(b.paths.logs);
     const events: ChatEvent[] = [];
@@ -78,7 +79,7 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes('planted'), false, 'nothing planted reached the log');
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
-    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
+    assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
     // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project, and asks the
     // runtime where the harness root is, for the client's memory file.
     assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get', 'runtime status']);
@@ -88,17 +89,19 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
         '@mt': 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
         Host: 'deepseek',
         Resumed: false,
-        Mode: 'ask_first',
+        Mode: 'full_access',
         SourceContext: 'Jason.Desktop',
         EventName: 'chat_turn_started',
     });
     const endLine = lines.find((line) => line.EventName === 'chat_turn_ended');
-    assert.equal(endLine?.Steps, 4, 'a tool the allowed tools let through is a step and no request');
-    assert.equal(endLine?.Requests, 3);
+    assert.equal(endLine?.Steps, 5, 'a tool the allowed tools let through is a step and no request');
+    assert.equal(endLine?.Requests, 4);
     assert.equal(endLine?.Exit, 0);
+    // What the host asks about in Full access is a card the person answers, a jason command Ask first refuses among them;
+    // one of the three kinds is the model's refusal.
     assert.deepEqual(
         lines.filter((line) => line.EventName === 'chat_request_decided').map((line) => `${line.Outcome} ${line.By}`),
-        ['allowed person', 'allowed person', 'refused model'],
+        ['allowed person', 'allowed person', 'allowed person', 'refused model'],
     );
 });
 
@@ -291,6 +294,52 @@ test('a key source that stops nothing is logged by its word alone', (t) => {
     assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
 });
 
+test('a tool the hook never saw is logged by its turn\'s mode alone: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.unchecked();
+    logged.hookFiltered('ask_first');
+    logged.hookFiltered('auto_edit');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_turn_stopped' || line.EventName === 'chat_hook_filtered')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { '@l': 'Warning', EventName: 'chat_turn_stopped', Cause: 'unchecked_tool' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit' },
+    ]);
+});
+
+test('a bypass found not available is logged by its cause and the mode Claude Code named, each a word of a closed table, so the cases are told apart', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.bypassGone('root', null);
+    logged.bypassGone('bypass_off', 'default');
+    logged.bypassGone('bypass_off', 'another');
+    logged.bypassGone('forced_default', 'default');
+    logged.bypassGone('bypass_refused', null);
+    logged.bypassGone('unguarded', null);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_bypass_unavailable')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'root', Named: 'none' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'default' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_off', Named: 'another' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'forced_default', Named: 'default' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'bypass_refused', Named: 'none' },
+        { '@l': 'Warning', EventName: 'chat_bypass_unavailable', Cause: 'unguarded', Named: 'none' },
+    ]);
+});
+
 test('an ask of the models Codex offers is logged by its host id and a count, or the kind of its failure, and nothing the host said', (t) => {
     const removals: (() => void)[] = [];
     t.after(() => removals.forEach((remove) => remove()));
@@ -321,28 +370,6 @@ test('a naming run of a set-up chat is logged by how it ended, one word, never t
         .filter((line) => line.EventName === 'chat_named')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
     assert.deepEqual(said, outcomes.map((outcome) => ({ Outcome: outcome })));
-});
-
-test('the standing choice of Full access is logged by why it changed and whether new chats start in it, or by the code that kept it from its file', (t) => {
-    const removals: (() => void)[] = [];
-    t.after(() => removals.forEach((remove) => remove()));
-    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
-    const log = fileLogger(b.paths.logs);
-    loggedTurns(log).standingChanged({ givenAt: '2026-01-02T03:04:05.000Z', newChats: true }, 'given');
-    loggedTurns(log).standingChanged(null, 'taken_back');
-    loggedTurns(log).standingChanged(null, 'unchecked');
-    loggedTurns(log).standingUnwritten('EPERM');
-    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
-    const said = lines0(text)
-        .filter((line) => String(line.EventName).startsWith('chat_full_access_standing'))
-        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
-    assert.deepEqual(said, [
-        { EventName: 'chat_full_access_standing', Cause: 'given', Standing: true, NewChats: true },
-        { EventName: 'chat_full_access_standing', Cause: 'taken_back', Standing: false, NewChats: false },
-        { '@l': 'Warning', EventName: 'chat_full_access_standing', Cause: 'unchecked', Standing: false, NewChats: false },
-        { '@l': 'Warning', EventName: 'chat_full_access_standing_unwritten', Code: 'EPERM' },
-    ]);
-    assert.ok(!text.includes('2026-01-02'), 'not when it was given');
 });
 
 test('the Windows check of Codex\'s sandbox is logged by its answer and whether the settings file opened inside, one word each, never a path or what was read', (t) => {

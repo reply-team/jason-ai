@@ -9,13 +9,12 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeThem
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync, watchFile } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
-import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { restoreAtStart } from './carried-restore.ts';
 import { cliAt, startJasonAlone, type Cli } from './cli.ts';
@@ -106,6 +105,19 @@ function bundleVersion(bundle: string): string | null {
     try {
         const raw = JSON.parse(readFileSync(join(bundle, 'version.json'), 'utf8')) as { version?: unknown };
         return typeof raw.version === 'string' && raw.version !== '' ? raw.version : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * This account's name as the operating system gives it, the one the carried `jason` writes a person's acts under
+ * (`Environment.UserName` reads the same account): the chat's header names the person by it. Null where the system
+ * gives none.
+ */
+function accountName(): string | null {
+    try {
+        return userInfo().username || null;
     } catch {
         return null;
     }
@@ -624,7 +636,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
     // on the label the page drew and only while the item still says it. The answer carries what the person's last check
     // found, wherever it was asked from; a press from the page raises no notification, since the page says it.
-    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null), refused);
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer()), refused);
     handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
@@ -644,6 +656,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
+    // The chat, once made below: the listing of the hosts draws a turn's mode by what it knows of Claude Code's bypass.
+    let chatMade: Chat | null = null;
     const setup = new Setup({
         paths,
         cli,
@@ -662,6 +676,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             writeSettings(paths.settings, next);
         },
         models,
+        bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
         ownServers: { env: process.env, home },
         // A box is closed, and read as a no, when its window is hidden or closed.
@@ -697,41 +712,33 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundle,
         dataNamed,
         bundleVersion: version,
+        account: accountName(),
         cli,
         programs,
         models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
+        // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code on the other
+        // side of the floor of Full access, or its bypass not available here.
+        handedClaudeVersion: () => setup.handedClaudeVersion(),
+        setupChanged: () => toPage('setup.changed'),
         skillsGate,
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => toPage('chat.event', chatId, event),
-        // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
-        // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
-        // it. With no window there is no one to ask.
-        confirmFullAccess: async () => {
-            const parent = current;
-            if (parent === null) return null;
-            const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
-            return fullAccessAnswer(response, checkboxChecked);
-        },
         ...turns,
         started: (host, resumed, mode) => {
             turns.started(host, resumed, mode);
             roles.atTurn(host);
         },
-        // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
-        standingChanged: (standing, why) => {
-            turns.standingChanged(standing, why);
-            toPage('fullAccess.changed', standing);
-        },
     });
+    chatMade = chat;
     registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
-    // in this run's chat folder, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
+    // in the folder its turns run in, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
     // which this run is. Each application the menu offers is drawn with its own icon where one can be read: the pixels are
     // read here, by the system on Windows and from the bundle's own files on macOS, and kept for the run in memory only.
     const icons = new IconReader({
@@ -788,7 +795,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
     });
     handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
-    handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
+    handle(seam, 'openIn.open', origin, (target, campaignId, options) => openIn.open(target, campaignId, options), refused);
     handle(seam, 'openIn.continueChat', origin, (chatId) => openIn.continueChat(chatId), refused);
     handle(seam, 'openIn.changeJason', origin, () => openIn.changeJason(), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".

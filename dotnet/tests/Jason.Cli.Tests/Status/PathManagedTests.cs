@@ -1,5 +1,6 @@
 using Jason.Cli.Status;
 using Jason.Cli.Tests.Installation;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -125,5 +126,67 @@ public sealed class PathManagedTests : IDisposable
         Assert.True(path.Required);
         Assert.Null(path.Fix);
         Assert.Contains(manager, path.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Homebrew's older formula linked beside the jason Jason Desktop carries: the check passes, since a terminal finds this
+    /// jason, and carries the sentence that names the formula and what takes it off as its detail, which <c>--human</c>
+    /// prints below the table. Without the formula there is no detail.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I4, "status names the linked formula beside the carried jason")]
+    public async Task A_linked_formula_beside_the_carried_jason_is_a_detail_of_the_passing_path_check()
+    {
+        var keg = _layouts.LinkedFormula();
+        Assert.SkipWhen(keg is null, ManagedLayouts.NoLinkPrivilege);
+        var bundle = Directory.CreateDirectory(Path.Combine(_dir.Paths.Root, "Jason.app", "Contents", "Resources", "bundle")).FullName;
+        var carried = Path.Combine(bundle, Jason.Contracts.Update.ReleaseAssets.ExecutableName);
+        File.WriteAllText(carried, string.Empty);
+        CarriedRecord.Beside(carried);
+        var variables = new Dictionary<string, string> { [Jason.Cli.Installation.HomebrewCask.PrefixVariable] = keg.Prefix };
+        var output = new StringWriter();
+        var env = StatusCommandTests.Machine(_dir, output, installPath: carried) with { SearchPath = bundle, Managers = new PlantedRecords(), Variables = variables };
+        var sentence = Jason.Cli.Installation.HomebrewFormula.Linked(env)!.Sentence();
+
+        await CliApp.RunAsync(["status"], env, Ct);
+
+        var path = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, path.State);
+        Assert.Equal(sentence, path.Details![Jason.Cli.Installation.HomebrewFormula.DetailName]);
+        Assert.Contains("brew uninstall --formula jason", sentence, StringComparison.Ordinal);
+
+        output = new StringWriter();
+        await CliApp.RunAsync(["status", "--human"], env with { Out = output }, Ct);
+        Assert.Contains(sentence, output.ToString(), StringComparison.Ordinal);
+
+        output = new StringWriter();
+        await CliApp.RunAsync(["status"], env with { Out = output, Managers = null }, Ct);
+        Assert.Null(Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "path").Details);
+    }
+
+    /// <summary>Where the formula's link is what a terminal finds first, the failed check names the formula's own uninstall.</summary>
+    [Fact]
+    public async Task A_formula_found_first_by_name_fails_the_path_check_naming_brew_uninstall_formula()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Homebrew's link is a file named jason, which a Windows shell never runs by name.");
+        var keg = _layouts.LinkedFormula();
+        Assert.SkipWhen(keg is null, ManagedLayouts.NoLinkPrivilege);
+        var bundle = Directory.CreateDirectory(Path.Combine(_dir.Paths.Root, "Jason.app", "Contents", "Resources", "bundle")).FullName;
+        var carried = Path.Combine(bundle, "jason");
+        File.WriteAllText(carried, string.Empty);
+        CarriedRecord.Beside(carried);
+        var output = new StringWriter();
+        var env = StatusCommandTests.Machine(_dir, output, installPath: carried) with
+        {
+            SearchPath = Path.GetDirectoryName(keg.Link),
+            Managers = new PlantedRecords(),
+            Variables = new Dictionary<string, string> { [Jason.Cli.Installation.HomebrewCask.PrefixVariable] = keg.Prefix },
+        };
+
+        await CliApp.RunAsync(["status"], env, Ct);
+
+        var path = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, path.State);
+        Assert.Contains("It is Homebrew's older formula: `jason runtime stop`, then `brew uninstall --formula jason`, takes it off", path.Fact, StringComparison.Ordinal);
     }
 }

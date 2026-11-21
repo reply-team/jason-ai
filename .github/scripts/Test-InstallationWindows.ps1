@@ -30,6 +30,15 @@ uploads, and they are what a person reads.
                     file, the runtime running from it, the logon registration naming it, the move's record done, the
                     command-line install retired; and whether the build says it is a test build, as JASON_PROOF_BUILD
                     says it must (test on CI's build, release on the release's packages). The uninstall is the next step's
+  FromOneInstallation   the one-installation release (-OneInstallation, the folder its files were fetched to), Jason Desktop
+                    alone, installed by its own install.ps1 at the version its manifest.json names, nothing of Jason's
+                    running after it, then a runtime running from the jason it carries and no window open, updated by that
+                    jason's own `jason update apply --version` from the feed served on this machine: its Jason Desktop's
+                    updater installs this version, and the verb then runs this version's carried jason update apply
+                    --finish, which ends complete, as its exit and the document it prints say (Get-HandedFinishFault);
+                    Installed apps lists one entry, this version's, nothing of the update is left running, the carried
+                    jason says this version, a new shell finds it, and the runtime answers again. The uninstall is the next
+                    step's
   Compare           -Name against -Against: every line equal but those of the data directory, which an uninstall keeps
   ModulePath        a reading, never a failure: the module path Windows PowerShell rebuilds from an empty one
   Begin, End        a leg's two ends, so that no leg's failure keeps the legs after it from running. Begin records the
@@ -38,8 +47,9 @@ uploads, and they are what a person reads.
                     and, with -Clean, holds the machine to the listing taken before anything was installed: a machine
                     the leg that last changed it left is that leg's failure, recorded by its name, and on a
                     GitHub-hosted runner alone the product's own uninstalls take it off, each act logged in
-                    -Out\resets.txt. -Reading marks a leg that changes nothing. Held lists every failed leg, every leg
-                    not run and every divergence, and fails the job at its end
+                    -Out\resets.txt. -Reading marks a leg that changes nothing. End says the leg's time from its begin,
+                    with the job's so far, as the closing of a leg that never ended does. Held lists every failed leg,
+                    every leg not run and every divergence, and fails the job at its end
   PathShape         the account's Path made ExpandString with an entry spelled through a variable, on a GitHub-hosted
                     runner alone; every install after it holds both by name
   WayBack           going back from 0.49 to the previous release on a moved machine: campaigns as many, the journal held
@@ -61,7 +71,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'ServedFeed', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'ServedFeed', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'FromOneInstallation', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
     [string] $Executable,
     [string] $Leg,
     [string[]] $Needs = @(),
@@ -71,6 +81,7 @@ param(
     [string] $Version,
     [string] $Script,
     [string] $Previous,
+    [string] $OneInstallation,
     [string] $Next,
     [string] $Out = (Join-Path $env:RUNNER_TEMP 'installation'),
     [string] $Name,
@@ -323,24 +334,24 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
     return $process.ExitCode
 }
 
-# The previous release's runtime started by its own jason. Its start gives up after 30 s while the runtime it started
-# still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
-# v0.48.7: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
-# answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
-# start failed otherwise.
-function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
+# A released runtime started by its own jason: the previous release's, or the one $who names. Its start gives up after
+# 30 s while the runtime it started still runs, saying it may still be starting and that jason runtime status answers once
+# it has (RuntimeStartCommand at v0.48.7 and at v0.49.0: a first start migrates the database after a backup). Where it says
+# so, jason runtime status is asked until it answers, up to 180 s from the start; the seconds it took are said either way.
+# False where it never answers, or where the start failed otherwise.
+function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}, [string] $who = "the previous release's runtime") {
     $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $start = Invoke-Program $jason @('runtime', 'start') $environment
-    if ($start.Exit -eq 0) { Say "the previous release's runtime answered its start $([int]$clock.Elapsed.TotalSeconds) s after it was asked"; return $true }
+    if ($start.Exit -eq 0) { Say "$who answered its start $([int]$clock.Elapsed.TotalSeconds) s after it was asked"; return $true }
     if (-not ("$($start.Said)".Contains('"runtime_start_failed"') -and "$($start.Said)".Contains('is still running'))) { return $false }
     while ($clock.Elapsed.TotalSeconds -lt 180) {
         Start-Sleep -Seconds 5
         if ((Invoke-Program $jason @('runtime', 'status') $environment 60).Exit -eq 0) {
-            Say "the previous release's runtime answered jason runtime status $([int]$clock.Elapsed.TotalSeconds) s after its start was asked, past the start's own 30 s"
+            Say "$who answered jason runtime status $([int]$clock.Elapsed.TotalSeconds) s after its start was asked, past the start's own 30 s"
             return $true
         }
     }
-    Say "the previous release's runtime never answered within 180 s of its start"
+    Say "$who never answered within 180 s of its start"
     return $false
 }
 
@@ -360,22 +371,50 @@ function Save-JasonLogs([string] $leg) {
     }
 }
 
-# A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
-function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600) {
+# A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included. Given a
+# file to keep it in, each line is written there as it is said, so a run the bound ends leaves what it said before it. At
+# the bound the program's own process is ended with every process under it, then the step fails.
+# The bound finds that process by $file's image name, so a script wrapper (.cmd, .ps1) handed as $file ends nothing at it.
+function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}, [int] $seconds = 600, [string] $keep = '') {
     $saved = @{}
     foreach ($variable in $environment.Keys) { $saved[$variable] = [Environment]::GetEnvironmentVariable($variable); [Environment]::SetEnvironmentVariable($variable, $environment[$variable]) }
     try {
-        $job = Start-ThreadJob -ArgumentList $file, $arguments -ScriptBlock {
-            param($program, $words)
-            $lines = (& $program @words 2>&1 | ForEach-Object { "$_" }) -join "`n"
+        if ($keep) { [IO.File]::WriteAllText($keep, '') }
+        $began = Get-Date
+        $job = Start-ThreadJob -ArgumentList $file, $arguments, $keep -ScriptBlock {
+            param($program, $words, $kept)
+            $lines = (& $program @words 2>&1 | ForEach-Object { $line = "$_"; if ($kept) { Add-Content -LiteralPath $kept -Value $line }; $line }) -join "`n"
             [pscustomobject]@{ Said = $lines; Code = $LASTEXITCODE }
         }
         if (-not (Wait-Job -Job $job -Timeout $seconds)) {
             $what = "$(Split-Path -Leaf $file) $($arguments -join ' ')"
             Write-Host "$what had not ended after $seconds s"
             Write-JasonProcesses
-            $started = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ParentProcessId -eq $PID -and $_.Name -ne 'conhost.exe' })
-            $started | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            # The program's own process - the one this PowerShell started for it, running its file, created once its run
+            # began, never a helper the step started before it - and every process under it, so that a program that started
+            # others leaves none running past its bound. A process is under another only where it was created at or after
+            # that one, so that one whose dead parent's id was given again to a process of ours is not taken; and this
+            # PowerShell's ancestors and the runner's own processes are never taken, whatever the table says of them.
+            $all = @(Get-CimInstance -ClassName Win32_Process)
+            $byId = @{}
+            foreach ($process in $all) { $byId[[int] $process.ProcessId] = $process }
+            $ancestors = [System.Collections.Generic.HashSet[int]]::new()
+            $at = [int] $PID
+            while ($byId.ContainsKey($at) -and $ancestors.Add([int] $byId[$at].ParentProcessId)) { $at = [int] $byId[$at].ParentProcessId }
+            $image = "$((Get-Command -Name $file -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
+            $leaf = Split-Path -Leaf $(if ($image) { $image } else { $file })
+            if (-not [IO.Path]::HasExtension($leaf)) { $leaf += '.exe' }
+            $ids = [System.Collections.Generic.List[int]]::new()
+            foreach ($own in @($all | Where-Object { [int] $_.ParentProcessId -eq $PID -and $_.CreationDate -ge $began -and "$($_.Name)" -ieq $leaf })) { $ids.Add([int] $own.ProcessId) }
+            for ($index = 0; $index -lt $ids.Count; $index++) {
+                $parent = $byId[$ids[$index]]
+                foreach ($child in @($all | Where-Object { [int] $_.ParentProcessId -eq $ids[$index] -and $_.CreationDate -ge $parent.CreationDate })) {
+                    $id = [int] $child.ProcessId
+                    if ($ids.Contains($id) -or $ancestors.Contains($id) -or $id -eq $PID -or "$($child.Name)" -like 'Runner.*') { continue }
+                    $ids.Add($id)
+                }
+            }
+            foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
             Fail "$what did not end within $seconds s"
         }
         $result = Receive-Job -Job $job
@@ -400,6 +439,44 @@ function Read-Document([string] $said) {
     $lines = @(@($said -split "`n") | Where-Object { $_.TrimStart().StartsWith('{') })
     if ($lines.Count -eq 0) { return $null }
     try { return ($lines[-1] | ConvertFrom-Json) } catch { return $null }
+}
+
+# What the one-installation release's own jason update apply lacks, by its exit code and the document it printed, to say
+# that the update was handed to its Jason Desktop and finished by this build's jason. That verb's own part ends at the swap
+# (CarriedUpdate.InstallAsync at v0.49.0): Jason Desktop asked to download $toVersion and wait for the go, then the
+# application is $toVersion. It then runs the application's carried jason, $toVersion's own file by then, with update
+# apply --finish, and prints that one's document with its own steps in front (UpdateCommands.HandToFinishAsync at
+# v0.49.0); the finishing jason alone says the runtime healthy at $toVersion and the update complete, in this build's
+# UpdateApplier's words. Empty where it exited 0 and the document says all of it, in that order; else the first thing it
+# lacks, in one sentence, its exit first. A member of the document is read as PowerShell writes it in a string: a null as
+# nothing, a list's items apart by a space; steps that are not a list are one step. The macOS proof's
+# from-one-installation reads the same run by the same rule, in the same words.
+function Get-HandedFinishFault([int] $exit, $document, [string] $fromVersion, [string] $toVersion) {
+    if ($exit -ne 0) { return "it exited with $exit" }
+    if (-not $document) { return 'it printed no document' }
+    $members = @($document.PSObject.Properties.Name)
+    foreach ($member in @('from', 'to', 'step', 'steps')) {
+        if ($members -cnotcontains $member) { return "its document has no $member" }
+    }
+    if ("$($document.from)" -cne $fromVersion -or "$($document.to)" -cne $toVersion) { return "its document says $($document.from) -> $($document.to), not $fromVersion -> $toVersion" }
+    if ("$($document.step)" -cne 'complete') { return "its document ends at the step $($document.step), not complete" }
+    $asked = "asked: Jason Desktop asked to download $toVersion and wait for the go, request "
+    $wanted = @(
+        @("$asked<id>", ('^' + [regex]::Escape($asked) + '\S+$')),
+        @("swapped: the application is $toVersion", ('^' + [regex]::Escape("swapped: the application is $toVersion") + '$')),
+        @("healthy: $toVersion, <n> migrations applied", ('^' + [regex]::Escape("healthy: $toVersion") + '(\+[^,]*)?, [0-9]+ migrations applied$')),
+        @("complete: $fromVersion -> $toVersion", ('^' + [regex]::Escape("complete: $fromVersion -> $toVersion") + '$'))
+    )
+    $said = @($document.steps | ForEach-Object { "$_" })
+    $at = 0
+    $after = ''
+    foreach ($pair in $wanted) {
+        while ($at -lt $said.Count -and $said[$at] -cnotmatch $pair[1]) { $at++ }
+        if ($at -ge $said.Count) { return $(if ($after) { 'no step "{0}" follows "{1}"' -f $pair[0], $after } else { 'no step "{0}"' -f $pair[0] }) }
+        $after = $said[$at]
+        $at++
+    }
+    return ''
 }
 
 # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, read whole: each item as the JSON the
@@ -701,6 +778,39 @@ $legOpen = Join-Path $Out 'leg-open.txt'
 $legsEnded = Join-Path $Out 'legs-ended.txt'
 # The leg that last changed the machine, which a later leg's start holds to what it left.
 $lastLegFile = Join-Path $Out 'last-leg.txt'
+# Each leg's time, from its begin to its end, with the job's beside it, in whole seconds: said where the leg ends, or where
+# a leg that never ended is closed, and so in the job's summary, that a leg's step and the job are bounded by what a run
+# measured. The job is timed from the start of the runner's worker that runs it, which is the job's own start; where none
+# is found, from the first leg's begin, and the line that starts the job's clock says which.
+$legBegan = Join-Path $Out 'leg-began.txt'
+$jobBegan = Join-Path $Out 'job-began.txt'
+
+# This leg's clock started; at the job's first leg, the job's as well, and said.
+function Start-LegClock {
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if (-not (Test-Path -LiteralPath $jobBegan)) {
+        $began = $now
+        $from = "this leg's begin: no runner's worker was found"
+        $workers = @(Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue)
+        if ($workers.Count -gt 0) {
+            try {
+                $began = @($workers | ForEach-Object { ([DateTimeOffset] $_.StartTime.ToUniversalTime()).ToUnixTimeSeconds() } | Sort-Object)[0]
+                $from = "the start of the runner's worker that runs it"
+            } catch { $from = "this leg's begin: the start of the runner's worker could not be read ($($_.Exception.Message))" }
+        }
+        Set-Content -LiteralPath $jobBegan -Value $began
+        Say "the job's time is counted from $from; it had run $($now - $began) s when this leg began"
+    }
+    Set-Content -LiteralPath $legBegan -Value $now
+}
+
+# The open leg's time from its begin, with the job's so far, as a leg's end says them.
+function Get-LegClock {
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $legTime = if (Test-Path -LiteralPath $legBegan) { "$($now - [long] "$(Get-Content -LiteralPath $legBegan -Raw)".Trim()) s" } else { 'an unknown time' }
+    $jobTime = if (Test-Path -LiteralPath $jobBegan) { "$($now - [long] "$(Get-Content -LiteralPath $jobBegan -Raw)".Trim()) s" } else { 'an unknown time' }
+    "$legTime after its begin, with the job at $jobTime"
+}
 
 # A leg that began and never ended failed: recorded by its name, its own lines being its step's.
 function Close-Leg {
@@ -712,6 +822,7 @@ function Close-Leg {
     $why = if (Test-Path -LiteralPath $words) { "it said: $((Get-Content -LiteralPath $words) -join ' / ')" } else { 'its own lines are in its step' }
     Write-Host "::error title=Installation::the leg '$open' failed; $why"
     Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value "the leg '$open' failed; $why"
+    Say "the leg '$open' did not end: it is closed $(Get-LegClock)"
     Save-JasonLogs $open
 }
 
@@ -1150,6 +1261,7 @@ switch ($Step) {
         Remove-Item -LiteralPath $skip -Force -ErrorAction SilentlyContinue
         Write-Host "=== $Leg"
         Close-Leg
+        Start-LegClock
         Remove-Item -LiteralPath (Join-Path $Out 'leg-failure.txt') -Force -ErrorAction SilentlyContinue
         Set-Content -LiteralPath $legOpen -Value $Leg
 
@@ -1322,14 +1434,16 @@ switch ($Step) {
         if (-not $Leg) { Fail '-Leg names the leg.' }
         Add-Content -LiteralPath $legsEnded -Value $Leg
         Remove-Item -LiteralPath $legOpen -Force -ErrorAction SilentlyContinue
+        $clock = Get-LegClock
         # A leg whose own compare differed ran to its End and is recorded as failed already: its step fails here, so that
         # no leg reads as succeeded with a divergence in it.
         $dirty = Join-Path $Out 'legs-dirty.txt'
         if ((Test-Path -LiteralPath $dirty) -and (@(Get-Content -LiteralPath $dirty) -ccontains $Leg)) {
             Write-Host "::error title=Installation::$Leg - ended, but its compare differs: it is recorded as failed"
+            Say "$Leg - ended $clock, its compare differing"
             exit 1
         }
-        Say "$Leg - ended"
+        Say "$Leg - ended $clock"
     }
 
     'Held' {
@@ -2181,6 +2295,87 @@ switch ($Step) {
             Say 'a test build, and it says so: jason --version on standard error, and test_build: true in the runtime''s report'
         }
         exit 0
+    }
+
+    'FromOneInstallation' {
+        # The one-installation release as a person has it: Jason Desktop alone, installed by its own install.ps1 from its own
+        # assets, which runs its setup silently and starts nothing of Jason's, then a runtime started from the jason it
+        # carries. It is held to be the release its fetched manifest.json names, the one pinned.
+        if (-not $OneInstallation -or -not $Feed -or -not $Version) { Fail '-OneInstallation, -Feed and -Version are needed.' }
+        $quiet = @{ JASON_Update__CheckEnabled = 'false' }
+        $updater = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
+        $manifest = Get-Content -LiteralPath (Join-Path $OneInstallation 'manifest.json') -Raw | ConvertFrom-Json
+        $manifestVersion = if ($manifest -and $manifest.PSObject.Properties['version']) { [string]$manifest.version } else { '' }
+        if (-not $manifestVersion -or $manifestVersion -ceq $Version) { Fail "the one-installation release's manifest.json names '$manifestVersion', not a release before $Version" }
+        $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $OneInstallation 'install.ps1')) @{ JASON_INSTALL_FEED = $OneInstallation }
+        if ($old.Exit -ne 0) { Fail "the one-installation release's install.ps1 exited with $($old.Exit)" }
+        $fromVersion = Read-Version $carried
+        if ($fromVersion -cne $manifestVersion) { Fail "the one-installation release's install.ps1 left '$fromVersion' at $app, not $manifestVersion, the release its manifest.json names" }
+        $running = @(Get-OwnProcesses $app)
+        if ($running.Count -ne 0) { Fail "the one-installation release's install.ps1 starts nothing of Jason's, and after it these run from ${app}: $(($running | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
+        # A first start migrates a new database and can outlast the start's own wait, which then refuses, saying the runtime
+        # it started is still running: only then is jason runtime status asked until it answers; any other failure of the
+        # start fails here.
+        if (-not (Start-PreviousRuntime $carried $quiet "the one-installation release's runtime")) { Fail "the one-installation release's carried jason could not start a runtime" }
+        Say "Jason Desktop $fromVersion installed by its own install.ps1 at $app, nothing of Jason's running after it, and a runtime answering from its carried jason"
+
+        # Its carried jason update apply, pinned to this version, from the feed served on this machine, with no window open:
+        # it hands the update to its own Jason Desktop, whose updater checks this version's setup and runs it, then runs this
+        # version's carried jason update apply --finish, and prints that one's document with its own steps in front. What it
+        # says is kept in the leg's folder as it says it, so a run its bound ends leaves its evidence.
+        $kept = Join-Path $Out 'update-from-one-installation.json'
+        $server = Start-FeedServer $Feed 8099 (Join-Path $Out 'feed-server-from-one-installation.log')
+        try {
+            $update = Invoke-Program $carried @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900 $kept
+        } catch {
+            # The bound was reached, or the verb could not be run: Invoke-Program has ended the verb and every process under
+            # it. What the verb set going and that outlived its parent is ended here by what it is: Jason Desktop, waiting for
+            # the go or quitting for its installer, and whatever runs from the updater's folder, the setup among them.
+            foreach ($outlived in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater)) {
+                Write-Host "  ended, as the update left it running: $($outlived.ProcessId) $($outlived.CommandLine)"
+                Stop-Process -Id $outlived.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+            throw
+        } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+        }
+        $fault = Get-HandedFinishFault $update.Exit (Read-Document $update.Said) $fromVersion $Version
+        if ($fault) { Fail "$fromVersion's carried jason update apply --version $Version does not say it handed the update to its Jason Desktop and this version's carried jason finished it: $fault" }
+        Say "$fromVersion's own carried jason update apply --version $Version, with no window open, handed the update to its Jason Desktop, whose updater installed $Version, then ran this version's carried jason update apply --finish, which ended complete, $fromVersion -> $Version"
+
+        # This version's Jason Desktop, by the one entry Installed apps lists. The setup Jason Desktop ran, --updated /S,
+        # writes that entry as it ends, and can still be at work when this version's jason has finished: the entries are
+        # read once they are this version's one, or as they are at 120 s, a bound of this proof's own.
+        $oneAtVersion = { $now = @(Get-JasonUninstallEntries); $now.Count -eq 1 -and $now[0].PSObject.Properties['DisplayVersion'] -and [string]$now[0].DisplayVersion -ceq $Version }
+        $until = [DateTime]::UtcNow.AddSeconds(120)
+        while (-not (& $oneAtVersion) -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 500 }
+        $entries = @(Get-JasonUninstallEntries)
+        if ($entries.Count -ne 1) { Fail "Installed apps lists $($entries.Count) Jason entries after the update, not one" }
+        $listed = if ($entries[0].PSObject.Properties['DisplayVersion']) { [string]$entries[0].DisplayVersion } else { 'no version' }
+        if ($listed -cne $Version) { Fail "Installed apps' Jason entry says $listed after the update, not $Version" }
+
+        # Nothing of the update is left running: an update asked for from a terminal with no window open opens none, and its
+        # setup and whatever else ran from the updater's folder have ended, given 30 s to, as the setup can still be ending
+        # when Installed apps' entry first says this version. Each one left is named: the uninstall after this step opens a
+        # window and waits for it, and would take one left here for its own.
+        $leftOf = { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater) }
+        $graceUntil = [DateTime]::UtcNow.AddSeconds(30)
+        $stillRunning = @(& $leftOf)
+        while ($stillRunning.Count -ne 0 -and [DateTime]::UtcNow -lt $graceUntil) { Start-Sleep -Seconds 1; $stillRunning = @(& $leftOf) }
+        if ($stillRunning.Count -ne 0) { Fail "the update, asked for from a terminal with no window open, left these running 30 s after Installed apps said this version: $(($stillRunning | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
+
+        # Its carried jason says this version.
+        if ((Read-Version $carried) -cne $Version) { Fail "$carried is $(Read-Version $carried) after the update, not $Version" }
+        $said = "$((Invoke-Program $carried @('--version') $quiet 120).Said)".Trim()
+        if ((($said -split '\+')[0]) -cne $Version) { Fail "the carried jason says '$said' after the update, not $Version" }
+        Say "Installed apps lists one Jason entry, Jason Desktop $Version; no window of Jason Desktop and nothing from the updater's folder runs; and the carried jason at $carried says $Version"
+
+        # A terminal opened from now on finds that jason, and the runtime the finish started answers.
+        $found = @(Find-InNewShell 'jason')
+        if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
+        if ($found[0] -ine $carried -or (($found[1] -split '\+')[0]) -cne $Version) { Fail "after the update a new shell finds '$($found -join ' ')', not $carried saying $Version" }
+        if ((Invoke-Program $carried @('runtime', 'status') $quiet 60).Exit -ne 0) { Fail 'no runtime answers after the update' }
+        Say "a new shell finds jason at $carried and it says $Version, and the runtime answers again"
     }
 
     'WayBack' {

@@ -495,15 +495,15 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
-.jc-console .newrow {
+/* New GTM agent and New chat: two light buttons across the width, one above the other. */
+.jc-console .newstack {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     margin: 2px 14px 8px;
 }
-.jc-console .newrow .newbtn {
+.jc-console .newstack .newbtn {
     margin: 0;
-    flex: 1;
     min-width: 0;
     font-weight: 500;
     padding: 8px 10px;
@@ -522,18 +522,6 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
-    color: var(--ink);
-}
-.jc-console .newrow .caret {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-.jc-console .newrow .caret:hover,
-.jc-console .newrow .caret[aria-expanded='true'] {
-    background: var(--panel);
-    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -557,11 +545,6 @@
     border-radius: 12px;
     padding: 4px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-.jc-console .menuwrap.create > .menu {
-    left: 14px;
-    right: 14px;
-    top: calc(100% - 6px);
 }
 .jc-console .menuitem {
     display: grid;
@@ -635,6 +618,13 @@
 .jc-console .item:hover {
     background: var(--hover);
     text-decoration: none;
+}
+/* The row whose menu is open (`row-menu.tsx`). */
+.jc-console .recent-row.menu-open {
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+.jc-console .recent-row.menu-open:not([aria-current='true']) {
+    background: var(--hover);
 }
 .jc-console .item svg {
     flex: 0 0 17px;
@@ -1442,6 +1432,17 @@ body,
     gap: 6px;
     padding: 8px 16px 0;
 }
+/* Whose chat this is, on one standing line at the bar's start; the bar's buttons stay at its end. */
+.jc-console .chat-whose {
+    margin-right: auto;
+    align-self: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--mute);
+    font-size: 13px;
+}
 .jc-console .chat-bar .btn.ib {
     flex: none;
     width: 36px;
@@ -1479,6 +1480,33 @@ body,
     color: var(--mute);
     font-size: 13px;
     overflow-wrap: anywhere;
+}
+/* A note that closes: a notice or an aside of a chat, or the sidebar's word that a folder did not open. Its words, its
+   button where it has one, and its close control at the end of the line. */
+.jc-console .note.closable {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.jc-console .note.closable .note-said {
+    flex: 1;
+    min-width: 0;
+}
+.jc-console .note-close {
+    flex: none;
+    display: inline-flex;
+    padding: 2px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+}
+.jc-console .note-close:hover,
+.jc-console .note-close:focus-visible {
+    opacity: 1;
+    background: var(--hover);
 }
 .jc-console .chat-pick .ask-a {
     flex-wrap: wrap;

@@ -15,7 +15,6 @@ import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { chosenSection } from '../screens/settings/chosen';
-import { fullAccessStanding } from '../platform/full-access';
 import {
     noteKey,
     notesClosed,
@@ -126,7 +125,6 @@ beforeEach(() => {
     voiceKnown.value = 'unread';
     localStorage.removeItem(noteKey('live'));
     localStorage.removeItem(noteKey('demo'));
-    fullAccessStanding.value = null;
 });
 
 /** Opens the Campaigns panel and the chat of the campaign named, from its row, as a person does. */
@@ -287,6 +285,34 @@ describe('the start screen', () => {
         );
     });
 
+    it('puts the path of a file dropped on the box in at the caret, quoted, says one it could not read, and goes nowhere', async () => {
+        const desktop = renderConsole(stubDesktop());
+        await ready();
+        fireEvent.change(box(), { target: { value: 'people like those in  please' } });
+        box().setSelectionRange(21, 21);
+        const list = new File(['x'], 'leads.csv');
+        const path = 'C:\\Users\\Ана Ли\\Desktop\\leads.csv';
+        desktop.paths.set(list, path);
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        // The box takes the drop, so the window never goes to the file.
+        expect(fireEvent.dragOver(box(), carrying(list))).toBe(false);
+        expect(fireEvent.drop(box(), carrying(list))).toBe(false);
+        const put = `people like those in '${path}' please`;
+        await waitFor(() => expect(box().value).toBe(put));
+        expect(box().selectionStart).toBe(put.length - ' please'.length);
+        expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['leads.csv']]);
+        expect(screen.queryByText(unread)).toBeNull();
+        // A file that is not on this computer puts nothing in, and the box says so, until a word is typed.
+        expect(fireEvent.drop(box(), carrying(new File(['z'], 'made.txt')))).toBe(false);
+        await waitFor(() => within(startForm()).getByText(unread));
+        expect(box().value).toBe(put);
+        fireEvent.change(box(), { target: { value: `${put}, in Poland` } });
+        await waitFor(() => expect(screen.queryByText(unread)).toBeNull());
+        // Nothing is sent by a drop: Start still waits for its button.
+        expect(calls(desktop, 'chat.create')).toEqual([]);
+    });
+
     it('starts a set-up chat with what is sent, on the AI that is connected, and shows the chat', async () => {
         const desktop = renderConsole(stubDesktop());
         await waitFor(() => startForm());
@@ -303,7 +329,7 @@ describe('the start screen', () => {
         renderConsole(stubDesktop());
         await ready();
         const form = startForm();
-        expect(within(form).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        expect(within(form).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         expect(within(form).getByRole('button', { name: 'Model: Claude Code default' })).toBeTruthy();
         const buttons = within(form).getAllByRole('button');
         expect(buttons[buttons.length - 1]!.getAttribute('aria-label')).toBe('Send');
@@ -343,26 +369,26 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')[0]!.args[2]).toMatchObject({ model: 'opus', effort: 'high' });
     });
 
-    it('with "start new chats in Full access" shows the access mode as Full access with the chat\'s line, and the chat starts in it', async () => {
+    it("shows the access mode as Full access with the chat's line before any chat is made, and the chat starts in it, drawn in the mode the desktop made it in", async () => {
         const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
         const line = await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
         expect(line.textContent).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
         expect(within(startForm()).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'claude'] }]);
+        // The desktop makes it in Full access: no host is named and no mode asked for.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        expect(calls(desktop, 'chat.setMode')).toEqual([]);
         await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
     });
 
     it('choosing Ask first in the access mode makes that chat start in Ask first', async () => {
         const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
         await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
@@ -371,18 +397,36 @@ describe('the start screen', () => {
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Asked of the desktop once the chat is made, before its first message.
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         await waitFor(() => screen.getByRole('form', { name: 'Message' }));
         expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
     });
 
-    it('shows Ask first and no Full access line without "start new chats"', async () => {
-        const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+    it('with Codex picked, draws Full access in Codex’s own line, and Ask first chosen there makes the chat start in Ask first', async () => {
+        const both: DesktopSetup = {
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'codex' ? { ...each, found: true, version: '1.0.0' } : each,
+            ),
+        };
+        const desktop = stubDesktop(both);
         renderConsole(desktop);
         await ready();
-        await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
-        expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
-        expect(within(startForm()).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        fireEvent.click(item(openMenu(/Model:/), 'Codex'));
+        // Codex runs Full access as itself, with no sandbox, and the line says so in its own words.
+        await waitFor(() =>
+            expect(within(startForm()).getByRole('status', { name: 'Full access is on' }).textContent).toBe(
+                'Full access · Codex runs commands on this computer without asking, with no sandbox',
+            ),
+        );
+        expect(within(startForm()).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
+        fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
+        await waitFor(() => within(startForm()).getByRole('button', { name: 'Access mode: Ask first' }));
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
     });
 
     it('where the host offers no Full access, as in the demo, the access mode refuses it in the own words of the chat', async () => {
@@ -393,6 +437,7 @@ describe('the start screen', () => {
         };
         renderConsole(stubDesktop(demo));
         await ready();
+        fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
         const full = item(openMenu(/Access mode/), /^Full access/) as HTMLButtonElement;
         expect(full.getAttribute('aria-disabled')).toBe('true');
         expect(full.textContent).toContain(refusal);
@@ -702,6 +747,31 @@ describe('Reply in a chat, by the route of enrolment', () => {
         expect(card()).toBeNull();
         release();
         await waitFor(() => expect(card()).not.toBeNull());
+    });
+
+    it('stays drawn at the first send while the made chat reads the route again, and goes only on an answer that says so', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(card()).not.toBeNull());
+        const reads = () => fake.value!.calls.filter((each) => each.operation === 'route.resolve').length;
+        const before = reads();
+
+        // The conversation is made at this send and shown in a panel of its own, which reads the route again.
+        const release = fake.value!.hold('route.resolve');
+        const message = screen.getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(message, { target: { value: 'Find me ten founders' } });
+        fireEvent.keyDown(message, { key: 'Enter' });
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        await waitFor(() => expect(reads()).toBe(before + 1));
+        expect(card(), 'the card stays while the route is read again').not.toBeNull();
+
+        // The read answers that enrolment now goes to another plugin: that changes what the card shows, and it goes.
+        fake.value!.answer('route.resolve', 'route.resolve/elsewhere');
+        release();
+        await waitFor(() => expect(card()).toBeNull());
     });
 
     it('does not ask the runtime where a campaign that runs is routed', async () => {

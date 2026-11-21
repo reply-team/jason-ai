@@ -22,15 +22,15 @@ written a route.
 ## Is it running
 
 ```
-jason runtime status --human
+jason status --human
 ```
 
-That asks the runtime for `system.info` and prints what it says: the version, the data directory it is using,
-how long it has been up, the migrations applied, and — once the runtime has successfully asked the release
-feed — an `update` section saying whether a newer version exists.
-
-If nothing answers, the command exits 3 and says the runtime is unreachable. That is a runtime that is not
-running, not a runtime that is broken; start it. If it answers but reports a data directory you did not expect,
+That checks whether this installation can start work, and its `runtime` check says whether a runtime is running:
+its version, its process id and the data directory it is using, or that none answers and the command that starts
+one. It exits 0 or 1 and never 3, so read `ready` in its body. A runtime that does not answer is one that is not
+running, not one that is broken; start it. For what the runtime says about itself, how long it has been up, the
+migrations applied and, once it has asked the release feed, whether a newer version exists, ask it with
+`jason runtime status --human`, which exits 3 when nothing answers. If it answers but reports a data directory you did not expect,
 something is running under a different `JASON_DATA_DIR` than the one you are typing against, and the two will
 disagree about everything else you ask.
 
@@ -217,8 +217,9 @@ When someone says nothing ever tells them anything, read `jason status`'s `notif
 rather than guessing. Its states mean:
 
 - **`absent`, notifications off or no channel on** — say how to turn them on, and leave it to them.
-- **`absent`, a toast switched off** — Windows has Jason's notifications switched off in Settings → System →
-  Notifications. That is the person's own switch; tell them where it is.
+- **`absent`, a toast switched off** — Windows answered, when the toast was last sent, that Jason's notifications were
+  switched off in Settings → System → Notifications, or reads as off now; the check says which and when. That is the
+  person's own switch; tell them where it is. Switched on again since, the check is `ok` and says the next one will tell.
 - **`absent`, no desktop** — a machine with no session bus or no notification program shows no toast by design; a
   plugin still reaches them, if they want one.
 - **`failed`, session 0** — the runtime has no desktop: a service or an SSH session runs there, and so does the runtime
@@ -233,14 +234,14 @@ is invisible to Jason: a toast sent then goes to the notification center without
 
 ## Where the person's files live
 
-What the person tells Jason about their business in their own words is kept in plain files under one folder, the
-harness root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another
-folder as an absolute path; `jason runtime status` says which root is in force. Move it only when the person asks:
-move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it:
-`jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the
-project by the marker there. Nothing moves by itself, and a campaign created in a project not linked again is
-refused until it is. In the chat of Jason Desktop the person types `jason project link`, like `jason role add`, in a
-terminal: the chat refuses both, so say which command to run and in which folder rather than run it.
+What the person tells Jason about their business in their own words is kept in plain files under one folder, the harness
+root: `Jason` in the home directory, unless `Harness:Root` in `~/.jason/config/settings.json` names another folder as an
+absolute path; `jason runtime status` says which root is in force. Move it only when the person asks: move the folder,
+set `Harness:Root` to where it is now, and then link each project whose folder moved with it: `jason project link` run
+inside that project's folder, or given the folder's absolute path with `--path`, finds the project by the marker there.
+Nothing moves by itself, and a campaign created in a project not linked again is refused until it is. In the chat of
+Jason Desktop you run `jason project link` with `--path` when the person asks for it, since the chat works in a folder
+of its own; where the chat's mode only reads and proposes, you do not run it: say that this mode does not.
 
 ## The plugins it has loaded and where work goes
 
@@ -250,7 +251,7 @@ campaign. The two are separate: installing a plugin makes an operation *possible
 
 ```
 jason plugin list --human
-jason plugin reload --reason "installed my plugin"
+jason plugin reload --reason 'installed my plugin'
 ```
 
 `jason plugin list` prints the active snapshot: every plugin with its digest, the capabilities it was granted,
@@ -294,9 +295,9 @@ with `EACCES`, npm's global prefix is a directory this account does not own: ins
 account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime
 sees.
 
-Those three verbs are the whole plugin vocabulary, and **there is no `jason plugin get`**. One plugin by name is
-that listing read down to its row — `--human` for a person, or the default JSON for a session that is going to
-pick the row out itself.
+`install`, `list`, `reload`, `grant` and `revoke` are the whole plugin vocabulary, and **there is no
+`jason plugin get`**. One plugin by name is that listing read down to its row — `--human` for a person, or the default
+JSON for a session that is going to pick the row out itself.
 
 ```
 jason route list --human
@@ -370,14 +371,14 @@ or no route bound the account. Jason says it once, in a notification and in the 
 the person asks:
 
 ```
-jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason "read the weeks the runtime was off"
+jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason 'read the weeks the runtime was off'
 ```
 
-Ask first, and run it on the person's yes, with their words as the reason. It reads and sends nothing, and leaves the
-account's own reading where it stands. What it finds that a campaign was not told, and that happened after the campaign
-went live, wakes that campaign's manager; what happened before is kept and says nothing. A span reaches at most 366
-days back and ends no later than now; eight may wait for one account. Each span asked for is listed under its source in
-`jason events sources`, with how it ended.
+Ask first, and run it on the person's yes, with a reason in your own words (in the chat, the reason of rule 13). It
+reads and sends nothing, and leaves the account's own reading where it stands. What it finds that a campaign was not
+told, and that happened after the campaign went live, wakes that campaign's manager; what happened before is kept and
+says nothing. A span reaches at most 366 days back and ends no later than now; eight may wait for one account. Each span
+asked for is listed under its source in `jason events sources`, with how it ended.
 
 `jason events signal` is for a program the person runs to receive a provider's webhooks: it has the account read at the
 next scan, never within a minute of its last read, and carries nothing of what the webhook said. Do not run it yourself
@@ -648,7 +649,9 @@ application last. It is also reached from Installed apps on Windows and from Uni
 macOS. On Linux it is the one uninstall too, reached from Uninstall Jason… in the Jason menu as well: for the deb it asks
 for an administrator's password first, to take the package off, and removes nothing of theirs when that is refused. Run
 from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed:
-say so, and ask the person to quit Jason, rather than closing it yourself. The harness root is never touched.
+say so, and ask the person to quit Jason, rather than closing it yourself. On macOS, while Jason Desktop's updater
+installs an update, it refuses with `update_in_progress` before anything is removed: say so, and run it again once the
+update has ended. The harness root is never touched.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and the verb removes those skills and nothing else. **A skill somebody copied into a harness by hand has

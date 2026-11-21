@@ -12,6 +12,7 @@ import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, read
 import { join } from 'node:path';
 import { isFullAccessWhy, type FullAccessWhy } from './chat-full-access-why.ts';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
+import { isChatMode, type ChatMode } from './chat-modes.ts';
 import { givenUpTo, isJournalId, keptLineOf, type LineEntry } from './feed.ts';
 import { digestShape, memoryLevels, type GivenDigests } from './chat-memory.ts';
 
@@ -67,8 +68,8 @@ export interface Conversation {
     sessions: Record<string, string>;
     /**
      * The host ids of `sessions` whose session the last turn to name it, or to answer with it, was a plain one: on the
-     * person's own login of Claude Code or Codex, outside Full access (`nameSession`). Absent when there is none, and in a
-     * record an earlier desktop wrote, so a session no mark covers is never one to continue in a terminal.
+     * person's own login of Claude Code or Codex, in any mode (`nameSession`). Absent when there is none, and in a record
+     * an earlier desktop wrote, so a session no mark covers is never one to continue in a terminal.
      */
     plain_sessions?: string[];
     /**
@@ -83,10 +84,16 @@ export interface Conversation {
     /** What the last turn was sent with; absent until a turn is, and in a record another version wrote. */
     chosen?: Chosen;
     /**
-     * Present when the person chose Plan only for the conversation; absent, Ask first. Full access is never written: it is
-     * held in memory alone, so a record never opens a chat in it.
+     * The mode the person chose from the menu, or the one the Feed was made in; absent, Full access, which is never
+     * written: choosing it takes the mode off the record. A record an earlier desktop wrote names Plan only or nothing.
      */
-    mode?: 'plan_only';
+    mode?: ChatMode;
+    /**
+     * Present, `own`, for a conversation made by a desktop that gives each conversation a folder of its own,
+     * `<data>/desktop/chats/<id>/`, where every turn of it runs. Absent, the shared chat folder, `<data>/desktop/chat/`, as
+     * for every conversation an earlier desktop made, which so keeps resuming its host's session where it was made.
+     */
+    folder?: 'own';
 }
 
 /** What one host session was given of the memory files: the session's id, and by level the digest of each file. */
@@ -218,6 +225,11 @@ function memoryGivenOf(value: unknown, sessions: Readonly<Record<string, string>
 
 /** A record read from its file, or null when the text is not one, or not the one its name says. */
 export function parseConversation(text: string, id: string): Conversation | null {
+    return readRecord(text, id)?.conversation ?? null;
+}
+
+/** A record read from its file, and whether it carries a shape (`recordShape`); null as `parseConversation` says. */
+function readRecord(text: string, id: string): { conversation: Conversation; stamped: boolean } | null {
     let value: unknown;
     try {
         value = JSON.parse(text);
@@ -276,29 +288,35 @@ export function parseConversation(text: string, id: string): Conversation | null
         entries,
         dropped,
     };
-    // Only Plan only is read from a record; anything else there, Full access included, is Ask first.
-    const planned = raw.mode === 'plan_only' ? { mode: 'plan_only' as const } : {};
-    return chosen === undefined ? { ...read, ...planned } : { ...read, chosen, ...planned };
+    // The mode chosen is read back; none, or Full access written by hand, is Full access. A mode this desktop does not know,
+    // written by another version, is read as Ask first rather than widened to Full access.
+    const moded = raw.mode === undefined || raw.mode === 'full_access' ? {} : { mode: isChatMode(raw.mode) ? raw.mode : ('ask_first' as const) };
+    // A folder of its own only by the one word this desktop writes; anything else is the shared chat folder.
+    const owned = raw.folder === 'own' ? { folder: 'own' as const } : {};
+    // A shape of a later desktop's is a shape all the same: that desktop keeps a chat's mode too.
+    const stamped = typeof raw.shape === 'number' && Number.isSafeInteger(raw.shape) && raw.shape >= recordShape;
+    return { conversation: chosen === undefined ? { ...read, ...moded, ...owned } : { ...read, chosen, ...moded, ...owned }, stamped };
 }
 
 /**
- * The record as it is written: its fields in a fixed order, the Feed's mark and the person's only where they stand, and
- * the mode only when it is Plan only.
+ * The record as it is written: its fields in a fixed order, the Feed's mark and the person's only where they stand, the
+ * mode only when one was chosen, the folder only when the conversation has one of its own, and last the record's shape.
  */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, memory_given, entries, dropped, chosen } = conversation;
     const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
-    const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
+    const moded = conversation.mode === undefined || conversation.mode === 'full_access' ? {} : { mode: conversation.mode };
+    const owned = conversation.folder === 'own' ? { folder: 'own' } : {};
     const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
     const memory = memory_given === undefined || Object.keys(memory_given).length === 0 ? {} : { memory_given };
-    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...moded, ...owned, shape: recordShape });
 }
 
 /**
  * Keeps the session a host named, or answered a resume with, and whether that turn was plain: on the person's own login
- * of Claude Code or Codex, outside Full access. A turn that is not plain takes the mark away even from the same id, since
- * it continued that session where a terminal would not. Answers whether the record changed.
+ * of Claude Code or Codex, in any mode. A turn that is not plain takes the mark away even from the same id, since it
+ * continued that session where a terminal would not. Answers whether the record changed.
  */
 export function nameSession(conversation: Conversation, host: string, session: string, plain: boolean): boolean {
     const marked = conversation.plain_sessions?.includes(host) === true;
@@ -439,32 +457,47 @@ function ownFolder(folder: string): void {
     if (!isFolder) throw new ConversationUnwritten('ENOTDIR');
 }
 
-/** The records in the folder, and how many files there could not be read as one; nothing there is changed. */
-export function readConversations(folder: string): { kept: Conversation[]; unreadable: number } {
+/**
+ * The shape of the records this desktop writes, on every one it writes. An earlier desktop writes a record again with only
+ * the fields it knows, and drops this one with the rest, the mode but Plan only and the folder among them: once every
+ * record was stamped (`DesktopPaths.conversationsStamped`), a record without it is one an earlier desktop wrote last.
+ */
+export const recordShape = 1;
+
+/**
+ * The records in the folder, how many files there could not be read as one, whether the folder could be listed at all
+ * (one that is not there, is no folder or is a link is not, and then nothing is known of what it would hold), and the ids
+ * of the records read that carry no shape (`recordShape`). Nothing there is changed.
+ */
+export function readConversations(folder: string): { kept: Conversation[]; unreadable: number; listed: boolean; unstamped: string[] } {
     let names: string[];
     try {
-        if (!lstatSync(folder).isDirectory()) return { kept: [], unreadable: 0 };
+        if (!lstatSync(folder).isDirectory()) return { kept: [], unreadable: 0, listed: false, unstamped: [] };
         names = readdirSync(folder);
     } catch {
-        return { kept: [], unreadable: 0 };
+        return { kept: [], unreadable: 0, listed: false, unstamped: [] };
     }
     const kept: Conversation[] = [];
+    const unstamped: string[] = [];
     let unreadable = 0;
     for (const name of names) {
         if (!name.endsWith('.json')) continue;
         const id = name.slice(0, -'.json'.length);
         const file = join(folder, name);
-        let record: Conversation | null = null;
+        let record: { conversation: Conversation; stamped: boolean } | null = null;
         try {
             const stat = lstatSync(file);
-            if (stat.isFile() && stat.size <= recordLimit * 2) record = parseConversation(readFileSync(file, 'utf8'), id);
+            if (stat.isFile() && stat.size <= recordLimit * 2) record = readRecord(readFileSync(file, 'utf8'), id);
         } catch {
             record = null;
         }
         if (record === null) unreadable++;
-        else kept.push(record);
+        else {
+            kept.push(record.conversation);
+            if (!record.stamped) unstamped.push(id);
+        }
     }
-    return { kept, unreadable };
+    return { kept, unreadable, listed: true, unstamped };
 }
 
 /** Writes the record to a new file beside its name, readable by this account alone, and renames it over the name. */

@@ -283,6 +283,35 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
 
     public void DeletePreferences(string domain) => Record("preferences.delete", domain);
 
+    /// <summary>
+    /// What launchd says of the job at each read, in order, the last said again once they run out; none, unless a test says,
+    /// is a job that is not there.
+    /// </summary>
+    public List<Jason.Cli.Autostart.LaunchdJob> Jobs { get; } = [];
+
+    /// <summary>The labels launchd was asked about, in order: apart from <see cref="Reads"/>, whose count the looks go by.</summary>
+    public List<string> LaunchdReads { get; } = [];
+
+    /// <summary>
+    /// launchctl, as a test says it answers, where one does: each read then goes through
+    /// <see cref="Jason.Cli.Autostart.LaunchdJobs.Read"/> on the login domain of the user id 501, as this machine's remover
+    /// reads this account's, in place of <see cref="Jobs"/>.
+    /// </summary>
+    internal Jason.Cli.Autostart.BoundedRun? Launchctl { get; set; }
+
+    public Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label)
+    {
+        LaunchdReads.Add(label);
+        if (Launchctl is { } launchctl)
+        {
+            return Jason.Cli.Autostart.LaunchdJobs.Read(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(501), label, launchctl);
+        }
+
+        return Jobs.Count == 0 ? Jason.Cli.Autostart.LaunchdJob.Absent : Jobs[Math.Min(LaunchdReads.Count, Jobs.Count) - 1];
+    }
+
+    public void BootOutLaunchdJob(string label) => Record("launchd.bootout", label);
+
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;
 

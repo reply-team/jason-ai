@@ -20,6 +20,12 @@ public interface ITerminalStarter
     /// <summary>The system directory, where Windows keeps the console host; null elsewhere.</summary>
     string? SystemDirectory { get; }
 
+    /// <summary>The account's WindowsApps folder, where Windows keeps Windows Terminal's program; null elsewhere, and in a test that names none.</summary>
+    string? WindowsAppsDirectory => null;
+
+    /// <summary>The program the App Execution Alias at a path stands for, read without starting it; null where it cannot be read, and in a test that names none.</summary>
+    string? AliasTarget(string path) => null;
+
     /// <summary>True when the terminal process started; false with a problem worded to follow "did not start".</summary>
     bool Start(TerminalLaunch launch, out string? problem);
 }
@@ -46,6 +52,13 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
         : OperatingSystem.IsMacOS() ? TerminalPlatform.MacOs : TerminalPlatform.Linux;
 
     public string? SystemDirectory { get; } = OperatingSystem.IsWindows() ? Environment.SystemDirectory : null;
+
+    /// <summary>The account's own local application data folder as the system knows it, never a variable, and its WindowsApps folder.</summary>
+    public string? WindowsAppsDirectory { get; } = OperatingSystem.IsWindows() && Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) is { Length: > 0 } local
+        ? Path.Combine(local, "Microsoft", "WindowsApps")
+        : null;
+
+    public string? AliasTarget(string path) => ExecutionAlias.Target(path);
 
     /// <summary>How long macOS's opener is waited for: it exits once Terminal has the script, and a hang is not a refusal.</summary>
     private static readonly TimeSpan OpenerWait = TimeSpan.FromSeconds(10);
@@ -125,6 +138,57 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
 }
 
 /// <summary>
+/// A launch started through the machine's starter, and where its own start fails and it has a fallback (Windows Terminal's
+/// console host), that fallback once, never silently nothing: the launch that started, or null with the problem of each.
+/// </summary>
+public static class TerminalStarts
+{
+    /// <param name="passedOver">Why the launch itself did not start, where its fallback started in its place; else null.</param>
+    public static TerminalLaunch? Start(ITerminalStarter starter, TerminalLaunch launch, out string? problem, out string? passedOver)
+    {
+        ArgumentNullException.ThrowIfNull(starter);
+        ArgumentNullException.ThrowIfNull(launch);
+        passedOver = null;
+        if (starter.Start(launch, out problem))
+        {
+            return launch;
+        }
+
+        if (launch.Fallback is not { } fallback)
+        {
+            return null;
+        }
+
+        if (starter.Start(fallback, out var second))
+        {
+            passedOver = problem;
+            problem = null;
+            return fallback;
+        }
+
+        problem = $"{problem}; {fallback.Terminal} did not start either: {second}";
+        return null;
+    }
+
+    /// <summary>
+    /// The launch that started, <paramref name="opened"/>, after one line on <paramref name="error"/> where it is the
+    /// fallback: which terminal did not start, why, and that the console window was opened in its place.
+    /// </summary>
+    public static TerminalLaunch Said(TextWriter error, TerminalLaunch launch, TerminalLaunch opened, string? passedOver)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(launch);
+        ArgumentNullException.ThrowIfNull(opened);
+        if (!ReferenceEquals(launch, opened))
+        {
+            error.WriteLine($"{launch.Terminal} did not start ({passedOver}), so the console window was opened instead.");
+        }
+
+        return opened;
+    }
+}
+
+/// <summary>
 /// macOS's <c>/usr/bin/open</c>, once started on the three pipes <see cref="TerminalStartInfo"/> gives it: it hands the
 /// script to Terminal and exits, so it is waited for, and an exit other than zero within the wait is a start that failed.
 /// </summary>
@@ -172,7 +236,7 @@ public static class MacOpener
 /// console of its own, and what it does with redirected handles has not been read. On Linux and macOS the door's kind
 /// with all three streams redirected, so the terminal holds none of the CLI's own: a caller that captures the CLI's
 /// output (an agent's shell tool, a script) reads its end of file when the CLI exits, not when the window closes. On
-/// Windows, where the console host starts Windows PowerShell after its <c>--</c>, the console host is started without
+/// Windows, where the console host or Windows Terminal starts Windows PowerShell after its <c>--</c>, it is started without
 /// <c>PSModulePath</c>, which it would hand on (<see cref="TerminalPlan.HostsWindowsPowerShell"/>). On
 /// every system the terminal is a person's own, so it never carries <c>JASON_CONFINED</c>, which confines only the CLI
 /// call it is set on. The launch's variables (<see cref="TerminalLaunch.Variables"/>) are set on it last, each replacing
@@ -199,7 +263,9 @@ public static class TerminalStartInfo
 
         start.WorkingDirectory = workingDirectory;
         start.Environment.Remove(Confinement.Variable);
-        if (platform == TerminalPlatform.Windows && argv.Count > 2 && argv[1] == "--" && TerminalPlan.HostsWindowsPowerShell(platform, argv.Skip(2).ToList()))
+        start.Environment.Remove(Confinement.ChatTurnVariable);
+        var end = argv.ToList().IndexOf("--");
+        if (platform == TerminalPlatform.Windows && end > 0 && argv.Count > end + 1 && TerminalPlan.HostsWindowsPowerShell(platform, argv.Skip(end + 1).ToList()))
         {
             start.Environment.Remove(ChildProcess.ModulePathVariable);
         }

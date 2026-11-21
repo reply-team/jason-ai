@@ -4,8 +4,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { helpNouns, readFence } from '../src/chat-deny.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { helpNouns, modeFence, readFence, withoutRequestFiles } from '../src/chat-deny.ts';
+import type { ChatMode } from '../src/chat-modes.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, pinnedEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
@@ -15,7 +16,7 @@ const fence = readFence(join(here, '..'));
 const entries = fence.commands;
 const fixture = (name: string) => readFileSync(join(here, 'fixtures', name), 'utf8').split(/\r?\n/).filter((line) => line !== '');
 
-const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [], version: '2.1.300' };
+const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [], version: '2.1.300' };
 
 /** The value that follows a flag, once. */
 function valueOf(args: readonly string[], flag: string): string | undefined {
@@ -40,7 +41,7 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
     assert.ok(!args.includes('--bare'));
     assert.ok(args.includes('--strict-mcp-config'));
     assert.equal(valueOf(args, '--setting-sources'), 'project');
-    assert.equal(valueOf(args, '--permission-prompt-tool'), 'mcp__jason_desktop__decide');
+    assert.equal(valueOf(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide');
     assert.equal(valueOf(args, '--mcp-config'), turn.mcpConfig);
 });
 
@@ -53,7 +54,7 @@ test('every Claude Code turn blocks reads outside its working folders, so a read
 
 test('the person\'s words are never on a host\'s command line: every argument is a flag or a flag\'s value', () => {
     const claude = claudeArguments({ ...turn, model: 'sonnet', resume: 'ses-1', addDirs: ['/c', '/p'] });
-    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
+    const flagsWithValue = new Set(['--output-format', '--setting-sources', '--settings', '--permission-mode', '--add-dir', '--permission-prompt-tool', '--mcp-config', '--model', '--resume']);
     for (let i = 0; i < claude.length; i++) {
         const arg = claude[i] ?? '';
         assert.ok(arg.startsWith('-'), `${arg} is not a flag`);
@@ -63,10 +64,26 @@ test('the person\'s words are never on a host\'s command line: every argument is
     assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
-test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help', () => {
-    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+test('a Codex turn in Full access acts with no sandbox and reads the person\'s own configuration, on every platform; Ask first, Plan only and Auto-edit are the read-only turn', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+        assert.deepEqual(codexArguments({ platform, mode: 'full_access' }), [
+            'exec', '--json', '--sandbox', 'danger-full-access', '--skip-git-repo-check',
+            '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-',
+        ], `${platform}: no --ignore-user-config and no windows.sandbox setting`);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) assert.deepEqual(codexArguments({ platform, mode }), codexArguments({ platform }), `${platform} ${mode}`);
+    }
+    assert.deepEqual(codexArguments({ platform: 'linux', mode: 'full_access', model: 'gpt-5', resume: 'thr-1' }).slice(-5), ['--model', 'gpt-5', 'resume', 'thr-1', '-']);
+});
+
+test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, each allowed jason verb and each noun\'s help; with no hook, below the floor of Full access, no verb that reads a request\'s content', () => {
+    assert.deepEqual(valuesOf(claudeArguments({ ...turn, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' }), '--allowedTools'), [
         ...claudeAllowedTools,
         ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`),
+        ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
+    ]);
+    assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [
+        ...claudeAllowedTools,
+        ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`),
         ...helpNouns(fence.allowed, []).map((noun) => `Bash(jason ${noun} --help)`),
     ]);
     assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
@@ -89,15 +106,15 @@ test('no allowed rule begins the spellings that ran with no prompt under one rul
     assert.ok(prefixes.every((prefix) => prefix.startsWith('jason ') && prefix.length > 'jason '.length), 'a rule for all of jason');
 });
 
-test('the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
-    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
+test('in Plan only the host\'s argv carries every deny-list entry as a disallowed tool, and a jason command that starts with an option', () => {
+    const disallowed = valuesOf(realTurn('plan_only'), '--disallowedTools');
     assert.ok(entries.length > 10);
     for (const entry of entries) assert.ok(disallowed.includes(`Bash(jason ${entry}:*)`), `${entry} is not fenced`);
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 71 verbs are allowed', () => {
-    const args = claudeArguments(turn);
+test('in Plan only a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: the plan list\'s 47 verbs are allowed', () => {
+    const args = realTurn('plan_only');
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
     assert.ok(disallowed.includes('Bash(jason project link:*)'));
@@ -106,10 +123,10 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 71);
+    assert.equal(allowed.length, 47);
 });
 
-test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before', () => {
+test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before but where the hook rides', () => {
     const nouns = helpNouns(fence.allowed, fence.reads);
     assert.deepEqual(nouns, ['approval', 'audience', 'block', 'campaign', 'contact', 'decision', 'events', 'journal', 'operation', 'plugin', 'preference', 'project', 'reply', 'report', 'role', 'rolenote', 'route', 'sender', 'subscription', 'suppression', 'workitem']);
     const rules = nouns.map((noun) => `Bash(jason ${noun} --help)`);
@@ -118,11 +135,14 @@ test('each noun with a verb on the allow list or the plan list has its help allo
         const args = claudeArguments({ ...turn, reads: fence.reads, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
         const help = valuesOf(args, '--allowedTools').filter((rule) => rule.endsWith(' --help)'));
         assert.deepEqual(help, rules, mode);
-        // The deny rules are not touched: every jason that starts with an option stays refused by the host, root help included.
+        // Every jason that starts with an option stays refused by the host where no hook rides the turn, root help
+        // included: Plan only, and Ask first below the floor of Full access. Where the hook rides, the model judges it.
         const refused = valuesOf(args, '--disallowedTools');
-        assert.ok(refused.includes('Bash(jason -*)'), mode);
-        for (const rule of denied) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
+        assert.equal(refused.includes('Bash(jason -*)'), mode === 'plan_only', mode);
+        // Full access keeps the PowerShell tool, as a terminal's session does (`fullAccessRemovedTools`).
+        for (const rule of denied.filter((rule) => (mode !== 'full_access' || rule !== 'PowerShell') && (mode === 'plan_only' || rule !== 'Bash(jason -*)'))) assert.ok(refused.includes(rule), `${mode} keeps ${rule}`);
     }
+    assert.ok(denied.includes('Bash(jason -*)'), 'below the floor');
     // Only `--help`, and no rule for all of a noun, the root's help or a noun the deny list takes away whole.
     const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
     for (const rule of ['Bash(jason --help)', 'Bash(jason -h)', 'Bash(jason campaign -h)', 'Bash(jason campaign --help:*)', 'Bash(jason campaign:*)', 'Bash(jason runtime --help)', 'Bash(jason profile --help)', 'Bash(jason update --help)', 'Bash(jason skills --help)', 'Bash(jason ui --help)', 'Bash(jason session --help)', 'Bash(jason status --help)', 'Bash(jason logs --help)']) {
@@ -130,25 +150,32 @@ test('each noun with a verb on the allow list or the plan list has its help allo
     }
 });
 
-test('a Claude turn is denied starting a campaign in every mode, and keeps the acts that stop reaching a person', () => {
+/** A Claude turn's command line in a mode, under the fence a real turn of that mode runs under (`modeFence`). */
+function realTurn(mode: ChatMode): string[] {
+    const used = modeFence(fence, mode);
+    return claudeArguments({ ...turn, denied: used.commands, allowed: used.allowed, reads: used.reads, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
+}
+
+test('a Claude turn is denied starting a campaign in Plan only, and outside it the host runs it on the person\'s word; every mode keeps the acts that stop reaching a person', () => {
     for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
-        const args = claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
-        assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign start:*)'), mode);
-        assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign start:*)'), mode);
+        const args = realTurn(mode);
+        assert.equal(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign start:*)'), mode === 'plan_only', mode);
+        assert.equal(valuesOf(args, '--allowedTools').includes('Bash(jason campaign start:*)'), mode !== 'plan_only', mode);
     }
-    const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
-    for (const verb of ['campaign pause', 'suppression add', 'reply record', 'workitem cancel']) {
-        assert.ok(allowed.includes(`Bash(jason ${verb}:*)`), verb);
+    for (const mode of ['ask_first', 'auto_edit', 'full_access'] as const) {
+        const allowed = valuesOf(realTurn(mode), '--allowedTools');
+        for (const verb of ['campaign pause', 'suppression add', 'workitem cancel']) assert.ok(allowed.includes(`Bash(jason ${verb}:*)`), `${mode} ${verb}`);
+        assert.ok(!allowed.includes('Bash(jason reply record:*)'), `${mode}: a reply's verdict can let sends go, so it is the person's card`);
     }
 });
 
-test('a Claude turn is denied archiving a campaign in every mode, and keeps pausing one', () => {
+test('a Claude turn is denied archiving a campaign in Plan only, and outside it the host neither runs nor denies it: it is the mode\'s; pausing one runs in every mode but Plan only\'s reads', () => {
     for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
-        const args = claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
-        assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign archive:*)'), mode);
+        const args = realTurn(mode);
+        assert.equal(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign archive:*)'), mode === 'plan_only', mode);
         assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign archive:*)'), mode);
+        assert.equal(valuesOf(args, '--allowedTools').includes('Bash(jason campaign pause:*)'), mode !== 'plan_only', mode);
     }
-    assert.ok(valuesOf(claudeArguments(turn), '--allowedTools').includes('Bash(jason campaign pause:*)'));
 });
 
 test('the PowerShell and Monitor tools are taken out of every turn by a bare rule, so the one shell is the fenced one', () => {
@@ -172,7 +199,7 @@ test('each allowed and disallowed rule is an argument of its own, so a comma in 
     const args = claudeArguments({ ...turn, dataRules: rules });
     assert.equal(args.filter((arg) => arg === '--allowedTools').length, 1);
     assert.equal(args.filter((arg) => arg === '--disallowedTools').length, 1);
-    for (const rule of [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
+    for (const rule of [...claudeAllowedTools, ...withoutRequestFiles(fence.allowed).map((verb) => `Bash(jason ${verb}:*)`), ...rules]) assert.equal(args.filter((arg) => arg === rule).length, 1, rule);
     assert.deepEqual(valuesOf(args, '--disallowedTools').slice(-2), rules);
 });
 
@@ -184,6 +211,15 @@ test('the campaign\'s and the project\'s folders are added one --add-dir each; a
     assert.equal(valueOf(args, '--resume'), 'ses-42');
     const first = claudeArguments(turn);
     assert.ok(!first.includes('--add-dir') && !first.includes('--model') && !first.includes('--resume'));
+});
+
+test('a resume that forks passes --fork-session right after its session; a fork with no resume, or none asked for, passes nothing', () => {
+    const forked = claudeArguments({ ...turn, resume: 'ses-42', fork: true });
+    assert.deepEqual(forked.slice(forked.indexOf('--resume'), forked.indexOf('--resume') + 3), ['--resume', 'ses-42', '--fork-session']);
+    assert.equal(forked.filter((arg) => arg === '--fork-session').length, 1);
+    assert.ok(!claudeArguments({ ...turn, resume: 'ses-42' }).includes('--fork-session'));
+    assert.ok(!claudeArguments({ ...turn, resume: 'ses-42', fork: false }).includes('--fork-session'));
+    assert.ok(!claudeArguments({ ...turn, fork: true }).includes('--fork-session'));
 });
 
 test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed by its thread, the prompt from stdin', () => {
@@ -274,7 +310,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(plain, [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -286,7 +322,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -299,7 +335,7 @@ test('in a demo run the data rules refuse the person\'s data directory and harne
         'Read(//home/a/Jason)', 'Read(//home/a/Jason/**)', 'Edit(//home/a/Jason)', 'Edit(//home/a/Jason/**)',
     ]);
     assert.deepEqual(dataRules('linux', '/home/a/.jason', [], [], undefined, []), dataRules('linux', '/home/a/.jason', [], []));
-    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'grant-1', present: ['grant-1'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
+    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'conv_01JD0000000000000000000000', present: ['conv_01JD0000000000000000000000'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
     for (const rule of ['Read(//c/Users/a/.jason/**)', 'Edit(//c/Users/a/.jason)', 'Edit(//c/Users/a/Jason/**)']) assert.ok(windows.includes(rule), rule);
 });
 
@@ -357,7 +393,7 @@ test('the host\'s own rules refuse Read and Edit of setup/ and layout.json, and 
         const rules = dataRules(platform, data, [], []);
         for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
             const args = claudeArguments({ ...turn, mode, dataRules: rules, ...(mode === 'full_access' ? { settingsFile: '/data/desktop/turns/turn-1.settings.json' } : {}) });
-            const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+            const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--settings'));
             for (const name of ['setup', 'layout.json']) {
                 const rule = rulePath(platform, platform === 'win32' ? `${data}\\${name}` : `${data}/${name}`);
                 for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${platform} ${mode}: ${each}`);
@@ -376,12 +412,25 @@ test('the host\'s environment puts the bundled jason first on PATH and names the
     assert.equal('JASON_DATA_DIR' in hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} }), false);
 });
 
-test('every host runs the CLI confined: the environment sets JASON_CONFINED whatever the desktop inherited', () => {
+test('every host\'s turn carries JASON_CHAT_TURN in every mode, and JASON_CONFINED on every turn that can only read and propose, Plan only on any host and every Codex turn outside Full access, whatever the desktop inherited in any letter case', () => {
     for (const program of ['claude', 'codex'] as const) {
-        for (const inherited of [{}, { JASON_CONFINED: '' }, { jason_confined: '0' }, { Jason_Confined: '' }]) {
-            const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform: 'win32', bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
-            assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), [['JASON_CONFINED', '1']], `${program} ${JSON.stringify(inherited)}`);
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            for (const mode of ['ask_first', 'auto_edit', 'full_access', 'plan_only', undefined] as const) {
+                for (const inherited of [{}, { JASON_CONFINED: '1', JASON_CHAT_TURN: '' }, { jason_confined: '0', jason_chat_turn: '0' }, { Jason_Confined: '', Jason_Chat_Turn: 'x' }]) {
+                    const env = hostEnvironment({ PATH: '/x', ...inherited }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {}, ...(mode === undefined ? {} : { mode }) });
+                    const said = `${program} ${platform} ${mode} ${JSON.stringify(inherited)}`;
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CHAT_TURN'), [['JASON_CHAT_TURN', '1']], said);
+                    const confined = mode === 'plan_only' || (program === 'codex' && mode !== undefined && mode !== 'full_access');
+                    assert.deepEqual(Object.entries(env).filter(([name]) => name.toUpperCase() === 'JASON_CONFINED'), confined ? [['JASON_CONFINED', '1']] : [], said);
+                }
+            }
         }
+    }
+});
+
+test('a Claude turn is denied, by the host itself, any command that names JASON_CHAT_TURN, in every mode', () => {
+    for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
+        assert.equal(valuesOf(claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn.settings.json' }), '--disallowedTools').filter((rule) => rule === 'Bash(*JASON_CHAT_TURN*)').length, 1, mode);
     }
 });
 
@@ -427,16 +476,123 @@ test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },
         { platform: 'darwin', bundleVersion: null, bundle: '/b', data: '/d', program: 'codex', keyed: false, provider: {} },
     );
-    assert.deepEqual(Object.keys(env).sort(), ['JASON_CONFINED', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
+    assert.deepEqual(Object.keys(env).sort(), ['JASON_CHAT_TURN', 'JASON_DATA_DIR', 'JASON_Harness__Root', 'PATH']);
     assert.ok(!JSON.stringify(env).includes('xoxb-planted'));
 });
 
 test('a desktop started from inside a Claude Code session hands the host none of that session\'s markers, and keeps a person\'s configuration', () => {
     const env = hostEnvironment({ PATH: '/x', ...plantedMarkers, claudecode: '1', ...plantedConfiguration }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} });
     assert.deepEqual(markersIn(Object.keys(env)), []);
-    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CONFINED', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
+    assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CHAT_TURN', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
+});
+
+test('what a hooked turn\'s settings set of its environment is, for each name the desktop decides, the value the turn\'s environment holds or an empty one where it withholds it: never the scrub, a provider\'s variable or a key', () => {
+    const inherited = {
+        Path: '/usr/bin',
+        HOME: '/h',
+        JASON_DATA_DIR: '/old',
+        JASON_CHAT_TURN: '0',
+        JASON_CONFINED: '1',
+        JASON_ATTEMPT_ID: 'att_planted',
+        CLAUDE_AUTO_BACKGROUND_TASKS: '1',
+        CLAUDE_CODE_EFFORT_LEVEL: 'low',
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+        ...plantedMarkers,
+        ...plantedConfiguration,
+    };
+    const shapes = [
+        { mode: 'full_access' as const, home: '/turn-home', effortNamed: true, data: '/d' },
+        { mode: 'full_access' as const, data: null },
+        { mode: 'ask_first' as const, effortNamed: true, data: '/d' },
+        { mode: 'auto_edit' as const, data: null },
+    ];
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        for (const { mode, data, ...options } of shapes) {
+            for (const keyed of [false, true]) {
+                const provider: Record<string, string> = keyed ? { ANTHROPIC_API_KEY: 'sk-planted-pinned', CLAUDE_CONFIG_DIR: '/keyed' } : {};
+                const env = hostEnvironment(inherited, { platform, bundleVersion: null, bundle: '/b', data, program: 'claude', keyed, provider, mode, ...options });
+                const pins = pinnedEnvironment(env, options);
+                const said = `${platform} ${mode} ${JSON.stringify(options)} ${keyed}`;
+                const expected = [
+                    'PATH',
+                    'JASON_DATA_DIR',
+                    'JASON_CHAT_TURN',
+                    'JASON_CONFINED',
+                    'JASON_ATTEMPT_ID',
+                    'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR',
+                    'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS',
+                    'CLAUDE_AUTO_BACKGROUND_TASKS',
+                    ...Object.keys(plantedMarkers),
+                    'REPLY_CLIENT',
+                    ...('home' in options ? ['HOME'] : []),
+                    ...('effortNamed' in options ? ['CLAUDE_CODE_EFFORT_LEVEL'] : []),
+                ];
+                assert.deepEqual(Object.keys(pins).sort(), expected.sort(), said);
+                // Each the value the turn's environment holds, by any spelling of its name, or empty where it holds none.
+                for (const [name, value] of Object.entries(pins)) {
+                    assert.equal(value, Object.entries(env).find(([each]) => each.toUpperCase() === name)?.[1] ?? '', `${said} ${name}`);
+                }
+                assert.equal(pins.PATH, `/b${platform === 'win32' ? ';' : ':'}/usr/bin`, said);
+                assert.equal(pins.JASON_CHAT_TURN, '1', said);
+                assert.equal(pins.JASON_DATA_DIR, data ?? '', said);
+                assert.equal(pins.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR, '1', said);
+                assert.equal(pins.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1', said);
+                for (const name of ['JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', 'REPLY_CLIENT', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${said} ${name}`);
+                if ('home' in options) assert.equal(pins.HOME, '/turn-home', said);
+                if ('effortNamed' in options) assert.equal(pins.CLAUDE_CODE_EFFORT_LEVEL, '', said);
+                assert.ok(!('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' in pins), said);
+                assert.ok(!('ANTHROPIC_API_KEY' in pins) && !('CLAUDE_CONFIG_DIR' in pins), said);
+                assert.ok(!JSON.stringify(pins).includes('sk-planted-pinned'), said);
+            }
+        }
+    }
+});
+
+test('a hooked turn\'s settings pin every name the desktop decides of the turn\'s environment, read from what it does with a planted one, so a name it comes to set or withhold is pinned too: all but the scrub, a provider\'s variables and a plugin\'s configuration', () => {
+    // Every name the sources that decide the environment spell, each planted with a value of its own, beside a person's
+    // configuration: a name the desktop decides is one whose value the turn's environment does not keep as it came.
+    const spelled = new Set<string>(['JASON_Plugins__Config__planted__Key']);
+    for (const file of ['chat-hosts.ts', 'chat-permission-model.ts', 'session-markers.ts', 'reply-client.ts']) {
+        for (const [, name] of readFileSync(join(here, '..', 'src', file), 'utf8').matchAll(/'([A-Z][A-Z0-9]*(?:_[A-Z0-9]*)*)'/g)) spelled.add(name as string);
+    }
+    assert.ok(['PATH', 'JASON_DATA_DIR', 'CLAUDE_AUTO_BACKGROUND_TASKS', 'REPLY_CLIENT'].every((name) => spelled.has(name)), 'the sources were read');
+    const inherited: Record<string, string> = { ...plantedConfiguration };
+    for (const name of spelled) inherited[name] ??= `planted-${name}`;
+    const upper = (env: Readonly<Record<string, string>>) => new Map(Object.entries(env).map(([name, value]) => [name.toUpperCase(), value]));
+    const before = upper(inherited);
+    const shapes = [
+        { home: '/turn-home', effortNamed: true },
+        { effortNamed: false },
+        {},
+    ];
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+            for (const options of shapes) {
+                for (const data of ['/d', null]) {
+                    for (const bundleVersion of ['0.49.2', null]) {
+                        for (const keyed of [false, true]) {
+                            const provider: Record<string, string> = keyed ? { ANTHROPIC_API_KEY: 'sk-planted-pinned', CLAUDE_CONFIG_DIR: '/keyed' } : {};
+                            const shape = { platform, bundleVersion, bundle: '/b', data, program: 'claude' as const, mode, ...options };
+                            const env = hostEnvironment(inherited, { ...shape, keyed, provider });
+                            const after = upper(env);
+                            const decided = [...new Set([...before.keys(), ...after.keys()])].filter((name) => before.get(name) !== after.get(name));
+                            // What the same turn on the person's own sign-in decides: the rest a keyed turn decides is a
+                            // provider's, and a keyed turn loads no settings file of the person's (`claudeArguments`).
+                            const signedIn = keyed ? upper(hostEnvironment(inherited, { ...shape, keyed: false, provider: {} })) : after;
+                            const providers = (name: string) => keyed && before.get(name) === signedIn.get(name);
+                            const expected = decided.filter((name) => name !== 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' && !name.startsWith('JASON_PLUGINS__') && !providers(name) && !(name in provider));
+                            const pins = pinnedEnvironment(env, options);
+                            const said = `${platform} ${mode} ${JSON.stringify(options)} ${String(data)} ${String(bundleVersion)} ${keyed}`;
+                            assert.deepEqual(Object.keys(pins).sort(), expected.sort(), said);
+                            for (const [name, value] of Object.entries(pins)) assert.equal(value, after.get(name) ?? '', `${said} ${name}`);
+                        }
+                    }
+                }
+            }
+        }
+    }
 });
 
 test('a key provider\'s variables are added to the host\'s environment over the desktop\'s own', () => {
@@ -504,12 +660,18 @@ test('a key provider\'s turn is started without the provider and credentials the
     }
 });
 
-test('a Claude Code turn on macOS and Windows asks the host to scrub credentials from the commands it runs; on Linux no turn does, nor carries one inherited', () => {
+test('a Claude Code turn in Ask first, Auto-edit or Plan only, and a run of no mode, asks the host to scrub credentials from the commands it runs on macOS and Windows; no Full access turn does on any system, nor does any turn on Linux, and none carries one inherited', () => {
     for (const platform of ['darwin', 'win32', 'linux'] as const) {
         for (const keyed of [false, true]) {
-            const env = hostEnvironment({ PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0', claude_code_subprocess_env_scrub: '0' }, { platform, bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {} });
-            const scrub = Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
-            assert.deepEqual(scrub, platform === 'linux' ? [] : [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']], `${platform} keyed ${keyed}`);
+            for (const mode of [undefined, 'ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
+                const env = hostEnvironment(
+                    { PATH: '/x', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1', claude_code_subprocess_env_scrub: '0' },
+                    { platform, bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed, provider: keyed ? { ANTHROPIC_API_KEY: 'k' } : {}, ...(mode === undefined ? {} : { mode }) },
+                );
+                const scrub = Object.entries(env).filter(([name]) => name.toUpperCase() === 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB');
+                const scrubs = platform !== 'linux' && mode !== 'full_access';
+                assert.deepEqual(scrub, scrubs ? [['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', '1']] : [], `${platform} keyed ${keyed} ${mode ?? 'no mode'}`);
+            }
         }
     }
 });
@@ -521,7 +683,7 @@ test('every Claude Code turn asks the host to run nothing in the background, and
         assert.deepEqual(Object.entries(env).filter(([each]) => each.toUpperCase() === name), [[name, '1']]);
     }
     const codex = hostEnvironment({ PATH: '/x' }, { platform: 'darwin', bundleVersion: null, bundle: '/b', data: null, program: 'codex', keyed: false, provider: {} });
-    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CONFINED']);
+    assert.deepEqual(Object.keys(codex), ['PATH', 'JASON_CHAT_TURN']);
 });
 
 test('every Claude Code turn asks the host to run each command in the chat folder, so a cd does not carry to the next one', () => {
@@ -532,9 +694,10 @@ test('every Claude Code turn asks the host to run each command in the chat folde
     }
 });
 
-test('a recorded Claude Code turn maps to its session, its words and one step per tool use, in order, then the end', () => {
+test('a recorded Claude Code turn maps to its mode, its session, its words and one step per tool use, in order, then the end', () => {
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
+        { kind: 'permission_mode', mode: 'default' },
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
@@ -566,6 +729,13 @@ test('the init line says where the turn\'s key came from, by a closed word: the 
     for (const absent of [undefined, 7, null]) assert.deepEqual(source(absent), [{ kind: 'key_source', source: 'absent' }], String(absent));
     // A session id of a shape the desktop does not pass on still says where the key came from.
     assert.deepEqual(claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: '--x', apiKeySource: 'oauth' })), [{ kind: 'key_source', source: 'elsewhere' }]);
+});
+
+test('the init line says the permission mode the turn runs in, as one word, and nothing for any other value', () => {
+    const mode = (value: unknown) => claudeLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'stub-session-1', ...(value === undefined ? {} : { permissionMode: value }) })).filter((line) => line.kind === 'permission_mode');
+    assert.deepEqual(mode('bypassPermissions'), [{ kind: 'permission_mode', mode: 'bypassPermissions' }]);
+    assert.deepEqual(mode('default'), [{ kind: 'permission_mode', mode: 'default' }]);
+    for (const other of [undefined, 7, null, '', 'bypass Permissions', 'x'.repeat(33), 'default\n']) assert.deepEqual(mode(other), [], JSON.stringify(other));
 });
 
 test('a retry Claude Code reports on a 401, a 403 or a failed authentication is a refused key; any other retry says nothing', () => {
@@ -699,7 +869,7 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     const edited = claudeArguments({ ...turn, mode: 'auto_edit' });
     assert.deepEqual(edited, asked);
     assert.deepEqual(claudeArguments({ ...turn, mode: 'auto_edit', resume: 'ses-1', addDirs: ['/c'] }), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] }));
-    assert.equal(edited.includes('--permission-mode'), false);
+    assert.equal(valueOf(edited, '--permission-mode'), 'default', "the host's default, by name");
     assert.ok(edited.includes('--permission-prompt-tool'));
     // No argument and no setting names the host's own accept-edits mode or a default mode of any kind.
     for (const arg of edited) {
@@ -707,4 +877,38 @@ test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: th
     }
     const settings = JSON.parse(valueOf(edited, '--settings') ?? '{}') as Record<string, unknown>;
     assert.equal(JSON.stringify(settings).includes('hooks'), false);
+});
+
+test('Codex\'s warning that requirements put the sandbox below the one asked for is read as such, in the field this Codex names and the one an earlier one named; any other warning is dropped, as before', () => {
+    // The words at openai/codex 9f2b87495b, read and not seen: core/src/config/mod.rs, `apply_requirement_constrained_value`,
+    // says "Configured value for `{field_name}` is disallowed by requirements; falling back to required value
+    // {fallback_value:?}. Details: {err}", and exec/src/event_processor_with_jsonl_output.rs says a configuration warning
+    // as an `item.completed` whose item is of type `error` with that `message`.
+    const warning = (message: unknown) => JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } });
+    for (const field of ['permission_profile', 'sandbox_mode']) {
+        assert.deepEqual(codexLine(warning(`Configured value for \`${field}\` is disallowed by requirements; falling back to required value ReadOnly. Details: not allowed`), new Set()), [{ kind: 'sandbox_narrowed' }], field);
+    }
+    for (const message of ['Configured value for `web_search_mode` is disallowed by requirements; falling back to required value Cached.', 'Under-development features enabled: x.', '', undefined]) {
+        assert.deepEqual(codexLine(warning(message), new Set()), [], String(message));
+    }
+    assert.deepEqual(codexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'no' } }), new Set()), [{ kind: 'result', error: 'no' }]);
+});
+
+test('a Codex turn that reads the person\'s config.toml, a Full access one, pins JASON_DATA_DIR and JASON_CHAT_TURN in its shell environment policy by -c, and never PATH; a turn that leaves the file unread pins nothing', () => {
+    // openai/codex 9f2b87495b (read, not seen): session flags are merged over config.toml table by table
+    // (config/src/merge.rs, `merge_toml_values_at_path`), so `shell_environment_policy.set.<NAME>` adds a name to the
+    // person's `set`; `populate_env` (protocol/src/shell_environment.rs) applies `set` after `inherit` and the excludes.
+    const environment = { JASON_DATA_DIR: 'C:\\Users\\a b\\.jason', JASON_CHAT_TURN: '1', PATH: 'C:\\bin', OTHER: 'x' };
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        const full = codexArguments({ platform, mode: 'full_access', environment });
+        const settings = full.flatMap((arg, i) => (full[i - 1] === '-c' ? [arg] : []));
+        const pinned = settings.filter((setting) => setting.startsWith('shell_environment_policy.'));
+        assert.deepEqual(pinned, ['shell_environment_policy.set.JASON_DATA_DIR="C:\\\\Users\\\\a b\\\\.jason"', 'shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        // Without a data directory named, only the turn's mark.
+        const unnamed = codexArguments({ platform, mode: 'full_access', environment: { JASON_CHAT_TURN: '1', PATH: 'C:\\bin' } });
+        assert.deepEqual(unnamed.filter((arg) => arg.startsWith('shell_environment_policy.')), ['shell_environment_policy.set.JASON_CHAT_TURN="1"'], platform);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) {
+            assert.ok(!codexArguments({ platform, mode, environment }).some((arg) => arg.startsWith('shell_environment_policy.')), `${platform} ${mode}`);
+        }
+    }
 });

@@ -14,6 +14,7 @@ import {
     sendHeld,
     turnOptions,
     withModels,
+    drawnMode,
     fullAccessLine,
     autoEditLine,
     olderDesktopAutoEdit,
@@ -33,9 +34,15 @@ import {
     stopAsked,
     takenBack,
     everyWordBack,
+    exportNotTyped,
+    exportTypeIt,
     typed,
     afresh,
+    noteClosed,
+    withPaths,
+    dropCaretAt,
     codexPlanLine,
+    choiceStops,
     livePlan,
     planElsewhere,
     planOtherHost,
@@ -129,6 +136,170 @@ describe('a chat as the page keeps it', () => {
         expect(
             received(chat, { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' }).entries.at(-1),
         ).toEqual({ kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' });
+    });
+
+    describe('the paths of files dropped on the box', () => {
+        const windows = 'C:\\Users\\Ана Ли\\Desktop\\1.txt';
+
+        it('go in at the caret, each quoted, with a space after them, as a terminal puts them', () => {
+            expect(withPaths('', 0, 0, [windows])).toEqual({
+                text: `'${windows}' `,
+                caret: windows.length + 3,
+            });
+            expect(withPaths('add these lines to ', 19, 19, ['/Users/ana/1.txt'])).toEqual({
+                text: "add these lines to '/Users/ana/1.txt' ",
+                caret: 38,
+            });
+        });
+
+        it('stand apart from the words on each side, and several go in one after another', () => {
+            expect(withPaths('readthat now', 4, 4, ['/a b', '/c'])).toEqual({
+                text: "read '/a b' '/c' that now",
+                caret: 17,
+            });
+            expect(withPaths('compare  and', 8, 8, ['/x'])).toEqual({ text: "compare '/x' and", caret: 12 });
+        });
+
+        it('take the place of the words selected', () => {
+            expect(withPaths('open FILE please', 5, 9, ['/d/e.txt'])).toEqual({
+                text: "open '/d/e.txt' please",
+                caret: 15,
+            });
+        });
+
+        const put = (path: string) => withPaths('', 0, 0, [path]).text;
+
+        it('on macOS and Linux go in single quotes, where a shell takes every sign as it is, closed around a quote', () => {
+            expect(put('/Users/ana/a"b.txt')).toBe(`'/Users/ana/a"b.txt' `);
+            expect(put('/Users/ana/$x.txt')).toBe(`'/Users/ana/$x.txt' `);
+            expect(put('/Users/ana/`date`.txt')).toBe("'/Users/ana/`date`.txt' ");
+            expect(put('/Users/ana/hi!.txt')).toBe(`'/Users/ana/hi!.txt' `);
+            expect(put("/Users/ana/it's.txt")).toBe(`'/Users/ana/it'\\''s.txt' `);
+        });
+
+        it('leave the caret after them once the box shows them, and nowhere for another conversation or a text they never reached', () => {
+            const left = { key: 'conv_1', text: "see '/a' ", at: 9 };
+            expect(dropCaretAt(left, 'conv_1', "see '/a' ")).toBe(9);
+            expect(dropCaretAt(left, 'conv_2', "see '/a' ")).toBeNull();
+            // A conversation gone before the paths went in: a later word typed in a box takes no caret meant for them.
+            expect(dropCaretAt(left, 'conv_1', 'see x')).toBeNull();
+            expect(dropCaretAt(null, 'conv_1', 'see ')).toBeNull();
+        });
+
+        // What each Windows form below reads back as, run through Git Bash (`printf '%s\n' <form>`) and through
+        // PowerShell 7 and Windows PowerShell 5.1 (`Write-Output <form>`); the unit project starts no shell itself.
+        //
+        //   form                                  Git Bash                    PowerShell 7 and 5.1
+        //   'C:\Users\ana\a b.txt'                the name                    the name
+        //   'C:\Users\ana\$x.txt'                 the name                    the name
+        //   'C:\Users\ana\`date`.txt'             the name                    the name
+        //   'C:\Users\ana\100% a&b;c hi!.txt'     the name                    the name
+        //   'C:\Users\Ана Ли\Desktop\1.txt'       the name                    the name
+        //   '\\server\share\a.txt'                the name                    the name
+        //   "C:\Users\ana\it's.txt"               the name                    the name
+        //   "C:\Ана’s ‘q’ ‚z‛.txt"                the name                    the name
+        //   '\\server\share\it''s.txt'            \\server\share\its.txt      the name
+        //   'C:\Users\ana\$x it''s.txt'           C:\Users\ana\$x its.txt     the name
+        //   'C:\Users\ana\`d` it’’s.txt'          C:\Users\ana\`d` it’’s.txt  the name
+        //
+        // The double quotes this form replaced lost a UNC path's first backslash in Git Bash: "\\server\share\a.txt"
+        // read back as \server\share\a.txt.
+        const dir = 'C:\\Users\\ana\\';
+
+        it('on Windows go in single quotes where the name holds no quote, as PowerShell and Git Bash both read them', () => {
+            expect(put(`${dir}a b.txt`)).toBe("'C:\\Users\\ana\\a b.txt' ");
+            expect(put(`${dir}$x.txt`)).toBe("'C:\\Users\\ana\\$x.txt' ");
+            expect(put(`${dir}\`date\`.txt`)).toBe("'C:\\Users\\ana\\`date`.txt' ");
+            expect(put(`${dir}100% a&b;c hi!.txt`)).toBe("'C:\\Users\\ana\\100% a&b;c hi!.txt' ");
+            expect(put(windows)).toBe("'C:\\Users\\Ана Ли\\Desktop\\1.txt' ");
+            expect(put('\\\\server\\share\\a.txt')).toBe("'\\\\server\\share\\a.txt' ");
+        });
+
+        it('on Windows go in double quotes where the name holds a quote, typographic ones among them, and nothing double quotes expand', () => {
+            expect(put(`${dir}it's.txt`)).toBe(`"C:\\Users\\ana\\it's.txt" `);
+            expect(put('C:\\Ана\u2019s \u2018q\u2019 \u201az\u201b.txt')).toBe(
+                '"C:\\Ана\u2019s \u2018q\u2019 \u201az\u201b.txt" ',
+            );
+        });
+
+        it('on Windows keep the quotes doubled as PowerShell reads them for a quote with a UNC path, a `$` or a backtick, which Bash reads wrong', () => {
+            expect(put("\\\\server\\share\\it's.txt")).toBe("'\\\\server\\share\\it''s.txt' ");
+            expect(put(`${dir}$x it's.txt`)).toBe("'C:\\Users\\ana\\$x it''s.txt' ");
+            expect(put(`${dir}\`d\` it\u2019s.txt`)).toBe("'C:\\Users\\ana\\`d` it\u2019\u2019s.txt' ");
+        });
+
+        it('on macOS and Linux keep every other sign as it is, a trailing space and a name in another script among them', () => {
+            expect(put('/Users/ana/$x `date` 100% a&b;c.txt')).toBe("'/Users/ana/$x `date` 100% a&b;c.txt' ");
+            expect(put("/Users/ana/it's here.txt")).toBe("'/Users/ana/it'\\''s here.txt' ");
+            expect(put('/Users/ana/Ана Ли/note ')).toBe("'/Users/ana/Ана Ли/note ' ");
+            expect(put('/Users/ana/\u2019q.txt')).toBe("'/Users/ana/\u2019q.txt' ");
+        });
+    });
+
+    describe('a notice and an aside', () => {
+        const open = (chat: Chat) =>
+            chat.entries.flatMap((each) =>
+                (each.kind === 'notice' || each.kind === 'aside') && each.closed !== true ? [each.text] : [],
+            );
+        /** A turn that said a notice and an aside, ended, and the person's next message. */
+        const next = () => {
+            const first = received(
+                received(received(said(newChat('conv_1', 'claude'), 'Go'), { kind: 'notice', text: 'Fell back.' }), {
+                    kind: 'text',
+                    text: 'Done.',
+                }),
+                { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' },
+            );
+            const asided = {
+                ...first,
+                entries: [...first.entries, { kind: 'aside' as const, text: 'Written: /h/a.md' }],
+            };
+            return said(received(asided, { kind: 'done', error: null }), 'And now?');
+        };
+
+        it('stay through their turn and until the next answer begins, then go', () => {
+            const chat = next();
+            expect(open(chat)).toEqual(['Fell back.', 'Kept seven days: /d', 'Written: /h/a.md']);
+            expect(open(received(chat, { kind: 'text', text: 'Here.' }))).toEqual([]);
+            expect(open(received(chat, { kind: 'step', text: 'Read a file' }))).toEqual([]);
+        });
+
+        it('said in the turn that runs, stay while its answer goes on', () => {
+            const chat = received(next(), { kind: 'notice', text: 'This turn runs in Ask first.' });
+            expect(
+                open(received(received(chat, { kind: 'text', text: 'Here.' }), { kind: 'done', error: null })),
+            ).toEqual(['This turn runs in Ask first.']);
+        });
+
+        it('go at the end of the next turn even where it gave no answer', () => {
+            expect(open(received(next(), { kind: 'done', error: 'The host stopped.' }))).toEqual([]);
+        });
+
+        it('go as well when the next turn ends with no end from the desktop: refused, or failed to start', () => {
+            expect(open(failed(next(), 'The desktop could not start the turn.'))).toEqual([]);
+        });
+
+        it('go when an export is refused, by the send or by its answer, which says its own refusal beside them', () => {
+            const exporting = { ...next(), exporting: '/export' };
+            expect(open(failed(exporting, 'Not written.'))).toEqual(['Not written.']);
+            expect(open(received(exporting, { kind: 'done', error: 'Not written.' }))).toEqual(['Not written.']);
+        });
+
+        it('are closed one by one by their close control, and nothing else is', () => {
+            const chat = next();
+            const at = chat.entries.findIndex((each) => each.kind === 'aside');
+            expect(open(noteClosed(chat, at))).toEqual(['Fell back.', 'Kept seven days: /d']);
+            const text = chat.entries.findIndex((each) => each.kind === 'text');
+            expect(noteClosed(chat, text)).toBe(chat);
+            expect(noteClosed(chat, chat.entries.length + 3)).toBe(chat);
+        });
+
+        it('still lock the choice before them once closed', () => {
+            const asked = received(said(newChat('conv_1', 'claude'), 'Go'), { kind: 'text', text: 'Pick one.' });
+            const told = received(received(asked, { kind: 'done', error: null }), { kind: 'notice', text: 'Gone.' });
+            const closed = noteClosed(told, told.entries.length - 1);
+            expect(choiceState(closed, 1, ['A'], null, true)).toEqual({ state: 'locked' });
+        });
     });
 
     it('becomes a campaign’s conversation on a hand-over, and keeps a fresh session and a pick in its thread', () => {
@@ -432,6 +603,89 @@ describe('a message typed while a turn runs', () => {
     });
 });
 
+describe('an /export typed in the chat, which the desktop answers without a turn', () => {
+    const planning = (): Chat => ({ ...newChat('c1', 'claude'), mode: 'plan_only', turnHost: 'claude' });
+    const planned = (): Chat =>
+        received(received(said(planning(), 'plan it'), { kind: 'text', text: 'Read the replies first.' }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+    const refusal = 'Give a file name alone, such as notes.md, with no folder in it.';
+
+    it('is no message of the conversation: no You entry and no title, while the desktop answers it', () => {
+        const chat = said(newChat('c1', 'claude'), '/export notes.md');
+        expect(chat).toMatchObject({ title: 'New chat', entries: [], running: true, exporting: '/export notes.md' });
+        // Any other word with a slash is a message as any other, and names the chat.
+        expect(said(newChat('c1', 'claude'), '/exports notes.md')).toMatchObject({
+            title: '/exports notes.md',
+            entries: [{ kind: 'user', text: '/exports notes.md' }],
+            exporting: null,
+        });
+    });
+
+    it('says where it wrote beside the thread, and a plan before it stays live', () => {
+        const over = received(
+            received(said(planned(), '/export notes.md'), { kind: 'notice', text: 'Written: /h/notes.md' }),
+            { kind: 'done', error: null },
+        );
+        expect(over.entries.slice(-2)).toEqual([
+            { kind: 'text', text: 'Read the replies first.', plan: true },
+            { kind: 'aside', text: 'Written: /h/notes.md' },
+        ]);
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '' });
+        expect(livePlan(over, 'claude')).toBe(true);
+    });
+
+    it('is given back to the box when refused, says why beside the thread, and a plan before it stays live', () => {
+        const over = received(said(planned(), '/export ../x.md'), { kind: 'done', error: refusal });
+        expect(over.entries.at(-1)).toEqual({ kind: 'aside', text: refusal });
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '/export ../x.md' });
+        expect(livePlan(over, 'claude')).toBe(true);
+        // Above what was typed meanwhile, and once when it was a waiting message joined with another.
+        const joinedWords = ['/export a.md', 'And then?'].join(blank);
+        const queuedOver = received(typed(said(planned(), joinedWords, true), 'Typed'), {
+            kind: 'done',
+            error: refusal,
+        });
+        expect(queuedOver.draft).toBe([joinedWords, 'Typed'].join(blank));
+    });
+
+    it('leaves a chat about no campaign named New chat, so its first message names it', () => {
+        const refused = received(said(newChat('c1', 'claude'), '/export x.md'), {
+            kind: 'done',
+            error: 'This conversation has nothing to write yet.',
+        });
+        expect(refused.title).toBe('New chat');
+        expect(said(typed(refused, ''), 'Find leads in Austin').title).toBe('Find leads in Austin');
+    });
+
+    it('is an export after any space the desktop takes as one, a line break of Unicode’s included', () => {
+        for (const space of [' ', '\t', '\u00a0', '\u0085', '\u2028']) {
+            expect(said(newChat('c1', 'claude'), `/export${space}x.md`).exporting).toBe(`/export${space}x.md`);
+        }
+        expect(said(newChat('c1', 'claude'), '/exportx.md').exporting).toBeNull();
+    });
+
+    it('when the desktop refuses the send itself, says why beside the thread, gives the words back, and a plan stays live', () => {
+        const over = failed(said(planned(), '/export x.md'), 'The desktop is closing.');
+        expect(over.entries.at(-1)).toEqual({ kind: 'aside', text: 'The desktop is closing.' });
+        expect(over).toMatchObject({ running: false, exporting: null, outbox: null, draft: '/export x.md' });
+        expect(livePlan(over, 'claude')).toBe(true);
+        // Once, when it was a waiting message.
+        expect(failed(said(planned(), '/export x.md', true), 'No.').draft).toBe('/export x.md');
+    });
+
+    it('that the person did not type in the message box is sent as nothing: the chat says so beside it, and a plan stays live', () => {
+        const before = planned();
+        const over = exportNotTyped(before);
+        expect(over.entries).toEqual([...before.entries, { kind: 'aside', text: exportTypeIt }]);
+        expect(exportTypeIt).toBe('Type /export in the message box yourself.');
+        expect(over).toMatchObject({ running: false, exporting: null, draft: '' });
+        expect(livePlan(over, 'claude')).toBe(true);
+    });
+});
+
 describe('the model and the effort a chat is sent with', () => {
     const every: DesktopEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
     const claude: DesktopHost = {
@@ -445,6 +699,7 @@ describe('the model and the effort a chat is sent with', () => {
         belowFloor: null,
         fullAccess: null,
         autoEdit: null,
+        runs: { window: {}, tab: {} },
         models: [
             { id: 'opus', label: 'Opus', efforts: every },
             { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -461,6 +716,29 @@ describe('the model and the effort a chat is sent with', () => {
         models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
         typedModel: false,
     };
+
+    it("draws the mode the next turn runs in as the desktop hands it for the host and the place, and the record's mode where it hands nothing", () => {
+        const chat = { ...newChat('conv_1', 'codex'), mode: 'full_access' as const };
+        const handed: DesktopHost = {
+            ...codex,
+            runs: {
+                window: { full_access: { mode: 'ask_first', why: 'Full access runs on Claude Code only.' } },
+                tab: { full_access: { mode: 'ask_first', why: 'From a tab.' } },
+            },
+        };
+        expect(drawnMode(chat, handed, 'window')).toEqual({
+            mode: 'ask_first',
+            why: 'Full access runs on Claude Code only.',
+        });
+        expect(drawnMode(chat, handed, 'tab')).toEqual({ mode: 'ask_first', why: 'From a tab.' });
+        expect(drawnMode({ ...chat, mode: 'plan_only' }, handed, 'window')).toEqual({ mode: 'plan_only', why: null });
+        expect(drawnMode(chat, codex, 'window')).toEqual({ mode: 'full_access', why: null });
+        expect(drawnMode(chat, null, 'window')).toEqual({ mode: 'full_access', why: null });
+        // A host an earlier desktop listed hands nothing: the record's mode is drawn, as before.
+        const [older] = withModels([{ ...handed, runs: undefined } as unknown as DesktopHost]);
+        expect(older!.runs).toEqual({ window: {}, tab: {} });
+        expect(drawnMode(chat, older!, 'window')).toEqual({ mode: 'full_access', why: null });
+    });
     const fresh = newChat('conv_1', 'claude');
 
     it('names no model and no effort until one is chosen, so the host keeps its own', () => {
@@ -587,6 +865,7 @@ describe('the hosts as a desktop of another version answers them', () => {
             ...older,
             fullAccess: null,
             autoEdit: null,
+            runs: { window: {}, tab: {} },
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
             modelsUnread: null,
@@ -624,14 +903,21 @@ describe('the hosts as a desktop of another version answers them', () => {
 });
 
 describe("a chat's access mode", () => {
-    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null, autoEdit: null } as unknown as DesktopHost;
+    const claude = {
+        id: 'claude',
+        label: 'Claude Code',
+        fullAccess: null,
+        autoEdit: null,
+        runs: { window: {}, tab: {} },
+    } as unknown as DesktopHost;
     const codexAutoEdit =
         'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
     const codex = {
         id: 'codex',
         label: 'Codex',
-        fullAccess: 'Full access runs on Claude Code only.',
+        fullAccess: null,
         autoEdit: codexAutoEdit,
+        runs: { window: { auto_edit: { mode: 'ask_first', why: codexAutoEdit } }, tab: {} },
     } as unknown as DesktopHost;
 
     it('is Ask first in a new chat, and is what the desktop says it is, never what the page asked for', () => {
@@ -666,30 +952,28 @@ describe("a chat's access mode", () => {
             { mode: 'auto_edit', label: 'Auto-edit', disabled: null },
             { mode: 'full_access', label: 'Full access', disabled: null },
         ]);
-        expect(modeChoices(codex)[3]).toEqual({
-            mode: 'full_access',
-            label: 'Full access',
-            disabled: 'Full access runs on Claude Code only.',
-        });
-        expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
-        expect(modeChoices(claude, true)[3]?.disabled).toBe(
-            'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
-        );
-        expect(
-            modeChoices(claude, true)
-                .slice(0, 2)
-                .map((each) => each.disabled),
-        ).toEqual([null, null]);
-        expect(modeChoices(codex, true)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+        // Codex offers Full access, as Claude Code does; with no host nothing is said against it.
+        expect(modeChoices(codex)[3]).toEqual({ mode: 'full_access', label: 'Full access', disabled: null });
+        expect(modeChoices(null)[3]?.disabled).toBeNull();
     });
 
-    it("disables Auto-edit on Codex, with no host and for the Feed in the desktop's words, and nowhere else", () => {
+    it('stops a running turn for a choice narrower than the mode that turn runs in, not the mode the chat keeps: the checked mode stops nothing', () => {
+        const running = { ...newChat('conv_1', 'codex'), mode: 'auto_edit' as const, running: true };
+        // On Codex Auto-edit runs in Ask first: the checked Ask first changes nothing the turn may do.
+        expect(choiceStops(running, 'ask_first', codex, 'window')).toBe(false);
+        expect(choiceStops(running, 'plan_only', codex, 'window')).toBe(true);
+        // On Claude Code the turn runs in Auto-edit, so Ask first is narrower.
+        expect(choiceStops(running, 'ask_first', claude, 'window')).toBe(true);
+        // Codex runs Full access as itself: leaving it stops the turn.
+        expect(choiceStops({ ...running, mode: 'full_access' }, 'ask_first', codex, 'window')).toBe(true);
+        expect(choiceStops({ ...running, mode: 'full_access' }, 'full_access', codex, 'window')).toBe(false);
+        // A chat with no turn running stops nothing.
+        expect(choiceStops({ ...running, running: false }, 'plan_only', codex, 'window')).toBe(false);
+    });
+
+    it("disables Auto-edit on Codex and with no host in the desktop's words, and nowhere else, the Feed included", () => {
         expect(modeChoices(codex)[2]).toEqual({ mode: 'auto_edit', label: 'Auto-edit', disabled: codexAutoEdit });
         expect(modeChoices(null)[2]?.disabled).toBe(codexAutoEdit);
-        expect(modeChoices(claude, true)[2]?.disabled).toBe(
-            'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
-        );
-        expect(modeChoices(codex, true)[2]?.disabled).toBe(codexAutoEdit);
         // A Claude Code below Full access's floor still offers Auto-edit: it needs no hook.
         const below = { ...claude, fullAccess: 'Full access needs a newer Claude Code.' } as DesktopHost;
         expect(modeChoices(below)[2]?.disabled).toBeNull();
@@ -704,7 +988,7 @@ describe("a chat's access mode", () => {
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
         expect(fullAccessLine).toBe(
-            'Full access · the AI runs commands without asking, except those Jason cannot read',
+            "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables",
         );
     });
 });
@@ -832,7 +1116,7 @@ describe('Plan only’s plan card, as the page keeps it', () => {
             'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
         );
         expect(codexPlanLine).toBe(
-            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.',
+            'On Codex the approved plan still only reads: Codex runs Ask first read-only. To have it carried out, choose Full access or Claude Code for this chat.',
         );
         expect(planApproved).toBe('Approved: the chat is in Ask first.');
         expect(planModeMoved).toBe("The chat's mode changed before the plan was approved, so nothing was sent.");

@@ -182,7 +182,7 @@ public static partial class LogsCommand
         }
         catch (Exception failure) when (failure is UnauthorizedAccessException or IOException)
         {
-            return Unreadable(env, directory, failure.Message);
+            return Unreadable(env, human, directory, failure.Message);
         }
 
         if (human)
@@ -218,9 +218,9 @@ public static partial class LogsCommand
             tail.SkippedLines);
     }
 
-    private static int Unreadable(CliEnvironment env, string directory, string reason)
+    private static int Unreadable(CliEnvironment env, bool human, string directory, string reason)
     {
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             CliErrors.LogsUnreadable,
             $"The log directory {directory} exists and could not be read: {reason}",
             retryable: false));

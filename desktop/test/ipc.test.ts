@@ -65,13 +65,15 @@ interface Recorded {
     exposed: Map<string, unknown>;
     invoked: { channel: string; args: unknown[] }[];
     listening: string[];
+    /** The files whose path the preload asked Electron for, by name. */
+    paths: string[];
 }
 
-/** Runs the preload as Electron would, with an Electron that records what it is asked. */
-function runPreload(): Recorded {
+/** Runs the preload as Electron would, in a page of that protocol, with an Electron that records what it is asked. */
+function runPreload(protocol = 'http:'): Recorded {
     const source = readFileSync(join(root, 'src', 'preload.ts'), 'utf8');
     const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
-    const recorded: Recorded = { exposed: new Map(), invoked: [], listening: [] };
+    const recorded: Recorded = { exposed: new Map(), invoked: [], listening: [], paths: [] };
     const electron = {
         contextBridge: { exposeInMainWorld: (name: string, api: unknown) => void recorded.exposed.set(name, api) },
         ipcRenderer: {
@@ -82,13 +84,19 @@ function runPreload(): Recorded {
             on: (channel: string) => void recorded.listening.push(channel),
             removeListener: () => undefined,
         },
+        webUtils: {
+            getPathForFile: (file: { name: string }) => {
+                recorded.paths.push(file.name);
+                return `/dropped/${file.name}`;
+            },
+        },
     };
     const required = (name: string) => {
         if (name !== 'electron') throw new Error(`a sandboxed preload may require only electron, not ${name}`);
         return electron;
     };
     const module = { exports: {} };
-    new Function('require', 'module', 'exports', 'process', outputText)(required, module, module.exports, { platform: 'win32' });
+    new Function('require', 'module', 'exports', 'process', 'location', outputText)(required, module, module.exports, { platform: 'win32' }, { protocol });
     return recorded;
 }
 
@@ -120,8 +128,8 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             openFolder: 'function',
             feed: 'function',
             cardRefused: 'function',
+            pathOf: 'function',
         },
-        fullAccess: { standing: 'function', takeBack: 'function', onChanged: 'function' },
         theme: { get: 'function', set: 'function' },
         updates: { key: 'function', item: 'function', press: 'function', onChanged: 'function' },
         dailyTrends: { get: 'function', set: 'function' },
@@ -153,6 +161,17 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
     });
 });
 
+test('a dropped file’s path is read in the preload for a page served over http alone: any other page is told none', () => {
+    const asked = (protocol: string) => {
+        const recorded = runPreload(protocol);
+        const seam = recorded.exposed.get('jasonDesktop') as { chat: { pathOf(file: { name: string }): string } };
+        return { path: seam.chat.pathOf({ name: 'a.txt' }), read: recorded.paths, invoked: recorded.invoked };
+    };
+    assert.deepEqual(asked('http:'), { path: '/dropped/a.txt', read: ['a.txt'], invoked: [] });
+    for (const protocol of ['file:', 'https:', 'data:', 'about:', 'devtools:'])
+        assert.deepEqual(asked(protocol), { path: '', read: [], invoked: [] }, protocol);
+});
+
 test('each member of the seam calls the channel ipc.ts checks, with its own arguments only', () => {
     const recorded = runPreload();
     const api = recorded.exposed.get('jasonDesktop') as Record<string, Record<string, (...args: unknown[]) => unknown>>;
@@ -162,7 +181,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.answer', ['c1', 'r1', { allow: true, always: false }]],
         ['chat.list', []],
         ['chat.open', ['conv_01']],
-        ['chat.create', ['cmp_01', 'claude']],
+        ['chat.create', ['cmp_01']],
         ['chat.remove', ['conv_01']],
         ['chat.restart', ['conv_01']],
         ['chat.attach', ['conv_01', 'cmp_01']],
@@ -171,8 +190,6 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.openFolder', ['01JD0000000000000000000000-1788000000000']],
         ['chat.feed', [[], { catchUp: true }]],
         ['chat.cardRefused', ['conv_01', 'choice', 'schema']],
-        ['fullAccess.standing', []],
-        ['fullAccess.takeBack', []],
         ['links.take', []],
         ['pairing.paired', ['uit_01JD0000000000000000000002']],
         ['theme.get', []],
@@ -185,7 +202,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['mode.get', []],
         ['mode.set', ['demo']],
         ['openIn.targets', ['cmp_01', 'conv_01']],
-        ['openIn.open', ['vscode', 'cmp_01']],
+        ['openIn.open', ['vscode', 'cmp_01', { keep: false }]],
         ['openIn.continueChat', ['conv_01']],
         ['openIn.changeJason', []],
         ['setup.status', []],
@@ -196,8 +213,8 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.useProgram', ['codex']],
         ['setup.configurePlugin', ['slack', { token: 't', target: 'C1' }]],
         ['setup.disconnectPlugin', ['slack']],
-        ['setup.replyConnect', ['email', { provider: 'gmail', sharedPage: true }]],
-        ['setup.replyReconnect', ['linkedin', '34', { sharedPage: false }]],
+        ['setup.replyConnect', ['email', { provider: 'gmail', copy: true }]],
+        ['setup.replyReconnect', ['linkedin', '34', { copy: false }]],
         ['setup.replyLimits', ['12', 200]],
         ['setup.replyPause', ['34']],
         ['setup.replyResume', ['34']],
@@ -218,8 +235,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
     void api.chat?.onEvent?.(() => undefined);
     void api.setup?.onChanged?.(() => undefined);
     void api.links?.onOpen?.(() => undefined);
-    void api.fullAccess?.onChanged?.(() => undefined);
     void api.mode?.onPreparing?.(() => undefined);
     void api.updates?.onChanged?.(() => undefined);
-    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open'], eventChannels['fullAccess.changed'], eventChannels['mode.preparing'], eventChannels['updates.changed']]);
+    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open'], eventChannels['mode.preparing'], eventChannels['updates.changed']]);
 });

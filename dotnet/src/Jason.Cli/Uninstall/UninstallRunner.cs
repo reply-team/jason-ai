@@ -216,10 +216,13 @@ public static class UninstallRunner
 
             // 5. The PATH entry, only where this installer wrote it; for the application's jason, the terminal command
             //    `jason install` placed and what an older command-line install left, then the application's other files.
+            //    ShipIt installing an update by now keeps what it installs: its own state, and the application last.
+            var shipItInstalling = false;
             if (desktop is not null && places is not null)
             {
                 DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
-                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
+                shipItInstalling = DesktopRemoval.TakeOutUpdaterJob(env, places, desktop, done, problems);
+                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, kept, problems, shipItInstalling);
             }
             else
             {
@@ -269,7 +272,7 @@ public static class UninstallRunner
             // 8. The application itself, last of all: everything above ran from the jason inside it.
             if (desktop is not null)
             {
-                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems);
+                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems, shipItInstalling);
             }
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)

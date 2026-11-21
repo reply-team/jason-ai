@@ -141,7 +141,7 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
         Assert.Contains("This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.", help, StringComparison.Ordinal);
         Assert.DoesNotContain("build for one is published", help, StringComparison.Ordinal);
         Assert.DoesNotContain("Intel Mac is not published", help, StringComparison.Ordinal);
-        Assert.Contains("On a Mac this script is the way to install Jason; Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
+        Assert.Contains("On a Mac this script is the way to install Jason, and Homebrew's cask installs the same Jason Desktop (brew install --cask reply-team/tap/jason); Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1110,7 +1110,7 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
                 return RunToEnd(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), environment, call);
             }
 
-            return RunToEnd(Pwsh(), environment, call);
+            return RunToEnd(Jason.Runtime.Tests.ChildPwsh.StartInfo(Root), environment, call);
         }
     }
 
@@ -1386,28 +1386,15 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
     private static string Code(string name) =>
         string.Join('\n', Script(name).Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
 
-    private static string Pwsh()
-    {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it.");
-        return pwsh!;
-    }
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments, string? workingDirectory = null) =>
+        RunToEnd(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = workingDirectory ?? string.Empty }, environment, arguments);
 
-    private static (int Exit, string Stdout, string Stderr) RunToEnd(string executable, IReadOnlyDictionary<string, string> environment, string[] arguments, string? workingDirectory = null)
+    private static (int Exit, string Stdout, string Stderr) RunToEnd(ProcessStartInfo start, IReadOnlyDictionary<string, string> environment, string[] arguments)
     {
-        var start = new ProcessStartInfo(executable)
-        {
-            WorkingDirectory = workingDirectory ?? string.Empty,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
@@ -1424,7 +1411,7 @@ public sealed partial class InstallDesktopScriptTests : IDisposable
         if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"{Path.GetFileName(executable)} did not finish in two minutes.");
+            Assert.Fail($"{Path.GetFileName(start.FileName)} did not finish in two minutes.");
         }
 
         return (process.ExitCode, stdout.Result, stderr.Result);

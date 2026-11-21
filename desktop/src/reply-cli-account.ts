@@ -1,7 +1,7 @@
 /**
  * Pure: the Reply CLI's account verbs as the desktop uses them, and nothing of the desktop's own: the arguments each verb
- * is started with, the shapes it prints under `--json`, the codes its refusals carry and the warning it gives with the
- * shared mailbox page. This file is the desktop's whole knowledge of that contract, so a change to it at the CLI is a
+ * is started with, the shapes it prints under `--json` and the codes its refusals carry. This file is the desktop's
+ * whole knowledge of that contract, so a change to it at the CLI is a
  * change here; `test/reply-cli-account-fixture.ts` holds what the CLI prints, taken from the CLI's own tests.
  *
  * The CLI prints a verb's result as one JSON object on stdout and exits 0; it ends a refusal with one JSON line
@@ -14,9 +14,7 @@ export type ReplyCliProvider = 'gmail' | 'office365';
 
 /** The codes the desktop does something with; every other code is shown by the code alone. */
 export const replyCliCodes = {
-    emailLinkNotAvailable: 'email_link.not_available',
     emailLinkProviderRequired: 'email_link.provider_required',
-    sharedPageNotEnabled: 'shared_page.not_enabled',
     emailAccountNotFound: 'email_account.not_found',
     emailAccountLimitReached: 'email_account.limit_reached',
     emailAccountNoFreeMailboxSlots: 'email_account.no_free_mailbox_slots',
@@ -35,28 +33,20 @@ export const replyCliCodes = {
 /** The prefix of the codes of a usage error, which the CLI ends with exit 2 before it asks Reply anything. */
 export const replyCliUsagePrefix = 'usage.';
 
-/**
- * The CLI's own words for the shared mailbox page's address, which it prints beside one as `warning` and in the hint of
- * `email_link.not_available`.
- */
-export const replyCliSharedPageWarning = "this address does not expire and lets its holder manage all of this user's mailboxes, deletion included";
-
 const json = '--json';
 
 /**
  * `account connect`: LinkedIn by a name, email by a provider. The name is one argument with its flag, so no name can be
- * read as another option. `--allow-shared-page` is added only where the caller says so.
+ * read as another option.
  */
-export function connectArguments(
-    request: { channel: 'linkedin'; name: string } | { channel: 'email'; provider: ReplyCliProvider; allowSharedPage: boolean },
-): string[] {
+export function connectArguments(request: { channel: 'linkedin'; name: string } | { channel: 'email'; provider: ReplyCliProvider }): string[] {
     if (request.channel === 'linkedin') return ['account', 'connect', '--channel', 'linkedin', `--name=${request.name}`, json];
-    return ['account', 'connect', '--channel', 'email', '--provider', request.provider, ...(request.allowSharedPage ? ['--allow-shared-page'] : []), json];
+    return ['account', 'connect', '--channel', 'email', '--provider', request.provider, json];
 }
 
-/** `account reconnect <id>`: by the account's id; `--allow-shared-page` for email only, and only where the caller says so. */
-export function reconnectArguments(channel: ReplyCliChannel, id: string, allowSharedPage: boolean): string[] {
-    return ['account', 'reconnect', id, '--channel', channel, ...(channel === 'email' && allowSharedPage ? ['--allow-shared-page'] : []), json];
+/** `account reconnect <id>`: by the account's id. */
+export function reconnectArguments(channel: ReplyCliChannel, id: string): string[] {
+    return ['account', 'reconnect', id, '--channel', channel, json];
 }
 
 /** `account pending`, one channel at a time, as the accounts are listed. */
@@ -121,12 +111,13 @@ export interface ReplyCliLink {
     expiresAt: string | null;
     pendingId: number | null;
     kind: 'connect' | 'reconnect';
-    linkKind: 'connection_link' | 'shared_page';
+    linkKind: 'connection_link';
 }
 
 /**
- * `{"channel", "id"?, "link", "expires_at", "pending_id", "kind", "link_kind", "warning"?}`, or null for a print of
- * any other shape.
+ * `{"channel", "id"?, "link", "expires_at", "pending_id", "kind", "link_kind"}`, or null for a print of any other shape.
+ * `link_kind` is always `connection_link` from reply-cli 0.22.0; an older CLI's `shared_page`, an address that does not
+ * expire, is no link the desktop opens or copies.
  */
 export function readLink(stdout: string): ReplyCliLink | null {
     const raw = objectOf(stdout);
@@ -134,7 +125,7 @@ export function readLink(stdout: string): ReplyCliLink | null {
     const { channel, link, kind } = raw;
     const linkKind = raw['link_kind'];
     if ((channel !== 'email' && channel !== 'linkedin') || typeof link !== 'string' || link === '') return null;
-    if ((kind !== 'connect' && kind !== 'reconnect') || (linkKind !== 'connection_link' && linkKind !== 'shared_page')) return null;
+    if ((kind !== 'connect' && kind !== 'reconnect') || linkKind !== 'connection_link') return null;
     return { channel, link, expiresAt: text(raw['expires_at']), pendingId: positive(raw['pending_id']), kind, linkKind };
 }
 

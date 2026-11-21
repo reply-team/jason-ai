@@ -124,7 +124,6 @@ export const passiveWords: readonly string[] = [
     'Check now',
     'Limits',
     'Open folder',
-    'Open the shared mailbox page',
     'Needs you',
     'You chose this',
     // The chips (`chips.ts`): a click sends the chip's words as the person's message, and acts on nothing.

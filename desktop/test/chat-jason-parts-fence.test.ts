@@ -10,7 +10,8 @@ import type { ChatScope, Platform } from '../src/chat-permission-model.ts';
 // The chat is kept from changing Jason's own parts, so that it can never rewrite the instructions Jason's own agents work by:
 // the role skills folder, the plugins folder and the settings file are refused to a Claude Code turn in every mode, Full
 // access included, by the desktop's judgement of each request and by the host's own file rules, however the path is
-// spelled; a Codex turn is held by its own read-only sandbox. "Change Jason itself" in Open in is the way to change them.
+// spelled; a Codex turn is held by its own read-only sandbox outside Full access, and by nothing in it. "Change Jason
+// itself" in Open in is the way to change them.
 // True since the chat had a fence; this file keeps it true.
 
 /**
@@ -93,14 +94,17 @@ function shellSpellings(platform: Platform, data: string, inside: string): [stri
 }
 
 /**
- * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a Full
- * access turn works in its grant's folder below `chat-full`, every other in the chat folder.
+ * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a turn works
+ * in its conversation's own folder below `chats` (here in Full access), or in the shared chat folder for a conversation an
+ * earlier desktop made (here in every other mode).
  */
+const conversation = 'conv_01JD0000000000000000000000';
+
 function scopeOf(platform: Platform, mode: ChatMode = 'ask_first'): ChatScope {
     const paths = platform === 'win32' ? win32 : posix;
     const home = platform === 'win32' ? 'C:\\Users\\someone' : platform === 'darwin' ? '/Users/someone' : '/home/someone';
     const data = paths.join(home, '.jason');
-    const chat = mode === 'full_access' ? paths.join(data, 'desktop', 'chat-full', 'grant-1') : paths.join(data, 'desktop', 'chat');
+    const chat = mode === 'full_access' ? paths.join(data, 'desktop', 'chats', conversation) : paths.join(data, 'desktop', 'chat');
     return {
         platform,
         cwd: chat,
@@ -169,8 +173,8 @@ for (const mode of chatModes) {
         for (const platform of platforms) {
             const scope = scopeOf(platform, mode);
             const paths = platform === 'win32' ? win32 : posix;
-            // A Full access turn runs in its grant's folder, and its rules are made with that grant.
-            const rules = dataRules(platform, scope.data, [], [], mode === 'full_access' ? { id: 'grant-1', present: ['grant-1'] } : undefined);
+            // A turn in its conversation's own folder has its rules made with that folder.
+            const rules = dataRules(platform, scope.data, [], [], mode === 'full_access' ? { id: conversation, present: [conversation] } : undefined);
             for (const { part, inside } of parts(platform, scope.data)) {
                 // The rule of the data directory's entry the part is in, which covers everything under it.
                 const entry = paths.join(scope.data, paths.relative(scope.data, inside).split(paths.sep)[0]!);
@@ -182,14 +186,18 @@ for (const mode of chatModes) {
     });
 }
 
-test('a Codex turn, which the desktop does not fence, runs only in Ask first and Plan only, in its own read-only sandbox, so it changes none of them', () => {
+test('a Codex turn, which the desktop does not fence, runs in its own read-only sandbox in Ask first and Plan only, and in Full access with none, so the fence changes none of them', () => {
     for (const platform of platforms) {
-        // Its command line takes no mode: the sandbox is read-only whatever the conversation's mode.
-        const args = codexArguments({ platform });
-        assert.deepEqual(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2), ['--sandbox', 'read-only'], platform);
+        // Every mode but Full access is the read-only sandbox; Full access is no sandbox at all, which nothing of the fence holds.
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit'] as const) {
+            const args = codexArguments({ platform, mode });
+            assert.deepEqual(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2), ['--sandbox', 'read-only'], `${platform} ${mode}`);
+        }
+        const full = codexArguments({ platform, mode: 'full_access' });
+        assert.deepEqual(full.slice(full.indexOf('--sandbox'), full.indexOf('--sandbox') + 2), ['--sandbox', 'danger-full-access'], platform);
     }
-    // Auto-edit and Full access are refused on Codex before a turn starts.
+    // Auto-edit is refused on Codex before a turn starts; Full access is not.
     const chat = readFileSync(join(import.meta.dirname, '..', 'src', 'chat.ts'), 'utf8');
     assert.match(chat, /if \(program === 'codex'\) throw new ChatRefused\(codexAutoEdit\);/);
-    assert.match(chat, /if \(program === 'codex'\) throw new ChatRefused\(codexFullAccess\);/);
+    assert.doesNotMatch(chat, /\bcodexFullAccess\b/);
 });

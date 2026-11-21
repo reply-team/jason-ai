@@ -14,8 +14,8 @@
  *
  * What a tab may ask is one table. A member not in it is refused with one sentence; a member in it hands its arguments
  * to the very handler the window's channel runs (`ipc.ts`'s registry), behind the row's own rule. A tab never says yes:
- * a permission card is answered, a chat's mode is changed and Full access is chosen in the desktop's own window, a chat
- * in Full access takes no message from a tab, and a chat a tab makes starts in Ask first.
+ * a permission card is answered and a chat's mode is changed in the desktop's own window, and a message a tab sends to a
+ * chat in Full access runs that turn in Ask first, the chat keeping its mode (`Chat.send`'s `fromTab`).
  *
  * The log names what was refused, and never a text: no code, no secret, no argument.
  */
@@ -29,8 +29,6 @@ import type { Logger } from './log.ts';
 
 /** What a tab is told when it asks for a member outside the table. */
 export const elsewhere = "That is done in Jason Desktop's own window.";
-/** What a tab is told when it sends to a chat in Full access. */
-export const fullAccessElsewhere = 'This chat is in Full access. Send messages to it from Jason Desktop.';
 /** What a tab is told when it sends to a chat in Auto-edit. */
 export const autoEditElsewhere = 'This chat is in Auto-edit. Send messages to it from Jason Desktop.';
 /** What a tab is told when it sends to a chat in any other mode a tab does not send in. */
@@ -39,12 +37,12 @@ export const otherModeElsewhere = 'This chat is in a mode a tab cannot send to. 
 export const modeElsewhere = "A browser tab sends in the chat's own mode. Its mode is changed in Jason Desktop's own window.";
 
 /** The pushed channels a session reads, of those the window is sent. */
-export type BridgeChannel = 'chat.event' | 'fullAccess.changed' | 'setup.changed';
-export const bridgeChannels: readonly BridgeChannel[] = ['chat.event', 'fullAccess.changed', 'setup.changed'];
+export type BridgeChannel = 'chat.event' | 'setup.changed';
+export const bridgeChannels: readonly BridgeChannel[] = ['chat.event', 'setup.changed'];
 export const isBridgeChannel = (channel: string): channel is BridgeChannel => (bridgeChannels as readonly string[]).includes(channel);
 
 /** A row's own rule: the arguments to hand the handler, or a refusal the tab is answered with as a value. */
-type Ruled = { args: unknown[] } | { refused: string; why: 'full_access' | 'auto_edit' | 'other_mode' | 'no_chat' | 'mode' };
+type Ruled = { args: unknown[] } | { refused: string; why: 'auto_edit' | 'other_mode' | 'no_chat' | 'mode' };
 
 interface Row {
     /** How many arguments the handler takes; what a tab sends past them is not handed on. */
@@ -52,39 +50,39 @@ interface Row {
     rule?: (args: unknown[], modeOf: (chatId: unknown) => string | null) => Promise<Ruled>;
 }
 
-/** The modes a tab sends in: an allowlist, so a mode added later is refused until it is named here. */
-const tabModes: readonly string[] = ['ask_first', 'plan_only'];
+/**
+ * The modes a tab sends in: an allowlist, so a mode added later is refused until it is named here. A send to a chat in
+ * Full access is marked as a tab's, and its turn runs in Ask first.
+ */
+const tabModes: readonly string[] = ['ask_first', 'plan_only', 'full_access'];
 
 /** The refusal for a chat in a mode a tab does not send in, named where the mode has a sentence of its own. */
 function modeRefusal(mode: string): Ruled {
-    if (mode === 'full_access') return { refused: fullAccessElsewhere, why: 'full_access' };
     if (mode === 'auto_edit') return { refused: autoEditElsewhere, why: 'auto_edit' };
     return { refused: otherModeElsewhere, why: 'other_mode' };
 }
 
 /**
- * The table, exactly: six reads and four acts. Everything else the window may ask is outside it by not being here, among
+ * The table, exactly: five reads and four acts. Everything else the window may ask is outside it by not being here, among
  * them every answer to a card, every choice of a mode, the Feed (the window feeds it; two feeders would double it), and
  * every act of set-up, of the demo, of the theme, of Open in, of links and of the window's pairing.
  */
 const rows = new Map<InvokeMember, Row>([
     ['mode.get', { arity: 0 }],
     ['theme.get', { arity: 0 }],
-    ['fullAccess.standing', { arity: 0 }],
     ['setup.status', { arity: 0 }],
     ['chat.list', { arity: 0 }],
     ['chat.open', { arity: 1 }],
-    // The host is not handed on: it chooses no program (a send does), and it is what lets a standing choice put a new chat
-    // in Full access. Without it the chat starts in Ask first, whatever the standing choice says.
-    ['chat.create', { arity: 1, rule: async (args) => ({ args: [args[0]] }) }],
+    ['chat.create', { arity: 1 }],
     [
         'chat.send',
         {
             arity: 3,
             // The chat's mode is read as the chat holds it now, kept or not (`Chat.modeNow`), with no side effect. A tab sends
-            // only to a chat in Ask first or Plan only; any other mode is refused. The send carries that mode, which the chat
-            // checks again as it takes the send: a mode changed between the two refuses it. A chat the desktop does not hold
-            // has no mode a tab sends in, so it is refused here and the send handler never runs.
+            // only to a chat in Ask first, Plan only or Full access; any other mode is refused. The send carries that mode,
+            // which the chat checks again as it takes the send: a mode changed between the two refuses it. It is marked as a
+            // tab's, after what the tab sent, so a turn of a chat in Full access runs in Ask first. A chat the desktop does
+            // not hold has no mode a tab sends in, so it is refused here and the send handler never runs.
             rule: async (args, modeOf) => {
                 const [chatId, text, options] = args;
                 const mode = modeOf(chatId);
@@ -92,7 +90,7 @@ const rows = new Map<InvokeMember, Row>([
                 if (!tabModes.includes(mode)) return modeRefusal(mode);
                 const given = typeof options === 'object' && options !== null && !Array.isArray(options) ? (options as Record<string, unknown>) : {};
                 if (given.mode !== undefined && given.mode !== mode) return { refused: modeElsewhere, why: 'mode' };
-                return { args: [chatId, text, { ...given, mode }] };
+                return { args: [chatId, text, { ...given, mode, fromTab: true }] };
             },
         },
     ],

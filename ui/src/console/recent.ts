@@ -1,7 +1,10 @@
-import { signal } from '@preact/signals-react';
-import { act, argsOf, define } from './actions';
+import { computed, effect, signal, untracked } from '@preact/signals-react';
+import type { Api } from '../api/client';
+import type { Campaign, CampaignSummary } from '../api/types';
+import { act, argsOf, define, parseArgs } from './actions';
+import { agentFacts } from './agent-facts';
 import { shownAgent } from './agent-place';
-import { campaigns } from './campaigns';
+import { campaigns, read } from './campaigns';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
@@ -10,8 +13,69 @@ import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type
 import { chats, clock, conversations, currentChat } from './state';
 
 // "Recent" in the sidebar: the conversations, each with a dot, its title, what waits on the person and its age, a search
-// box and a filter in the header, ten rows at a time. Everything here is read from what the console already holds; the
-// state below is the page's own and is kept nowhere.
+// box and a filter in the header, ten rows at a time. Everything here is read from what the console already holds, but
+// the state of the agent of a conversation the list of agents does not hold, which is read on its own, so that a
+// conversation whose agent is archived leaves Recent; the state below is the page's own and is kept nowhere.
+
+/**
+ * The agents of the conversations that the list of agents does not hold, as one key: an archived agent, which that list
+ * leaves out, or one past its first page. Empty until the list is read.
+ */
+const unlisted = computed(() => {
+    if (!read.value) return '';
+    const listed = new Set(campaigns.value.map((each) => each.id));
+    const ids = new Set<string>();
+    for (const conversation of conversations.value)
+        if (conversation.campaignId !== null && conversation.main !== true && !listed.has(conversation.campaignId))
+            ids.add(conversation.campaignId);
+    return [...ids].sort().join(' ');
+});
+
+/**
+ * The agents read here on their own, by id: their state alone, by `campaign.get`, never the count of people or the work
+ * the agent's header reads (`agent-facts.ts`). Emptied each time the console binds the reads below.
+ */
+const readAlone = signal<Readonly<Record<string, CampaignSummary>>>({});
+
+/** Reads one agent's state; an agent the runtime does not know, or a read that failed, leaves nothing said of it. */
+async function readState(api: Api, id: string): Promise<void> {
+    try {
+        const { name, status } = await api.call<Campaign>('campaign.get', { campaign_id: id });
+        readAlone.value = { ...readAlone.value, [id]: { id, name, status } };
+    } catch {
+        // Its conversation stays, as one whose agent is not held.
+    }
+}
+
+/**
+ * An agent the list of agents does not hold, as it was read last, here or by its header: archived where either read
+ * says so, since an archive is not undone.
+ */
+function stateOf(id: string): CampaignSummary | undefined {
+    const alone = readAlone.value[id];
+    const facts = agentFacts.value[id]?.campaign;
+    return alone?.status === 'archived' ? alone : (facts ?? alone);
+}
+
+/**
+ * Reads the state of each agent that comes to be among the agents of the conversations the list of agents does not
+ * hold, and of no other: so an agent the list stops holding, archived anywhere, is read once the journal has the list
+ * read again, and one already among them is not read again. One known as archived is not read, since an archive is not
+ * undone. Bound while the console is; the function it returns stops it.
+ */
+export function readUnlisted(api: Api): () => void {
+    readAlone.value = {};
+    let before = new Set<string>();
+    return effect(() => {
+        const key = unlisted.value;
+        const now = new Set(key === '' ? [] : key.split(' '));
+        const fresh = [...now].filter((id) => !before.has(id));
+        before = now;
+        untracked(() => {
+            for (const id of fresh) if (stateOf(id)?.status !== 'archived') void readState(api, id);
+        });
+    });
+}
 
 /** Whether the search box is drawn, and what is typed in it. */
 const searching = signal(false);
@@ -33,6 +97,32 @@ export function resetRecent(): void {
 /** Closes the filter's menu. */
 export function closeFilterMenu(): void {
     menuOpen.value = false;
+}
+
+/** The menu open on a row (`row-menu.tsx`): the row's conversation, its title, and where the menu stands in the window. */
+export interface RowMenuAt {
+    id: string;
+    title: string;
+    x: number;
+    y: number;
+}
+
+export const rowMenu = signal<RowMenuAt | null>(null);
+
+/** Closes the menu on a row. */
+export function closeRowMenu(): void {
+    rowMenu.value = null;
+}
+
+/** The row of the conversation, where it is drawn. */
+export function rowElement(id: string): HTMLElement | undefined {
+    const rows = document.querySelectorAll<HTMLElement>('.side .recent-row');
+    return [...rows].find((each) => parseArgs(each.dataset['args'])[0] === id);
+}
+
+/** Gives the focus to the row of the conversation, where it is drawn. */
+export function focusRow(id: string): void {
+    rowElement(id)?.focus();
 }
 
 const labels: Readonly<Record<RecentFilter, string>> = {
@@ -97,6 +187,7 @@ function agentsRow(id: string): boolean {
 }
 
 function rowView(row: RecentRow): Html {
+    const menu = rowMenu.value?.id === row.id;
     const said = [
         row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
         row.age === '' ? null : row.age,
@@ -105,12 +196,15 @@ function rowView(row: RecentRow): Html {
         .filter((each) => each !== null)
         .join(' · ');
     return html`<button
-        class="item recent-row"
+        class="item recent-row${menu ? ' menu-open' : ''}"
         type="button"
         aria-label="${row.title}"
         aria-description="${said}"
         ${row.id === currentChat.value || agentsRow(row.id) ? html`aria-current="true"` : null}
+        aria-haspopup="menu"
+        aria-expanded="${menu ? 'true' : 'false'}"
         ${act('side.chat', row.id)}
+        data-menu="side.rowmenu"
     >
         <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>
         <span class="rt">${row.title}</span>
@@ -140,17 +234,29 @@ function filterMenu(): Html {
         </div>`;
 }
 
-/** The header, the search box when it is open, and the list of conversations. */
-export function recentView(): Html {
+/** Every row of Recent, and the ones drawn now under the filter, the search and the paging. */
+const listed = computed(() => {
     const rows = recentRows({
         conversations: conversations.value,
         titles: (id) => chats.value[id]?.title,
         running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
+        agentRead: stateOf,
         ...needsInput(),
         now: clock.value,
     });
-    const { rows: shown, more } = shownRows(rows, filter.value, text.value, limit.value);
+    const drawn = shownRows(rows, filter.value, text.value, limit.value);
+    return { rows, shown: drawn.rows, more: drawn.more };
+});
+
+/** Whether the conversation's row is drawn now. */
+export function rowDrawn(id: string): boolean {
+    return listed.value.shown.some((each) => each.id === id);
+}
+
+/** The header, the search box when it is open, and the list of conversations. */
+export function recentView(): Html {
+    const { rows, shown, more } = listed.value;
     return html`<div class="recent">
             <span class="rl">${t('recent.title')}</span>
             <span class="rtools">
