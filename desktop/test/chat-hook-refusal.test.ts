@@ -459,6 +459,8 @@ test('on Windows the host names of the Linux subsystem\'s share are this compute
             ['Read', { file_path: `${data}\\config\\settings.json` }],
             ['Bash', { command: `cat '${data}\\config\\settings.json'` }],
             ['Bash', { command: `cat ${data.replace(/\\/g, '/')}/logs/desktop.log` }],
+            ['Bash', { command: `cat ${data.replace(/\\/g, '\\\\')}\\\\config\\\\settings.json` }],
+            ['Bash', { command: `cat "${data}\\\\config\\\\settings.json"`.replace(/^cat "\\\\/, 'cat "\\\\\\\\') }],
             ['PowerShell', { command: `Get-Content '${data}\\run\\runtime.json'` }],
         ] as const) {
             assert.deepEqual(fullAccessJudgement(tool, input, named), refused(unplacedRefusal), `${tool} ${JSON.stringify(input)}`);

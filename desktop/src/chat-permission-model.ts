@@ -3398,7 +3398,7 @@ function kindOver(text: string, places: readonly string[], scope: ChatScope): st
  * confining variable with it.
  */
 function commandKind(tool: string, command: string, scope: ChatScope): string | null {
-    const asWritten = kindOver(command, [...placesOf(command, scope), ...literalPlaces(tool, command, scope)], scope);
+    const asWritten = kindOver(command, [...placesOf(command, scope), ...literalPlaces(tool, command, scope), ...writtenPlaces(tool, command, scope)], scope);
     if (asWritten !== null) return asWritten;
     const respelled = textKind(command, scope);
     if (respelled !== null) return respelled;
@@ -3421,6 +3421,16 @@ function commandKind(tool: string, command: string, scope: ChatScope): string | 
     const unseen = unseenReadRefusal(tool, command, scope);
     if (unseen !== null) return unseen;
     return walkRefusal(walksRoot(tool, command, scope));
+}
+
+/**
+ * The places the words of a command name as its shell takes their quotes and escapes away (`everyCommand`), read from
+ * the folder the turn runs in, that could not be placed (`hookPlace`): such a path is refused by the sentence that says
+ * so before the data's (`kindOver`), however its text is spelled.
+ */
+function writtenPlaces(tool: string, command: string, scope: ChatScope): string[] {
+    const words = everyCommand(command, { scope, powershell: tool === 'PowerShell' }, 0).flat().map((word) => word.text);
+    return placesOfWords(words, scope, false).filter((path) => hookPlace(path, scope) === null);
 }
 
 /**
