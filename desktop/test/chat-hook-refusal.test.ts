@@ -453,6 +453,16 @@ test('on Windows the host names of the Linux subsystem\'s share are this compute
         }
         const command = `cat //${host}/Ubuntu/mnt/c/Users/someone/notes.md`;
         assert.deepEqual(fullAccessJudgement('Bash', { command }, named), refused(unplacedRefusal), command);
+        // The words that also name the data directory as the subsystem sees it do not change the sentence.
+        const data = `\\\\${host}\\Ubuntu\\mnt\\c\\Users\\someone\\.jason`;
+        for (const [tool, input] of [
+            ['Read', { file_path: `${data}\\config\\settings.json` }],
+            ['Bash', { command: `cat '${data}\\config\\settings.json'` }],
+            ['Bash', { command: `cat ${data.replace(/\\/g, '/')}/logs/desktop.log` }],
+            ['PowerShell', { command: `Get-Content '${data}\\run\\runtime.json'` }],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement(tool, input, named), refused(unplacedRefusal), `${tool} ${JSON.stringify(input)}`);
+        }
     }
     assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\wsl-box\\Ubuntu\\notes.md' }, named), runs, 'another computer\'s share');
 });

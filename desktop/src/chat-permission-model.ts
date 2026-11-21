@@ -2856,7 +2856,8 @@ function textKind(text: string, scope: ChatScope): string | null {
 
 /**
  * The kinds a command's text and the places its words name show, in the order the sentences are said, each place read
- * where it leads (`hookPlace`), one whose end is not read refused by the sentence that says so (`unplacedRefusal`).
+ * where it leads (`hookPlace`), one whose end is not read refused by the sentence that says so (`unplacedRefusal`)
+ * before the data's, whatever else the words of such a path name.
  */
 function kindOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
@@ -2866,8 +2867,8 @@ function kindOver(text: string, places: readonly string[], scope: ChatScope): st
     const read = leads.filter((path): path is string => path !== null);
     if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(read, scope)) return personsRefusal;
     if (read.some((path) => isProtected(scope, path))) return settingsRefusal;
-    if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope)) return dataRefusal;
-    return leads.includes(null) ? unplacedRefusal : null;
+    if (leads.includes(null)) return unplacedRefusal;
+    return namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope) ? dataRefusal : null;
 }
 
 /**
