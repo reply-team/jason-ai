@@ -37,7 +37,7 @@ public sealed class CancelledCreateTests
         Assert.Equal((made.Id, made.FolderPath), (again.Id, again.FolderPath));
         Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, made.Id), HarnessMarker.In(made.FolderPath!));
         Assert.Equal(1, await db.Campaigns.CountAsync(Ct));
-        Assert.Equal(new string?[] { "q3-leads" }, Directory.GetDirectories(Path.GetDirectoryName(made.FolderPath!)!).Select(Path.GetFileName));
+        Assert.Equal(new string?[] { TestHarness.LeafOf(made, TimeZoneInfo.Utc) }, Directory.GetDirectories(Path.GetDirectoryName(made.FolderPath!)!).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class CancelledCreateTests
         var made = await Campaigns(db).CreateAsync(request, Ct);
 
         Assert.Empty(leftBehind);
-        Assert.Equal(Path.Combine(campaigns, "q3-leads"), made.FolderPath);
+        Assert.Equal(Path.Combine(campaigns, TestHarness.LeafOf(made, TimeZoneInfo.Utc)), made.FolderPath);
         Assert.Equal(1, await db.Campaigns.CountAsync(Ct));
     }
 

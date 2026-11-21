@@ -10,7 +10,7 @@
     },
     "new": {
       "folder_path": "/home/someone/Jason/projects/spring-launch",
-      "campaigns": { "cmp_01JC000000000000000000000F": "/home/someone/Jason/projects/spring-launch/campaigns/follow-up" }
+      "campaigns": { "cmp_01JC000000000000000000000F": "/home/someone/Jason/projects/spring-launch/campaigns/2026-11-20-141502-00000f" }
     }
   },
   "expect": "valid"

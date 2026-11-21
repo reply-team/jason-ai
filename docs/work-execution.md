@@ -1039,7 +1039,7 @@ One JSON object is written to the child's standard input, which is then closed:
   "memory_files": {
     "client": "…/Jason/AGENTS.md",
     "project": "…/Jason/projects/acme-corp/AGENTS.md",
-    "campaign": "…/Jason/projects/acme-corp/campaigns/q3-marketing-leads/AGENTS.md"
+    "campaign": "…/Jason/projects/acme-corp/campaigns/2026-11-21-084507-7h5nrd/AGENTS.md"
   },
   "resumption": {
     "previous_attempt_id": "att_…",

@@ -37,7 +37,7 @@ public sealed class ProjectLinkTests
 
         var linked = await api.PostOkAsync<ProjectLinkResult>(Operations.ProjectLink, new { path = moved, reason = "moved to the shared drive" }, Ct);
 
-        var leadsNow = Path.Combine(moved, "campaigns", "q3-leads");
+        var leadsNow = Path.Combine(moved, "campaigns", TestHarness.LeafOf(leads));
         Assert.Equal((acme.Id, moved, LinkFolderOutcome.Relinked), (linked.Project.Id, linked.Project.FolderPath, linked.Folder));
         Assert.Equal([new LinkedCampaign(leads.Id, leadsNow, LinkCampaignOutcome.Relinked)], linked.Campaigns);
         Assert.Empty(linked.Reported);
@@ -74,8 +74,8 @@ public sealed class ProjectLinkTests
         var after = await api.PostOkAsync<CampaignDto>(Operations.CampaignUpdate, new { campaign_id = leads.Id, project_id = beta.Id }, Ct);
 
         Assert.Equal((moved, LinkFolderOutcome.Relinked), (linked.Project.FolderPath, linked.Folder));
-        Assert.Equal(Path.Combine(moved, "campaigns", "q3-leads"), leads.FolderPath);
-        Assert.Equal(Path.Combine(beta.FolderPath!, "campaigns", "q3-leads"), after.FolderPath);
+        Assert.Equal(Path.Combine(moved, "campaigns", TestHarness.LeafOf(leads)), leads.FolderPath);
+        Assert.Equal(Path.Combine(beta.FolderPath!, "campaigns", TestHarness.LeafOf(leads)), after.FolderPath);
     }
 
     /// <summary>
@@ -129,12 +129,12 @@ public sealed class ProjectLinkTests
         Assert.Equal(
             new[]
             {
-                new LinkedCampaign(leads.Id, Path.Combine(folder, "campaigns", "q3-leads"), LinkCampaignOutcome.Made),
+                new LinkedCampaign(leads.Id, Path.Combine(folder, "campaigns", TestHarness.LeafOf(leads)), LinkCampaignOutcome.Made),
                 new LinkedCampaign(old.Id, null, LinkCampaignOutcome.Archived),
             }.OrderBy(campaign => campaign.CampaignId, StringComparer.Ordinal),
             linked.Campaigns);
-        Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, leads.Id), HarnessMarker.In(Path.Combine(folder, "campaigns", "q3-leads")));
-        Assert.False(Directory.Exists(Path.Combine(folder, "campaigns", "spring-push")), "a folder was made for an archived campaign.");
+        Assert.Equal(new HarnessMarker(HarnessMarker.Campaign, leads.Id), HarnessMarker.In(Path.Combine(folder, "campaigns", TestHarness.LeafOf(leads))));
+        Assert.False(Directory.Exists(Path.Combine(folder, "campaigns", TestHarness.LeafOf(old))), "a folder was made for an archived campaign.");
     }
 
     /// <summary>A project whose folder holds already makes the folders its campaigns lack, the case of an installation that upgraded and has made a campaign since.</summary>

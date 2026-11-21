@@ -119,7 +119,7 @@ public sealed class CampaignService(
         }
 
         campaign.FolderPath = await folders
-            .MakeCampaignFolderAsync(projectFolder, campaign.PublicId, name, id => HoldsAsync(id, cancellationToken))
+            .MakeCampaignFolderAsync(projectFolder, campaign.PublicId, CampaignLeaf.Of(campaign.PublicId, now, clock.LocalTimeZone), id => HoldsAsync(id, cancellationToken))
             .ConfigureAwait(false);
 
         // Once the folders stand, the create is finished whether or not its caller is still there: a caller that went

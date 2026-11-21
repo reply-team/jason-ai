@@ -1161,6 +1161,31 @@ public class ReleaseAndUpdateDocTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Installing's cask paragraph says, conditionally, what to do where Homebrew says the tap is not trusted: whether a
+    /// fully qualified install trusts the tap by itself is not yet seen, so the page claims neither.
+    /// </summary>
+    [Fact]
+    public void Installing_says_what_to_do_where_Homebrew_says_the_tap_is_not_trusted()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+
+        Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.", installing, StringComparison.Ordinal);
+        Assert.DoesNotContain("trusts the tap by itself", installing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Installing's cask paragraph says what to do where Homebrew stops at the Xcode licence, a state of the Mac and not of
+    /// Jason: Homebrew does nothing on a Mac running macOS 27 until the licence is accepted.
+    /// </summary>
+    [Fact]
+    public void Installing_says_what_to_do_where_Homebrew_stops_at_the_Xcode_licence()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+
+        Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", installing, StringComparison.Ordinal);
+    }
+
     /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
     private static string Section(string page, string heading)
     {

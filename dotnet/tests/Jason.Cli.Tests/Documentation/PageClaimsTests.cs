@@ -1009,7 +1009,8 @@ public partial class PageClaimsTests
 
         Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, from the candidate that carries it, Homebrew's cask installs the same Jason Desktop, from the same release:", package, StringComparison.Ordinal);
         Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
-        Assert.Contains("Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
+        Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", package, StringComparison.Ordinal);
+        Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
         Assert.Contains("Homebrew's older formula is the command line alone, without Jason Desktop: where it is installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the way.", package, StringComparison.Ordinal);
         Assert.DoesNotContain("This page names no package for a new install", package, StringComparison.Ordinal);
         Assert.DoesNotMatch("brew install(?! --cask reply-team/tap/jason)", Flat(Page("docs", "INSTALL.md")));
