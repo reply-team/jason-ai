@@ -830,8 +830,14 @@ describe('The conversation’s acts in the agent’s “…”', () => {
         fireEvent.click(more());
         const offered = within(head()!).getByRole('menuitem', { name: 'Open Claude Code in terminal' });
         expect(offered.title).toBe("Opens a new Claude Code session in a terminal at this agent's folder");
-        // The chat is set to Codex now: the item follows it.
+        // The chat is set to Codex now, which is found here: the item follows the host the chat runs on.
         await flush(async () => {
+            setup.value = {
+                ...setup.value!,
+                hosts: setup.value!.hosts.map((each) =>
+                    each.id === 'codex' ? { ...each, found: true, version: '0.130.0', install: null } : each,
+                ),
+            };
             chats.value = { ...chats.value, [spring]: { ...chats.value[spring]!, host: 'codex' } };
         });
         const codex = await waitFor(() => within(head()!).getByRole('menuitem', { name: 'Open Codex in terminal' }));

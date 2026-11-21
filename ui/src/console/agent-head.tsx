@@ -12,7 +12,7 @@ import { isUnmade, restartChat } from './chat';
 import type { Chat } from './chat-model';
 import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
-import { begin, placeGates } from './conversation-acts';
+import { begin, placeGates, runsOn } from './conversation-acts';
 import { conversationItems, type MenuItem } from './conversation-items';
 import { openFolder, openSession } from './open-folder';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
@@ -61,7 +61,7 @@ function ConversationMenu({ agent }: { agent: string }) {
             campaignId: agent,
             running: chat?.running === true,
             removing: chat?.removing === true,
-            host: chat?.host ?? null,
+            host: runsOn(chat),
         },
         placeGates(),
     );

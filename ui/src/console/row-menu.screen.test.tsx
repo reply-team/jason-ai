@@ -315,7 +315,15 @@ describe('The menu on a row of Recent', () => {
         });
 
         it('names the host the agent’s chat is set to use, Codex, where it is found', async () => {
-            const desktop = await renderConsole();
+            // Codex is found here, as Open in found it.
+            const desktop = await renderConsole(undefined, (desktop) => {
+                desktop.status = {
+                    ...desktop.status,
+                    hosts: desktop.status.hosts.map((each) =>
+                        each.id === 'codex' ? { ...each, found: true, version: '0.130.0', install: null } : each,
+                    ),
+                };
+            });
             // Autumn's last turn was sent to Codex, as the desktop keeps it.
             desktop.keep({
                 id: autumn,
@@ -365,6 +373,33 @@ describe('The menu on a row of Recent', () => {
             expect(hostsOffered().map((each) => each.label)).toEqual(['Claude Code', 'Codex']);
             setPlace('none');
             expect(hostsOffered()).toEqual([]);
+        });
+
+        it('offers Codex for a chat that chose no host where Claude Code is below the chat’s floor, as the chat runs', async () => {
+            const desktop = await renderConsole(undefined, (desktop) => {
+                desktop.status = {
+                    ...desktop.status,
+                    hosts: desktop.status.hosts.map((each) =>
+                        each.id === 'claude'
+                            ? {
+                                  ...each,
+                                  version: '2.1.200',
+                                  belowFloor: 'Claude Code 2.1.200 is older than the chat needs.',
+                              }
+                            : each.id === 'codex'
+                              ? { ...each, found: true, version: '0.130.0', install: null }
+                              : each,
+                    ),
+                };
+            });
+            fireEvent.click(await row('Autumn'));
+            await waitFor(() => expect(chats.value[autumn]).toBeDefined());
+            expect(chats.value[autumn]!.host).toBeNull();
+            fireEvent.contextMenu(await row('Autumn'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!).slice(0, 3)).toEqual(['Open', folder, 'Open Codex in terminal']);
+            fireEvent.click(item('Open Codex in terminal'));
+            await waitFor(() => expect(opened(desktop)).toEqual([['codex', 'cmp_2', { keep: false }]]));
         });
 
         it('is not offered in the demo', async () => {

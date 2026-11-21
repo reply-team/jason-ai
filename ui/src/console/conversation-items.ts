@@ -33,7 +33,7 @@ export interface ConversationFacts {
     running: boolean;
     /** Whether its removal is being asked now; false where it is not known. */
     removing: boolean;
-    /** The host its chat is set to use, a `DesktopHost.id`; null where none is chosen or the chat is not held. */
+    /** The host its chat runs on, a `DesktopHost.id`, by the chat's own rule (`runsOn`); null where there is none. */
     host: string | null;
 }
 
@@ -79,7 +79,7 @@ export function conversationItems(facts: ConversationFacts, gates: Gates): MenuI
     const items: MenuItem[] = [];
     if (facts.campaignId !== null && !gates.tab && gates.folder !== null)
         items.push({ kind: 'folder', label: gates.folder });
-    // One host, never two: the one the agent's chat is set to use where it is found, else the first found.
+    // One host, never two: the one the agent's chat runs on where Open in found it, else the first found.
     const host =
         facts.campaignId === null || gates.tab
             ? undefined
