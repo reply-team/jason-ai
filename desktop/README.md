@@ -102,8 +102,9 @@ directory, `JASON_CHAT_TURN`, the folder and background variables, and empty val
 markers among them. Claude Code writes a settings file's `env` over the environment it was started with, and the
 turn's file outranks the person's and a project's, so a PATH or another of those variables in the person's own `env`
 does not apply in the turn, which keeps the desktop's own. Every other turn keeps the sealed command
-line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: Plan only, Ask
-first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
+line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: a turn on a
+provider's key in every mode, Full access included (`ClaudeTurn.keyed`, its settings keeping the server defences); Plan
+only, Ask first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
 browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
 the hook was found filtered out. That line is `--setting-sources project`, `--strict-mcp-config`
 with the turn's MCP file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true`, deny
@@ -112,8 +113,8 @@ commands (`disableSkillShellExecution: true`): `serverDefences`, in `claudeTurnS
 hooked settings of Ask first and Auto-edit. In every mode the turn carries its own `--mcp-config`: the prompt tool, on a
 server named for that turn alone, `jason_desktop_` and a nonce (`newServerName`), so no server of the person's, the
 fixed name an earlier version used included, answers a card, and a tool of any server whose name begins
-`jason_desktop_` is refused to the agent (`isOwnTool`). A turn on a provider's key runs with the desktop's own
-`CLAUDE_CONFIG_DIR` (`keyedFolder`), so the person's configuration does not load there either. Every Codex turn outside
+`jason_desktop_` is refused to the agent (`isOwnTool`). A turn on a provider's key keeps the sealed line and runs with
+the desktop's own `CLAUDE_CONFIG_DIR` (`keyedFolder`), so the person's configuration does not load there either. Every Codex turn outside
 Full access, Plan only included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a
 provider or profile set there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded,
 since a Codex turn asks no one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which

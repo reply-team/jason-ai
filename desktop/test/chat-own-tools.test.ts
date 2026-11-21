@@ -200,6 +200,19 @@ test('every turn that does not run in Full access keeps the sealed line whole, i
     for (const each of inline) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
     for (const each of hooked) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, undefined);
     assert.equal(noChromeFrom, '2.1.285');
+    // A turn on a provider's key keeps the sealed line in Full access too, at the floor of Full access and above, in its
+    // bypass, and its settings keep the server defences; its other modes are sealed as every other turn's.
+    for (const version of [fullAccessFloor, '2.1.329']) {
+        for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+            const args = claudeArguments({ ...base, mode, keyed: true, ...(mode === 'plan_only' ? {} : { settingsFile }), version });
+            assert.equal(after(args, '--setting-sources'), 'project', `keyed ${version} ${mode}`);
+            assert.ok(args.includes('--strict-mcp-config') && args.includes('--no-chrome'), `keyed ${version} ${mode}`);
+            if (mode === 'full_access') assert.equal(after(args, '--permission-mode'), 'bypassPermissions', `keyed ${version}`);
+        }
+    }
+    const keyed = hookedSettings('full_access', hookUrl, 'the-secret', { keyed: true }) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(defences)) assert.deepEqual(keyed[key], value, `keyed: ${key}`);
+    assert.equal('permissions' in keyed, false, 'keyed: Full access asks about no page');
 });
 
 test('a turn that runs in Full access, at the floor of Full access and above, loads the person\'s own configuration as in a terminal: none of --setting-sources, --strict-mcp-config and --no-chrome, and its hook in settings that carry none of the server defences', () => {

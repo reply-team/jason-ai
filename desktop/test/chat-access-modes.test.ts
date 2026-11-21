@@ -234,6 +234,23 @@ test('a Full access chat\'s turn sent from a browser tab runs in Ask first with 
     assert.ok(texts(desk).includes(openSettings), texts(desk).join(' | '));
 });
 
+test('a Full access turn on a provider\'s key runs in Claude Code\'s bypass with the sealed line whole and settings that keep the server defences, in Jason Desktop\'s own Claude Code folder; a turn on the person\'s own sign-in loads their configuration', async (t) => {
+    const r = rig(t, { chat: { keyFor: (id) => (id === 'claude-api-key' ? 'sk-planted-anthropic' : undefined) } });
+    const { id } = await r.chat.create();
+    const other = await r.chat.create();
+    plan(r, [{ defences: true }]);
+    const keyed = await r.turn(id, 'on a key', { host: 'claude-api-key' });
+    const plain = await r.turn(other.id, 'on my sign-in', claude);
+    assert.deepEqual(r.started, ['full_access', 'full_access']);
+    const [onKey, onSignIn] = r.hosts();
+    assert.equal(flag(onKey?.args ?? [], '--permission-mode'), 'bypassPermissions');
+    assert.ok(sealedLine(onKey?.args ?? []), JSON.stringify(onKey?.args));
+    assert.ok(texts(keyed).includes(sealedSettings), texts(keyed).join(' | '));
+    assert.equal(onKey?.env.CLAUDE_CONFIG_DIR, join(r.b.paths.desktop, 'claude-keyed', 'claude-api-key'));
+    assert.ok(openLine(onSignIn?.args ?? []), JSON.stringify(onSignIn?.args));
+    assert.ok(texts(plain).includes(openSettings), texts(plain).join(' | '));
+});
+
 test('Plan only is kept on the conversation\'s record, survives a restart, and starts Claude Code in plan mode', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();

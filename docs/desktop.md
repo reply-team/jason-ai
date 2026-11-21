@@ -657,7 +657,8 @@ Claude Code.
   variables there apply. Your configuration comes from where your own Claude
   Code keeps it: Jason puts the chat's own folder back as it placed it before each turn, a `.mcp.json` there included,
   and touches no other. A turn of a Full access chat that Jason starts in Ask first (see Full access) loads none of it,
-  and neither does a turn on a provider's key, which runs with Jason Desktop's own Claude Code folder.
+  and neither does a turn on a provider's key, which in Full access too runs sealed as the other modes do, with Jason
+  Desktop's own Claude Code folder.
 - **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn outside Full access leaves your
   `config.toml` unread (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that
   cannot be read, the turn is refused before Codex starts, with a sentence that says to update Codex. Outside Full

@@ -2023,10 +2023,10 @@ export class Chat {
                 const server = newServerName();
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret, server);
                 const hookUrl = endpoint.hookUrl;
-                let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode, { env: pinsNow() }) : undefined;
+                let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode, { env: pinsNow(), keyed: resolved.keyed }) : undefined;
                 narrowSettings = (mode) => {
                     rmSync(turnSettingsPath(paths.turns, id), { force: true });
-                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, mode, { env: pinsNow() });
+                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, mode, { env: pinsNow(), keyed: resolved.keyed });
                 };
                 // The host's data rules name the conversations' folders present at this turn's start; one made later is
                 // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
@@ -2038,7 +2038,7 @@ export class Chat {
                 // over them, and so does a turn narrowed to Ask first.
                 const rulesNow = () => [...data, ...(running.mode === 'full_access' ? [] : chatRules(this.#platform, folder))];
                 argsFor = (resumed) =>
-                    claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
+                    claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version, keyed: resolved.keyed });
             } else {
                 argsFor = (resumed) =>
                     codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: environmentNow() });

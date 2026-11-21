@@ -84,6 +84,8 @@ export interface ClaudeTurn {
     resume?: string | undefined;
     /** The host's version as read before the turn, at or above the floor (`claudeFloor`): it decides a sealed turn's `--no-chrome`. */
     version: string;
+    /** A turn on a provider's key, which keeps the sealed line in every mode, Full access included. */
+    keyed?: boolean | undefined;
 }
 
 /**
@@ -98,8 +100,8 @@ export interface ClaudeTurn {
  * honored as "`true` from any scope", and `--settings` "can set any key your user settings file can set". The browser's
  * server is `claude-in-chrome`, the name its tools are called by. https://code.claude.com/docs/en/skills (read
  * 2026-11-12): with `disableSkillShellExecution` set, "each command is replaced with `[shell command execution disabled by
- * policy]`". A turn that runs in Full access carries none of them: it loads the person's own configuration as a terminal
- * does.
+ * policy]`". A turn that runs in Full access on the person's own sign-in carries none of them: it loads the person's own
+ * configuration as a terminal does. A turn on a provider's key carries them in every mode.
  */
 function serverDefences() {
     return { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
@@ -140,8 +142,8 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
 
 /**
  * The settings of a turn the hook rides, written to the turn's own file: in Ask first and Auto-edit the rule that every
- * page asks (`claudeTurnSettings`) and the server defences (`serverDefences`), in Full access no rule and no server
- * defence; and a `PreToolUse` hook on every tool that posts the tool use to the turn's endpoint, which answers a refusal
+ * page asks (`claudeTurnSettings`) and the server defences (`serverDefences`), in Full access no rule, and no server
+ * defence but on a provider's key (`keyed`), whose turn is sealed in every mode; and a `PreToolUse` hook on every tool that posts the tool use to the turn's endpoint, which answers a refusal
  * of the three kinds or nothing (`HookAnswer`). Reads outside the working folders are not blocked: the hook refuses the
  * three kinds wherever a tool names them, so a read anywhere else runs in Full access, and in Ask first and Auto-edit
  * reaches the prompt tool, which runs it with no card, and a change outside the working folders is the one card
@@ -163,7 +165,7 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
  * in every mode the hook rides: a settings file of the person's, which a Full access turn loads, or a project's, which
  * every turn loads, could otherwise put its own PATH or its own value of a turn's variable in place of the desktop's.
  */
-export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string, turn: { env?: Readonly<Record<string, string>> } = {}) {
+export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string, turn: { env?: Readonly<Record<string, string>>; keyed?: boolean } = {}) {
     return {
         ...(mode === 'full_access' ? {} : { permissions: { ask: ['WebFetch(domain:*)'] } }),
         ...(turn.env === undefined ? {} : { env: { ...turn.env } }),
@@ -173,7 +175,7 @@ export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: st
         // hook's address is always on the list.
         disableAllHooks: false,
         allowedHttpHookUrls: [hookUrl],
-        ...(mode === 'full_access' ? {} : serverDefences()),
+        ...(mode === 'full_access' && turn.keyed !== true ? {} : serverDefences()),
         hooks: {
             PreToolUse: [
                 {
@@ -261,12 +263,13 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * command reaches the prompt tool, which runs jason's own help and version and refuses any other. Never `--bare`, which
  * drops the subscription sign-in and the skills.
  *
- * A turn that runs in Full access loads the person's own Claude Code configuration, as a terminal does: no
- * `--setting-sources`, no `--strict-mcp-config`, no `--no-chrome`, so their settings, rules and hooks, their skills, their
- * MCP servers, their claude.ai connectors and the browser integration reach it; the permission mode named every time
- * overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20: `--permission-mode`
- * "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole: Plan only, Ask
- * first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
+ * A turn that runs in Full access on the person's own sign-in loads the person's own Claude Code configuration, as a
+ * terminal does: no `--setting-sources`, no `--strict-mcp-config`, no `--no-chrome`, so their settings, rules and hooks,
+ * their skills, their MCP servers, their claude.ai connectors and the browser integration reach it; the permission mode
+ * named every time overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20:
+ * `--permission-mode` "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole:
+ * a turn on a provider's key in every mode, Full access included, beside the desktop's own Claude Code folder
+ * (`keyedFolder`); Plan only, Ask first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
  * browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
  * the hook was found filtered out: which line a turn gets follows the mode it runs in (`turnMode`, and `running.mode`
  * once a start is narrowed), never the one the chat shows. The sealed line is `--setting-sources project`,
@@ -281,7 +284,7 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
-    const sealed = mode !== 'full_access';
+    const sealed = mode !== 'full_access' || turn.keyed === true;
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     // The hook rides every turn given a settings file of its own, and Plan only, which carries its inline settings, never.
     const hooked = mode !== 'plan_only' && turn.settingsFile !== undefined;
