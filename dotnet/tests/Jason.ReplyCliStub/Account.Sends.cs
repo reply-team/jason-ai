@@ -44,9 +44,9 @@ internal static partial class Account
     /// limit of direct emails, and the active contacts of the account's billing period, each with reply-cli's own sentence
     /// for it. reply-cli prints both as <c>email.limit_reached</c> at 429, which limit under <c>details.limit</c>, Reply's
     /// code and sentence carried. Copied from reply-cli 0.22.0, src/operations/direct-send.ts, <c>LIMITS.email</c>. Reply
-    /// may send a Retry-After with each, which reply-cli passes on as <c>retry_after</c>; this stand-in's Reply sends none,
-    /// as some of reply-cli's own tests answer, so no wait is named, and a test that needs one plants it with
-    /// <c>Refuses</c>.
+    /// sends a Retry-After with each, which reply-cli passes on as <c>retry_after</c>; this stand-in sends one only where a
+    /// test plants it on the mailbox (<see cref="RetryAfter"/>), so a test that plants none reads the block a refusal with
+    /// no wait makes.
     /// </summary>
     private static readonly Dictionary<string, (string Code, string Detail, string Title)> MailboxLimits = new(StringComparer.Ordinal)
     {
@@ -57,6 +57,9 @@ internal static partial class Account
             "contact.activeContactsLimitReached", "The account has emailed as many contacts this billing period as its plan allows.",
             "The account reached its active contacts limit for the billing period, so nothing was sent."),
     };
+
+    /// <summary>The seconds of the Retry-After Reply sends with a limit's refusal, where a test plants them on the mailbox.</summary>
+    private const string RetryAfter = "_retry_after";
 
     /// <summary>What a test plants on a mailbox Reply says cannot send direct emails at all.</summary>
     private const string SendingDisabled = "sending_disabled";
@@ -522,7 +525,8 @@ internal static partial class Account
             details["state"] = "failed";
         }
 
-        return Refused("email.limit_reached", title, status: 429, replyCode: code, detail: detail, ids: ids, details: details);
+        var wait = mailbox[RetryAfter] is JsonValue plantedWait && plantedWait.TryGetValue<int>(out var seconds) ? seconds : (int?)null;
+        return Refused("email.limit_reached", title, status: 429, replyCode: code, detail: detail, ids: ids, details: details, retryAfter: wait);
     }
 
     /// <summary>

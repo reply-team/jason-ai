@@ -503,7 +503,8 @@ public sealed class ReplyAccount : IDisposable
         string? address,
         int? owner = Caller,
         string? status = null,
-        string? limit = null)
+        string? limit = null,
+        int? retryAfter = null)
     {
         var senders = ReadArray(SendersFile);
         foreach (var existing in senders.ToList())
@@ -526,6 +527,11 @@ public sealed class ReplyAccount : IDisposable
         if (limit is not null)
         {
             sender["_limit"] = limit;
+        }
+
+        if (retryAfter is not null)
+        {
+            sender["_retry_after"] = retryAfter;
         }
 
         senders.Add(sender);
@@ -896,6 +902,18 @@ public sealed class ReplyAccount : IDisposable
             record["bounced"] = bounced.DeepClone();
             record["bounceType"] = bounceType;
             record["bouncedAt"] = bouncedAt;
+        }
+        else
+        {
+            if (bounceType is not null)
+            {
+                record["bounceType"] = bounceType;
+            }
+
+            if (bouncedAt is not null)
+            {
+                record["bouncedAt"] = bouncedAt;
+            }
         }
 
         sends.Add(record);

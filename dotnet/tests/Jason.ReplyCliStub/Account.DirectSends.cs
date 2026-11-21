@@ -348,42 +348,48 @@ internal static partial class Account
         record["message_id"] = held["messageId"]?.DeepClone();
         record["failure_reason"] = held["failureReason"]?.DeepClone();
 
-        // Reply's own code for a failure, only where it gave one, as reply-cli passes it on.
-        if (held["failureCode"] is { } code)
+        // Reply's own code for a failure, and the message as it went, each only where Reply gave it as text or null, and
+        // the names it could not fill as a list of text or null, as reply-cli 0.22.0 passes them on
+        // (src/operations/direct-sends.ts, `rendering_of`).
+        foreach (var (from, to) in new[] { ("failureCode", "failure_code"), ("renderedSubject", "rendered_subject"), ("renderedBody", "rendered_body") })
         {
-            record["failure_code"] = code.DeepClone();
+            if (Given(held, from, out var value))
+            {
+                record[to] = value?.DeepClone();
+            }
         }
 
-        // The message as it went, only where Reply kept that copy: a send it rendered names both.
-        if (held["renderedSubject"] is { } subject)
+        if (held.TryGetPropertyValue("missingVariables", out var missing)
+            && (missing is null || missing is JsonArray names && names.All(name => name?.GetValueKind() == System.Text.Json.JsonValueKind.String)))
         {
-            record["rendered_subject"] = subject.DeepClone();
-            record["rendered_body"] = held["renderedBody"]?.DeepClone();
+            record["missing_variables"] = missing?.DeepClone();
         }
 
         record["cancelled_at"] = held["cancelledAt"]?.DeepClone();
 
-        // Whether an email bounced, its kind and its moment, only where a test planted them, each as reply-cli 0.22.0
+        // Whether an email bounced, its kind and its moment, each on its own where a test planted it, as reply-cli 0.22.0
         // passes Reply's `bounced`, `bounceType` and `bouncedAt` on (src/operations/direct-sends.ts, `bounce_of`): only in
         // Reply's shape, `bounced` as true or false and the kind and the moment as text or null, and left out otherwise.
-        if (held["bounced"] is { } bounced)
+        if (held["bounced"] is { } bounced
+            && bounced.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
         {
-            if (bounced.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
-            {
-                record["bounced"] = bounced.DeepClone();
-            }
+            record["bounced"] = bounced.DeepClone();
+        }
 
-            foreach (var (from, to) in new[] { ("bounceType", "bounce_type"), ("bouncedAt", "bounced_at") })
+        foreach (var (from, to) in new[] { ("bounceType", "bounce_type"), ("bouncedAt", "bounced_at") })
+        {
+            if (Given(held, from, out var value))
             {
-                if (held.TryGetPropertyValue(from, out var value) && (value is null || value.GetValueKind() == System.Text.Json.JsonValueKind.String))
-                {
-                    record[to] = value?.DeepClone();
-                }
+                record[to] = value?.DeepClone();
             }
         }
 
         return Done(record);
     }
+
+    /// <summary>Whether Reply gave the member as text or null, the shape reply-cli 0.22.0 passes such a member on in.</summary>
+    private static bool Given(JsonObject held, string name, out JsonNode? value) =>
+        held.TryGetPropertyValue(name, out value) && (value is null || value.GetValueKind() == System.Text.Json.JsonValueKind.String);
 
     /// <summary>
     /// <c>direct-send cancel &lt;reference&gt;</c>: cancels a send Reply still holds for its moment, and answers its record as

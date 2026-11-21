@@ -109,7 +109,8 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// "plugins and their grants are data 0.48.7 reads as it is": each package's newest version and digest is the one
-    /// v0.48.7 published, Reply's aside, which the section names as the newer one 0.48.7 reads as it is, and there is no
+    /// v0.48.7 published, Reply's aside, which the section names as the newer one 0.49.4 placed and 0.48.7 still reads as
+    /// it is, and there is no
     /// package 0.48.7 did not have. Any other package that moves in 0.49 turns this red, and so does a Reply package that
     /// moves without this list and the section.
     /// </summary>
@@ -117,7 +118,7 @@ public partial class PageClaimsTests
     public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_7_shipped()
     {
         Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
-        Assert.Contains("The Reply package is the one exception: it stays the newer one, 0.19.0, which 0.48.7 reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, as this release already asks.", Flat(GoingBack()), StringComparison.Ordinal);
+        Assert.Contains("The Reply package 0.49.4 or later placed differs from the one 0.48.7 shipped: it stays the newer one, 0.19.0, which 0.48.7 still reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, the same reply-cli 0.49.4 needs.", Flat(GoingBack()), StringComparison.Ordinal);
 
         var newest = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
             .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Line: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Last().Trim()))

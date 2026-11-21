@@ -716,12 +716,12 @@ describe('the Reply card, its acts', () => {
     });
 
     it('below the Reply CLI the acts need, says so once, offers the desktop’s update and no act', async () => {
-        const below = 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.';
+        const below = 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.';
         const desktop = renderConnect({
             ...setupFound,
             reply: {
                 ...setupFound.reply,
-                cli: { found: true, version: '0.20.0', install: 'reply' },
+                cli: { found: true, version: '0.21.0', install: 'reply' },
                 accounts: [account('2', 'email', 'disconnected')],
                 belowMinimum: below,
             },
@@ -730,7 +730,7 @@ describe('the Reply card, its acts', () => {
         const card = () => replyCard(connect);
         expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([`${below} Update`]);
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
-        expect(words(card())).not.toContain('Reply CLI 0.20.0');
+        expect(words(card())).not.toContain('Reply CLI 0.21.0');
         expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
@@ -747,9 +747,9 @@ describe('the Reply card, its acts', () => {
             ...setupFound,
             reply: {
                 ...setupFound.reply,
-                cli: { found: true, version: '0.20.0', install: null },
+                cli: { found: true, version: '0.21.0', install: null },
                 accounts: [],
-                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.',
+                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.',
             },
         });
         const card = replyCard(await openConnect());

@@ -1208,13 +1208,14 @@ internal static partial class Account
         string? detail = null,
         JsonObject? ids = null,
         JsonObject? details = null,
-        string? hint = null) =>
-        new(exit, null, ErrorOf(code, title, status, replyCode, detail, ids, details, hint));
+        string? hint = null,
+        int? retryAfter = null) =>
+        new(exit, null, ErrorOf(code, title, status, replyCode, detail, ids, details, hint, retryAfter));
 
     /// <summary>reply-cli's <c>--json</c> error envelope, its empty members left out as reply-cli leaves them out.</summary>
     private static JsonObject ErrorOf(
         string code, string title, int? status, string? replyCode, string? detail, JsonObject? ids, JsonObject? details,
-        string? hint = null)
+        string? hint = null, int? retryAfter = null)
     {
         var error = new JsonObject { ["code"] = code, ["title"] = title };
         if (status is { } answered)
@@ -1240,6 +1241,11 @@ internal static partial class Account
         if (ids is { Count: > 0 })
         {
             error["ids"] = ids.DeepClone();
+        }
+
+        if (retryAfter is { } wait)
+        {
+            error["retry_after"] = wait;
         }
 
         if (details is not null)

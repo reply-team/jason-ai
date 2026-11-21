@@ -1377,9 +1377,11 @@ public class ReplyStubDirectSendTests
         using var account = new ReplyAccount()
             .WithDirectSend("email-1001", "sent", sendAfter: "2026-11-03T14:00:00Z", sentAt: "2026-11-20T10:00:00Z", messageId: "<m1@example.com>", bounced: true, bounceType: "mailboxFull", bouncedAt: "2026-11-20T10:05:00Z")
             .WithDirectSend("email-1002", "sent", bounced: JsonValue.Create("yes"), bounceType: "hard")
-            .WithDirectSend("email-1003", "sent");
+            .WithDirectSend("email-1003", "sent")
+            .WithDirectSend("email-1004", "sent", bounceType: "hard");
 
         var (_, bouncedOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1001"), Ct);
+        var (_, kindOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1004"), Ct);
         var (_, oddOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1002"), Ct);
         var (_, plainOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1003"), Ct);
 
@@ -1392,6 +1394,24 @@ public class ReplyStubDirectSendTests
         Assert.Equal((false, "hard", true), (odd.ContainsKey("bounced"), (string?)odd["bounce_type"], odd.ContainsKey("bounced_at") && odd["bounced_at"] is null));
         var plain = JsonNode.Parse(plainOut)!.AsObject();
         Assert.All(["bounced", "bounce_type", "bounced_at"], name => Assert.False(plain.ContainsKey(name)));
+        var kind = JsonNode.Parse(kindOut)!.AsObject();
+        Assert.Equal((false, "hard", false), (kind.ContainsKey("bounced"), (string?)kind["bounce_type"], kind.ContainsKey("bounced_at")));
+    }
+
+    /// <summary>
+    /// Reply sends a Retry-After with a limit's refusal, and reply-cli 0.22.0 passes it on as <c>retry_after</c>; the
+    /// stand-in does where a test plants one on the mailbox.
+    /// </summary>
+    [Fact]
+    public async Task A_limit_refusal_carries_the_retry_after_planted_on_the_mailbox()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: "daily", retryAfter: 3600);
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        var error = Error(said);
+        Assert.Equal((1, "email.limit_reached", 3600), (exit, (string?)error["code"], (int?)error["retry_after"]));
+        Assert.Empty(account.Sent);
     }
 
     /// <summary>

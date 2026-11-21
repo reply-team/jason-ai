@@ -1549,9 +1549,10 @@ differs from what 0.48.7 recorded, and 0.48.7 keeps a file it finds changed sinc
    and `jason runtime autostart enable` where the runtime started at logon before.
 
 Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads
-as it is. The Reply package is the one exception: it stays the newer one, 0.19.0, which 0.48.7 reads as it is, since it
-adds no manifest key, and which needs reply-cli 0.22.0 or newer, as this release already asks. What goes is Jason Desktop: under 0.48.7 it was a separate download, and whoever wants it takes it from
-[0.48.7's release page](https://get.jasonharness.ai/releases/tag/v0.48.7) after step 2; on Linux apt keeps no
+as it is. The Reply package 0.49.4 or later placed differs from the one 0.48.7 shipped: it stays the newer one, 0.19.0,
+which 0.48.7 still reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, the same
+reply-cli 0.49.4 needs. What goes is Jason Desktop: under 0.48.7 it was a separate download, and whoever wants it takes
+it from [0.48.7's release page](https://get.jasonharness.ai/releases/tag/v0.48.7) after step 2; on Linux apt keeps no
 previous version of the package, so the deb of 0.48.7 is taken from there too. The same three steps
 also go back from a 0.49 installed fresh rather than moved. Under 0.48.7, `jason update apply` brings 0.49 back and moves
 the install into Jason Desktop again, and `jason update rollback` acts on 0.49's update record, putting back the version
