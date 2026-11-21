@@ -407,6 +407,19 @@ test('the place used last is kept, Copy path excepted, and becomes the default; 
     assert.equal(((await gone.openIn.targets()) as { default: string }).default, 'claude');
 });
 
+test('an opening asked not to be kept leaves the default where it was, as an agent’s Open folder does; any other keeps it', async () => {
+    const b = bench({ remembered: 'zed' });
+    assert.equal(await b.openIn.open('files', undefined, { keep: false }), null);
+    assert.deepEqual(b.kept, []);
+    assert.equal(((await b.openIn.targets()) as { default: string }).default, 'zed');
+    assert.equal(b.started.length, 1, 'the file manager was started');
+    for (const options of [undefined, null, {}, { keep: true }, { keep: 'false' }, false]) {
+        const each = bench({ remembered: 'zed' });
+        assert.equal(await each.openIn.open('files', undefined, options), null);
+        assert.deepEqual(each.kept, ['files'], JSON.stringify(options));
+    }
+});
+
 test('nothing is written into the folder: it is the same after every place is opened', async () => {
     const folder = mkdtempSync(join(tmpdir(), 'open-in-'));
     try {

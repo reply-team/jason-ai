@@ -155,6 +155,11 @@ describe('the object of a tab with a bridge', () => {
                 await expect(at(desktop, member)()).resolves.toBeNull();
                 continue;
             }
+            // Where a dropped file is: a tab reads no file's place, so it answers none, and the box says so.
+            if (member === 'chat.pathOf') {
+                expect(at(desktop, member)(new File(['x'], 'a.txt'))).toBe('');
+                continue;
+            }
             const said = await Promise.resolve(at(desktop, member)('a', 'b', 'c')).then(
                 (answer) => (answer as { refused: string }).refused,
                 (error: Error) => error.message,
@@ -205,7 +210,15 @@ describe('the object of a tab with no desktop', () => {
 
     it('refuses every act in the one sentence, and says nothing of what only the desktop knows', async () => {
         const desktop = noDesktop();
-        const reads = ['mode.get', 'chat.list', 'theme.get', 'links.take', 'dailyTrends.get', 'updates.key'];
+        const reads = [
+            'mode.get',
+            'chat.list',
+            'theme.get',
+            'links.take',
+            'dailyTrends.get',
+            'updates.key',
+            'chat.pathOf',
+        ];
         const subscriptions = [
             'onCommand',
             'mode.onPreparing',
@@ -225,6 +238,8 @@ describe('the object of a tab with no desktop', () => {
         }
         for (const member of subscriptions)
             expect(typeof at(desktop, member)(() => undefined), member).toBe('function');
+        // Where a dropped file is: with no desktop no file's place is read.
+        expect(at(desktop, 'chat.pathOf')(new File(['x'], 'a.txt'))).toBe('');
     });
 
     it('can do nothing: the place named none asks no member of the desktop', () => {

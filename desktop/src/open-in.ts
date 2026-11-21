@@ -246,6 +246,10 @@ export const notFolderPlaces: readonly PlaceId[] = ['copy', 'browser'];
  * The place the main part opens: the one used last while it is still here, else Claude Code, else the first place that
  * opens something. Copy path and a browser are never the default; a terminal is always there.
  */
+/** Whether the page asked that an opening not be kept as the next default; anything but `keep: false` keeps it. */
+const leavesDefault = (options: unknown): boolean =>
+    typeof options === 'object' && options !== null && (options as { keep?: unknown }).keep === false;
+
 export function defaultPlace(places: readonly Place[], remembered: PlaceId | null): PlaceId {
     const here = (id: PlaceId) => places.some((place) => place.id === id);
     if (remembered !== null && !notFolderPlaces.includes(remembered) && here(remembered)) return remembered;
@@ -568,8 +572,12 @@ export class OpenIn {
         return found[0] ?? 'none';
     }
 
-    /** Opens the folder in the place the name says; a name not on this computer's list, or a path, is refused. */
-    async open(target: unknown, campaignId?: unknown): Promise<OpenInRefusal | null> {
+    /**
+     * Opens the folder in the place the name says; a name not on this computer's list, or a path, is refused. The place is
+     * kept as the next default, unless `options` says `keep: false`: an agent's Open folder, which leaves the window's
+     * Open in where it was.
+     */
+    async open(target: unknown, campaignId?: unknown, options?: unknown): Promise<OpenInRefusal | null> {
         const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
         if (!isPlace(target) || !places.some((place) => place.id === target)) return { refused: 'That is not a place this computer can open the folder in.' };
         // A browser opens the chat, not a folder: none is read, and it is never kept as the place used last.
@@ -613,7 +621,7 @@ export class OpenIn {
             deps.log?.('open_in_refused', { Place: target });
             return refusal;
         }
-        if (!notFolderPlaces.includes(target)) deps.remember(target);
+        if (!notFolderPlaces.includes(target) && !leavesDefault(options)) deps.remember(target);
         deps.log?.('open_in', { Place: target });
         return null;
     }

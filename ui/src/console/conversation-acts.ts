@@ -1,6 +1,7 @@
 import { can } from '../platform/places';
 import { openConversation, restartChat } from './chat';
 import { conversationItems, type ConversationAct, type ConversationFacts, type Gates } from './conversation-items';
+import { folderWord } from './open-folder';
 import { changeChat, chats, conversations, inTab } from './state';
 
 // The conversation's acts as they are taken, wherever they are offered: the agent's "…" and the menu on a row of Recent.
@@ -14,6 +15,7 @@ export function placeGates(): Gates {
         restart: can('chat.restart'),
         remove: can('chat.remove'),
         tab: inTab(),
+        folder: folderWord(),
     };
 }
 
@@ -24,6 +26,7 @@ export function factsOf(id: string): ConversationFacts {
     return {
         kept: listed?.id,
         id,
+        campaignId: listed?.campaignId ?? chat?.campaignId ?? null,
         running: chat?.running ?? listed?.running ?? false,
         removing: chat?.removing === true,
     };
