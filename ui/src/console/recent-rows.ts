@@ -41,6 +41,12 @@ export interface RecentInput {
     /** Whether a chat the console holds has a turn running now; undefined for one it does not hold. */
     running?: (id: string) => boolean | undefined;
     campaigns: readonly CampaignSummary[];
+    /**
+     * An agent `campaigns` does not hold, as it was read on its own (`recent.ts`): an archived one, which that list leaves
+     * out, or one past its first page. Undefined while it has not been read, and for one the runtime does not know;
+     * absent for none read.
+     */
+    agentRead?: (id: string) => CampaignSummary | undefined;
     approvals: readonly ApprovalSummary[];
     questions: readonly DecisionSummary[];
     /** The chats that wait on a choice, once read; absent or null while they have not been. */
@@ -52,7 +58,11 @@ export interface RecentInput {
 
 const states = ['active', 'paused', 'draft'] as const;
 
-/** Every conversation except the Feed, newest first as the desktop listed them, with its agent's state and what waits. */
+/**
+ * Every conversation except the Feed and those whose agent is archived, newest first as the desktop listed them, with its
+ * agent's state and what waits. An archived agent's conversation is reached from that agent's own place; one whose agent
+ * is not read yet stays, as a conversation whose agent is not held.
+ */
 export function recentRows(input: RecentInput): RecentRow[] {
     const waits = {
         approvals: input.approvals,
@@ -62,11 +72,13 @@ export function recentRows(input: RecentInput): RecentRow[] {
     };
     return input.conversations
         .filter((conversation) => conversation.main !== true)
-        .map((conversation) => {
+        .flatMap((conversation) => {
             const agent =
                 conversation.campaignId === null
                     ? undefined
-                    : input.campaigns.find((each) => each.id === conversation.campaignId);
+                    : (input.campaigns.find((each) => each.id === conversation.campaignId) ??
+                      input.agentRead?.(conversation.campaignId));
+            if (agent?.status === 'archived') return [];
             const count = agent
                 ? needsCount(waits, agent.id)
                 : {
@@ -78,18 +90,20 @@ export function recentRows(input: RecentInput): RecentRow[] {
                   };
             const waiting = count.n;
             const state = states.find((each) => each === agent?.status);
-            return {
-                id: conversation.id,
-                title: input.titles(conversation.id) ?? conversation.title,
-                agent: agent?.name ?? null,
-                aboutAgent: conversation.campaignId !== null,
-                waiting,
-                waitingWords: countWords(count),
-                state: state ?? null,
-                running: input.running?.(conversation.id) ?? conversation.running,
-                dot: waiting > 0 ? 'waiting' : (state ?? 'none'),
-                age: ageOf(conversation.updatedAt, input.now),
-            } satisfies RecentRow;
+            return [
+                {
+                    id: conversation.id,
+                    title: input.titles(conversation.id) ?? conversation.title,
+                    agent: agent?.name ?? null,
+                    aboutAgent: conversation.campaignId !== null,
+                    waiting,
+                    waitingWords: countWords(count),
+                    state: state ?? null,
+                    running: input.running?.(conversation.id) ?? conversation.running,
+                    dot: waiting > 0 ? 'waiting' : (state ?? 'none'),
+                    age: ageOf(conversation.updatedAt, input.now),
+                } satisfies RecentRow,
+            ];
         });
 }
 

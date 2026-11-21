@@ -269,11 +269,19 @@ describe('a plan the AI proposes', () => {
         );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
         expect(part.textContent!.match(/\d+/g)).toEqual(['2']);
-        // The card reads the agent once; the agent's header over the chat reads it once more for itself.
+        // The card reads the agent once; the agent's header over the chat reads it once more for itself; and Recent reads
+        // it once, its state alone, since the list of agents does not hold it.
         expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([
             { campaign_id: 'cmp_5' },
             { campaign_id: 'cmp_5' },
+            { campaign_id: 'cmp_5' },
         ]);
+        // Its people are counted for it alone twice, once by the card and once by the header; Recent asks for none.
+        expect(
+            calls(fake, 'campaign.summary').filter(
+                (each) => JSON.stringify((each.body as { campaign_ids?: string[] }).campaign_ids) === '["cmp_5"]',
+            ),
+        ).toHaveLength(2);
         // A send names its channel, so where each channel's sends go is read by naming it, as the claim does.
         expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
             { campaign_id: 'cmp_5', operation: 'message.send', channel: 'email' },

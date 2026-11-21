@@ -193,16 +193,21 @@ describe('the agent’s move over its chat', () => {
 
     it('an archived campaign’s chat says Archived over it and offers no move', async () => {
         const desktop = chatDesktop();
-        // The list of campaigns leaves an archived one out: the header reads the agent, and its count, for it alone.
+        // The list of campaigns leaves an archived one out: Recent reads the agent's state alone and leaves its chat out,
+        // and the agent's own address shows it, its header reading the agent, and its count, for it alone.
         desktop.keep({ id: 'conv_01JDKEPT000000000000000004', campaignId: 'cmp_4', title: 'Winter' });
-        renderConsole(
-            desktop,
-            consoleApi()
-                .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/archived')
-                .answer('campaign.get', 'campaign.get/archived'),
-        );
+        const fake = consoleApi()
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/archived')
+            .answer('campaign.get', 'campaign.get/archived');
+        renderConsole(desktop, fake);
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(await waitFor(() => within(listed()).getByRole('button', { name: 'Winter' })));
+        await waitFor(() =>
+            expect(sent(fake, 'campaign.get').some((each) => each['campaign_id'] === 'cmp_4')).toBe(true),
+        );
+        await waitFor(() => expect(within(listed()).queryByRole('button', { name: 'Winter' })).toBeNull());
+        flush(() => {
+            location.hash = '#/campaigns/cmp_4/chat';
+        });
         await waitFor(() => expect(agent()).not.toBeNull());
         expect(within(agent()!).getByText('Archived')).toBeTruthy();
         expect(moves(agent()!)).toEqual([]);

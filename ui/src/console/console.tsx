@@ -50,6 +50,7 @@ import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
 import { Painted } from './painted';
 import { Palette } from './palette';
+import { readUnlisted } from './recent';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
 import { closeMenus, sideView } from './side';
 import { StartPanel } from './start';
@@ -549,7 +550,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             void conversations.value;
             untracked(retireShadowed);
         });
+        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Recent.
+        const unlisted = readUnlisted(api);
         return () => {
+            unlisted();
             shadowed();
             made();
             followed();
