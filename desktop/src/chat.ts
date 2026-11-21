@@ -81,25 +81,30 @@ import { helpNouns, modeFence, type ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
     askFirstThisTurn,
-    bypassSentences,
+    bypassHeldMs,
+    bypassLeadsTo,
     codexAutoEdit,
     codexFullAccessRefused,
     followsCodexRefusal,
     codexFullAccessNarrowed,
     earlierDesktopAskFirst,
     feedDefaultMode,
+    forcedDefault,
     fullAccessCurrent,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
     hookFilteredSentence,
     isChatMode,
+    namedMode,
     planModeMoved,
     turnMode,
     unguardedSentence,
     type AskFirstWhy,
+    type Bypass,
     type BypassWhy,
     type ChatMode,
+    type NamedMode,
 } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
@@ -264,6 +269,14 @@ export interface ChatOptions {
      * the turn runs on under its cards and the host's own rules.
      */
     hookFiltered?(mode: ChatMode): void;
+    /**
+     * Said once as the chat is made where the desktop runs as root, and each time a turn finds Claude Code's bypass not
+     * available where no earlier finding still holds: its cause, and the mode Claude Code named instead, a word of its
+     * closed table (`namedMode`), null where it named none.
+     */
+    bypassGone?(why: BypassWhy, named: NamedMode | null): void;
+    /** How long a cause a turn found holds, in milliseconds (`bypassLeadsTo`); absent, `bypassHeldMs`, a minute. A row shortens it. */
+    bypassHeldMs?: number;
     /**
      * Whether the desktop runs as root, as which Claude Code does not run in its bypass mode on macOS and Linux; absent,
      * the system's answer. A row gives its own.
@@ -473,8 +486,8 @@ interface Attempted {
     ours?: boolean;
     /** Whether Claude Code refused its bypass mode before it started (`BypassWhy`). */
     bypassRefused?: boolean;
-    /** Whether Claude Code started in another mode than its bypass, and this start was stopped at its first line. */
-    bypassOff?: boolean;
+    /** The mode Claude Code started in instead of its bypass, where it named one and this start was stopped at its first line. */
+    bypassOff?: Bypass | null;
     /** Whether the host said any line on its standard output before it exited. */
     heard?: boolean;
 }
@@ -483,6 +496,9 @@ interface Attempted {
 function runsAsRoot(): boolean {
     return process.platform !== 'win32' && process.getuid?.() === 0;
 }
+
+/** Every cause of Claude Code's bypass not being available (`BypassWhy`), each told once in each hold of it. */
+const bypassKinds = Object.keys({ root: true, bypass_off: true, forced_default: true, bypass_refused: true, unguarded: true } satisfies Record<BypassWhy, true>) as BypassWhy[];
 
 /** The campaigns the conversation's last pick named. */
 const candidatesOf = (conversation: Conversation): string[] => {
@@ -624,7 +640,11 @@ export class Chat {
      * host's version is given only when no other choice came meanwhile.
      */
     #choices = new Map<string, number>();
-    /** Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once. */
+    /**
+     * Why turns of each conversation ran in Ask first while it was in another mode, by conversation id: each said once, and
+     * a cause of Claude Code's bypass once in each hold of it, so a cause that comes to hold again is said again
+     * (`#bypassGone`).
+     */
     #toldAskFirst = new Map<string, Set<AskFirstWhy>>();
     /** The conversations already told that Codex ran a Full access turn in a narrower sandbox (`codexFullAccessNarrowed`). */
     #toldNarrowed = new Set<string>();
@@ -634,9 +654,15 @@ export class Chat {
     #toldFiltered = new Set<string>();
     /**
      * Why Claude Code's bypass, which Full access runs in, is not available here, as the machine or a turn of this run
-     * showed it; null while nothing showed it. Kept until the desktop starts again, never on a record.
+     * showed it, and until when on the clock (`#now`) that holds: a minute after a turn found it, or null for the rest of
+     * this run (`bypassLeadsTo`); null while nothing that holds showed it. Never on a record.
      */
-    #bypass: BypassWhy | null;
+    #bypass: { bypass: Bypass; until: number | null } | null;
+    /**
+     * Asks the page to read the hosts again when a cause that holds a minute ends, so the menu draws the chat's own mode
+     * again with no turn sent; never keeps the process alive, and cleared when the window closes.
+     */
+    #bypassEnds: NodeJS.Timeout | null = null;
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
     #daily: NodeJS.Timeout;
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
@@ -672,7 +698,10 @@ export class Chat {
     constructor(options: ChatOptions) {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
-        this.#bypass = (options.root?.() ?? runsAsRoot()) ? 'root' : null;
+        const root = options.root?.() ?? runsAsRoot();
+        this.#bypass = root ? { bypass: { why: 'root', named: null }, until: null } : null;
+        // Running as root holds for the whole run, and is said to the log once, now, as a cause a turn finds is when it does.
+        if (root) options.bypassGone?.('root', null);
         sweepTurnFiles(options.paths.turns);
         // The standing choice of Full access an earlier desktop kept, and its mark of a take-back owed, mean nothing now:
         // every chat starts in Full access with no box. Both files are unlinked, and neither ever changes a mode.
@@ -1017,29 +1046,60 @@ export class Chat {
 
     /**
      * Why Claude Code's bypass, which Full access runs in, is not available here, as this run of the desktop knows it
-     * (`BypassWhy`); null while it is. The listing of the hosts draws a turn's mode by it, as the turn does.
+     * (`Bypass`), while that holds; null while it is, or once what a turn found has held its minute, when the next Full
+     * access turn asks for the bypass again. The listing of the hosts draws a turn's mode by it, as the turn does.
      */
-    bypassUnavailable(): BypassWhy | null {
-        return this.#bypass;
+    bypassUnavailable(): Bypass | null {
+        const held = this.#bypass;
+        if (held === null) return null;
+        if (held.until !== null && this.#now() >= held.until) {
+            this.#bypass = null;
+            return null;
+        }
+        return held.bypass;
     }
 
     /**
-     * Claude Code's bypass is not available here, as a turn showed it: kept for this run's later turns, which run in Ask
-     * first and say why once in each conversation, and the page is asked to read the hosts again. The first cause stands.
+     * Claude Code's bypass is not available here, as a turn showed it: held for as long as `bypassLeadsTo` says, a minute
+     * or the rest of this run, while the turns after it run in Ask first and say why once in each conversation for this
+     * hold, and the page is asked to read the hosts again, now and when a minute that holds ends. A cause that still holds
+     * stands, unless it holds a minute and this one the rest of the run; the log is told each cause that comes to hold, by
+     * its cause and the mode Claude Code named.
      */
-    #bypassGone(why: BypassWhy): void {
-        if (this.#bypass !== null) return;
-        this.#bypass = why;
+    #bypassGone(bypass: Bypass): void {
+        const holding = this.bypassUnavailable() === null ? null : this.#bypass;
+        const { held } = bypassLeadsTo(bypass);
+        if (holding !== null && (holding.until === null || held === 'one_minute')) return;
+        // A new hold: what each conversation was told of an earlier one is told again.
+        for (const told of this.#toldAskFirst.values()) for (const kind of bypassKinds) told.delete(kind);
+        if (this.#bypassEnds !== null) clearTimeout(this.#bypassEnds);
+        this.#bypassEnds = null;
+        if (held === 'this_run') this.#bypass = { bypass, until: null };
+        else {
+            const heldMs = this.#options.bypassHeldMs ?? bypassHeldMs;
+            const until = this.#now() + heldMs;
+            this.#bypass = { bypass, until };
+            this.#bypassEnds = setTimeout(() => {
+                this.#bypassEnds = null;
+                if (this.#bypass?.until === until) this.#bypass = null;
+                this.#options.setupChanged?.();
+            }, heldMs);
+            this.#bypassEnds.unref();
+        }
+        this.#options.bypassGone?.(bypass.why, bypass.named);
         this.#options.setupChanged?.();
     }
 
-    /** Tells a conversation, once for each cause, why a turn runs in Ask first while it keeps another mode. */
-    #tellAskFirst(conversationId: string, chatId: string, kind: AskFirstWhy, text: string): void {
+    /**
+     * Tells a conversation, once for each cause, why a turn runs in Ask first while it keeps another mode: a cause of Claude
+     * Code's bypass once for each hold of it (`#toldAskFirst`).
+     */
+    #tellAskFirst(conversationId: string, chatId: string, kind: AskFirstWhy, text: string, kept: ChatMode): void {
         const told = this.#toldAskFirst.get(conversationId) ?? new Set<AskFirstWhy>();
         if (told.has(kind)) return;
         told.add(kind);
         this.#toldAskFirst.set(conversationId, told);
-        this.#options.emit(chatId, { kind: 'notice', text: askFirstThisTurn(text) });
+        this.#options.emit(chatId, { kind: 'notice', text: askFirstThisTurn(text, kept) });
     }
 
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
@@ -1380,7 +1440,7 @@ export class Chat {
         // access on a Claude Code below its floor is found once the version is read, below; on Codex Full access runs as
         // itself.
         const recorded = this.#modeOf(conversation);
-        const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered(), bypass: this.#bypass };
+        const place = { fromTab: given.fromTab === true, offered: this.#fullAccessOffered(), bypass: this.bypassUnavailable() };
         const first = turnMode(recorded, resolved.program, { ...place, claudeVersion: undefined });
         let why: { kind: AskFirstWhy; text: string } | null = first.why;
 
@@ -1427,7 +1487,7 @@ export class Chat {
                 return refuse(held);
             }
             // Said once per conversation for each reason, before the turn's first words.
-            if (why !== null) this.#tellAskFirst(conversation.id, chatId, why.kind, why.text);
+            if (why !== null) this.#tellAskFirst(conversation.id, chatId, why.kind, why.text, recorded);
             // The page drew Ask first from a listing that read Claude Code below the floor of Full access or could not read
             // its version; read now, it is at the floor, and the turn runs in Full access: the conversation is told once.
             if (drewFloor && running.mode === 'full_access' && !this.#toldCurrent.has(conversation.id)) {
@@ -1501,6 +1561,8 @@ export class Chat {
     closeAll(): void {
         this.#closed = true;
         clearInterval(this.#daily);
+        if (this.#bypassEnds !== null) clearTimeout(this.#bypassEnds);
+        this.#bypassEnds = null;
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();
@@ -1862,7 +1924,7 @@ export class Chat {
          */
         let hooked = false;
         /** Writes the turn's settings again for Ask first, once Claude Code refused its bypass before it started. */
-        let narrowSettings: (() => void) | null = null;
+        let narrowSettings: ((mode: 'ask_first') => void) | null = null;
         let endpoint: Endpoint | null = null;
         let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
@@ -1936,9 +1998,9 @@ export class Chat {
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const hookUrl = endpoint.hookUrl;
                 let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode) : undefined;
-                narrowSettings = () => {
+                narrowSettings = (mode) => {
                     rmSync(turnSettingsPath(paths.turns, id), { force: true });
-                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, 'ask_first');
+                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, mode);
                 };
                 // The host's data rules name the conversations' folders present at this turn's start; one made later is
                 // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
@@ -1953,7 +2015,7 @@ export class Chat {
                     claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
                 argsFor = (resumed) =>
-                    codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: env });
+                    codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: environmentNow() });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -1969,22 +2031,27 @@ export class Chat {
             return;
         }
 
-        const env = hostEnvironment(this.#options.env, {
-            platform: this.#platform,
-            bundle: this.#options.bundle,
-            data: this.#options.dataNamed ? paths.data : null,
-            program: resolved.program,
-            keyed: resolved.keyed,
-            provider: resolved.provider,
-            bundleVersion: this.#options.bundleVersion,
-            effortNamed: resolved.effort !== undefined,
-            mode: running.mode,
-            ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
-        });
+        // A start's environment is built as it starts, from the mode it starts in, as its command line is (`argsFor`), never
+        // from the conversation's record: a Full access start carries no scrub (`hostEnvironment`), and a start in Ask first,
+        // the one a turn is narrowed to before it starts or started again in after Claude Code's bypass was found not
+        // available, carries Ask first's.
+        const environmentNow = () =>
+            hostEnvironment(this.#options.env, {
+                platform: this.#platform,
+                bundle: this.#options.bundle,
+                data: this.#options.dataNamed ? paths.data : null,
+                program: resolved.program,
+                keyed: resolved.keyed,
+                provider: resolved.provider,
+                bundleVersion: this.#options.bundleVersion,
+                effortNamed: resolved.effort !== undefined,
+                mode: running.mode,
+                ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
+            });
         // On Windows a read-only Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run
         // file; a Full access turn runs with no sandbox, so there is nothing to check.
         if (resolved.program === 'codex' && this.#platform === 'win32' && running.mode !== 'full_access') {
-            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed, folder);
+            await this.#codexSandboxHolds(launch, version, environmentNow(), running, resolved.keyed, folder);
             if (running.stopped) {
                 this.#setupTurns.delete(conversation.id);
                 this.#running.delete(conversation.id);
@@ -2040,7 +2107,7 @@ export class Chat {
             // Whether the host said any line at all: one that refused its bypass mode says none.
             let spoke = false;
             // Whether this start ran in another mode than the bypass it asked for, and was stopped at its first line.
-            let bypassOff = false;
+            let bypassOff: Bypass | null = null;
             const seen = new Set<string>();
             // Whether the host said anything on its standard output: a Codex that refuses to start says no event.
             let heard = false;
@@ -2061,17 +2128,19 @@ export class Chat {
             };
             const said = (line: HostLine) => {
                 spoke = true;
-                if (other || stoppedFor !== null || bypassOff) return;
+                if (other || stoppedFor !== null || bypassOff !== null) return;
                 if (line.kind === 'permission_mode') {
-                    // A turn that asked for Claude Code's bypass runs in another mode: its settings turned the bypass off
-                    // (`disableBypassPermissionsMode`), and this line, read first from the init line, is the one word of it.
-                    // This start is stopped there, what it still asks judged and carded as Ask first's and nothing more it
-                    // says read, and the turn is started again in Ask first, as one whose bypass was refused is: with Ask
-                    // first's own tools, settings and rules. The record keeps Full access.
+                    // A turn that asked for Claude Code's bypass names another mode on its init line, read first: Claude Code
+                    // did not start in its bypass here. What is kept is the mode it named, as a word of the closed table
+                    // (`namedMode`); why is read once the start has ended, from Claude Code's own words that it forced its
+                    // default mode alone (`forcedDefault`). What that leads to is decided in one place (`bypassLeadsTo`):
+                    // this start is stopped there, what it still asks judged and carded as that mode's and nothing more it
+                    // says read, and the turn is started again in that mode, as one whose bypass was refused is: with that
+                    // mode's own tools, settings, rules and environment. The record keeps Full access.
                     if (running.mode !== 'full_access' || line.mode === 'bypassPermissions') return;
-                    bypassOff = true;
-                    running.mode = 'ask_first';
-                    if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
+                    bypassOff = { why: 'bypass_off', named: namedMode(line.mode) };
+                    running.mode = bypassLeadsTo(bypassOff).mode;
+                    if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, running.mode);
                     host?.stop();
                     return;
                 }
@@ -2108,7 +2177,7 @@ export class Chat {
                     // rules deciding as before; the log is told once in the turn, and the conversation once.
                     if (!hooked || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
-                    this.#bypassGone('unguarded');
+                    this.#bypassGone({ why: 'unguarded', named: null });
                     if (running.mode === 'full_access') {
                         this.#options.unchecked?.();
                         if (running.stopped) return;
@@ -2165,7 +2234,7 @@ export class Chat {
             try {
                 started = (this.#options.startHost ?? startHost)(launch, argsFor(resumed), {
                     cwd: folder,
-                    env,
+                    env: environmentNow(),
                     stdin: turnInput(headFor(resumed), recapped ? earlier : null, text),
                     onLine: (line) => {
                         heard = true;
@@ -2182,7 +2251,7 @@ export class Chat {
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
             for (const { read, how } of giving(resumed)) this.#options.memoryGiven?.(read.level, how);
-            if (running.stopped || stoppedFor !== null || bypassOff) started.stop();
+            if (running.stopped || stoppedFor !== null || bypassOff !== null) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.
             if (exit.startError === null && given !== null) markGiven(conversation.entries, given.waiting);
@@ -2194,29 +2263,47 @@ export class Chat {
             // line, failed, and its standard error names the mode.
             const bypassRefused =
                 resolved.program === 'claude' && running.mode === 'full_access' && !spoke && !running.stopped && exit.startError === null && exit.code !== 0 && /\bbypassPermissions\b/.test(started.stderrTail());
-            const again = !bypassOff && resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
+            const again = bypassOff === null && resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
             return { exit, result, host: started, again, ours: refusedKey, heard, bypassRefused, bypassOff };
         };
+
+        /**
+         * The verdict every start of the turn meets, the first and the fresh session after a resume that was lost alike: a
+         * start whose bypass was refused, or was not in force, is started again at once, as `again` starts it, in the mode
+         * that leads to (`bypassLeadsTo`), its settings written for it and its command line and its environment that mode's
+         * own, the cause held as long as that says, and the conversation told once in the hold why: by the cause that holds,
+         * which a cause this start found within it does not replace (`#bypassGone`). Any other start stands as it ended.
+         */
+        const unlessNarrowed = async (ended: Attempted, again: () => Promise<Attempted>): Promise<Attempted> => {
+            // A start that named another mode, whose standard error, read to its end, holds Claude Code's own words that it
+            // forced its default mode, is that cause; nothing else of what it wrote is read (`forcedDefault`).
+            const off = ended.bypassOff ?? null;
+            const named: Bypass | null = off !== null && forcedDefault(ended.host?.stderrTail() ?? '') ? { why: 'forced_default', named: off.named } : off;
+            const narrowed: Bypass | null = named ?? (ended.bypassRefused === true ? { why: 'bypass_refused', named: null } : null);
+            if (narrowed === null || narrowSettings === null) return ended;
+            const leads = bypassLeadsTo(narrowed);
+            running.mode = leads.mode;
+            if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, leads.mode);
+            narrowSettings(leads.mode);
+            this.#bypassGone(narrowed);
+            const told = bypassLeadsTo(this.bypassUnavailable() ?? narrowed).why;
+            this.#tellAskFirst(conversation.id, replyTo, told.kind, told.text, this.#modeOf(conversation));
+            return running.stopped ? ended : again();
+        };
+
+        // A resumed start stopped for its mode may already have written the person's message into the session it resumed, so
+        // it is started again in a fresh session given the recap, never in that session again: the message is held once, and
+        // the record takes the fresh session's id as a fallback's (`attempt`).
+        const startAgain = resume === undefined ? () => attempt(undefined, hostChanged, false) : () => attempt(undefined, true, true);
 
         void (async () => {
             let last: Attempted = { exit: { code: null, startError: 'unknown' }, result: undefined, host: null, again: false };
             let handed: HandOver | null = null;
             try {
-                last = await attempt(resume, hostChanged, false);
-                const narrowed = last.bypassOff === true ? 'bypass_off' : last.bypassRefused === true ? 'bypass_refused' : null;
-                if (narrowed !== null && narrowSettings !== null) {
-                    // A start whose bypass was refused, or was off, is started again at once in Ask first, its settings
-                    // written for it and its command line Ask first's own, and the conversation told once why.
-                    running.mode = 'ask_first';
-                    if (running.turnId !== null) this.#broker.narrowTurn(running.turnId, 'ask_first');
-                    narrowSettings();
-                    this.#bypassGone(narrowed);
-                    this.#tellAskFirst(conversation.id, replyTo, narrowed, bypassSentences[narrowed]);
-                    if (!running.stopped) last = await attempt(resume, hostChanged, false);
-                }
+                last = await unlessNarrowed(await attempt(resume, hostChanged, false), startAgain);
                 if (last.again) {
                     this.#fresh(replyTo, 'not_found');
-                    if (!running.stopped) last = await attempt(undefined, true, true);
+                    if (!running.stopped) last = await unlessNarrowed(await attempt(undefined, true, true), () => attempt(undefined, true, true));
                 }
             } catch {
                 // An attempt never rejects; were one to, the turn still ends below, as one that could not be started.
