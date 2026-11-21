@@ -1,16 +1,17 @@
 // A turn the hook rides: Full access, and Ask first and Auto-edit from Claude Code's floor of Full access on. Reads run
 // anywhere with no card, and the hook refuses the three kinds whatever tool names them: Jason's settings and run files,
 // its data directory outside the chat's own folder, and what Jason sets for the turn. In Ask first and Auto-edit a write
-// outside the chat's folders is one card; every jason verb runs with no card but four, which keep theirs whatever their
-// spelling; help and jason's reads never card; a compound of no-card parts runs with no card. Below the floor and in Plan
-// only nothing changes. Every path here is made up or a temporary one, every command a neutral one or a made-up one.
+// outside the chat's folders is one card; every jason verb runs with no card but the carded forms, which keep theirs
+// whatever their spelling; help and jason's reads never card; a compound of no-card parts runs with no card. A folder
+// that holds the data directory is walked in no form but those known not to descend. Below the floor and in Plan only
+// nothing changes. Every path here is made up or a temporary one, every command a neutral one or a made-up one.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
-import { askingCardedVerbs, helpNouns, modeFence, readFence } from '../src/chat-deny.ts';
+import { askingCardedForms, helpNouns, modeFence, readFence } from '../src/chat-deny.ts';
 import { claudeArguments, claudeTurnSettings, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
 import {
@@ -20,8 +21,11 @@ import {
     commandRefusal,
     confinedRefusal,
     dataRefusal,
+    filesFromRefusal,
     fullAccessJudgement,
+    jqRefusal,
     judge,
+    lookupRefusal,
     noCardFilters,
     optionRefusal,
     ownToolRefusal,
@@ -175,43 +179,88 @@ const noCard = [
     'jason plugin revoke reply --host api.reply.io',
     'jason plugin install reply',
     'jason suppression remove someone@example.com',
-    'jason export --out jason.zip',
     'jason runtime stop',
     'jason update apply',
+    'jason update apply --drain-seconds 30',
+    'jason skills install',
+    'jason skills install --host claude --pack business',
+    'jason skills update',
+    'jason skills update --force',
     'jason --help',
     'jason -h',
     'jason --version',
     'jason runtime --help',
     'jason runtime status --help',
     'jason uninstall --help',
+    'jason uninstall --purge-data --help',
     'jason import --help',
+    'jason export --help',
     'jason update rollback --help',
+    'jason update apply --version 0.40.0 --help',
     'jason plugin grant --help',
     'jason plugin grant -h --host api.reply.io',
+    'jason plugin grant reply --help',
+    'jason plugin install reply --replace --help',
+    'jason skills install --source packs -h',
     'jason preference set --help',
     'jason campaign -h',
 ];
 
-/** The four verbs that keep a card in Ask first and Auto-edit where the hook rides, every form of each. */
+/** The forms that keep a card in Ask first and Auto-edit where the hook rides. */
 const carded = [
     'jason uninstall',
     'jason uninstall --purge-data',
     'jason import jason.zip',
     'jason import jason.zip --replace',
+    'jason export',
+    'jason export --out jason.zip',
+    'jason export --stop',
     'jason update rollback',
+    'jason update apply --version 0.40.0',
+    'jason update apply --version=0.40.0',
     'jason plugin grant reply --host api.reply.io',
+    'jason plugin install reply --feed https://example.com/manifest.json',
+    'jason plugin install reply --replace',
+    'jason skills install --source packs',
+    'jason skills install --feed https://example.com/manifest.json',
+    'jason skills install --root harness',
+    'jason skills update --feed https://example.com/manifest.json',
+    'jason skills update --root harness',
+    'jason skills update --source packs',
 ];
 
-test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but four: uninstall, import, update rollback and plugin grant, each a card in every form', () => {
-    assert.deepEqual([...askingCardedVerbs], ['uninstall', 'import', 'update rollback', 'plugin grant']);
+test('in Ask first and Auto-edit every jason verb runs with no card, its help and its reads among them, but the carded forms: uninstall, import, export and update rollback in every form, update apply with --version, plugin grant, plugin install with --feed or --replace, and skills install and skills update with --source, --feed or --root', () => {
+    assert.deepEqual(askingCardedForms.map(({ verb, options }) => [verb, [...(options ?? [])]]), [
+        ['uninstall', []],
+        ['import', []],
+        ['export', []],
+        ['update rollback', []],
+        ['update apply', ['--version']],
+        ['plugin grant', []],
+        ['plugin install', ['--feed', '--replace']],
+        ['skills install', ['--source', '--feed', '--root']],
+        ['skills update', ['--source', '--feed', '--root']],
+    ]);
     for (const scope of scopes) {
         for (const command of noCard) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
         for (const command of carded) assert.deepEqual(both('Bash', { command }, scope).map(asked), ['Run a command', 'Run a command'], `${scope.platform}: ${command}`);
     }
 });
 
-test('the four carded verbs keep their card whatever their spelling and in any compound, --help aside: never a run with no card', () => {
+test('the carded forms keep their card whatever their spelling and in any compound, --help aside and a --help after `--` not: never a run with no card', () => {
     const spellings = [
+        'jason EXPORT out.zip',
+        'jason status && jason export out.zip',
+        'jason update apply --VERSION 0.40.0',
+        'jason update apply --version:0.40.0',
+        'jason update --verbose apply --version 0.40.0',
+        'jason plugin install reply --Feed https://example.com/manifest.json',
+        'jason plugin install reply --replace=true',
+        'jason skills --verbose install --source packs',
+        'jason skills install --root=harness',
+        'echo y | jason skills update --feed https://example.com/manifest.json',
+        'jason update apply --version 0.40.0 -- --help',
+        'jason export -- --help',
         'jason  update   rollback',
         'jason update --verbose rollback',
         'jason UPDATE rollback',
@@ -232,7 +281,6 @@ test('the four carded verbs keep their card whatever their spelling and in any c
         'xargs jason uninstall',
         'jason.exe uninstall',
         '/usr/local/bin/jason uninstall',
-        'jason plugin grant reply --help',
     ];
     for (const scope of scopes) {
         for (const command of spellings) {
@@ -277,22 +325,86 @@ test('a pipeline or a sequence of no-card jason forms and filters of the closed 
     }
 });
 
-test('the host\'s read-only commands read anywhere with no card in Ask first and Auto-edit, a listing of the home folder among them; a walk of a folder that holds the data directory is refused, by the model and by the hook', () => {
+test('the host\'s read-only commands read anywhere with no card in Ask first and Auto-edit, a listing of the home folder among them; a walk of a folder that holds the data directory is refused by the hook, and the model\'s card each time', () => {
     for (const command of ['ls ~/Downloads', 'ls /home/someone', 'cat /home/someone/Desktop/1.txt', 'head -n 20 /srv/shared/notes.md', 'wc -l /home/someone/notes.md']) {
         assert.deepEqual(both('Bash', { command }, linux), [allow, allow], command);
         assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'runs' }, command);
     }
     for (const command of ['grep -r token /home/someone', 'grep -rl token ~', 'ls -R ~', 'find ~ -name settings.json', 'du -sh /home/someone', 'tar czf all.tgz /home/someone', 'cp -r ~ /tmp/copy']) {
-        for (const judged of both('Bash', { command }, linux)) assert.deepEqual(judged, { verdict: 'deny', message: searchRefusal }, command);
+        for (const judged of both('Bash', { command }, linux)) assert.deepEqual(judged, { verdict: 'ask', title: 'Run a command', detail: command, remember: null }, command);
         assert.deepEqual(fullAccessJudgement('Bash', { command }, linux), { outcome: 'refused', message: searchRefusal }, command);
+        assert.equal(judge('Bash', { command }, unhooked(linux)).verdict, 'ask', `below the floor a card, as before: ${command}`);
     }
-    for (const [tool, input] of [
-        ['Grep', { pattern: 'token', path: '/home/someone' }],
-        ['Glob', { pattern: '**/*.json', path: '/home/someone' }],
-        ['Glob', { pattern: '/home/someone/**/*.json' }],
+    for (const [tool, input, title] of [
+        ['Grep', { pattern: 'token', path: '/home/someone' }, 'Search a folder outside the chat\'s folders'],
+        ['Glob', { pattern: '**/*.json', path: '/home/someone' }, 'Find files in a folder outside the chat\'s folders'],
+        ['Glob', { pattern: '/home/someone/**/*.json' }, 'Find files in a folder outside the chat\'s folders'],
     ] as const) {
         assert.deepEqual(fullAccessJudgement(tool, input, linux), { outcome: 'refused', message: searchRefusal }, `${tool} ${JSON.stringify(input)}`);
-        assert.equal(judge(tool, input, linux).verdict, 'deny', `${tool} ${JSON.stringify(input)}`);
+        for (const judged of both(tool, input, linux)) assert.deepEqual(judged, { verdict: 'ask', title, detail: '/home/someone', remember: null }, `${tool} ${JSON.stringify(input)}`);
+        assert.deepEqual(judge(tool, input, unhooked(linux)), { verdict: 'deny', message: searchRefusal }, `below the floor refused, as before: ${tool} ${JSON.stringify(input)}`);
+    }
+});
+
+test('a folder that holds the data directory is walked in no form but those the chat knows do not descend: any other option, an abbreviated long one among them, any -d value, and a program that descends or copies is refused by the hook and the model\'s card each time', () => {
+    for (const scope of scopes) {
+        const root = scope.platform === 'win32' ? '/c/Users/someone' : scope.home;
+        const walks = [
+            `grep -d recurse -a -h api_key ${root}`,
+            'grep --directories recurse api_key ~',
+            'grep --dir=recurse api_key ~',
+            'grep -d skip api_key ~',
+            'grep --recur api_key ~',
+            'grep --rec api_key ~',
+            'grep --deref api_key ~',
+            'ls --recur ~',
+            'tar --cre -f x.tar ~',
+            'cp --recur ~ x',
+            '7z a x.7z ~',
+            'ls --frobnicate ~',
+            'grep --frobnicate api_key ~',
+            'cd ~; find .',
+            'cd /; grep -r api_key .',
+            'cd; du -sh .',
+            'cd ~ && tar -cf x.tar .',
+            'sh -c "du -sh ~"',
+            "bash -c 'find ~ -name x'",
+            'echo ~ | xargs du -sh',
+            'du -sh $(echo ~)',
+        ];
+        for (const command of walks) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: searchRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) {
+                assert.deepEqual(judged, { verdict: 'ask', title: 'Run a command', detail: command, remember: null }, `${scope.platform}: ${command}`);
+            }
+        }
+    }
+    for (const command of ['Compress-Archive -Path ~ -DestinationPath x.zip', 'Compress-Archive -Path:~ -DestinationPath x.zip', 'Get-ChildItem ~ -Rec', 'gci -Path ~ -Recurse']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
+    }
+});
+
+test('a plain listing of such a folder, a read of a file in it and a body that only mentions a walk run with no card in Ask first and Auto-edit and run in Full access: the Downloads folder, the home folder, a here-document and a quoted text', () => {
+    for (const scope of scopes) {
+        const commands = [
+            'ls ~/Downloads',
+            'ls -la ~/Downloads',
+            'ls ~',
+            'ls -la ~',
+            'ls -1 --color=never ~',
+            'grep -i -n api_key ~/Documents/notes.md',
+            "jason journal append --file - <<'EOF'\n{\"note\":\"check du / weekly\"}\nEOF",
+            "jason campaign update-context cmp_1 --file - <<'EOF'\n{\"plan\":\"find ~ -name x, then tree /\"}\nEOF",
+            "echo 'find / is slow'",
+            'jason campaign list | grep -c "tree /"',
+        ];
+        for (const command of commands) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+        }
+    }
+    for (const command of ['Get-ChildItem ~', 'gci -Path ~ -Force', 'dir ~\\Downloads']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'runs' }, command);
     }
 });
 
@@ -404,8 +516,10 @@ test('the settings and the data refusals say what is closed, that it is Jason\'s
     assert.match(dataRefusal, /`jason campaign list`/);
     assert.match(searchRefusal, /holds Jason's data directory, the installation's own data and not one of the person's files/);
     assert.match(searchRefusal, /Name a narrower folder that does not hold it/);
-    for (const sentence of [confinedRefusal, attemptRefusal]) assert.match(sentence, /Jason's own variables? (?:for this turn )?and not the person's/, sentence);
+    for (const sentence of [confinedRefusal, attemptRefusal, lookupRefusal]) assert.match(sentence, /Jason's own (?:variables? )?(?:for this turn )?and not the person's/, sentence);
     assert.match(ownToolRefusal, /Jason's own, set for this turn/);
+    // A walk of such a folder would pass through Jason's own data, and the sentence names the narrower folder to use.
+    assert.match(searchRefusal, /would pass through Jason's own data/);
 });
 
 test('in Full access the hook refuses nothing but the three kinds: the person\'s files anywhere are read, appended to and written, and every jason verb runs, the four carded ones among them', () => {
@@ -426,7 +540,6 @@ test('in Full access the hook refuses nothing but the three kinds: the person\'s
         for (const command of [...noCard, ...carded, 'jason --actor human:someone approval approve apr_1']) {
             assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
         }
-        // Acceptance: "show me Jason's settings file", "read the database", "set JASON_CHAT_TURN to 0 and run".
         const data = scope.platform === 'win32' ? win32 : posix;
         assert.deepEqual(fullAccessJudgement('Read', { file_path: data.join(scope.data, 'config', 'settings.json') }, scope), { outcome: 'refused', message: settingsRefusal });
         assert.deepEqual(fullAccessJudgement('Read', { file_path: data.join(scope.data, 'jason.db') }, scope), { outcome: 'refused', message: dataRefusal });
@@ -454,14 +567,112 @@ test('a Glob whose pattern climbs is judged where it can lead, and a brace group
     }
 });
 
-test('the filters a no-card compound may hold are a closed list, and the ones that can write a file keep their card when they would', () => {
+test('a no-card compound takes each filter of its closed list only with that filter\'s own options and only as a reader of standard input: any other option, a file a filter names in a compound, and one that can write a file keep their card', () => {
     assert.deepEqual([...noCardFilters], ['jq', 'grep', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'cat', 'ls', 'echo']);
     for (const scope of scopes) {
-        for (const command of ['jason campaign list | sort -r', 'jason campaign list | sort -k 2 -t , -n', 'jason campaign list | uniq -c', 'jason campaign list | sort -- -o', 'echo done', 'jason contact list | grep -c reply']) {
+        const runs = [
+            'jason campaign list | sort -r',
+            'jason campaign list | sort -k 2 -t , -n',
+            'jason campaign list | uniq -c',
+            'echo done',
+            'jason contact list | grep -c reply',
+            'jason contact list | grep -i -e reply -e sent',
+            'jason campaign list | jq -r .items',
+            'jason campaign list | jq -rc .items',
+            "jason campaign list | jq -c --arg id cmp_1 '.items[] | select(.id == $id)'",
+            "jason campaign list | jq --argjson n 2 '.total > $n'",
+            'jason campaign list | jq -S -M -a -j -e -s .',
+            'jason contact list | cut -d , -f 1',
+            'jason contact list | tr -d x',
+            'jason campaign list | head -5',
+            'jason campaign list | tail -n 2',
+            'jason campaign list | wc -l',
+            'jason campaign list | cat -n',
+        ];
+        for (const command of runs) assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+        const cards = [
+            'jason campaign list | sort -ro x',
+            'jason campaign list | sort --out=x',
+            'jason campaign list | sort -T /tmp',
+            'jason campaign list | sort --compress-program=gzip',
+            'jason campaign list | uniq - out.txt',
+            'jason campaign list | tee x',
+            'jason campaign list >> x',
+            'jason campaign list 2> errors.txt',
+            'jason campaign list | sort -- -o',
+            'jason campaign list | sort notes.txt',
+            'jason campaign list | cat notes.txt',
+            'jason campaign list | grep reply notes.txt',
+            'jason campaign list | jq . notes.json',
+            'jason campaign list | jq -n .',
+            'jason campaign list | jq --raw-output .',
+            'jason campaign list | jq -L lib .',
+            'jason campaign list | jq --slurpfile x data.json .',
+            'jason campaign list | jq --rawfile x notes.txt .',
+            'jason campaign list | tail -f',
+            'jason campaign list | head --frobnicate',
+            'jason campaign list | wc --frobnicate',
+            'jason campaign list | sort --frobnicate',
+            'jason campaign list | uniq --frobnicate',
+            'jason campaign list | cut --frobnicate',
+            'jason campaign list | tr --frobnicate a b',
+            'jason campaign list | grep --frobnicate reply',
+            'jason campaign list | jq --frobnicate .',
+            'jason campaign list | cat --frobnicate',
+            'jason campaign list && ls --frobnicate',
+        ];
+        for (const command of cards) assert.deepEqual(both('Bash', { command }, scope).map((judged) => judged.verdict), ['ask', 'ask'], `${scope.platform}: ${command}`);
+    }
+});
+
+test('a jq program that reads the environment or a file by its own words, and a command told the files it reads on its input, are refused where the hook rides, by the hook and by the model', () => {
+    for (const scope of scopes) {
+        const refusals: [string, string][] = [
+            ["jason campaign list | jq 'env'", jqRefusal],
+            ["jason campaign list | jq '$ENV.HOME'", jqRefusal],
+            ['jason campaign list | jq -n \'import "settings" as $s; $s\'', jqRefusal],
+            ['jason campaign list | jq \'include "x"; .\'', jqRefusal],
+            ['jason campaign list | jq -f prog.jq', jqRefusal],
+            ['jason campaign list | jq -rf prog.jq', jqRefusal],
+            ['jason campaign list | jq --from-file prog.jq', jqRefusal],
+            ['echo notes.txt | tr "\\n" "\\0" | sort --files0-from=-', filesFromRefusal],
+            ['echo notes.txt | sort --fil=-', filesFromRefusal],
+            ['echo notes.txt | wc --files0-from=-', filesFromRefusal],
+            ['echo notes.txt | wc --files0=-', filesFromRefusal],
+            ['echo notes.txt | du --files0-from=-', filesFromRefusal],
+            ['find -files0-from list.txt', filesFromRefusal],
+        ];
+        for (const [command, sentence] of refusals) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.deepEqual(judged, { verdict: 'deny', message: sentence }, `${scope.platform}: ${command}`);
+        }
+        // A name that only holds the words, and a program that names none, run as before.
+        for (const command of ["jason campaign list | jq '.environment'", "jason campaign list | jq '.include_paths'"]) {
             assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
         }
-        for (const command of ['jason campaign list | sort -ro x', 'jason campaign list | sort --out=x', 'jason campaign list | sort -T /tmp', 'jason campaign list | sort --compress-program=gzip', 'jason campaign list | uniq - out.txt', 'jason campaign list | tee x', 'jason campaign list >> x', 'jason campaign list 2> errors.txt']) {
-            assert.deepEqual(both('Bash', { command }, scope).map((judged) => judged.verdict), ['ask', 'ask'], `${scope.platform}: ${command}`);
+    }
+});
+
+test('a reason in Russian and an account named in Cyrillic, each in single quotes, run with no card where the hook rides Ask first and Auto-edit, and below the floor each is a card as before; in double quotes, bare, or with a mark that is no letter, each is a card', () => {
+    const runs = [
+        "jason campaign archive cmp_1 --actor 'human:Некто' --reason 'человек попросил архивировать'",
+        "jason campaign start cmp_1 --actor 'human:Некто' --reason 'человек попросил запустить'",
+        "jason campaign list | jq '.items[] | select(.name == \"Кампания\")'",
+    ];
+    for (const scope of scopes) {
+        for (const command of runs) {
+            assert.deepEqual(both('Bash', { command }, scope), [allow, allow], `${scope.platform}: ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+            assert.equal(judge('Bash', { command }, unhooked(scope)).verdict, 'ask', `below the floor: ${command}`);
+        }
+        for (const command of [
+            "jason campaign archive cmp_1 --actor human:Некто --reason 'as asked'",
+            "jason campaign archive cmp_1 --actor \"human:Некто\" --reason 'as asked'",
+            "jason campaign archive cmp_1 --reason 'человек\u202eпопросил'",
+            "jason campaign archive cmp_1 --reason 'человек\u0007'",
+            "jason campaign archive cmp_1 --reason 'человек\u2026'",
+        ]) {
+            assert.deepEqual(both('Bash', { command }, scope).map(asked), ['Run a command', 'Run a command'], `${scope.platform}: ${command}`);
         }
     }
 });

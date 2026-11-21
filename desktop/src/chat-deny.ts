@@ -138,10 +138,12 @@ function readIfThere(file: string): string | null {
 /**
  * The deny list's verbs that are a person's own word and that a chat outside Plan only runs with no card, as the allow
  * list's verbs are run: the host's own rule lets each through (`modeFence`), and the chat's instructions keep each to the
- * person's word. One principle draws the line: outside Full access, an act that lets sends go without the person's
- * approval is a card by whichever door, and an act that only narrows needs none. So an approval approved or rejected, a
- * standing approval taken back, a question answered and a campaign started run with no card; a standing approval set,
- * which releases sends nobody reads, does not. They stay on the deny list, which Plan only still reads.
+ * person's word. Below Claude Code's floor of Full access one principle draws the line: outside Full access, an act that
+ * lets sends go without the person's approval is a card by whichever door, and an act that only narrows needs none. So
+ * an approval approved or rejected, a standing approval taken back, a question answered and a campaign started run with
+ * no card; a standing approval set, which releases sends nobody reads, does not. From the floor on, where the hook rides
+ * an Ask first or Auto-edit turn, every jason verb runs with no card but the forms of `askingCardedForms`. They stay on
+ * the deny list, which Plan only still reads.
  */
 export const personsWordVerbs: readonly string[] = ['approval approve', 'approval reject', 'approval unset-standing', 'decision answer', 'campaign start'];
 
@@ -176,20 +178,42 @@ export const personsWordForms: readonly string[] = [
 export const cardedVerbs: readonly string[] = ['reply record'];
 
 /**
- * The verbs that keep a card in Ask first and Auto-edit where the turn's hook rides them, from Claude Code's floor of Full
- * access on, every form of each: taking the installation off the machine, placing an archive over the installation,
- * putting back the executable an update replaced, and granting a plugin what it may reach. Every other jason verb runs
- * there with no card (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each written as the chat's
- * instructions write a person's word; below the floor nothing changed, and Plan only runs none of them.
+ * A jason verb that keeps a card in Ask first and Auto-edit where the turn's hook rides them: in every form, or, where it
+ * names options, in a form that gives one of them, by its name alone, after `=` or after `:`.
  */
-export const askingCardedVerbs: readonly string[] = ['uninstall', 'import', 'update rollback', 'plugin grant'];
+export interface CardedForm {
+    readonly verb: string;
+    readonly options?: readonly string[];
+}
+
+/**
+ * The forms that keep a card in Ask first and Auto-edit where the turn's hook rides them, from Claude Code's floor of Full
+ * access on: taking the installation off the machine, placing an archive over it, writing it into an archive, putting
+ * back the executable an update replaced or placing a version named, granting a plugin what it may reach, placing a
+ * plugin package from another feed or over the one there, and placing skills from another source, feed or root. The
+ * plain forms run with no card: `update apply`, `plugin install` of a package the release publishes, and `skills
+ * install` and `skills update` of the release's own skills. Every other jason verb runs there with no card
+ * (`ChatScope.hooked`), the deny list's and `cardedVerbs` among them, each written as the chat's instructions write a
+ * person's word; below the floor nothing changed, and Plan only runs none of them.
+ */
+export const askingCardedForms: readonly CardedForm[] = [
+    { verb: 'uninstall' },
+    { verb: 'import' },
+    { verb: 'export' },
+    { verb: 'update rollback' },
+    { verb: 'update apply', options: ['--version'] },
+    { verb: 'plugin grant' },
+    { verb: 'plugin install', options: ['--feed', '--replace'] },
+    { verb: 'skills install', options: ['--source', '--feed', '--root'] },
+    { verb: 'skills update', options: ['--source', '--feed', '--root'] },
+];
 
 /**
  * The fence one turn runs under in its mode. Plan only: the fence as it is read, every command and operation of the deny
  * list refused. Every other mode: no command or operation of the deny list is refused. The forms of a person's word
  * (`personsWordForms`) join the allow list and run with no card, and `cardedVerbs` leave it. Every other command of the
  * deny list goes to the permission model as any jason command the host does not run by itself does: where the hook rides
- * the turn it runs with no card but the verbs of `askingCardedVerbs`, and below the floor of Full access it is a card in
+ * the turn it runs with no card but the forms of `askingCardedForms`, and below the floor of Full access it is a card in
  * Ask first and Auto-edit; Full access runs it.
  */
 export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {

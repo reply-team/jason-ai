@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
-import { askingCardedVerbs, personsWordForms, readFence } from '../src/chat-deny.ts';
+import { askingCardedForms, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
 import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { loggedTurns } from '../src/chat-log.ts';
@@ -1820,9 +1820,10 @@ test('every turn, on either host and in every mode, carries the chat\'s variable
     }
 });
 
-test('in Ask first and Auto-edit, where the hook rides the turn, each installation verb and each act that lets sends go unapproved runs with no card but uninstall, import and plugin grant, each the person\'s card; below the floor of Full access each is a card, never a refusal; in Plan only each is refused with no card', async (t) => {
+test('in Ask first and Auto-edit, where the hook rides the turn, each installation verb and each act that lets sends go unapproved runs with no card but uninstall, export, import and plugin grant, each the person\'s card; below the floor of Full access each is a card, never a refusal; in Plan only each is refused with no card', async (t) => {
     const carded = [...installationVerbs, ...releasingActs, replyRecord];
-    const keepsCard = (command: string) => askingCardedVerbs.some((verb) => command === `jason ${verb}` || command.startsWith(`jason ${verb} `));
+    const keepsCard = (command: string) =>
+        askingCardedForms.some(({ verb, options }) => (command === `jason ${verb}` || command.startsWith(`jason ${verb} `)) && (options === undefined || options.some((option) => command.split(' ').includes(option))));
     const versionFile = join(mkdtempSync(join(tmpdir(), 'jason-version-')), 'version.json');
     t.after(() => rmSync(dirname(versionFile), { recursive: true, force: true }));
     writeFileSync(versionFile, JSON.stringify({ stdout: '2.1.300 (Claude Code)' }));
@@ -1840,7 +1841,7 @@ test('in Ask first and Auto-edit, where the hook rides the turn, each installati
             assert.equal(texts(said).filter((text) => text === 'decision allow').length, carded.length - asked.length, `${floor}, ${mode}: the rest ran with no card`);
         }
     }
-    assert.deepEqual(carded.filter(keepsCard), ['jason uninstall', 'jason import in.zip', 'jason plugin grant reply --http api.example.com']);
+    assert.deepEqual(carded.filter(keepsCard), ['jason uninstall', 'jason export out.zip', 'jason import in.zip', 'jason plugin grant reply --http api.example.com']);
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'plan_only');

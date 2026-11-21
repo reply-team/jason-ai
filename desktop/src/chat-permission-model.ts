@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { askingCardedVerbs } from './chat-deny.ts';
+import { askingCardedForms } from './chat-deny.ts';
 import { followsLinksIn, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -64,8 +64,9 @@ export interface ChatScope {
      * where the turn's settings block no read (`hookedSettings`) and the hook refuses the three kinds wherever a tool names
      * them. There a read anywhere else runs with no card, a listing and the host's own read-only commands among them
      * (`hookedNoCard`), a change outside the chat's folders is one card, a walk of a folder that holds the data directory is
-     * refused (`walkRefusal`), and every jason verb runs with no card but those of `askingCardedVerbs`, jason's own help and
-     * version among them. Absent or false, below the floor and in Plan only: as it was.
+     * refused by the hook and a card each time here (`walksRoot`), and every jason verb runs with no card but the forms of
+     * `askingCardedForms`, jason's own help and version among them. Absent or false, below the floor and in Plan only: as
+     * it was.
      */
     hooked?: boolean;
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
@@ -213,14 +214,29 @@ export const ownToolRefusal =
     'That tool is Jason\'s own, set for this turn: it carries the chat\'s own permission requests, and only the person answers them, so the chat does not use it. Nothing was done.';
 /**
  * The refusal of a walk of a folder that holds Jason's data directory, or in a demo run one of the person's own
- * directories: a search of it by the Grep or Glob tool, and where the hook rides the turn a command that walks it
- * (`walkRefusal`), with how to go on. A walk reads the data without naming it, so it is the data's kind. A plain listing
+ * directories: a search of it by the Grep or Glob tool, and where the hook rides the turn a command that may walk it
+ * (`walksRoot`), with how to go on. A walk reads the data without naming it, so it is the data's kind. A plain listing
  * of such a folder is no walk where the hook rides the turn; a listing of the data directory itself is a read of the data
  * (`dataRefusal`).
  */
 export const searchRefusal =
-    'That folder holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, so a search or a walk of it would reach that '
-    + 'data: the chat does not take it. Name a narrower folder that does not hold it, such as Documents or Desktop. Nothing was done.';
+    'That folder holds Jason\'s data directory, the installation\'s own data and not one of the person\'s files, so a search, a walk, a copy or an archive of '
+    + 'it would pass through Jason\'s own data: the chat does not take it, and runs on such a folder only a plain listing, such as `ls ~`. Name a narrower '
+    + 'folder that does not hold it, such as Documents or Desktop. Nothing was done.';
+/**
+ * Where the hook rides the turn, the refusal of a jq program that reads what its input does not hold: the environment
+ * (`env`, `$ENV`), a module or a data file by its own words (`import`, `include`), or a program from a file (`-f`).
+ */
+export const jqRefusal =
+    'That jq program reads the environment or a file by its own words (`env`, `$ENV`, `import`, `include`, or a program from a file), which the chat does not run: '
+    + 'give jq what it reads on standard input, such as `jason campaign list | jq \'.items\'`. Nothing was run.';
+/**
+ * Where the hook rides the turn, the refusal of a command told the files it reads on its input or by another file
+ * (`--files0-from`), whose names no word of it holds.
+ */
+export const filesFromRefusal =
+    'That command reads files whose names come on its input or from another file, so no word of it says which files it opens, and one may be Jason\'s own '
+    + 'data and not one of the person\'s files: the chat does not take it. Name each file in the command instead, such as `wc -l notes.txt`. Nothing was run.';
 const lengthRefusal = 'That path is longer than the system takes: the chat neither reads nor writes it. Nothing was done.';
 /** The longest path each platform takes: the `\\?\` form's limit on Windows, `PATH_MAX` on macOS and Linux. */
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
@@ -243,8 +259,8 @@ export const attemptRefusal =
     'That command names JASON_ATTEMPT_ID, one of Jason\'s own variables and not the person\'s, which says a role\'s attempt runs: the chat is never one, and '
     + 'does not open or change it. `jason workitem get` reads an item and its attempts. Nothing was run.';
 export const lookupRefusal =
-    'That command changes where the shell finds a program, which Jason itself sets for the turn and the chat does not open or change, so that '
-    + 'the jason it starts stays the desktop\'s: run the `jason` verb you need as it is, such as `jason campaign list`. Nothing was run.';
+    'That command changes where the shell finds a program, Jason\'s own for this turn and not the person\'s, which Jason itself sets and the chat does not '
+    + 'open or change, so that the jason it starts stays the desktop\'s: run the `jason` verb you need as it is, such as `jason campaign list`. Nothing was run.';
 /** What the hook answers where reading a tool use failed: it refuses, since a judgement that failed never runs anything. */
 const unreadRefusal = 'The desktop could not read what this tool would do, so it was not run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
@@ -587,14 +603,19 @@ function holdsData(value: string, scope: ChatScope): boolean {
 
 /**
  * A folder a search or a listing walks: one that holds the data directory is refused, since the walk would read what the
- * chat never reads, and that comes before a card for its spelling; any other is judged as a read of it. Its card is
- * remembered by the folder it names and by the tool's own kind, so a grant covers that tool's walks of that folder only:
- * never a Read, a sibling, a folder under it or another tool's walk, and a Read's grant never covers it.
+ * chat never reads, and that comes before a card for its spelling; where the hook rides the turn, which refuses such a
+ * walk itself (`walkKind`), it is the person's card each time, never covered by a grant. Any other is judged as a read of
+ * it. Its card is remembered by the folder it names and by the tool's own kind, so a grant covers that tool's walks of
+ * that folder only: never a Read, a sibling, a folder under it or another tool's walk, and a Read's grant never covers it.
  */
 function judgeFolder(tool: string, value: string, scope: ChatScope): Judgement {
     const judged = judgePath(value, scope, false);
     if (judged.verdict === 'deny') return judged;
-    if (holdsData(value, scope)) return { verdict: 'deny', message: searchRefusal };
+    if (holdsData(value, scope)) {
+        return scope.hooked === true
+            ? { verdict: 'ask', title: walkTitles[tool] ?? 'Run a command', detail: shorten(located(value, scope)), remember: null }
+            : { verdict: 'deny', message: searchRefusal };
+    }
     if (judgeSpelling(value, scope) !== null) return judged;
     const folder = located(value, scope);
     if (judged.verdict !== 'ask' || judged.remember === null) return judged;
@@ -817,88 +838,217 @@ function plainForm(tool: string, command: string, places: readonly string[], sco
 /**
  * The programs that run with no card beside jason where the hook rides an Ask first or Auto-edit turn, alone or in a
  * pipeline or a sequence with it (`hookedNoCard`): a closed list of the host's read-only commands and `jq`, each of which
- * reads its input or the files it names and prints, and writes nothing, starts nothing and runs nothing it is given. Each
- * is named bare, as the shell finds it. `sort` runs with no option that writes a file or starts a program (`sortWrites`),
- * and `uniq` with at most one file, since its second is the file it writes. Any other program is a card, as before.
+ * reads its input and prints, and writes nothing, starts nothing and runs nothing it is given. Each is named bare, as the
+ * shell finds it, and takes only the options of its own table (`optionTables`); in a command of more than one part each
+ * reads its standard input alone and names no file (`noCardFilter`), but `ls`, which lists the folders it names, and
+ * `echo`, which prints its words. Any other program is a card, as before.
  */
 export const noCardFilters: readonly string[] = ['jq', 'grep', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'tr', 'cat', 'ls', 'echo'];
 
 /**
- * True when sort's words write a file or start a program: `-o` or `-T` in a cluster of short options before any letter
- * that takes the rest as its value, or `--output`, `--temporary-directory` or `--compress-program` by any prefix of them,
- * since GNU takes an abbreviated long option.
+ * A program's options in the forms the chat knows read no folder below the ones they name and no file they are told of
+ * on their input or by another file: letters alone (`flags`), letters that take a value, the rest of their word or the
+ * next word (`valued`), long options alone (`long`), long options that take a value after `=` or as the next word
+ * (`longValued`), and long options that take two (`longPairs`, jq's `--arg NAME VALUE`). Each is exact, since a program
+ * that takes an abbreviated long option reads a prefix as the option it begins; nothing else is taken. `operands` says
+ * what its other words are: files, a pattern and then files, a program and then files, folders it lists, or the sets of
+ * letters `tr` reads.
  */
-function sortWrites(args: readonly string[]): boolean {
-    for (const word of args) {
-        if (word === '--') return false;
-        if (word.startsWith('--')) {
-            const name = (word.slice(2).split('=')[0] ?? '').toLowerCase();
-            if (name !== '' && ['output', 'temporary-directory', 'compress-program'].some((long) => long.startsWith(name))) return true;
+interface OptionTable {
+    readonly flags: string;
+    readonly valued?: string;
+    readonly long?: readonly string[];
+    readonly longValued?: readonly string[];
+    readonly longPairs?: readonly string[];
+    /** A count as an option of its own, as `head -5`. */
+    readonly count?: boolean;
+    readonly operands: 'files' | 'pattern' | 'program' | 'folders' | 'sets';
+}
+
+const colorOptions = ['--color', '--color=never', '--color=auto', '--color=always'];
+const grepTable: OptionTable = {
+    flags: 'ivcnlLhHoqswxEFGPabzZ',
+    valued: 'emABC',
+    long: [
+        '--ignore-case', '--no-ignore-case', '--invert-match', '--count', '--line-number', '--files-with-matches', '--files-without-match', '--no-filename',
+        '--with-filename', '--only-matching', '--quiet', '--silent', '--no-messages', '--word-regexp', '--line-regexp', '--extended-regexp',
+        '--fixed-strings', '--basic-regexp', '--perl-regexp', '--text', '--byte-offset', '--null-data', '--null', ...colorOptions,
+        ...colorOptions.map((option) => option.replace('color', 'colour')),
+    ],
+    longValued: ['--regexp', '--max-count', '--after-context', '--before-context', '--context'],
+    operands: 'pattern',
+};
+const headTable: OptionTable = { flags: 'qvz', valued: 'nc', count: true, long: ['--quiet', '--silent', '--verbose', '--zero-terminated'], longValued: ['--lines', '--bytes'], operands: 'files' };
+
+/**
+ * The options each program of `noCardFilters` takes, and the plain forms of a walk (`plainWalkForm`), GNU's and BSD's
+ * in common use, none that descends into a folder, reads a file it is told of on its input or by another file, writes a
+ * file or starts a program: `ls` and `grep` with no recursion and no `-d`, `sort` with no `-o`, `-T`, `--files0-from` or
+ * `--compress-program`, `wc` with no `--files0-from`, `tail` with no `-f`, and `jq` with only `-r`, `-c`, `-e`, `-s`,
+ * `-j`, `-S`, `-M`, `-a`, `--arg` and `--argjson`.
+ */
+const optionTables: Readonly<Record<string, OptionTable>> = {
+    ls: {
+        flags: 'aAlhd1FptrSsiognGcuUXvkQmxC',
+        long: ['--all', '--almost-all', '--human-readable', '--directory', '--classify', '--reverse', '--size', '--inode', '--numeric-uid-gid',
+            '--group-directories-first', '--full-time', '--literal', '--si', '--kibibytes', '--no-group', ...colorOptions],
+        operands: 'folders',
+    },
+    grep: grepTable,
+    egrep: grepTable,
+    fgrep: grepTable,
+    cat: { flags: 'AbeEnstTuv', long: ['--show-all', '--number-nonblank', '--show-ends', '--number', '--squeeze-blank', '--show-tabs', '--show-nonprinting'], operands: 'files' },
+    head: headTable,
+    tail: headTable,
+    wc: { flags: 'cmlwL', long: ['--bytes', '--chars', '--lines', '--words', '--max-line-length'], operands: 'files' },
+    sort: {
+        flags: 'bdfgiMhnrVsuz',
+        valued: 'kt',
+        long: ['--ignore-leading-blanks', '--dictionary-order', '--ignore-case', '--general-numeric-sort', '--ignore-nonprinting', '--month-sort',
+            '--human-numeric-sort', '--numeric-sort', '--reverse', '--version-sort', '--stable', '--unique', '--zero-terminated'],
+        longValued: ['--key', '--field-separator'],
+        operands: 'files',
+    },
+    uniq: {
+        flags: 'cduiz',
+        valued: 'fsw',
+        long: ['--count', '--repeated', '--unique', '--ignore-case', '--zero-terminated'],
+        longValued: ['--skip-fields', '--skip-chars', '--check-chars'],
+        operands: 'files',
+    },
+    cut: {
+        flags: 'snz',
+        valued: 'bcfd',
+        long: ['--complement', '--only-delimited', '--zero-terminated'],
+        longValued: ['--bytes', '--characters', '--fields', '--delimiter', '--output-delimiter'],
+        operands: 'files',
+    },
+    tr: { flags: 'cCdst', long: ['--complement', '--delete', '--squeeze-repeats', '--truncate-set1'], operands: 'sets' },
+    jq: { flags: 'rcesjSMa', longPairs: ['--arg', '--argjson'], operands: 'program' },
+};
+
+/**
+ * A program's words that are no option, read by its table (`OptionTable`), and whether an option gave a grep its
+ * pattern; null where a word is an option the table does not take, or one that needs a value it is not given. Every word
+ * that begins with a dash before `--` is an option, wherever it stands, as GNU's programs read it.
+ */
+function operandsOf(table: OptionTable, args: readonly string[]): { operands: string[]; patternGiven: boolean } | null {
+    const operands: string[] = [];
+    let patternGiven = false;
+    for (let at = 0; at < args.length; at++) {
+        const word = args[at] as string;
+        if (word === '--') {
+            operands.push(...args.slice(at + 1));
+            break;
+        }
+        if (word === '-' || !word.startsWith('-')) {
+            operands.push(word);
             continue;
         }
-        if (!/^-[A-Za-z0-9]/.test(word)) continue;
-        for (const letter of word.slice(1)) {
-            if (letter === 'o' || letter === 'T') return true;
-            if ('ktS'.includes(letter)) break;
+        if (word.startsWith('--')) {
+            const equals = word.indexOf('=');
+            const name = equals < 0 ? word : word.slice(0, equals);
+            if (table.long?.includes(word) === true) continue;
+            if (table.longValued?.includes(name) === true) {
+                if (equals < 0 && ++at >= args.length) return null;
+                if (name === '--regexp') patternGiven = true;
+                continue;
+            }
+            if (equals < 0 && table.longPairs?.includes(word) === true) {
+                at += 2;
+                if (at >= args.length) return null;
+                continue;
+            }
+            return null;
+        }
+        if (table.count === true && /^-[0-9]+$/.test(word)) continue;
+        for (let letter = 1; letter < word.length; letter++) {
+            const flag = word[letter] as string;
+            if (table.flags.includes(flag)) continue;
+            if (table.valued?.includes(flag) !== true) return null;
+            if (letter === word.length - 1 && ++at >= args.length) return null;
+            if (table.operands === 'pattern' && flag === 'e') patternGiven = true;
+            break;
         }
     }
-    return false;
+    return { operands, patternGiven };
 }
 
-/** The words of a program's that are files, not options: every word after `--`, a lone `-`, and a word with no dash. */
-function fileWords(args: readonly string[]): string[] {
-    const at = args.indexOf('--');
-    const before = at < 0 ? args : args.slice(0, at);
-    return [...before.filter((word) => word === '-' || !word.startsWith('-')), ...(at < 0 ? [] : args.slice(at + 1))];
-}
-
-/** True when a program of `noCardFilters` runs with these words with no card where the hook rides the turn. */
-function noCardFilter(program: string, args: readonly string[]): boolean {
-    if (!noCardFilters.includes(program)) return false;
-    if (program === 'sort') return !sortWrites(args);
-    if (program === 'uniq') return fileWords(args).length <= 1;
-    return true;
+/** The files a program reads among its words that are no option, by what its table says they are; `-` is its input. */
+function filesOf(table: OptionTable, read: { operands: string[]; patternGiven: boolean }): string[] {
+    const named = table.operands === 'sets' ? [] : table.operands === 'program' || (table.operands === 'pattern' && !read.patternGiven) ? read.operands.slice(1) : read.operands;
+    return named.filter((word) => word !== '-');
 }
 
 /**
- * True when the words after `jason` run with no card where the hook rides an Ask first or Auto-edit turn: any verb but the
- * four that keep a card (`askingCardedVerbs`), which are told in any letter case and with anything between their words
- * (`holdsEntry`); the help of one of the four, its words exactly and then `--help` or `-h`, which runs nothing; and
- * jason's own help and version, each alone (`rootForms`). Nothing else that starts with an option.
+ * True when a program of `noCardFilters` runs with these words with no card where the hook rides the turn: `echo` with
+ * any; any other with only the options its table takes (`optionTables`), `uniq` with one file at most, since its second
+ * is the file it writes; and in a command of more than one part (`compound`) none but `ls` names a file, so each reads its
+ * standard input alone.
+ */
+function noCardFilter(program: string, args: readonly string[], compound: boolean): boolean {
+    if (!noCardFilters.includes(program)) return false;
+    if (program === 'echo') return true;
+    const table = optionTables[program];
+    const read = table === undefined ? null : operandsOf(table, args);
+    if (table === undefined || read === null) return false;
+    const files = filesOf(table, read);
+    if (program === 'uniq' && files.length > 1) return false;
+    return !compound || table.operands === 'folders' || files.length === 0;
+}
+
+/** True when a word gives an option: its name in any letter case, alone or with its value after `=` or `:`. */
+function namesOption(word: string, option: string): boolean {
+    const folded = word.toLowerCase();
+    return folded === option || folded.startsWith(`${option}=`) || folded.startsWith(`${option}:`);
+}
+
+/**
+ * True when the words after `jason` run with no card where the hook rides an Ask first or Auto-edit turn: any verb in any
+ * form but the forms that keep a card (`askingCardedForms`), whose verb is told in any letter case and with anything
+ * between its words (`holdsEntry`) and whose option is told anywhere among them (`namesOption`); the help of a carded
+ * form, a `--help` or `-h` anywhere before a `--`, which runs nothing; and jason's own help and version, each alone
+ * (`rootForms`). Nothing else that starts with an option.
  */
 function noCardJason(rest: readonly string[]): boolean {
     const first = rest[0];
     if (first === undefined) return false;
     if (first.startsWith('-')) return rest.length === 1 && rootForms.includes(first);
-    const carded = askingCardedVerbs.find((verb) => holdsEntry(rest, verb));
-    if (carded === undefined) return true;
-    const words = carded.split(' ');
-    const help = rest[words.length];
-    return words.every((word, at) => rest[at] === word) && (help === '--help' || help === '-h');
+    const carded = askingCardedForms.some(
+        ({ verb, options }) => holdsEntry(rest, verb) && (options === undefined || rest.some((word) => options.some((option) => namesOption(word, option)))),
+    );
+    if (!carded) return true;
+    const end = rest.indexOf('--');
+    return (end < 0 ? rest : rest.slice(0, end)).some((word) => word === '--help' || word === '-h');
 }
 
 /**
  * Where the hook rides an Ask first or Auto-edit turn, true when the Bash tool's command runs with no card: read
- * literally (`readLiteral`, a `~` taken only where the shell's home is the judgement's), one command or a pipeline or a
- * sequence of them, each the desktop's own `jason` in a form that runs with no card (`noCardJason`) or a program of
- * `noCardFilters`; no directory change; standard input nothing, a pipe, a here-document or one file given by its only
- * redirection, and every other redirection to `/dev/null` alone, so nothing is written into a file; no file named like one
- * of its programs in the folder the shell runs in (`shadowed`) and no guard's card. It is judged after every refusal, the
- * three kinds and a walk of a folder that holds the data directory among them, so a place any of its words names is
- * refused before it is looked at. Anything else, compound or not, is the card it was.
+ * literally (`readLiteral`, a `~` taken only where the shell's home is the judgement's, and a letter outside ASCII read in
+ * a single-quoted body), one command or a pipeline or a sequence of them, each the desktop's own `jason` in a form that
+ * runs with no card (`noCardJason`) or a program of `noCardFilters` as it runs with none (`noCardFilter`); no directory
+ * change; standard input nothing, a pipe, a here-document or one file given by its only redirection, and every other
+ * redirection to `/dev/null` alone, so nothing is written into a file; no file named like one of its programs in the
+ * folder the shell runs in (`shadowed`) and no guard's card. It is judged after every refusal, and its own reading is held
+ * to them again (`refusalOver`), since the readings they read do not take a letter outside ASCII. Anything else, compound
+ * or not, is the card it was.
  */
 function hookedNoCard(tool: string, command: string, places: readonly string[], scope: ChatScope): boolean {
     if (scope.hooked !== true || tool !== 'Bash') return false;
     // Whatever goes wrong while the command is read, it keeps its card: a reading that failed never runs anything.
     try {
-        const reading = readLiteral('Bash', command, { platform: scope.platform, home: shellHomeOf(scope) });
+        const reading = readLiteral('Bash', command, { platform: scope.platform, home: shellHomeOf(scope), lettersInSingleQuotes: true });
         if (reading.held) return false;
+        const read = reading.commands.flatMap(({ words, targets }) => placesOfWords([...words, ...targets], scope, true));
+        const text = reading.commands.map(({ words, targets }) => [...words, ...targets].join(' ')).join('\n');
+        if (refusalOver(text, read, scope) !== null || read.some((path) => isProtected(scope, path)) || guardedPlace(read, scope) !== undefined) return false;
         const programs = new Set<string>();
+        const compound = reading.commands.length > 1;
         for (const { words, targets, input, cwd } of reading.commands) {
             if (cwd !== null) return false;
             if (input === 'file' ? targets.length !== 1 : targets.some((target) => target !== '/dev/null')) return false;
             const [program = '', ...rest] = words;
-            if (program === 'jason' ? !noCardJason(rest) : !noCardFilter(program, rest)) return false;
+            if (program === 'jason' ? !noCardJason(rest) : !noCardFilter(program, rest, compound)) return false;
             programs.add(program);
         }
         if (shadowed(scope, programs)) return false;
@@ -908,60 +1058,644 @@ function hookedNoCard(tool: string, command: string, places: readonly string[], 
     }
 }
 
-/** The programs that walk every folder they are given whatever their options: searches, finders, sizes, trees, copies. */
-const alwaysWalks: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'find', 'du', 'tree', 'robocopy']);
-/** The archivers, which walk a folder they are given when they create or add to an archive. */
-const archivers: ReadonlySet<string> = new Set(['tar', 'bsdtar', 'gtar']);
-/** The programs that walk the folder they run in when no folder is given: what a walk reaches after a directory change. */
-const walksHere: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'find', 'du', 'tree', 'ls', 'dir', 'gci', 'get-childitem', 'findstr']);
-/** The searches whose first word that is no option is the pattern, unless an option gives it. */
-const patternFirst: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'findstr']);
-/** The copies whose last word that is no option is where they copy to, which they do not walk. */
-const copies: ReadonlySet<string> = new Set(['cp', 'scp', 'rsync', 'robocopy', 'xcopy', 'copy-item', 'cpi', 'copy']);
+/**
+ * The programs the chat knows do not walk a folder they are given, whatever their words: they print their words
+ * (`echo`, `printf`), change or say the folder the shell runs in (`cd`, `pushd`, `popd`, `pwd`), or look at a path and no
+ * further (`test`, `[`, `[[`).
+ */
+const neverWalks: ReadonlySet<string> = new Set(['echo', 'printf', 'cd', 'chdir', 'pushd', 'popd', 'pwd', 'test', '[', '[[']);
+/** PowerShell's kinds of `neverWalks`. */
+const powerShellNeverWalks: ReadonlySet<string> = new Set([
+    'set-location', 'sl', 'cd', 'chdir', 'push-location', 'pushd', 'pop-location', 'popd', 'get-location', 'gl', 'pwd', 'write-output', 'write', 'echo',
+    'write-host', 'test-path',
+]);
+/** PowerShell's listing, which walks only with a parameter its table does not take (`powerShellListingParameters`). */
+const powerShellListing: ReadonlySet<string> = new Set(['get-childitem', 'gci', 'ls', 'dir']);
+const powerShellListingParameters: readonly string[] = ['-force', '-name', '-directory', '-file', '-hidden', '-path', '-literalpath', '-filter', '-erroraction', '-ea'];
+const powerShellValued: readonly string[] = ['-path', '-literalpath', '-filter', '-erroraction', '-ea'];
+/** The PowerShell commands that print or reshape what a pipe gives them, and open no path it gives. */
+const powerShellPrints: ReadonlySet<string> = new Set([
+    'write-output', 'write', 'echo', 'write-host', 'out-host', 'out-string', 'out-null', 'measure-object', 'measure', 'select-object', 'select',
+    'sort-object', 'sort', 'format-table', 'ft', 'format-list', 'fl', 'format-wide', 'fw', 'where-object', 'where', '?', 'foreach-object', '%',
+    'foreach', 'group-object', 'group', 'convertto-json', 'convertfrom-json',
+]);
 
-/** A PowerShell parameter that makes a listing or a copy recursive: `-Recurse` or any prefix of it, or `-Depth`. */
-function recursesInPowerShell(word: string): boolean {
-    const name = word.toLowerCase().split(':')[0] ?? '';
-    return (name.length >= 2 && '-recurse'.startsWith(name)) || name === '-depth';
-}
+/** The plain forms whose programs have an option that descends into a folder: a listing and a search. */
+const descends: ReadonlySet<string> = new Set(['ls', 'grep', 'egrep', 'fgrep']);
 
-/** True when a word of a program's makes it walk what it is given (`walkRefusal`), by the program's own spelling of it. */
-function recursiveWord(program: string, word: string, platform: Platform, powershell: boolean): boolean {
-    const slash = platform === 'win32' ? word.toLowerCase() : '';
-    switch (program) {
-        case 'grep':
-        case 'egrep':
-        case 'fgrep':
-            return /^-[^-]*[rR]/.test(word) || /^--(recursive|dereference-recursive|directories=recurse)$/.test(word);
-        case 'ls':
-        case 'dir':
-        case 'gci':
-        case 'get-childitem':
-            return /^-[^-]*R/.test(word) || word === '--recursive' || (powershell && recursesInPowerShell(word)) || slash === '/s';
-        case 'cp':
-        case 'scp':
-            return /^-[^-]*[rRa]/.test(word) || word === '--recursive' || word === '--archive';
-        case 'copy-item':
-        case 'cpi':
-        case 'copy':
-            return powershell && recursesInPowerShell(word);
-        case 'rsync':
-            return /^-[^-]*[ra]/.test(word) || word === '--recursive' || word === '--archive';
-        case 'zip':
-            return /^-[^-]*r/.test(word) || word === '--recurse-paths';
-        case 'findstr':
-        case 'xcopy':
-            return slash === '/s' || slash === '/e';
-        case 'where':
-            return slash === '/r';
-        default:
-            return false;
+/**
+ * True when a program with these words is one of the few forms the chat knows does not walk a folder it is given: a
+ * program of `neverWalks`, whatever its words; one of `optionTables` with only the options its table takes, `uniq` with
+ * one file at most, and, for a listing or a search (`descends`), no word the shell builds (`unknown`) and none that
+ * begins with a pattern, either of which may be an option that descends; in PowerShell the kinds of `neverWalks`, and
+ * its listing with only the parameters its table takes, each named whole, and no splatted word, the one way a value
+ * becomes a parameter there.
+ */
+function plainWalkForm(program: string, args: readonly string[], powershell: boolean, unknown: (at: number) => boolean): boolean {
+    if (powershell) {
+        if (powerShellNeverWalks.has(program)) return true;
+        if (!powerShellListing.has(program)) return false;
+        for (let at = 0; at < args.length; at++) {
+            const word = (args[at] as string).toLowerCase();
+            if (word.startsWith('@')) return false;
+            if (!word.startsWith('-')) continue;
+            if (!powerShellListingParameters.includes(word)) return false;
+            if (powerShellValued.includes(word)) at++;
+        }
+        return true;
     }
+    if (neverWalks.has(program)) return true;
+    const table = optionTables[program];
+    if (table === undefined) return false;
+    if (descends.has(program) && args.some((arg, at) => unknown(at) || /^[*?[]/.test(arg))) return false;
+    const read = operandsOf(table, args);
+    return read !== null && (program !== 'uniq' || filesOf(table, read).length <= 1);
 }
 
-/** True when an archiver's words create or add to an archive: the first word's letters, or an option, say so. */
-function archives(words: readonly string[]): boolean {
-    return words.some((word, index) => (index === 0 && /^-?[A-Za-z]*[cru][A-Za-z]*$/.test(word)) || /^-[^-]*[cru]/.test(word) || /^--(create|append|update)$/.test(word));
+/**
+ * True when a program never runs a word it is given, so a quoted word or a here-document's body given to it is its data
+ * and never a command (`walkedFrom`): the desktop's own jason, whose words are a request, and the programs of
+ * `noCardFilters` but `sort`, and of `neverWalks`; in PowerShell its kinds of `neverWalks` and its listing.
+ */
+function takesTextOnly(program: string, powershell: boolean): boolean {
+    if (program === 'jason') return true;
+    if (powershell) return powerShellNeverWalks.has(program) || powerShellListing.has(program);
+    return (program !== 'sort' && noCardFilters.includes(program)) || neverWalks.has(program);
+}
+
+/**
+ * True when a command's text could make a program of the plain forms another one: an alias, a function, `hash` or
+ * `enable` in a shell, and the variable BSD grep reads its options from; an alias, a function, a filter or a default
+ * parameter in PowerShell. Such a command has no plain form.
+ */
+function redefines(command: string, powershell: boolean): boolean {
+    return powershell
+        ? /(?<![\w-])(?:function|filter|set-alias|new-alias|sal|nal|import-alias)(?![\w-])|\$PSDefaultParameterValues|(?:alias|function):/i.test(command)
+        : /(?:^|[\s;&|(){}`])(?:alias|function|hash|enable)(?=[\s;&|()]|$)|[A-Za-z_][\w.:-]*[ \t]*\([ \t]*\)|GREP_OPTIONS/.test(command);
+}
+
+/**
+ * A word as the walk reads it: its text, its quotes and escapes taken; whether it holds a space or a separator; whether
+ * the shell builds part of it while it runs, by a variable, a substitution or an expression; and whether a pattern
+ * outside quotes is in it.
+ */
+interface WrittenWord {
+    text: string;
+    spaced: boolean;
+    built: boolean;
+    pattern: boolean;
+}
+
+/**
+ * One command as the walk reads it (`writtenCommands`): its words; the texts of the substitutions and expressions in
+ * them, which run where it runs; the bodies of its here-documents, each with whether its tag was quoted; and whether a
+ * pipe feeds it.
+ */
+interface WrittenCommand {
+    words: WrittenWord[];
+    inner: string[];
+    bodies: { text: string; quoted: boolean }[];
+    piped: boolean;
+}
+
+/** Where the parenthesis that closes the one at `open` stands, quoted text skipped; the text's end when none does. */
+function closing(text: string, open: number, powershell: boolean): number {
+    const escape = powershell ? '`' : '\\';
+    let depth = 0;
+    for (let at = open; at < text.length; at++) {
+        const c = text[at] as string;
+        if (c === escape) {
+            at++;
+        } else if (c === '\'') {
+            const end = text.indexOf('\'', at + 1);
+            if (end < 0) return text.length;
+            at = end;
+        } else if (c === '"') {
+            let end = at + 1;
+            while (end < text.length && text[end] !== '"') end += text[end] === escape ? 2 : 1;
+            at = end;
+        } else if (c === '(') {
+            depth++;
+        } else if (c === ')' && --depth === 0) {
+            return at;
+        }
+    }
+    return text.length;
+}
+
+/** Where the backquote that closes the one at `open` stands, an escaped one skipped; the text's end when none does. */
+function backquoteEnd(text: string, open: number): number {
+    for (let at = open + 1; at < text.length; at++) {
+        if (text[at] === '\\') at++;
+        else if (text[at] === '`') return at;
+    }
+    return text.length;
+}
+
+/** The texts of the substitutions a text holds where the shell runs them, `$(...)` and backquotes in a POSIX shell. */
+function substitutions(text: string, powershell: boolean): string[] {
+    const found: string[] = [];
+    for (let at = 0; at < text.length; at++) {
+        if (text[at] === '$' && text[at + 1] === '(') {
+            const end = closing(text, at + 1, powershell);
+            found.push(text.slice(at + 2, end));
+            at = end;
+        } else if (!powershell && text[at] === '`') {
+            const end = backquoteEnd(text, at);
+            found.push(text.slice(at + 1, end));
+            at = end;
+        }
+    }
+    return found;
+}
+
+/**
+ * The commands of a text as its shell splits them, whatever is not literal in it: on every separator outside quotes, a
+ * quoted text part of its word with its quotes taken and an escaped character taken as it is, as the POSIX grammar of the
+ * Bash tool reads them and, with its backtick, its expressions and its blocks, PowerShell's does. A substitution, a
+ * backquote and an expression stay in the word they stand in, their texts kept beside the command; a here-document's
+ * body, and a here-string's, kept beside the command that reads it. A reading for refusals: it reads more commands than
+ * run, never fewer.
+ */
+function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
+    const commands: WrittenCommand[] = [];
+    const fresh = (piped: boolean): WrittenCommand => ({ words: [], inner: [], bodies: [], piped });
+    let current = fresh(false);
+    let word: WrittenWord | null = null;
+    const documents: { tag: string; quoted: boolean; dash: boolean; owner: WrittenCommand }[] = [];
+    const escape = powershell ? '`' : '\\';
+    const separating = powershell ? /[\s;&|()<>{}]/ : /[\s;&|()<>`]/;
+    // A kept substitution is read through its text (`inner`), so it does not make its word one to read again.
+    const append = (piece: string, built = false, pattern = false, kept = false) => {
+        const each: WrittenWord = word ?? { text: '', spaced: false, built: false, pattern: false };
+        each.text += piece;
+        if (!kept && separating.test(piece)) each.spaced = true;
+        if (built) each.built = true;
+        if (pattern) each.pattern = true;
+        word = each;
+    };
+    const endWord = () => {
+        if (word !== null) current.words.push(word);
+        word = null;
+    };
+    const inWord = () => word !== null;
+    const endCommand = (piped = false) => {
+        endWord();
+        if (current.words.length > 0 || current.inner.length > 0 || current.bodies.length > 0) commands.push(current);
+        current = fresh(piped);
+    };
+    // A substitution or an expression the shell runs where it stands: kept in its word, its text read as commands.
+    const kept = (from: number, open: number): number => {
+        const end = closing(text, open, powershell);
+        current.inner.push(text.slice(open + 1, end));
+        append(text.slice(from, end + 1), true, false, true);
+        return end + 1;
+    };
+    let at = 0;
+    while (at < text.length) {
+        const c = text[at] as string;
+        if (c === escape) {
+            const next = text[at + 1];
+            if (next !== '\n' && next !== undefined) append(next);
+            at += 2;
+            continue;
+        }
+        if (powershell && c === '@' && (text[at + 1] === '\'' || text[at + 1] === '"') && /^[ \t]*\r?\n/.test(text.slice(at + 2))) {
+            const quote = text[at + 1] as string;
+            const close = text.indexOf(`\n${quote}@`, at + 2);
+            const body = text.slice(at + 2, close < 0 ? text.length : close);
+            if (quote === '"') current.inner.push(...substitutions(body, true));
+            append(body, quote === '"');
+            at = close < 0 ? text.length : close + 3;
+            continue;
+        }
+        if ((c === '$' || (powershell && c === '@')) && text[at + 1] === '(') {
+            at = kept(at, at + 1);
+            continue;
+        }
+        if (c === '(' && (inWord() || current.words.length > 0)) {
+            at = kept(at, at);
+            continue;
+        }
+        if (!powershell && c === '`') {
+            const end = backquoteEnd(text, at);
+            current.inner.push(text.slice(at + 1, end));
+            append(text.slice(at, end + 1), true, false, true);
+            at = end + 1;
+            continue;
+        }
+        if (!powershell && c === '$' && text[at + 1] === '\'') {
+            let end = at + 2;
+            while (end < text.length && text[end] !== '\'') end += text[end] === '\\' ? 2 : 1;
+            append(ansiC(text.slice(at + 2, end)));
+            at = end + 1;
+            continue;
+        }
+        if (!powershell && c === '$' && text[at + 1] === '"') {
+            at++;
+            continue;
+        }
+        if (c === '$') {
+            append('$', true);
+            at++;
+            continue;
+        }
+        if (c === '\'') {
+            let end = at + 1;
+            let body = '';
+            for (; end < text.length; end++) {
+                if (text[end] !== '\'') {
+                    body += text[end];
+                    continue;
+                }
+                // PowerShell writes a quote inside a single-quoted text as two.
+                if (powershell && text[end + 1] === '\'') {
+                    body += '\'';
+                    end++;
+                    continue;
+                }
+                break;
+            }
+            append(body);
+            at = end + 1;
+            continue;
+        }
+        if (c === '"') {
+            let end = at + 1;
+            let body = '';
+            let built = false;
+            while (end < text.length) {
+                const each = text[end] as string;
+                if (each === '"') {
+                    // PowerShell writes a quote inside a double-quoted text as two.
+                    if (powershell && text[end + 1] === '"') {
+                        body += '"';
+                        end += 2;
+                        continue;
+                    }
+                    break;
+                }
+                if (each === escape && end + 1 < text.length) {
+                    body += text[end + 1];
+                    end += 2;
+                    continue;
+                }
+                if (each === '$' && text[end + 1] === '(') {
+                    const close = closing(text, end + 1, powershell);
+                    current.inner.push(text.slice(end + 2, close));
+                    body += text.slice(end, close + 1);
+                    built = true;
+                    end = close + 1;
+                    continue;
+                }
+                if (!powershell && each === '`') {
+                    const close = backquoteEnd(text, end);
+                    current.inner.push(text.slice(end + 1, close));
+                    body += text.slice(end, close + 1);
+                    built = true;
+                    end = close + 1;
+                    continue;
+                }
+                if (each === '$') built = true;
+                body += each;
+                end++;
+            }
+            append(body, built);
+            at = end + 1;
+            continue;
+        }
+        if (!powershell && c === '<' && text[at + 1] === '<' && text[at + 2] !== '<') {
+            // A here-document: its tag, quoted or not, whose body follows the line.
+            endWord();
+            let from = at + 2;
+            const dash = text[from] === '-';
+            if (dash) from++;
+            while (text[from] === ' ' || text[from] === '\t') from++;
+            let tag = '';
+            let quoted = false;
+            while (from < text.length && !/[\s;&|()<>]/.test(text[from] as string)) {
+                const each = text[from] as string;
+                if (each === '\'' || each === '"' || each === '\\') quoted = true;
+                else tag += each;
+                from++;
+            }
+            documents.push({ tag, quoted, dash, owner: current });
+            at = from;
+            continue;
+        }
+        if (c === '<' || c === '>') {
+            endWord();
+            at++;
+            while (text[at] === '<' || text[at] === '>') at++;
+            if (text[at] === '&') at++;
+            continue;
+        }
+        if (c === ' ' || c === '\t') {
+            endWord();
+            at++;
+            continue;
+        }
+        if (c === '\n' || c === '\r') {
+            endCommand();
+            at++;
+            if (c !== '\n') continue;
+            while (documents.length > 0) {
+                const document = documents.shift() as (typeof documents)[number];
+                const lines: string[] = [];
+                while (at < text.length) {
+                    const end = text.indexOf('\n', at);
+                    const line = text.slice(at, end < 0 ? text.length : end).replace(/\r$/, '');
+                    at = end < 0 ? text.length : end + 1;
+                    if ((document.dash ? line.replace(/^\t+/, '') : line) === document.tag) break;
+                    lines.push(line);
+                }
+                document.owner.bodies.push({ text: lines.join('\n'), quoted: document.quoted });
+            }
+            continue;
+        }
+        if (c === '|') {
+            const or = text[at + 1] === '|';
+            endCommand(!or);
+            at += or ? 2 : text[at + 1] === '&' ? 2 : 1;
+            continue;
+        }
+        if (';&()'.includes(c) || (powershell && '{}'.includes(c))) {
+            endCommand();
+            at++;
+            continue;
+        }
+        append(c, false, !powershell && (c === '*' || c === '?'));
+        at++;
+    }
+    endCommand();
+    for (const document of documents) document.owner.bodies.push({ text: '', quoted: document.quoted });
+    return commands;
+}
+
+/** The words that stand before a program and are none: a shell's reserved words, a group's braces and a negation. */
+const beforeProgram: ReadonlySet<string> = new Set(
+    'if then elif else fi do done case esac while until for select function coproc time in ! { } noglob nocorrect repeat foreach'.split(' '),
+);
+
+/** Where a command's program stands among its words, after the words of `beforeProgram` and the assignments before it. */
+function programIndex(texts: readonly string[], powershell: boolean): { at: number; assigned: boolean } {
+    let assigned = false;
+    for (let at = 0; at < texts.length; at++) {
+        const word = texts[at] as string;
+        if (beforeProgram.has(word)) continue;
+        if (!powershell && /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=/.test(word)) {
+            assigned = true;
+            continue;
+        }
+        if (powershell && word.startsWith('$') && /^[+\-*/]?=$/.test(texts[at + 1] ?? '')) {
+            assigned = true;
+            at++;
+            continue;
+        }
+        return { at, assigned };
+    }
+    return { at: texts.length, assigned };
+}
+
+/** A program's name as the walk compares it: as the platform finds it (`programOf`), and in PowerShell in any case. */
+function programKey(platform: Platform, word: string, powershell: boolean): string {
+    const name = programOf(platform, word);
+    return powershell ? name.toLowerCase() : name;
+}
+
+/** The programs a word after which may be a folder change of the shell's own: `builtin cd` and `command cd`. */
+const changeRunners: ReadonlySet<string> = new Set(['builtin', 'command']);
+const posixChanges: ReadonlySet<string> = new Set(['cd', 'chdir', 'pushd']);
+const powerShellChanges: ReadonlySet<string> = new Set(['set-location', 'sl', 'cd', 'chdir', 'push-location', 'pushd']);
+/** The commands that go back to a folder the shell was in before: `popd`, and PowerShell's `Pop-Location`. */
+const goesBack: ReadonlySet<string> = new Set(['popd', 'pop-location']);
+/** The programs that run another with words they read on their standard input. */
+const inputRunners: ReadonlySet<string> = new Set(['xargs', 'parallel']);
+/** On Windows, the programs whose short slash words are options (`/s`), not a drive's own path. */
+const slashPrograms: ReadonlySet<string> = new Set(['cmd', 'robocopy', 'xcopy', 'findstr', 'where', 'attrib', 'icacls']);
+/** How deep the walk reads a text inside a text; deeper, a text is taken to walk where the command names such a folder. */
+const walkDepth = 6;
+
+/** What the walk carries through a command: the judgement's scope, the shell, and what the whole command's text says. */
+interface WalkReading {
+    scope: ChatScope;
+    powershell: boolean;
+    /** The command could make a program of the plain forms another one (`redefines`). */
+    redefined: boolean;
+    /** Some word of the command names a folder that holds the data directory, or may (`wordNamesRoot`). */
+    named: boolean;
+}
+
+/**
+ * Where the shell may run while the walk reads a command: every folder it may be in now, every one it may have been in,
+ * and whether a change led where the walk could not follow.
+ */
+interface WalkPlace {
+    folders: string[];
+    seen: string[];
+    unknown: boolean;
+}
+
+/** True when a located place is a folder that holds the data directory, read where it leads (`hookPlace`). */
+function isRoot(place: string, scope: ChatScope): boolean {
+    const lead = hookPlace(place, scope);
+    return typeof lead === 'string' && !network(scope.platform, lead) && holdsFenced(scope, lead);
+}
+
+/** The folders a word's path is fixed to before the first part the shell builds, with the separator after them. */
+function fixedPart(value: string, platform: Platform): string | null {
+    const at = value.search(/[*?[{$`%(]/);
+    if (at < 0) return null;
+    const head = value.slice(0, at);
+    const cut = Math.max(head.lastIndexOf('/'), platform === 'win32' ? head.lastIndexOf('\\') : -1);
+    return cut < 0 ? '' : head.slice(0, cut + 1);
+}
+
+/**
+ * True when a word the shell builds while it runs may name a folder that holds the data directory: a `~name`, which is
+ * a home folder the walk does not read, and a word whose folders before its first pattern, variable or substitution are
+ * such a folder, its home spelling taken (`homeExpanded`), read from the folder it is read in.
+ */
+function builtRoot(word: string, scope: ChatScope): boolean {
+    const value = nativeSpelling(homeExpanded(word, scope), scope);
+    if (/^~[^\\/]/.test(value)) return true;
+    const fixed = fixedPart(value, scope.platform);
+    return fixed !== null && fixed !== '' && isRoot(located(fixed, scope), scope);
+}
+
+/**
+ * True when a word names a folder that holds the data directory (`isRoot`), read from `cwd`: its places as `placesOfWords`
+ * reads them, in PowerShell a parameter's value joined by a colon (`-Path:~`) among them, or, read as written, a word the
+ * shell builds that may name one (`builtRoot`).
+ */
+function wordNamesRoot(text: string, cwd: string, reading: WalkReading, literal: boolean): boolean {
+    const at = { ...reading.scope, cwd };
+    const joined = reading.powershell ? /^-[A-Za-z][\w-]*:(.+)$/.exec(text) : null;
+    const words = joined === null ? [text] : [text, joined[1] as string];
+    if (placesOfWords(words, at, literal).some((place) => isRoot(place, reading.scope))) return true;
+    return !literal && words.some((word) => word.split(/[=@,]/).some((piece) => builtRoot(piece, at)));
+}
+
+/** True when a word the walk reads is one the shell builds and no home spelling: a variable, a substitution, an expression. */
+function unknownWord(word: WrittenWord, scope: ChatScope): boolean {
+    return word.built && /[$`(]/.test(homeExpanded(word.text, scope));
+}
+
+/** A command as the walk reads it: its words, their texts, its program and the words after it. */
+interface ReadCommand {
+    command: WrittenCommand;
+    assigned: boolean;
+    word: string | undefined;
+    args: WrittenWord[];
+    program: string | null;
+}
+
+/** The commands of a text, each with its program, and whether every program of them takes text only (`takesTextOnly`). */
+function readCommands(text: string, reading: Pick<WalkReading, 'scope' | 'powershell'>): { commands: ReadCommand[]; pure: boolean } {
+    const commands = writtenCommands(text, reading.powershell).map((command) => {
+        const texts = command.words.map((each) => each.text);
+        const { at, assigned } = programIndex(texts, reading.powershell);
+        const word = texts[at];
+        return { command, assigned, word, args: command.words.slice(at + 1), program: word === undefined ? null : programKey(reading.scope.platform, word, reading.powershell) };
+    });
+    // A text whose every program takes text only runs none of its words, so a quoted word or a body is data there; where
+    // any other program reads it, a shell or an interpreter among them, it may be run.
+    return { commands, pure: commands.every(({ program }) => program === null || takesTextOnly(program, reading.powershell)) };
+}
+
+/**
+ * The texts the walk reads again as commands of their own: the substitutions and expressions a command holds; where a
+ * program that does not take text only reads the text, every word that holds a space or a separator and every body of a
+ * here-document, and `eval`'s words as one command; and otherwise a body's substitutions where its tag is not quoted.
+ * `pure` false reads every one of them again, whatever reads the text.
+ */
+function readAgain(each: ReadCommand, pure: boolean, powershell: boolean): string[] {
+    const text = pure && each.program !== null && takesTextOnly(each.program, powershell);
+    return [
+        ...each.command.inner,
+        ...(text ? [] : each.command.words.filter((word) => word.spaced).map((word) => word.text)),
+        ...(each.program === 'eval' ? [each.args.map((arg) => arg.text).join(' ')] : []),
+        ...each.command.bodies.flatMap((body) => (!text ? [body.text] : body.quoted ? [] : substitutions(body.text, powershell))),
+    ];
+}
+
+/**
+ * True when some word of a text names such a folder, read as `writtenCommands` reads it and again wherever any of it may
+ * be run, data or not (`readAgain`), each from the folder the turn runs in; a folder change with no target names the
+ * home folder. A short slash option of a program that takes them (`slashPrograms`) is no folder.
+ */
+function namesAnyRoot(text: string, reading: WalkReading, depth: number): boolean {
+    if (depth > walkDepth) return false;
+    const { scope, powershell } = reading;
+    const cwd = located(scope.cwd, scope);
+    const { commands } = readCommands(text, reading);
+    return commands.some((each) => {
+        const slashes = scope.platform === 'win32' && each.program !== null && slashPrograms.has(each.program);
+        const options = new Set(slashes ? each.args.filter((arg) => optionWord(arg.text, scope.platform)) : []);
+        if (each.command.words.some((word) => !options.has(word) && wordNamesRoot(word.text, cwd, reading, false))) return true;
+        const change = each.program !== null && (powershell ? powerShellChanges : posixChanges).has(each.program);
+        if (change && each.args.every((arg) => arg.text.startsWith('-')) && isRoot(located(scope.home, scope), scope)) return true;
+        return readAgain(each, false, powershell).some((inner) => namesAnyRoot(inner, reading, depth + 1));
+    });
+}
+
+/**
+ * Where a folder change of the shell's own leads: its target, read as `placesOfWords` reads it from each folder the shell
+ * may be in; with none, the home folder, and `-`, `+`, `popd` and `Pop-Location` any folder it has been in. A target the
+ * shell builds while it runs leads below the folders it is fixed to (`fixedPart`), and where it leads is not followed.
+ */
+function changedPlace(program: string, args: readonly string[], place: WalkPlace, reading: WalkReading): WalkPlace {
+    const { scope, powershell } = reading;
+    const runner = changeRunners.has(program) && args[0] !== undefined;
+    const name = runner ? programKey(scope.platform, args[0] as string, powershell) : program;
+    const words = runner ? args.slice(1) : args;
+    const back = (): WalkPlace => ({ ...place, folders: [...place.seen] });
+    if (goesBack.has(name)) return back();
+    if (!(powershell ? powerShellChanges : posixChanges).has(name)) return place;
+    let target: string | undefined;
+    for (let at = 0; at < words.length; at++) {
+        const word = words[at] as string;
+        const folded = word.toLowerCase();
+        if (powershell && folded.startsWith('-')) {
+            const [parameter = '', joined] = folded.split(/:(.*)/s);
+            const named = (full: string, least: number) => parameter.length >= least && full.startsWith(parameter);
+            if (named('-path', 4) || named('-literalpath', 2) || named('-pspath', 3) || parameter === '-lp') {
+                target = joined !== undefined ? word.slice(word.indexOf(':') + 1) : words[at + 1];
+                break;
+            }
+            if (named('-stackname', 2) && joined === undefined) at++;
+            continue;
+        }
+        if (word === '-' || word === '+') return back();
+        if (word === '--') {
+            target = words[at + 1];
+            break;
+        }
+        if (word.startsWith('-')) continue;
+        target = word;
+        break;
+    }
+    const moved = (folders: string[], unknown: boolean): WalkPlace => ({ folders, seen: [...place.seen, ...folders], unknown });
+    if (target === undefined) return name === 'pushd' || name === 'push-location' ? back() : moved([located(scope.home, scope)], false);
+    const value = nativeSpelling(homeExpanded(target, scope), scope);
+    const fixed = /^~/.test(value) ? '' : fixedPart(value, scope.platform);
+    if (fixed !== null) return moved(fixed === '' ? place.folders : place.folders.map((folder) => located(fixed, { ...scope, cwd: folder })), true);
+    const absolute = pathsOf(scope.platform).isAbsolute(value);
+    return moved(place.folders.map((folder) => located(value, { ...scope, cwd: folder })), place.unknown && !absolute);
+}
+
+/**
+ * True when a command walks a folder that holds the data directory: it names one as a word, read from each folder the
+ * shell may be in, or runs in one; or, where some word of the whole command names one, it runs where a change led that
+ * the walk did not follow, takes a word the shell builds, takes words from its standard input (`inputRunners`), runs
+ * another program (`runsAnotherProgram`), a shell that reads a pipe among them, or in PowerShell is a command a pipe feeds
+ * paths to that does not only print them (`powerShellPrints`).
+ */
+function walksThere(each: ReadCommand, place: WalkPlace, reading: WalkReading): boolean {
+    const { scope, powershell } = reading;
+    const program = each.program ?? '';
+    const slashes = scope.platform === 'win32' && slashPrograms.has(program);
+    const named = each.args.some((arg) => !(slashes && optionWord(arg.text, scope.platform)) && place.folders.some((folder) => wordNamesRoot(arg.text, folder, reading, false)));
+    if (named || place.folders.some((folder) => isRoot(folder, scope))) return true;
+    if (!reading.named) return false;
+    return (
+        place.unknown
+        || inputRunners.has(program)
+        || runsAnotherProgram(program)
+        || each.args.some((arg) => unknownWord(arg, scope))
+        || (powershell && each.command.piped && !powerShellPrints.has(program))
+    );
+}
+
+/**
+ * The walk of the commands a text holds (`readCommands`), from where the shell may run on: true when one of them walks a
+ * folder that holds the data directory (`walksThere`) in any form but the plain ones the chat knows do not descend
+ * (`plainWalkForm`): an assignment before the program, a program named by a path and a command that could redefine a
+ * program (`redefines`) have none. What may run of a command is read again, as commands of their own, from the same place
+ * (`readAgain`). A folder change of the shell's own (`changedPlace`) sets where the commands after it run, whatever joins
+ * them, which reads more than runs where a group or a pipe keeps the change to itself; `eval` keeps the change its words
+ * make. Read deeper than `walkDepth`, a text walks where the command names such a folder.
+ */
+function walkedFrom(text: string, start: WalkPlace, reading: WalkReading, depth: number): { walks: boolean; place: WalkPlace } {
+    const { scope, powershell } = reading;
+    if (depth > walkDepth) return { walks: reading.named || start.unknown || start.folders.some((folder) => isRoot(folder, scope)), place: start };
+    const { commands, pure } = readCommands(text, reading);
+    let place = start;
+    for (const each of commands) {
+        if (each.word !== undefined && each.program !== null) {
+            const args = each.args.map((arg) => arg.text);
+            const unknown = (at: number) => unknownWord(each.args[at] as WrittenWord, scope);
+            const plain = !reading.redefined && !each.assigned && !/[\\/]/.test(each.word) && plainWalkForm(each.program, args, powershell, unknown);
+            if (!plain && walksThere(each, place, reading)) return { walks: true, place };
+        }
+        for (const inner of readAgain(each, pure, powershell)) {
+            const read = walkedFrom(inner, place, reading, depth + 1);
+            if (read.walks) return { walks: true, place };
+            if (each.program === 'eval') place = read.place;
+        }
+        if (each.program !== null) place = changedPlace(each.program, each.args.map((arg) => arg.text), place, reading);
+    }
+    return { walks: false, place };
 }
 
 /** A word that is an option and no folder: one that begins with a dash, or on Windows a short slash option (`/s`). */
@@ -970,52 +1704,81 @@ function optionWord(word: string, platform: Platform): boolean {
 }
 
 /**
- * The folders one command's words walk: after each word that names a walking program (`alwaysWalks`, an archiver that
- * creates, or a program a recursive word makes walk, `recursiveWord`), the words after it that are no option, less a
- * search's pattern and a copy's destination, and, for a program that walks where it runs, the folder it runs in when it
- * is given none. A program is looked for at every word, so a wrapper (`sudo`, `xargs`) does not hide it; that reads more
- * folders than the command walks, which only adds refusals.
+ * Where the hook rides the turn, true when a command may walk a folder that holds the installation's data
+ * (`holdsFenced`): the home folder, a drive's top, the data directory's parents, and in a demo run the person's own
+ * directories'. With no read blocked such a walk would read the data without naming it, so a command that names such a
+ * folder, or runs in one, passes only in a form the chat knows does not descend (`plainWalkForm`): a plain listing, a
+ * search of what it names alone, a print, a folder change. The commands are read as their shell splits them
+ * (`walkedFrom`), and again from the literal reading, each from the folder a literal directory change sets for it.
  */
-function walkedWords(words: readonly string[], platform: Platform, powershell: boolean): string[] {
-    const walked: string[] = [];
-    words.forEach((word, at) => {
-        const program = programOf(platform, word).toLowerCase();
-        const rest = words.slice(at + 1);
-        const walks = alwaysWalks.has(program) || (archivers.has(program) ? archives(rest) : rest.some((each) => recursiveWord(program, each, platform, powershell)));
-        if (!walks) return;
-        let operands: string[];
-        if (program === 'find') {
-            const end = rest.findIndex((each) => /^[-(!]/.test(each));
-            operands = end < 0 ? rest : rest.slice(0, end);
-        } else {
-            operands = rest.filter((each) => !optionWord(each, platform));
-            if (patternFirst.has(program) && !rest.some((each) => /^(-[^-]*[ef]|--regexp(=.*)?|--file(=.*)?|\/c:.*|\/g:.*)$/i.test(each))) operands = operands.slice(1);
-            if (copies.has(program) && operands.length > 1) operands = operands.slice(0, -1);
-        }
-        walked.push(...operands);
-        if (operands.length === 0 && walksHere.has(program)) walked.push('.');
+function walksRoot(tool: string, command: string, scope: ChatScope): boolean {
+    const powershell = tool === 'PowerShell';
+    const base = { scope, powershell, redefined: redefines(command, powershell), named: false };
+    const reading: WalkReading = { ...base, named: namesAnyRoot(command, base, 0) };
+    const start = located(scope.cwd, scope);
+    if (walkedFrom(command, { folders: [start], seen: [start], unknown: false }, reading, 0).walks) return true;
+    const literal = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
+    if (literal.held) return false;
+    return literal.commands.some(({ words, cwd }) => {
+        const at = cwd === null ? start : located(nativeSpelling(cwd, scope), scope);
+        const [word = '', ...args] = words;
+        const program = programKey(scope.platform, word, powershell);
+        if (!reading.redefined && !/[\\/]/.test(word) && plainWalkForm(program, args, powershell, () => false)) return false;
+        const slashes = scope.platform === 'win32' && slashPrograms.has(program);
+        return isRoot(at, scope) || args.some((arg) => !(slashes && optionWord(arg, scope.platform)) && wordNamesRoot(arg, at, reading, true));
     });
-    return walked;
+}
+
+/** A word that names jq's environment, or reads a module or a data file by jq's own words. */
+const jqReads = /(?<![A-Za-z0-9_$])(?:env|import|include|modulemeta)(?![A-Za-z0-9_])|\$ENV(?![A-Za-z0-9_])/;
+
+/** The programs whose `--files0-from` reads the names of the files they read from their input or another file. */
+const namesFromInput: ReadonlySet<string> = new Set(['sort', 'wc', 'du']);
+
+/** True when a word is `--files0-from` or a prefix of it GNU's programs take for it, alone or with its value. */
+function filesFromInput(word: string): boolean {
+    const name = (word.split('=')[0] ?? '').toLowerCase();
+    return name.length >= 3 && '--files0-from'.startsWith(name);
 }
 
 /**
- * Where the hook rides the turn, the refusal of a command that walks a folder holding the installation's data
- * (`holdsFenced`), as a search of it by the Grep tool is refused (`searchRefusal`): a recursive search, a finder, a size,
- * a tree, a recursive listing or copy, an archive made of it. With reads outside the working folders no longer blocked,
- * such a walk would read the data without naming it. The folders are read from the command's words as written, split on
- * the shell's separators, from the folder the turn runs in, and again from each command of the literal reading, read from
- * the folder a literal directory change sets for it. A plain listing of such a folder is no walk, and is not refused.
- * Null when no walk reaches the data.
+ * The words of every command a text holds as the walk reads them (`readCommands`), and of what may run of each, read
+ * again (`readAgain`): a reading for refusals, which reads more than runs. Read deeper than `walkDepth`, a text's words
+ * are read as one command a runner starts.
  */
-function walkRefusal(tool: string, command: string, scope: ChatScope): string | null {
-    const written = command.split(/&&|\|\||[;|&\n\r()`]/).map((part) => ({ words: part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, literal: false }));
-    const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
-    const read = reading.held
-        ? []
-        : reading.commands.map((each) => ({ words: each.words, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) }, literal: true }));
-    for (const each of [...written, ...read]) {
-        const folders = placesOfWords(walkedWords(each.words, scope.platform, tool === 'PowerShell'), each.scope, each.literal);
-        if (folders.some((folder) => !network(scope.platform, folder) && holdsFenced(scope, folder))) return searchRefusal;
+function everyCommand(text: string, reading: Pick<WalkReading, 'scope' | 'powershell'>, depth: number): WrittenWord[][] {
+    if (depth > walkDepth) {
+        return [['sh', ...text.split(/[\s'"`;|&()<>]+/)].filter((word) => word !== '').map((word) => ({ text: word, spaced: false, built: false, pattern: false }))];
+    }
+    const { commands } = readCommands(text, reading);
+    return commands.flatMap((each) => [each.command.words, ...readAgain(each, false, reading.powershell).flatMap((inner) => everyCommand(inner, reading, depth + 1))]);
+}
+
+/**
+ * Where the hook rides the turn, the refusal of a command that reads what no word of it shows: a jq program that reads
+ * the environment or a file by its own words, `env`, `$ENV`, `import`, `include` or `modulemeta`, takes its program from a
+ * file, or is given a word the shell builds (`jqRefusal`); and `sort`, `wc` or `du` told the files they read by
+ * `--files0-from` or a prefix of it, and `find` by `-files0-from` (`filesFromRefusal`). A program is looked for where a
+ * command's program stands and at every word after one that runs another (`runsAnotherProgram`), in every command as the
+ * walk reads them (`everyCommand`) and in the literal reading. Null for anything else.
+ */
+function unseenReadRefusal(tool: string, command: string, scope: ChatScope): string | null {
+    const powershell = tool === 'PowerShell';
+    const commands = everyCommand(command, { scope, powershell }, 0);
+    const literal = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope) });
+    if (!literal.held) commands.push(...literal.commands.map(({ words }) => words.map((text) => ({ text, spaced: false, built: false, pattern: false }))));
+    for (const words of commands) {
+        const start = programIndex(words.map((word) => word.text), powershell).at;
+        let runner = false;
+        for (let at = start; at < words.length; at++) {
+            if (at !== start && !runner) continue;
+            const program = programOf(scope.platform, (words[at] as WrittenWord).text).toLowerCase();
+            const rest = words.slice(at + 1);
+            if (program === 'jq' && rest.some(({ text, built, pattern }) => built || pattern || jqReads.test(text) || text === '--from-file' || text.startsWith('--from-file=') || /^-[A-Za-z]*f/.test(text))) return jqRefusal;
+            if (namesFromInput.has(program) && rest.some(({ text }) => filesFromInput(text))) return filesFromRefusal;
+            if (program === 'find' && rest.some(({ text }) => text === '-files0-from')) return filesFromRefusal;
+            if (runsAnotherProgram(program)) runner = true;
+        }
     }
     return null;
 }
@@ -1405,17 +2168,6 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (places.some((path) => isProtected(scope, path))) return { verdict: 'deny', message: settingsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
-    // Where the hook rides the turn no read is blocked, so a walk of a folder that holds the data reaches it without naming
-    // it: refused, as the hook refuses it (`walkRefusal`).
-    if (scope.hooked === true) {
-        let walked: string | null;
-        try {
-            walked = walkRefusal(tool, command, scope);
-        } catch {
-            walked = unreadRefusal;
-        }
-        if (walked !== null) return { verdict: 'deny', message: walked };
-    }
     const jason = jasonIn(command, scope);
     const jasonRefused = jasonRefusal(jason);
     if (jasonRefused !== null) return { verdict: 'deny', message: jasonRefused };
@@ -1424,6 +2176,22 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     const own = chatsOwnPlace(places, scope);
     if (own !== null) return { verdict: 'deny', message: own };
     if (replyRefused(command, scope)) return { verdict: 'deny', message: replyRefusal };
+    // Where the hook rides the turn no read is blocked: a command that reads what no word of it shows is refused, as the
+    // hook refuses it (`unseenReadRefusal`), and one that may walk a folder that holds the data directory without naming
+    // it, which the hook refuses too, is the person's to answer each time, never covered by a grant (`walksRoot`).
+    if (scope.hooked === true) {
+        let unseen: string | null;
+        let walks: boolean;
+        try {
+            unseen = unseenReadRefusal(tool, command, scope);
+            walks = walksRoot(tool, command, scope);
+        } catch {
+            unseen = unreadRefusal;
+            walks = false;
+        }
+        if (unseen !== null) return { verdict: 'deny', message: unseen };
+        if (walks) return command.length > detailLimit ? { verdict: 'deny', message: longRefusal } : { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
+    }
     // A plain form of the host's own allow rules runs with no card, as the host's rule would run it (`plainForm`), and so
     // does what runs with no card where the hook rides the turn (`hookedNoCard`): no card shows either, so neither is held
     // to a card's length.
@@ -1443,8 +2211,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // A noun's help, exactly as the host's help rule names it, runs here too: it prints and changes nothing.
     if (isNounHelp(tool, command, scope)) return allow;
     // A jason command in no plain form of the allow list is the person's to answer, each time; where the hook rides the
-    // turn that is a verb of `askingCardedVerbs`, or a jason with something that is no filter of `noCardFilters` beside
-    // it, a directory change or a redirection into a file.
+    // turn that is a form of `askingCardedForms`, or a jason with something that is no filter of `noCardFilters` as it
+    // runs with no card beside it, a directory change or a redirection into a file.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     // Only the Bash tool's commands are fenced by the host and may be allowed or remembered; any other tool's command is
     // the person's to answer, each time.
@@ -1881,10 +2649,12 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
  * names this computer as another computer would, through a drive's share, as that drive's path (`hookPlace`). A command
  * whose words are not literal is read by its text alone, and a path a program builds while it runs is not seen. No read
  * is blocked where the hook rides the turn, so a walk of a folder that holds the data directory is the data's kind too:
- * a search of it by the Grep or Glob tool (`walkKind`), or a command that walks it (`walkRefusal`), said by the sentence
- * that says how to go on (`searchRefusal`); a plain listing of such a folder is no walk. Null for anything else: the
- * turn's folder is its own, the chat's instructions and agent folders in it among it, which the desktop puts back before
- * the next turn.
+ * a search of it by the Grep or Glob tool (`walkKind`), or a command that may walk it, in any form but those known not to
+ * descend (`walksRoot`), said by the sentence that says how to go on (`searchRefusal`); a plain listing of such a folder
+ * is no walk. So is a command that reads what no word of it shows (`unseenReadRefusal`): a jq program that reads the
+ * environment or a file by its own words, and a command told the files it reads on its input. Null for anything else:
+ * the turn's folder is its own, the chat's instructions and agent folders in it among it, which the desktop puts back
+ * before the next turn.
  */
 export function hookRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
     if (tool.startsWith(`mcp__${serverName}__`)) return ownToolRefusal;
@@ -2057,9 +2827,11 @@ function commandKind(tool: string, command: string, scope: ChatScope): string | 
         }
         if (reading.commands.some((each) => clearsConfinement(each.words))) return confinedRefusal;
     }
-    // No read is blocked where the hook rides the turn, so a walk of a folder that holds the data reaches it without
-    // naming it: the data's kind too.
-    return walkRefusal(tool, command, scope);
+    // No read is blocked where the hook rides the turn, so a read no word shows, and a walk of a folder that holds the
+    // data, reach it without naming it: the data's kind too.
+    const unseen = unseenReadRefusal(tool, command, scope);
+    if (unseen !== null) return unseen;
+    return walksRoot(tool, command, scope) ? searchRefusal : null;
 }
 
 /**
