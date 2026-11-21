@@ -243,11 +243,16 @@ function asciiOnly(text: string): void {
     }
 }
 
-/** As `asciiOnly`, but a letter outside ASCII, or a mark that joins one, is read as it is written. */
+/**
+ * As `asciiOnly`, but a letter outside ASCII, or a mark that joins one, is read as it is written; a letter whose
+ * compatibility form, upper case or lower case holds an ASCII character stays held, since a file system that folds case
+ * or forms may open it as that character.
+ */
 function lettersOnly(text: string): void {
     for (const character of text) {
         const code = character.codePointAt(0) ?? 0;
         if (code > 0x7e && !/^[\p{L}\p{M}]$/u.test(character)) throw new Held('non_ascii');
+        if (code > 0x7e && /[\x00-\x7f]/.test(character.normalize('NFKC') + character.toUpperCase() + character.toLowerCase())) throw new Held('non_ascii');
         if (code < 0x20 && character !== '\n' && character !== '\t') throw new Held('control_character');
     }
 }

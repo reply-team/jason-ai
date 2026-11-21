@@ -822,3 +822,31 @@ test('delta F6 and F7: on Windows a Bash word Git Bash may rewrite or a program 
     }
     for (const command of ['frobnicate lib:/y', 'frobnicate -X/y', "frobnicate '*'"]) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `not on Linux: ${command}`);
 });
+
+test('a letter outside ASCII is read in a single-quoted body only under lettersInSingleQuotes, a mark that joins one and a tab among it; a control, a letter outside quotes and a letter whose compatibility form or case holds ASCII stay held; without the flag every one stays held', () => {
+    const letters: LiteralContext = { ...linux, lettersInSingleQuotes: true };
+    const taken = [
+        "jason campaign update cmp_1 --name 'Café'",
+        "jason campaign update cmp_1 --name 'Привет\tмир'",
+        "jason campaign update cmp_1 --name 'Привет'",
+        "jason campaign update cmp_1 --name 'Ελλάδα'",
+    ];
+    for (const command of taken) {
+        assert.equal(reasonOf('Bash', command, letters), null, JSON.stringify(command));
+        assert.notEqual(reasonOf('Bash', command, linux), null, `without the flag: ${JSON.stringify(command)}`);
+    }
+    for (const [command, reason] of [
+        ["jason campaign update cmp_1 --name 'a\u007fb'", 'non_ascii'],
+        ["jason campaign update cmp_1 --name 'a\u0085b'", 'non_ascii'],
+        ["jason campaign update cmp_1 --name 'a\u009bb'", 'non_ascii'],
+        ['jason campaign update cmp_1 --name Café', 'non_ascii'],
+        ["jason campaign update cmp_1 --name 'a\u0007b'", 'control_character'],
+        ["cat '/home/someone/.jaſon/config/settings.json'", 'non_ascii'],
+        ["cat '/home/someone/.jason/config/ｓettings.json'", 'non_ascii'],
+        ["cat '/home/someone/.Kason'", 'non_ascii'],
+        ["cat '/home/someone/.jason/ﬁle'", 'non_ascii'],
+    ] as const) {
+        assert.equal(reasonOf('Bash', command, letters), reason, JSON.stringify(command));
+        assert.notEqual(reasonOf('Bash', command, linux), null, `without the flag: ${JSON.stringify(command)}`);
+    }
+});

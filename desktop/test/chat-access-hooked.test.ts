@@ -1044,6 +1044,20 @@ test('a jq program that reads the environment or a file by its own words, and a 
     }
 });
 
+test('a path in single quotes spelled with a letter whose compatibility form or case is ASCII is no read with no card in Ask first and Auto-edit: a long s, a Kelvin sign and fullwidth letters', () => {
+    const commands: [ChatScope, string][] = [
+        [linux, "cat '/home/someone/.ja\u017fon/config/settings.json'"],
+        [mac, "cat '/Users/someone/.ja\u017fon/config/settings.json'"],
+        [windows, "cat 'C:\\Users\\someone\\.\u212aason\\config\\settings.json'"],
+        [windows, "jq . 'C:\\Users\\someone\\\uff0e\uff4a\uff41\uff53\uff4f\uff4e\\config\\settings.json'"],
+        [linux, "jq . '/home/someone/.jason/config/\uff53\uff45\uff54\uff54\uff49\uff4e\uff47\uff53.json'"],
+    ];
+    for (const [scope, command] of commands) {
+        for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+    }
+    assert.deepEqual(both('Bash', { command: "cat '/home/someone/Desktop/мой файл.txt'" }, linux), [allow, allow]);
+});
+
 test('a reason in Russian and an account named in Cyrillic, each in single quotes, run with no card where the hook rides Ask first and Auto-edit, and below the floor each is a card as before; in double quotes, bare, or with a mark that is no letter, each is a card', () => {
     const runs = [
         "jason campaign archive cmp_1 --actor 'human:Некто' --reason 'человек попросил архивировать'",
