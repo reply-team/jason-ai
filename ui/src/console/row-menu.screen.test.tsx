@@ -463,6 +463,108 @@ describe('The menu on a row of Recent', () => {
         expect(activePanel.value).toBe(`chat:${spring}`);
     });
 
+    describe('Archive…’s way to stop the provider’s campaign first', () => {
+        /** Archive… on Spring, live and linked to its campaign in Reply, and the dialog's paragraph about that campaign. */
+        async function archiveSpring(): Promise<{ dialog: HTMLElement; provider: HTMLElement }> {
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            fireEvent.click(item('Archive…'));
+            const dialog = await waitFor(() => document.querySelector<HTMLElement>('[role="dialog"]')!);
+            const provider = await waitFor(() => within(dialog).getByRole('region', { name: 'The campaign in Reply' }));
+            // Archive waits for the reads; once it can be pressed, every read the paragraph needs has answered.
+            await waitFor(() =>
+                expect(within(dialog).getByRole('button', { name: 'Archive' })).not.toHaveProperty('disabled', true),
+            );
+            return { dialog, provider };
+        }
+
+        it('offers Jason’s own pause first, as Settings does, where the agent’s route can pause it', async () => {
+            const fake = { value: null as FakeApi | null };
+            await renderConsole((api) => {
+                fake.value = api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause');
+            });
+            const { provider } = await archiveSpring();
+            expect(provider.textContent).toBe(
+                'The campaign in Reply (id 4711) is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.' +
+                    "To stop it first, ask in this agent's chat to pause it in Reply, and archive once that work has finished; or pause it in Reply itself.",
+            );
+            expect(
+                fake.value!.calls.filter((each) => each.operation === 'route.resolve').map((each) => each.body),
+            ).toEqual([{ campaign_id: 'cmp_1', operation: 'campaign.pause' }]);
+        });
+
+        const jasonFirst =
+            "To stop it first, ask in this agent's chat to pause it in Reply, and archive once that work has finished; or pause it in Reply itself.";
+        const ownWay = 'To stop it first, pause it in Reply itself, then archive.';
+
+        it('offers Jason’s pause first only where the route can pause it: not where it cannot, nor where it was not read', async () => {
+            await renderConsole((api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause'));
+            expect((await archiveSpring()).provider.textContent).toContain(jasonFirst);
+            cleanup();
+            await renderConsole((api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause-unusable'));
+            const unusable = await archiveSpring();
+            expect(unusable.provider.textContent).toContain(ownWay);
+            expect(unusable.provider.textContent).not.toContain(jasonFirst);
+            cleanup();
+            await renderConsole((api) => {
+                api.unreachable('route.resolve');
+            });
+            const unread = await archiveSpring();
+            expect(unread.provider.textContent).toContain(ownWay);
+            expect(unread.provider.textContent).not.toContain(jasonFirst);
+        });
+
+        it('offers nothing about a provider’s campaign where none is linked to the agent', async () => {
+            const fake = { value: null as FakeApi | null };
+            await renderConsole((api) => {
+                fake.value = api;
+            });
+            fireEvent.contextMenu(await row('Autumn'));
+            await waitFor(() => menu()!);
+            fireEvent.click(item('Archive…'));
+            const dialog = await waitFor(() => document.querySelector<HTMLElement>('[role="dialog"]')!);
+            await waitFor(() =>
+                expect(within(dialog).getByRole('button', { name: 'Archive' })).not.toHaveProperty('disabled', true),
+            );
+            expect(within(dialog).queryByRole('region', { name: /^The campaign in / })).toBeNull();
+            expect(dialog.textContent).not.toContain(jasonFirst);
+            expect(dialog.textContent).not.toContain('To stop it first');
+            expect(fake.value!.calls.some((each) => each.operation === 'route.resolve')).toBe(false);
+        });
+
+        it('offers Jason’s pause first in a tab the desktop opened too, where its chat is', async () => {
+            await renderConsole(
+                (api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause'),
+                undefined,
+                'tab',
+            );
+            expect((await archiveSpring()).provider.textContent).toContain(jasonFirst);
+        });
+
+        it('says an archive the runtime refuses in the dialog, in the runtime’s words, and keeps the dialog open', async () => {
+            await renderConsole((api) => {
+                api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause');
+                api.answerAnyRequest('campaign.archive', 'campaign.archive/archive-unknown');
+            });
+            const { dialog, provider } = await archiveSpring();
+            expect(provider.textContent).toContain(jasonFirst);
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+            await waitFor(() => expect(within(dialog).getByText("No campaign with id 'cmp_3'.")).toBeTruthy());
+            expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+        });
+
+        it('says an archive the runtime never answers in the dialog, and keeps the dialog open', async () => {
+            await renderConsole((api) => {
+                api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause');
+                api.unreachable('campaign.archive');
+            });
+            const { dialog } = await archiveSpring();
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+            await waitFor(() => expect(within(dialog).getByText('TypeError: Failed to fetch')).toBeTruthy());
+            expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+        });
+    });
+
     it('shows the row’s chat first for a conversation act, and acts there as the agent’s “…” does', async () => {
         const desktop = await renderConsole();
         fireEvent.contextMenu(await row('Spring'));

@@ -571,6 +571,7 @@ import approvalGetByWorkItem from '../../../docs/api/fixtures/approval.get/by-wo
 import approvalListArchiveAskedAndGiven from '../../../docs/api/fixtures/approval.list/archive-asked-and-given.json';
 import campaignArchiveArchiveSpring from '../../../docs/api/fixtures/campaign.archive/archive-spring.json';
 import campaignArchiveArchiveSpringAgain from '../../../docs/api/fixtures/campaign.archive/archive-spring-again.json';
+import campaignArchiveArchiveUnknown from '../../../docs/api/fixtures/campaign.archive/archive-unknown.json';
 import campaignGetArchiveSpring from '../../../docs/api/fixtures/campaign.get/archive-spring.json';
 import campaignGetArchiveSpringArchived from '../../../docs/api/fixtures/campaign.get/archive-spring-archived.json';
 import campaignListArchiveAfter from '../../../docs/api/fixtures/campaign.list/archive-after.json';
@@ -1643,6 +1644,10 @@ export const fixtures = {
     'campaign.archive/archive-spring-again': campaignArchiveArchiveSpringAgain satisfies Exchange<
         CampaignTransitionRequest,
         Campaign
+    >,
+    'campaign.archive/archive-unknown': campaignArchiveArchiveUnknown satisfies Exchange<
+        CampaignTransitionRequest,
+        ErrorEnvelope
     >,
     'campaign.get/archive-spring': campaignGetArchiveSpring satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/archive-spring-archived': campaignGetArchiveSpringArchived satisfies Exchange<
