@@ -35,8 +35,7 @@ voice.
 ## What is new since 0.49.1
 
 - **Every new chat starts in Full access, and it holds.** A new chat, the Feed's included, is made in Full access, with
-  no confirmation box and no standing choice to keep. The first message of a chat runs in Full access, the menu stays at
-  Full access, and a later message after a restart is answered once. A mode you choose from the menu beside the composer
+  no confirmation box and no standing choice to keep. The first message of a chat runs in Full access. A mode you choose from the menu beside the composer
   (Ask first, Plan only or Auto-edit) is kept with the conversation, after a restart and through **Start fresh**, until
   you choose another. Where Full access cannot apply to a turn, that turn runs in Ask first and the chat says why once
   and keeps its mode: a turn sent from a browser tab, and a turn on a Claude Code too old for it. The line under the
@@ -44,35 +43,35 @@ voice.
   [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
   mode lets the AI do.
 - **Full access is Claude Code's own bypass.** A turn in Full access runs Claude Code in its bypass mode, as a terminal
-  started that way would. When the bypass is not available (a setting of yours or an administrator's turns it off, a
-  restricted mode or a policy refuses it, Jason Desktop runs as root or under sudo, or a policy filtered Jason's check
-  out), the chat says "Full access is not available here" once, with the cause, runs that turn in Ask first, keeps the
-  conversation in Full access, and asks again a minute later. Jason's check before each tool use refuses a tool use that
+  started that way would. When the bypass is not available, the chat says "Full access is not available
+  here" once, with what Claude Code showed of the cause, runs that turn in Ask first and keeps the conversation in Full
+  access. Where Claude Code started in another mode or refused its bypass, the next Full access turn after a minute asks
+  for the bypass again. Where Jason Desktop runs as root or under sudo, every turn runs in Ask first. Where a policy
+  filtered Jason's check out, every turn runs in Ask first until Jason Desktop starts again. Jason's check before each tool use refuses a tool use that
   names one of three kinds: Jason's settings and run files; its data directory outside the conversation's folder; and
-  what Jason itself sets for the turn, meaning its variables and its permission tool. On Windows, a command or a path
-  that names a share of this computer by `localhost`, a `127.x.x.x` address, `::1` or the computer's own host name is
-  read as the drive it shares. Everything else runs. From Claude Code 2.1.322 on, Ask first and Auto-edit carry the same
+  what Jason itself sets for the turn, meaning its variables and its permission tool. On Windows, a path to a share of this
+  computer is read as the drive it shares. Everything else runs. From Claude Code 2.1.322 on, Ask first and Auto-edit carry the same
   check; below it, a plain `jason` command that ran with no card still does, and one fed the settings or the run file is
   refused.
 - **The chat reaches the files you name.** In Full access it reads and writes any file on this computer you point it
-  to, wherever it is, with no card. In Ask first and Auto-edit it reads such a file with no card, and a change to a file
-  outside the chat's folders is one card, "Change a file outside the chat's folders", for a new file and for an addition
-  to an existing one alike. In Full access the chat refuses three kinds: the installation's settings and run files,
-  Jason's data directory outside the chat's own folder, and what Jason sets for the turn. A command that would pass
-  through a folder holding Jason's data, such as the home folder or the top of a drive, is refused and asks for a
-  narrower folder; in Ask first and Auto-edit such a walk is refused too, not asked. When something is closed to it, the
-  chat says exactly what and why in one sentence, and gives the path to open yourself.
-- **`jason` commands run on your word, with a card only where it matters.** In Ask first and Auto-edit, a `jason`
-  command that changes the installation runs with no card in its plain form, which takes the release's own, and keeps a
-  card in a form that names another source, place, ref or version. The commands that keep a card are `jason uninstall`,
-  `jason import`, `jason export`, `jason update rollback`, `jason update apply` with `--version` or `--feed`,
-  `jason plugin grant`, `jason plugin install` with `--feed` or `--replace`, `jason skills install` and
-  `jason skills update` with `--source`, `--feed`, `--root` or `--ref`, `jason ui install --feed`, `jason install --retire`,
-  and `jason profile create` and `jason profile update` with `--program`, `--cli-command` or `--file`. Every help runs
-  with no card, and so do the reads, such as `jason runtime status` and `jason update check`, and a pipeline of such
-  commands with a plain filter such as `jq`. Where the act is yours, the chat names you as `human:<account>` and gives
-  its reason in its own words; an account or a reason in letters outside ASCII is put in single quotes.
-- **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
+  to, wherever it is, with no card. From Claude Code 2.1.322 on, in Ask first and Auto-edit it reads such a file with no
+  card, and a change to a file outside the chat's folders is one card, "Change a file outside the chat's folders", for
+  a new file and for an edit alike, lines added at the end of a file among them. A search, a walk, a copy, an archive or
+  a removal of a folder that holds Jason's own data, such as the home folder or the top of a drive, is refused and asks
+  for a narrower folder; from 2.1.322 on, in Ask first and Auto-edit it is refused too, not asked. When something is
+  closed to it, the chat says exactly what and why in one sentence, and gives the path to open yourself.
+- **`jason` commands run on your word, with a card only where it matters.** From Claude Code 2.1.322 on, in Ask first
+  and Auto-edit, a `jason` command that changes the installation runs with no card in its plain form, which takes the
+  release's own, and keeps a card in a form that names another source, place, ref or version. The commands that keep a
+  card in every form are `jason uninstall`, `jason import`, `jason export`, `jason update rollback` and
+  `jason plugin grant`; the others keep one only in such a form, for example `jason update apply --version`,
+  `jason install --retire`, or `jason profile create` with `--program`, and
+  [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) lists them all.
+  Every help runs with no card, and so do the reads, such as `jason runtime status` and `jason update check`, and a
+  pipeline of such commands with a plain filter such as `jq`. Where the act is yours, the chat names you as
+  `human:<account>` and gives its reason in its own words; the reason is always in single quotes, and an account in
+  letters outside ASCII is too.
+- **The chat acts on your word.** From Claude Code 2.1.322 on, in Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
   waits for you, answers a decision, starts, pauses or archives a campaign, takes back a standing approval, and sets the
   sender's name or tone of voice, with no card; each is recorded under the person the command names, as it would be from
   a terminal. It acts only on your word for that item, by name or as "all of these" about a list it showed.
@@ -80,7 +79,7 @@ voice.
   treated as one written from a terminal: it follows its campaign's send mode, and under "every message" it still waits
   for your approval.
 - **It asks in words before what cannot be undone.** A direct command is done at once, with no
-  "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "delete all my campaigns"
+  "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "archive all my campaigns"
   say, it says in a sentence or two what will happen, how many and that it cannot be undone, and asks once; your answer
   in the chat is the word, and on "yes" it does all of it. Where you spelled the act and its reach, "archive all
   campaigns except this one" say, that is already the word: it does all of it, one after another, and reports once at the
@@ -93,14 +92,14 @@ voice.
   to act as. It names each campaign it archives with its id and the count, and says once that an archive cannot be
   undone. It lifts a contact's opt-out only when you asked for that verdict on that reply, and then says whose. The
   skills no longer say the chat cannot do what it now does on your word.
-- **Your own Claude Code configuration is loaded in a Full access chat.** As in a terminal, a Full
-  access turn on Claude Code loads your own skills, hooks and MCP servers.
 - **Notices go by themselves.** A blue notice goes when the next answer of that conversation
   begins, and has a close control; none stays until a restart. The line under the composer still says why a mode fell
   back.
-- **Open folder.** An agent's "..." menu and its row's menu carry **Open folder**, which opens the
-  agent's folder in the system's file manager, File Explorer on Windows and Finder on a Mac. A chat of no agent and a
-  browser tab have none.
+- **Open the agent's folder.** An agent's "..." menu and its row's menu carry **Open in File Explorer** (Windows),
+  **Open in Finder** (macOS) or **Open in File manager** (Linux), which opens the agent's folder. A chat of no agent and
+  a browser tab have none.
+- **`/export <file name>` writes the conversation to a file.** A chat message of `/export` and a file name writes the
+  conversation's words to a new Markdown file.
 - **A file dropped on the message box puts its path in the text.** The path is quoted and set at
   the caret, as a terminal does; several files put several paths.
 - **A right-click on an agent's row opens its menu.** In the console's left column, the row of an agent offers the
@@ -123,8 +122,8 @@ voice.
 - **A new chat's first message no longer falls back to Ask first.** In rc.1 a turn in Full access could be stopped and
   run again in Ask first, with a box naming a setting you had not made, and the menu dropped to Ask first. A turn now
   starts in Full access as the menu says.
-- **A question is no longer answered as if you asked it twice.** A conversation resumed after a restart, whose first
-  turn had to be started again, holds your message once.
+- **A question is no longer answered as if you asked it twice.** A conversation whose message had to be started again in Ask
+  first now holds that message once; before, the session it went on in could hold it twice.
 - **Recent leaves out a conversation whose agent is archived.** Recent no longer lists it.
 - **The chat keeps the end of the conversation in view** when the cards under it, or the message box, change height,
   and the Reply card no longer goes away and comes back at a chat's first send.
@@ -175,5 +174,5 @@ voice.
 - No screen lists the archived agents yet.
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
 - An agent has one conversation: there is no second chat for the same agent yet.
-- **Archive** from an agent's row menu does not offer to pause the provider's campaign first; the same dialog from
-  Settings does.
+- **Archive** from an agent's row menu does not offer to have Jason pause the provider's campaign first; it says to pause it in the provider itself. The same
+  dialog from Settings does offer it.
