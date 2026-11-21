@@ -46,6 +46,7 @@ public sealed partial class InstallCommandTests : IDisposable
     {
         _data.Dispose();
         _tree.Dispose();
+        _brew.Dispose();
     }
 
     // --- refusals ---------------------------------------------------------------------------------------------

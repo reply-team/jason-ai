@@ -19,7 +19,7 @@ public sealed partial class InstallCommandTests
     }
 
     private void PlantDesktopRecord(string logon) =>
-        Written(Path.Combine(_data.Paths.Root, "desktop", "machine-setup.json"), "{\"ran_for\":\"0.49.4\",\"ran_from\":\"x\",\"report\":{\"logon\":\"" + logon + "\"}}");
+        Written(Path.Combine(_data.Paths.Root, "desktop", "machine-setup.json"), "{\"ran_for\":\"0.0.0\",\"ran_from\":\"x\",\"report\":{\"logon\":\"" + logon + "\"}}");
 
     private static void Written(string file, string text)
     {
@@ -48,7 +48,7 @@ public sealed partial class InstallCommandTests
     public async Task An_install_scripts_run_registers_the_start_naming_this_jason(string system)
     {
         var places = system == "linux" ? LinuxPlaces() : MacPlaces();
-        var executable = system == "linux" ? Carried(linux: "appimage", under: Path.Combine(_tree.Paths.Root, "bundles", "0.49.4")) : Carried();
+        var executable = system == "linux" ? Carried(linux: "appimage", under: Path.Combine(_tree.Paths.Root, "bundles", "0.0.0")) : Carried();
         var (env, output) = Environment(places, executable);
 
         await InstallCommand.RunAsync(env, new InstallOptions(false, true, null), Ct);
@@ -149,7 +149,7 @@ public sealed partial class InstallCommandTests
     [Fact]
     public async Task A_refusal_is_said_and_never_a_problem()
     {
-        var (env, output) = Environment(LinuxPlaces(), Carried(linux: "appimage", under: Path.Combine(_tree.Paths.Root, "bundles", "0.49.4")));
+        var (env, output) = Environment(LinuxPlaces(), Carried(linux: "appimage", under: Path.Combine(_tree.Paths.Root, "bundles", "0.0.0")));
         Registrar(env).Refuses = new AutostartException("systemctl --user could not reach the user manager.");
 
         await InstallCommand.RunAsync(env, new InstallOptions(false, true, null), Ct);
@@ -185,7 +185,7 @@ public sealed partial class InstallCommandTests
     public async Task A_start_turned_on_once_and_gone_is_not_turned_on_again()
     {
         PlantInstallation();
-        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.0.0");
         var (env, output) = Environment(MacPlaces(), Carried());
 
         await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
@@ -205,7 +205,7 @@ public sealed partial class InstallCommandTests
     {
         PlantInstallation();
         PlantDesktopRecord("no_installation");
-        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        AutostartOff.WriteDefault(_data.Paths, DateTimeOffset.UtcNow, "0.0.0");
         var (env, output) = Environment(MacPlaces(), Carried());
 
         await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);

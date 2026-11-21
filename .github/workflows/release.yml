@@ -6,8 +6,10 @@
 # the plugins' packages from the tag's tree; one job that writes the apt repository's index from the Linux deb, signs it
 # and reads it back as a machine's apt does; three proof jobs that install, update and uninstall the signed packages on
 # Windows, an Apple silicon Mac and an Intel Mac; then the release job — the only one that may write to this repository — assembles the manifest and the
-# checksums and publishes the release at once, with its notes and its assets. The job after it, which asked the Homebrew
-# tap to bump its formula, is switched off. The release pull request into main, and its run on every platform, come
+# checksums and publishes the release at once, with its notes and its assets. A job beside the proofs installs, upgrades
+# and takes off Homebrew's cask on an Apple silicon Mac, from taps made inside it, and the publication waits for nothing
+# of it. The job after the release, which would ask the Homebrew tap to bump its cask once that proof passed, is switched
+# off. The release pull request into main, and its run on every platform, come
 # before the tag: the tag is that pull request's head, the release is published from it, and the pull request is merged
 # into main only once the publication is checked, so main, whose README and pages GitHub shows, never describes a
 # release that is not out, and a release run that fails leaves main as it was. A hotfix's tag is its merge into main
@@ -1566,6 +1568,186 @@ jobs:
           path: installation
           if-no-files-found: ignore
 
+  # Homebrew's cask, on the signed and notarized zip the macOS job uploaded: rendered from .github/cask/jason.rb.template
+  # into taps made inside this job, never the real tap, it is audited as the real tap renders it, installed, opened,
+  # uninstalled, zapped, left to Homebrew by the carried uninstall, upgraded from the previous release's zip, and met
+  # beside the older formula. The publication waits for nothing of it: the tap's job needs it, so a red proof of the cask
+  # holds the cask's bump and never a release of Jason. It runs at a tag and in a dry run, as the other proof jobs do.
+  proof-macos-cask:
+    name: The cask on osx-arm64
+    needs: [version, macos]
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OUT: ${{ github.workspace }}/installation
+      FEED: ${{ github.workspace }}/feed
+      PREVIOUS: ${{ github.workspace }}/previous
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        id: download
+        with:
+          name: jason-desktop-osx-x64
+          path: feed
+
+      # The previous release's application zip, for the upgrade, and the older formula's command line, for the leg beside
+      # it, each held to its own release's checksums.txt.
+      - name: Fetch the previous release and the older formula's command line
+        id: previous
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          CASK_PREVIOUS_RELEASE: v0.49.1
+          FORMULA_RELEASE: v0.48.7
+        run: |
+          release="v${VERSION%%-*}"
+          [ "$CASK_PREVIOUS_RELEASE" != "$release" ] || { echo "::error::the previous release named, $CASK_PREVIOUS_RELEASE, is the one this tree builds"; exit 1; }
+          for pair in "$CASK_PREVIOUS_RELEASE jason-desktop-macos-arm64.zip" "$FORMULA_RELEASE jason-osx-arm64.tar.gz"; do
+            set -- $pair
+            tag="$1"; name="$2"; folder="$PREVIOUS/$tag"
+            mkdir -p "$folder"
+            for file in checksums.txt "$name"; do
+              curl -fsSL --max-time 600 -o "$folder/$file" "https://github.com/reply-team/jason-ai/releases/download/$tag/$file"
+            done
+            line="$(awk -v n="$name" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$folder/checksums.txt")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$folder" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$tag's $name matches its checksums.txt"
+          done
+
+      - name: The machine before anything is installed
+        id: before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills"
+          bash .github/scripts/test-installation-macos.sh listing before
+
+      - name: Make the test taps and audit the cask as the real tap renders it
+        id: taps
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          bash .github/scripts/test-cask-macos.sh taps "$FEED" "$VERSION"
+          bash .github/scripts/test-cask-macos.sh audit
+
+      # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
+      # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
+      - name: Install with the cask, uninstall it, and zap it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Install with the cask, uninstall it, and zap it"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-installation-macos.sh by-hand --placed "$VERSION"
+          bash .github/scripts/test-cask-macos.sh left-to-homebrew
+          bash .github/scripts/test-cask-macos.sh uninstall
+          bash .github/scripts/test-installation-macos.sh listing after-cask-uninstall
+          bash .github/scripts/test-cask-macos.sh uninstall-left
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-cask-zap
+          bash .github/scripts/test-installation-macos.sh compare after-cask-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L3b: the carried jason uninstall leaves the application Homebrew placed to it, and the zap it names then succeeds
+      # without --force.
+      - name: The carried uninstall leaves the application to Homebrew, and the zap it names takes it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "The carried uninstall leaves the application to Homebrew, and the zap it names takes it"
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh carried-uninstall
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-carried-uninstall-zap
+          bash .github/scripts/test-installation-macos.sh compare after-carried-uninstall-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L2: the previous release's application from the cask, a runtime running, then the cask at this version and brew
+      # upgrade: the uninstall stanza stops the runtime, leaving the note that a start is owed.
+      - name: Upgrade the cask from the previous release
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Upgrade the cask from the previous release"
+          CASK_PREVIOUS_RELEASE: v0.49.1
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "Fetch the previous release and the older formula's command line=${{ steps.previous.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          previous="${CASK_PREVIOUS_RELEASE#v}"
+          bash .github/scripts/test-cask-macos.sh render "$PREVIOUS/$CASK_PREVIOUS_RELEASE/jason-desktop-macos-arm64.zip" "$previous"
+          bash .github/scripts/test-cask-macos.sh install "$previous"
+          bash .github/scripts/test-cask-macos.sh open "$previous"
+          bash .github/scripts/test-cask-macos.sh start-runtime
+          bash .github/scripts/test-cask-macos.sh render "$FEED/jason-desktop-macos-arm64.zip" "$VERSION"
+          bash .github/scripts/test-cask-macos.sh upgrade "$VERSION"
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-cask-upgrade-zap
+          bash .github/scripts/test-installation-macos.sh compare after-cask-upgrade-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L5: the older formula installed and linked, then the cask: Homebrew skips the cask's link, set-up and jason status
+      # name brew uninstall --formula jason, and once it is off the missing link is said, not counted a fault.
+      - name: Install the cask beside the older formula
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Install the cask beside the older formula"
+          FORMULA_RELEASE: v0.48.7
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "Fetch the previous release and the older formula's command line=${{ steps.previous.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh formula "$PREVIOUS/$FORMULA_RELEASE/jason-osx-arm64.tar.gz" "${FORMULA_RELEASE#v}"
+          bash .github/scripts/test-cask-macos.sh beside-formula
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh formula-named
+          bash .github/scripts/test-cask-macos.sh formula-off
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-formula-zap
+          bash .github/scripts/test-installation-macos.sh compare after-formula-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      - name: The machine after every uninstall is the machine before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh held
+
+      - name: Keep the listings
+        timeout-minutes: 20
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-macos-cask-listings
+          path: installation
+          if-no-files-found: ignore
+
   release:
     name: Assemble and publish
     needs: [version, build, macos, windows, plugin, ui, skills, apt-index, proof-windows, proof-macos, proof-macos-intel]
@@ -1738,12 +1920,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
-  # Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the
-  # formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that
-  # carries one. The last clause of its condition is what switches it off.
+  # Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the
+  # last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository
+  # holds it at the release's tag, is the tap's to run. The last clause of its condition is what switches it off.
   #
-  # Asks the tap to bump its formula once a tag's release is published: after the release job succeeded, never after it
-  # failed or was skipped. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
+  # Asks the tap to bump its cask once a tag's release is published and the cask's own proof passed: after the release
+  # job and proof-macos-cask succeeded, never after either failed or was skipped, so a red proof of the cask holds the
+  # cask's bump and never the release. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
   # changes nothing when the address still answers the previous release or when this one is a candidate or an older
   # line's fix, since it reads the latest release. The tap's six-hour schedule catches whatever this misses. A job of its
   # own, so that "Re-run failed jobs" after a refusal runs this job alone, with the secret as it is then, and never the
@@ -1753,7 +1936,7 @@ jobs:
   # branches may run in.
   tap:
     name: Tell the tap
-    needs: release
+    needs: [release, proof-macos-cask]
     if: ${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' && false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

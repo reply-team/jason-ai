@@ -82,6 +82,11 @@ export interface ClaudeTurn {
     effort?: Effort | undefined;
     /** The session the previous turn of this chat reported; absent on a chat's first turn. */
     resume?: string | undefined;
+    /**
+     * Whether the resume forks (`--fork-session`): Claude Code then writes this start into a session of a new id and leaves
+     * the one resumed as it was. Read only with `resume`.
+     */
+    fork?: boolean | undefined;
     /** The host's version as read before the turn, at or above the floor (`claudeFloor`): it decides a sealed turn's `--no-chrome`. */
     version: string;
     /** A turn on a provider's key, which keeps the sealed line in every mode, Full access included. */
@@ -303,7 +308,10 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     }
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('--effort', effortWord(turn.effort));
-    if (turn.resume) args.push('--resume', resumable(turn.resume));
+    if (turn.resume) {
+        args.push('--resume', resumable(turn.resume));
+        if (turn.fork === true) args.push('--fork-session');
+    }
     return args;
 }
 
