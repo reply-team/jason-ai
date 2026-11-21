@@ -1280,6 +1280,8 @@ interface WrittenWord {
     glob?: boolean;
     /** A POSIX brace outside quotes, not a variable's: a group the shell may expand into words of its own. */
     braced?: boolean;
+    /** How much of the text ends with its last piece outside quotes and escapes; none when every piece is quoted. */
+    bareEnd?: number;
 }
 
 /**
@@ -1365,12 +1367,22 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
     const append = (piece: string, built = false, pattern = false, kept = false, glob = false, braced = false) => {
         const each: WrittenWord = word ?? { text: '', spaced: false, built: false, pattern: false };
         each.text += piece;
+        each.bareEnd = each.text.length;
         if (!kept && separating.test(piece)) each.spaced = true;
         if (built) each.built = true;
         if (pattern) each.pattern = true;
         if (glob) each.glob = true;
         if (braced) each.braced = true;
         word = each;
+    };
+    // A piece in quotes or after an escape is the word's literal text, so where its last piece outside them ends stays.
+    const quotedPiece = (piece: string, built = false) => {
+        const bareEnd = word?.bareEnd;
+        append(piece, built);
+        const each = word as WrittenWord | null;
+        if (each === null) return;
+        if (bareEnd === undefined) delete each.bareEnd;
+        else each.bareEnd = bareEnd;
     };
     const endWord = () => {
         if (word !== null) current.words.push(word);
@@ -1394,7 +1406,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
         const c = text[at] as string;
         if (c === escape) {
             const next = text[at + 1];
-            if (next !== '\n' && next !== undefined) append(next);
+            if (next !== '\n' && next !== undefined) quotedPiece(next);
             at += 2;
             continue;
         }
@@ -1403,7 +1415,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
             const close = text.indexOf(`\n${quote}@`, at + 2);
             const body = text.slice(at + 2, close < 0 ? text.length : close);
             if (quote === '"') current.inner.push(...substitutions(body, true));
-            append(body, quote === '"');
+            quotedPiece(body, quote === '"');
             at = close < 0 ? text.length : close + 3;
             continue;
         }
@@ -1425,7 +1437,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
         if (!powershell && c === '$' && text[at + 1] === '\'') {
             let end = at + 2;
             while (end < text.length && text[end] !== '\'') end += text[end] === '\\' ? 2 : 1;
-            append(ansiC(text.slice(at + 2, end)));
+            quotedPiece(ansiC(text.slice(at + 2, end)));
             at = end + 1;
             continue;
         }
@@ -1468,7 +1480,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
                 }
                 break;
             }
-            append(body);
+            quotedPiece(body);
             at = end + 1;
             continue;
         }
@@ -1520,7 +1532,7 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
                 body += each;
                 end++;
             }
-            append(body, built);
+            quotedPiece(body, built);
             at = end + 1;
             continue;
         }
@@ -1746,10 +1758,8 @@ function unfixedVariable(word: WrittenWord, place: WalkPlace, reading: WalkReadi
 
 /** A word's spellings for the walk: as written, and with the variables the reading knows put in (`resolvedSpellings`). */
 function walkSpellings(word: WrittenWord, place: WalkPlace, reading: WalkReading): string[] {
-    const { scope, powershell } = reading;
     if (!word.built || reading.assigned === undefined) return [word.text];
-    const values = (name: string) => reading.assigned?.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
-    return [word.text, ...(resolvedSpellings(word, values, scope) ?? [])];
+    return [word.text, ...(resolvedSpellings(word, (name) => variableValues(name, reading, place), reading.scope) ?? [])];
 }
 
 /**
@@ -1927,17 +1937,21 @@ function unfollowed(place: WalkPlace, reading: WalkReading, also: readonly strin
 
 /**
  * Where a folder change of the shell's own leads: its target, read as `placesOfWords` reads it from each folder the shell
- * may be in; with none, the home folder, and `-`, `+`, `popd` and `Pop-Location` any folder it has been in. A target the
- * shell builds while it runs leads below the folders it is fixed to (`fixedPart`), and where it leads is not followed;
- * nor is a place on the folder stack (`+1`, `-1`), a change with two operands, a file sourced into the shell (`.`,
- * `source`), nor, from where the reading cannot follow, a relative target (`unfollowed`).
+ * may be in; with none, the home folder, and `-`, `+`, `popd` and `Pop-Location` any folder it has been in. In a POSIX
+ * shell a value the text gives HOME is a home folder too, for no target and for `~` or `$HOME`, one it gives OLDPWD a
+ * folder `-` leads to, and a tilde of the folder stack leads where it leads (`stackTilde`). A target the shell builds
+ * while it runs leads below the folders it is fixed to (`fixedPart`), and where it leads is not followed; nor is a place
+ * on the folder stack (`+1`, `-1`), a change with two operands, a file sourced into the shell (`.`, `source`), nor, from
+ * where the reading cannot follow, a relative target (`unfollowed`).
  */
 function changedPlace(program: string, args: readonly string[], place: WalkPlace, reading: WalkReading): WalkPlace {
     const { scope, powershell } = reading;
     const runner = changeRunners.has(program) && args[0] !== undefined;
     const name = runner ? programKey(scope.platform, args[0] as string, powershell) : program;
     const words = runner ? args.slice(1) : args;
-    const back = (): WalkPlace => ({ ...place, folders: [...place.seen] });
+    // The values a POSIX text gives a variable of the shell's folders, each where it leads.
+    const given = (variable: string): string[] => (powershell ? [] : (reading.assigned?.get(variable) ?? []).map((folder) => located(nativeSpelling(folder, scope), scope)));
+    const back = (also: readonly string[] = []): WalkPlace => ({ ...place, folders: [...new Set([...place.seen, ...also])] });
     if (!powershell && (name === '.' || name === 'source')) return unfollowed(place, reading);
     if (goesBack.has(name)) return back();
     if (!(powershell ? powerShellChanges : posixChanges).has(name)) return place;
@@ -1960,7 +1974,8 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
             if (named('-stackname', 2) && joined === undefined) at++;
             continue;
         }
-        if (word === '-' || word === '+') return back();
+        if (word === '-') return back(given('OLDPWD'));
+        if (word === '+') return back();
         if (word === '--') {
             target = words[at + 1];
             break;
@@ -1970,7 +1985,19 @@ function changedPlace(program: string, args: readonly string[], place: WalkPlace
         break;
     }
     const moved = (folders: string[], unknown: boolean): WalkPlace => ({ folders, seen: [...place.seen, ...folders], unknown });
-    if (target === undefined) return name === 'pushd' || name === 'push-location' ? back() : moved([located(scope.home, scope)], false);
+    const homes = [...new Set([located(scope.home, scope), ...given('HOME')])];
+    if (target === undefined) return name === 'pushd' || name === 'push-location' ? back() : moved(homes, false);
+    // Below each of these folders by the rest of the target; where the shell builds the rest, below the part of it that
+    // is fixed, and not followed.
+    const below = (folders: readonly string[], rest: string, unknown: boolean): WalkPlace => {
+        const fixed = fixedPart(rest, scope.platform);
+        const tail = fixed ?? rest;
+        return moved([...new Set(folders.map((folder) => (tail === '' ? folder : located(`${folder}${tail}`, scope))))], unknown || fixed !== null);
+    };
+    const stack = powershell ? null : stackTilde(target);
+    if (stack !== null) return below(stack.current ? [...place.folders, ...given('PWD')] : [...place.seen, ...given('OLDPWD')], stack.rest, place.unknown);
+    const home = powershell ? null : /^(?:~|\$HOME|\$\{HOME\})(?=[\\/]|$)/.exec(target);
+    if (home !== null) return below(homes, target.slice(home[0].length), false);
     const value = nativeSpelling(homeExpanded(target, scope), scope);
     const fixed = /^~/.test(value) ? '' : fixedPart(value, scope.platform);
     if (fixed !== null) return moved(fixed === '' ? place.folders : place.folders.map((folder) => located(fixed, { ...scope, cwd: folder })), true);
@@ -2159,8 +2186,8 @@ interface KindsReading extends WalkReading {
 /**
  * The literal values a text gives its own variables, by the variable's name (in PowerShell in any case): a POSIX
  * assignment word wherever it stands, `export`'s and `local`'s among them, the words of a `for` loop's list, and
- * PowerShell's `$name = value` and `$name=value`; a value the shell builds is left out, so a variable that has none is
- * one the reading does not know.
+ * PowerShell's `$name = value` and `$name=value` where the value is quoted or a number; a value the shell builds is
+ * left out, and so is a command's output in PowerShell, so a variable that has none is one the reading does not know.
  */
 function assignedValues(text: string, reading: ShellReading): Map<string, string[]> {
     const { powershell } = reading;
@@ -2178,10 +2205,14 @@ function assignedValues(text: string, reading: ShellReading): Map<string, string
             }
             words.forEach((word, at) => {
                 if (powershell) {
+                    // A value is a literal only where it is quoted or a number: a bare word there is a command, whose
+                    // output the reading does not know.
+                    const literal = (each: WrittenWord, from: number) => (each.bareEnd ?? 0) <= from || /^[+-]?\d+(?:\.\d+)?$/.test(each.text.slice(from));
                     const joined = /^\$([A-Za-z_]\w*)=(.*)$/s.exec(word.text);
-                    if (joined !== null && !/[$`(]/.test(joined[2] as string)) add(joined[1] as string, joined[2] as string);
+                    const after = word.text.length - (joined?.[2]?.length ?? 0);
+                    if (joined !== null && !/[$`(]/.test(joined[2] as string) && literal(word, after)) add(joined[1] as string, joined[2] as string);
                     const value = words[at + 2];
-                    if (/^\$[A-Za-z_]\w*$/.test(word.text) && words[at + 1]?.text === '=' && value !== undefined && !value.built) add(word.text.slice(1), value.text);
+                    if (/^\$[A-Za-z_]\w*$/.test(word.text) && words[at + 1]?.text === '=' && value !== undefined && !value.built && literal(value, 0)) add(word.text.slice(1), value.text);
                     return;
                 }
                 const assignment = /^([A-Za-z_][A-Za-z0-9_]*)\+?=(.*)$/s.exec(word.text);
@@ -2223,19 +2254,63 @@ const profileFolder = /\(?\s*\[(?:System\.)?Environment\]::GetFolderPath\(\s*(['
 const spellingLimit = 16;
 
 /**
+ * The values a variable has where the reading reads it: those the text gives it (`assignedValues`) and, for a variable
+ * the reading knows (`knownVariable`), its own as well, since an assignment before a program leaves the words the shell
+ * expands for that program as they were; null where it has neither.
+ */
+function variableValues(name: string, reading: WalkReading, place: WalkPlace): string[] | null {
+    const assigned = reading.assigned?.get(reading.powershell ? name.toLowerCase() : name);
+    const known = knownVariable(name, reading.scope, place.folders);
+    if (assigned === undefined) return known;
+    return [...new Set([...assigned, ...(known ?? [])])];
+}
+
+/**
+ * Where a POSIX shell's tildes lead from a place: `~` to the home folder and to each value the text gives HOME; `~+`
+ * and `~0` to each folder the shell may be in, and each value the text gives PWD; `~-`, `~N`, `~+N` and `~-N` to each
+ * folder it has been in, and each value the text gives OLDPWD. None in PowerShell, whose `~` is its provider's home.
+ */
+interface Tildes {
+    home: readonly string[];
+    current: readonly string[];
+    previous: readonly string[];
+}
+
+function tildesOf(reading: WalkReading, place: WalkPlace): Tildes | undefined {
+    if (reading.powershell) return undefined;
+    const given = (name: string) => reading.assigned?.get(name) ?? [];
+    return {
+        home: [...new Set([reading.scope.home, ...given('HOME')])],
+        current: [...new Set([...place.folders, ...given('PWD')])],
+        previous: [...new Set([...place.seen, ...given('OLDPWD')])],
+    };
+}
+
+/** A tilde of the folder stack a path begins with (`~+`, `~0`, `~-`, `~N`, `~+N`, `~-N`): whether it is the folder the shell is in, and the rest of the path. */
+function stackTilde(text: string): { current: boolean; rest: string } | null {
+    const stack = /^~([+-]?)(\d*)(?=[\\/]|$)/.exec(text);
+    if (stack === null || (stack[1] === '' && stack[2] === '')) return null;
+    return { current: stack[1] !== '-' && /^0*$/.test(stack[2] as string), rest: text.slice(stack[0].length) };
+}
+
+/**
  * The spellings a word holds once the variables the reading knows are put in (`knownVariable`, and the text's own
  * values, `assignedValues`), and a `~` of the home folder, by itself or by the home's own account name, is the home
- * folder; null where any other part of it is built while the shell runs, a variable the reading does not know among them.
+ * folder, and where the place is given a POSIX shell's every tilde leads where it leads from it (`Tildes`); null where
+ * any other part of it is built while the shell runs, a variable the reading does not know among them.
  */
-function resolvedSpellings(word: WrittenWord, values: (name: string) => readonly string[] | null, scope: ChatScope): string[] | null {
-    const tilded = (text: string): string => {
+function resolvedSpellings(word: WrittenWord, values: (name: string) => readonly string[] | null, scope: ChatScope, tildes?: Tildes): string[] | null {
+    const tilded = (text: string): string[] => {
         const account = pathsOf(scope.platform).basename(scope.home);
+        const stack = tildes === undefined ? null : stackTilde(text);
+        if (tildes !== undefined && stack !== null) return (stack.current ? tildes.current : tildes.previous).map((folder) => `${folder}${stack.rest}`);
         const named = /^~([^\\/]+)(?=[\\/]|$)/.exec(text);
-        if (named !== null && keyOf(scope.platform, named[1] as string) === keyOf(scope.platform, account)) return `${scope.home}${text.slice(named[0].length)}`;
-        return homeExpanded(text, scope);
+        if (named !== null && keyOf(scope.platform, named[1] as string) === keyOf(scope.platform, account)) return [`${scope.home}${text.slice(named[0].length)}`];
+        if (tildes !== undefined && homeTilde(text)) return tildes.home.map((home) => `${home}${text.slice(1)}`);
+        return [homeExpanded(text, scope)];
     };
     const text = word.text.replace(profileFolder, () => scope.home);
-    if (!word.built) return [tilded(text)];
+    if (!word.built) return tilded(text);
     let spellings = [''];
     let at = 0;
     for (const match of text.matchAll(variableSpelling)) {
@@ -2248,7 +2323,7 @@ function resolvedSpellings(word: WrittenWord, values: (name: string) => readonly
         at = match.index + match[0].length;
     }
     spellings = spellings.map((done) => `${done}${text.slice(at)}`);
-    return spellings.some((each) => /[$`]/.test(each)) ? null : spellings.map(tilded);
+    return spellings.some((each) => /[$`]/.test(each)) ? null : spellings.flatMap(tilded);
 }
 
 /** A path's components as the platform compares them: its root first, then each folder and name. */
@@ -2318,11 +2393,12 @@ function patternKind(path: string, scope: ChatScope, dotted: boolean): string | 
  */
 function wordsKind(each: ReadCommand, place: WalkPlace, reading: KindsReading): string | null {
     const { scope, powershell } = reading;
-    const values = (name: string) => reading.assigned.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
+    const values = (name: string) => variableValues(name, reading, place);
+    const tildes = tildesOf(reading, place);
     const texts: string[] = [];
     const places: string[] = [];
     for (const word of each.command.words) {
-        for (const spelling of resolvedSpellings(word, values, scope) ?? []) {
+        for (const spelling of resolvedSpellings(word, values, scope, tildes) ?? []) {
             for (const expansion of word.braced === true ? (braces(spelling) ?? [spelling]) : [spelling]) {
                 const qualifier = /\(([^()]*)\)$/.exec(expansion);
                 const plain = qualifier !== null && word.glob === true ? expansion.slice(0, qualifier.index) : expansion;
@@ -2368,9 +2444,10 @@ function kindsFrom(text: string, start: WalkPlace, reading: KindsReading, depth:
             if (each.program === 'eval') place = read.place;
         }
         if (each.program === null) continue;
-        const values = (name: string) => reading.assigned.get(powershell ? name.toLowerCase() : name) ?? knownVariable(name, scope, place.folders);
+        const at = place;
+        const tildes = tildesOf(reading, at);
         const args = each.args.map((arg) => {
-            const spellings = resolvedSpellings(arg, values, scope);
+            const spellings = resolvedSpellings(arg, (name) => variableValues(name, reading, at), scope, tildes);
             return spellings?.length === 1 ? (spellings[0] as string) : arg.text;
         });
         place = changedPlace(each.program, args, place, reading);
@@ -2381,9 +2458,10 @@ function kindsFrom(text: string, start: WalkPlace, reading: KindsReading, depth:
 /**
  * Where the hook rides the turn, the three kinds as the walk reads a command: a relative path read from where a folder
  * change led, a word read through the variables the reading knows (the home folder's and the profile's, the drive's,
- * the folder the shell is in, and the values the text gives its own), a `~` of the home's own account name, and a
- * pattern by every name it may match, for a read and for a listing of its names alike. A variable the reading does not
- * know, and a path a program builds while it runs, stay unread. Null when none.
+ * the folder the shell is in, and the values the text gives its own, beside their own: `variableValues`), a `~` of the
+ * home's own account name, a POSIX shell's tildes where they lead (`tildesOf`), and a pattern by every name it may
+ * match, for a read and for a listing of its names alike. A variable the reading does not know, and a path a program
+ * builds while it runs, stay unread. Null when none.
  */
 function readKinds(tool: string, command: string, scope: ChatScope): string | null {
     const powershell = tool === 'PowerShell';

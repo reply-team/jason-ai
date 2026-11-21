@@ -942,8 +942,10 @@ Windows a path that names this computer as another computer would, `\\localhost\
 leads to, and one in a device's or a volume's namespace, or on a share of this computer that names no drive, is
 refused with the words that Jason could not place where it leads. The check reads a command as the shell would lead
 it: a relative path from the folder a change of folder led to, a variable it knows (your home folder's and your
-profile's, the drive's, the folder the shell is in, and one the command gives a value of its own), a `~` followed by
-your own account's name, and a pattern by every name it can match, for a read and a listing alike. What it does not
+profile's, the drive's, the folder the shell is in, and one the command gives a value of its own, in PowerShell a
+quoted one or a number, beside the variable's own), a `~` followed by your own account's name, a tilde of the folders
+the shell is in or has been in (`~+`, `~-`, `~1`), and a pattern by every name it can match, for a read and a listing
+alike. What it does not
 read is a variable it does not know and a path a program builds while it runs: a command that reaches one of them so
 runs. The turn's folder is its own, the chat's instructions and agent folders in it included: before the next turn
 Jason writes its instructions there afresh and leaves its agent folders holding only what Jason placed, in a

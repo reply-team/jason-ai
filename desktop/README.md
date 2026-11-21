@@ -484,9 +484,13 @@ applies to the turns a person starts by sending, from the next one on.
     it leads (`hookPlace`, `unplacedRefusal`); in the text a writer tool would put in a file; and in every string of an
     MCP tool's input. A command is also read as the shell would lead it (`readKinds`): a relative path from the folder a
     change of folder led to, a variable the reading knows (the home folder's and the profile's, the drive's, the folder
-    the shell is in, and a value the text gives one of its own, `assignedValues`), a `~` followed by the home's own
-    account name, and a pattern by every name it can match, a name that begins with a dot only by a pattern that does
-    too unless the text sets an option that says otherwise (`patternKind`), for a read and a listing alike. **The
+    the shell is in, and a value the text gives one of its own, `assignedValues`, in PowerShell a quoted one or a
+    number, each beside the variable's own, `variableValues`), a `~` followed by the home's own account name, a POSIX
+    shell's tildes where they lead (`tildesOf`: `~` to the home folder and to a value the text gives HOME, `~+` to the
+    folders the shell may be in, `~-` and the folder stack's `~N` to those it has been in, and a value the text gives
+    OLDPWD, for a word and for a change of folder, `cd -` among them), and a pattern by every name it can match, a name
+    that begins with a dot only by a pattern that does too unless the text sets an option that says otherwise
+    (`patternKind`), for a read and a listing alike. **The
     limit:** a variable the reading does not know, and a path a program builds while it runs, are not seen: such a
     command runs in Full access. A command that names another link to a settings file or the run file, as a word or as a
     redirect's source, is refused as that file, and in a demo run another link to the person's own settings file or run

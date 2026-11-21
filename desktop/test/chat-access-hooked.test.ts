@@ -621,6 +621,57 @@ test('a folder change the reading cannot follow, by a place on the folder stack,
     }
 });
 
+test('the folder stack\'s tildes are read as the folders the shell is in or has been in, and a text\'s own HOME and OLDPWD are followed for ~, a bare cd, cd ~ and cd -, the real ones too: each that reaches the settings file is refused by the hook in every mode it rides', () => {
+    for (const scope of scopes) {
+        // Where the home folder's parent is, as the shell spells it: Git Bash spells a drive as a folder of the root.
+        const parent = scope.platform === 'win32' ? '/c/Users' : posix.dirname(scope.home);
+        const account = scope.platform === 'win32' ? win32.basename(scope.home) : posix.basename(scope.home);
+        for (const command of [
+            'cd ~ && cat ~+/.jason/config/settings.json',
+            'cd ~ && cat ~0/.jason/config/settings.json',
+            'cd ~ && cat ~+0/.jason/config/settings.json',
+            'cd ~ && cd /tmp && cat ~-/.jason/config/settings.json',
+            'pushd ~ && pushd /tmp && cat ~1/.jason/config/settings.json',
+            'pushd ~ && pushd /tmp && cat ~+1/.jason/config/settings.json',
+            'pushd ~ && pushd /tmp && cat ~-1/.jason/config/settings.json',
+            'cd ~ && cd /tmp && cd ~- && cat .jason/config/settings.json',
+            'pushd ~ && pushd /tmp && cd ~1 && cat .jason/run/runtime.json',
+            `HOME=${parent}; cat ~/${account}/.jason/config/settings.json`,
+            `HOME=${parent}; cd; cat ${account}/.jason/config/settings.json`,
+            `HOME=${parent}; cd ~; cat ${account}/.jason/config/settings.json`,
+            `OLDPWD=${parent}; cd -; cat ${account}/.jason/config/settings.json`,
+            `HOME=/tmp cat $HOME/.jason/config/settings.json`,
+        ]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: settingsRefusal }, `${scope.platform}: ${command}`);
+            for (const judged of both('Bash', { command }, scope)) assert.notEqual(judged.verdict, 'allow', `${scope.platform}: ${command}`);
+        }
+        for (const command of ['cat ~+/notes.md', 'cd ~/Documents && cat ~+/notes.md', 'HOME=/tmp; cat ~/notes.md', 'cd /tmp && cd - && cat notes.md']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform}: ${command}`);
+        }
+    }
+});
+
+test('a PowerShell value is a literal only when it is quoted or a number: a command\'s output kept in a variable is a variable the reading does not know, and a walk of it is refused by the hook in every mode it rides', () => {
+    for (const command of [
+        'cd ~\\Documents; $d = Split-Path -Parent (Get-Location); Get-ChildItem $d -Recurse -Filter settings.json | Get-Content',
+        '$d = Get-Location; Get-ChildItem $d -Recurse',
+        '$d=Get-Location; Remove-Item $d -Recurse',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
+        for (const judged of both('PowerShell', { command }, windows)) assert.notEqual(judged.verdict, 'allow', command);
+    }
+    for (const [command, sentence] of [
+        ["$d = '.jason'; Get-Content ~\\$d\\config\\settings.json", settingsRefusal],
+        ['$d = ".jason"; Get-Content ~\\$d\\config\\settings.json', settingsRefusal],
+        ["$d='.jason'; Get-Content ~\\$d\\config\\settings.json", settingsRefusal],
+    ] as const) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'refused', message: sentence }, command);
+    }
+    for (const command of ["$d = 'C:\\Users\\someone\\Documents'; Get-ChildItem $d -Recurse", '$d = "C:\\Users\\someone\\Documents"; Get-ChildItem $d -Recurse', '$n = 5; Get-ChildItem ~\\Documents -Depth $n']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, windows), { outcome: 'runs' }, command);
+    }
+});
+
 test('PowerShell reads ${env:NAME} as one variable and a home spelling, a provider-qualified path as its path, and an en dash, an em dash or a horizontal bar as a dash: each spelling of the home folder and of a settings file is refused as the plain one', () => {
     for (const [command, sentence] of [
         ['Get-ChildItem ${env:USERPROFILE} -Recurse', searchRefusal],
