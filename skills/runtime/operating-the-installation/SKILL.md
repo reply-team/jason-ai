@@ -217,8 +217,9 @@ When someone says nothing ever tells them anything, read `jason status`'s `notif
 rather than guessing. Its states mean:
 
 - **`absent`, notifications off or no channel on** — say how to turn them on, and leave it to them.
-- **`absent`, a toast switched off** — Windows has Jason's notifications switched off in Settings → System →
-  Notifications. That is the person's own switch; tell them where it is.
+- **`absent`, a toast switched off** — Windows answered, when the toast was last sent, that Jason's notifications were
+  switched off in Settings → System → Notifications, or reads as off now; the check says which and when. That is the
+  person's own switch; tell them where it is. Switched on again since, the check is `ok` and says the next one will tell.
 - **`absent`, no desktop** — a machine with no session bus or no notification program shows no toast by design; a
   plugin still reaches them, if they want one.
 - **`failed`, session 0** — the runtime has no desktop: a service or an SSH session runs there, and so does the runtime

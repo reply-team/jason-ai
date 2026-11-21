@@ -45,7 +45,7 @@ export function NotificationsSection() {
                 { channel: channel.channel },
                 'write',
             );
-            if (shell.info.value) shell.info.value = { ...shell.info.value, notifications: answer };
+            shell.patchNotifications(answer);
         } catch (error) {
             if (!(error instanceof Unpaired))
                 setRefused({

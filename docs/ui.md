@@ -581,9 +581,12 @@ here: they are the **Notifications** section of Settings.
 ## Notifications in Settings
 
 **Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows what
-`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
+`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own; in Jason
+Desktop the page reads `system.info` again each time the window takes the focus back, beside the reload the Connect panel
+has, keeps the answer it has when that read fails, and drops a read a switch's answer overtook. It says whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
-with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+with its code and class, not shown with what Windows answered, not attempted with its reason, or nothing sent yet), with
+when that was. The text a failure carried is not drawn.
 Each channel has a switch, its on or off pill, which turns that one channel on or off as `jason notification enable` and
 `disable` do (`notification.enable`, `notification.disable`), in the paired person's name, as the command names who
 switches a channel; the section then shows the channels as the answer says them, and a refusal in the runtime's own
@@ -592,7 +595,8 @@ is `false` in the settings file every switch is off and inert, and the section s
 plugin channel that could not deliver (the runtime's `readiness`) says what is missing: that it cannot be turned on while
 it is off, with an inert switch, and that it cannot deliver while it is on, when it can still be turned off. What the
 operating system itself holds off stays words: a toast Windows did not show keeps its own switch, with the words beside
-it. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
+it, which say what Windows answered at that notification, never the switch as it is now, since the runtime asks Windows
+only when it sends a toast and asks again at the next one. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
 when an approval or a question is waiting, and how one channel is switched, there or with the command, in the person's
 name; in Jason Desktop a provider's channel is connected or disconnected on the Connect panel, which never changes the
 desktop toast; a browser has no Connect panel.
