@@ -1075,6 +1075,9 @@ export class Chat {
      * its cause and the mode Claude Code named.
      */
     #bypassGone(bypass: Bypass): void {
+        // Every refusal is seen, a cause that already holds included: a start begun before the hold may have been honoured
+        // within it, and the next resumed Full access start forks again.
+        this.#fullAccessHonoured = false;
         const holding = this.bypassUnavailable() === null ? null : this.#bypass;
         const { held } = bypassLeadsTo(bypass);
         if (holding !== null && (holding.until === null || held === 'one_minute')) return;
@@ -1082,7 +1085,6 @@ export class Chat {
         for (const told of this.#toldAskFirst.values()) for (const kind of bypassKinds) told.delete(kind);
         if (this.#bypassEnds !== null) clearTimeout(this.#bypassEnds);
         this.#bypassEnds = null;
-        this.#fullAccessHonoured = false;
         if (held === 'this_run') this.#bypass = { bypass, until: null };
         else {
             const heldMs = this.#options.bypassHeldMs ?? bypassHeldMs;
@@ -2222,6 +2224,7 @@ export class Chat {
                         host?.stop();
                         return;
                     }
+                    // Set at the session line; a start stopped later by a tool_result its hook never saw is un-set by `#bypassGone`.
                     if (resolved.program === 'claude' && running.mode === 'full_access') this.#fullAccessHonoured = true;
                     if (fallback && shown === 0) pending = line.id;
                     else name(line.id);

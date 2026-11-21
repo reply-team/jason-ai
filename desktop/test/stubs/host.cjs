@@ -55,6 +55,8 @@
 // when its configuration cannot be built.
 // STUB_CODEX_WARNING has Codex say a configuration warning before its thread, as a completed item of type `error`, the
 // shape codex exec --json gives one (codex-rs/exec/src/event_processor_with_jsonl_output.rs).
+// STUB_INIT_HOLD holds a Claude Code start before its init line until that file exists, so a test decides when the start
+// names its session. STUB_FAIL_START has Claude Code write those words to stderr and exit 1 before its init line.
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
@@ -170,6 +172,10 @@ async function claude(args, stdin) {
         process.stderr.write(`No conversation found with session ID: ${asked}\n`);
         process.exit(1);
     }
+    if (process.env.STUB_FAIL_START) {
+        process.stderr.write(`${process.env.STUB_FAIL_START}\n`);
+        process.exit(1);
+    }
     const store = process.env.STUB_SESSIONS || null;
     const opened = store === null ? 'stub-session-1' : `stub-session-${readdirSync(store).length + 1}`;
     const forking = asked !== null && args.includes('--fork-session');
@@ -201,6 +207,8 @@ async function claude(args, stdin) {
     // asked for: what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names
     // none.
     const named = forced ? 'default' : process.env.STUB_INIT_MODE;
+    const initHold = process.env.STUB_INIT_HOLD;
+    if (initHold) while (!existsSync(initHold)) await new Promise((resolve) => setTimeout(resolve, 20));
     if (store !== null) {
         if (forking && existsSync(join(store, asked))) writeFileSync(join(store, session), readFileSync(join(store, asked)));
         appendFileSync(join(store, session), stdin);
