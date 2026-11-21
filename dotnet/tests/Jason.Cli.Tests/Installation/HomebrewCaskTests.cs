@@ -136,8 +136,21 @@ public sealed partial class HomebrewCaskTests : IDisposable
     {
         var zap = Between(Template(), "zap script:", "trash:");
 
-        Assert.Contains($"delete:    [\n        \"~/.local/bin/jason\",\n        \"~/Library/LaunchAgents/{Jason.Cli.Autostart.AutostartArtifacts.Label}.plist\",\n        \"~/Library/LaunchAgents/{DesktopRemoval.Identifier}.plist\",\n      ]", zap, StringComparison.Ordinal);
+        Assert.Contains($"delete: [\n        \"~/.local/bin/jason\",\n        \"~/Library/LaunchAgents/{Jason.Cli.Autostart.AutostartArtifacts.Label}.plist\",\n        \"~/Library/LaunchAgents/{DesktopRemoval.Identifier}.plist\",\n      ]", zap, StringComparison.Ordinal);
         Assert.DoesNotContain("launchctl", zap, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The macOS floor is the release Electron's README names, as Homebrew's cask DSL reads a bare release: Ventura or
+    /// newer. The line is held exactly, so a change to it is seen.
+    /// </summary>
+    [Fact]
+    public void The_casks_macos_floor_is_ventura_or_newer_in_the_dsls_own_form()
+    {
+        var lines = Template().Split('\n');
+
+        Assert.Single(lines, line => line == "  depends_on macos: :ventura");
+        Assert.DoesNotContain(lines, line => line.Contains(">= :ventura", StringComparison.Ordinal) && !line.TrimStart().StartsWith('#'));
     }
 
     [Fact]

@@ -1156,6 +1156,19 @@ public class ReleaseAndUpdateDocTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Installing's cask paragraph says, conditionally, what to do where Homebrew says the tap is not trusted: whether a
+    /// fully qualified install trusts the tap by itself is not yet seen, so the page claims neither.
+    /// </summary>
+    [Fact]
+    public void Installing_says_what_to_do_where_Homebrew_says_the_tap_is_not_trusted()
+    {
+        var installing = Section(Read(), "## 6. Installing");
+
+        Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again.", installing, StringComparison.Ordinal);
+        Assert.DoesNotContain("trusts the tap by itself", installing, StringComparison.Ordinal);
+    }
+
     /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
     private static string Section(string page, string heading)
     {
