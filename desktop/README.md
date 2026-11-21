@@ -98,22 +98,23 @@ the composer while Codex is the chat's host outside Full access. Its sign-in is 
 access Codex turn reads the person's config.toml, as Codex in a terminal does, its MCP servers, providers and profiles
 with it; it still sets the cached search and `features.apps=false` for the run (`codexFullAccessSettings`).
 
-The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
-CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
-prints and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the
-CLI's own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`.
-A link the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it
-(https, a host name, no user, port or anything but printable ASCII) and hands it to the system browser through the
-navigation lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one
-account, writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or copied, when it stops working and its pending
-entry; the CLI's output for these verbs is never logged, recorded or put into an error.
-A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process
-that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused;
-no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and `delete` passes `--yes` only after the yes. One
-offer opens only after the code that calls for it, for the ask it answered and behind a box of its own: a forced delete
-(`--force`) after `linkedin.account_in_use`. A Reply that makes no one-mailbox link answers `email_link.not_available`,
-which is the plain refusal and offers nothing else. A refusal is one sentence of the desktop's, chosen by the CLI's code; a code the desktop does
-not act on, known or not, is said by one sentence that carries it, and nothing of the CLI's own words is shown or logged.
+The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply CLI
+that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI prints
+and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
+own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link
+the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a
+host name, no user, port or anything but printable ASCII) and hands it to the system browser through the navigation
+lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one account,
+writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or
+copied, when it stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put
+into an error. A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the
+main process that names the account as the list does (a connect and a reconnect make a link and ask nothing), with
+Cancel focused; no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and
+`delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it, for the ask it
+answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A Reply that makes no
+one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing else. A refusal is
+one sentence of the desktop's, chosen by the CLI's code; a code the desktop does not act on, known or not, is said by
+one sentence that carries it, and nothing of the CLI's own words is shown or logged.
 
 ## Its own files
 
