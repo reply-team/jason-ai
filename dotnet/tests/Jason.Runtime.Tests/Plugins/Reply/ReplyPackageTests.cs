@@ -127,9 +127,9 @@ public class ReplyPackageTests
         foreach (var twice in listed.GroupBy(entry => entry.Version, StringComparer.Ordinal).Where(group => group.Count() > 1))
         {
             problems.Add(
-                $"{DigestList} names version {twice.Key} {twice.Count()} times. A version has one line and a line is never changed: "
-                + "delete the line that was added or edited, put the package's content under a new version in plugin.yaml, and append "
-                + "the line for that version.");
+                $"{DigestList} names version {twice.Key} {twice.Count()} times. A version has one line: a released version's line is "
+                + "never changed, and the last line, of the version the release in work opened, is rewritten in place until that "
+                + "release ships. Delete the line that was added, and rewrite the last one where the version is still unreleased.");
         }
 
         var own = listed.Where(entry => entry.Version == version).ToList();
@@ -153,9 +153,10 @@ public class ReplyPackageTests
             {
                 problems.Add(
                     $"The package is not the content version {version} was recorded with: {DigestList} says {own[0].Digest}, the package "
-                    + $"is {digest}. A version is its content, so the version changes whenever any file of plugins/{ReplyPlugins.PluginId} does: "
-                    + "bump the version in plugin.yaml and write the changelog entry, then run this test again, which prints the line "
-                    + $"to append to the end of {DigestList}. The line already there is left as it is.");
+                    + $"is {digest}. A version is its content. Where {version} is the version the release in work opened, still "
+                    + $"unreleased, rewrite its line, the last of {DigestList}, as \"{line}\" and leave every other line as it is. Where "
+                    + $"{version} was released, its line is never changed: bump the version in plugin.yaml, write the changelog entry, "
+                    + $"and run this test again, which prints the line to append to the end of {DigestList}.");
             }
 
             if (listed[^1].Version != version)
