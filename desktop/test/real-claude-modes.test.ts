@@ -230,6 +230,8 @@ test('the real Claude Code, signed out, runs each mode\'s turn in the mode its i
             const settings = Object.entries(start.files).find(([file]) => file.startsWith('--settings '))?.[1] ?? flag(start.args, '--settings') ?? '';
             const hooked = mode === 'full_access' || (mode !== 'plan_only' && fullAccessSentence(version) === null);
             assert.equal(settings.includes('blockReadsOutsideWorkingDirectories'), !hooked, 'the block of reads as the mode decides it');
+            // A turn that runs in Full access loads the person's own configuration; every other turn keeps the sealed line.
+            for (const sealing of ['--setting-sources', '--strict-mcp-config']) assert.equal(start.args.includes(sealing), mode !== 'full_access', sealing);
             if (mode === 'plan_only') {
                 // Found on 2.1.329 on Windows: under the scrub Claude Code starts a Plan only turn in its default mode and says
                 // so; with none, as on Linux, it runs in the plan mode asked for.
