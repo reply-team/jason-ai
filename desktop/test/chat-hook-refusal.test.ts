@@ -59,7 +59,7 @@ const runs = { outcome: 'runs' } as const;
 const refused = (message: string) => ({ outcome: 'refused', message }) as const;
 const flag = (args: string[], name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const turnArgs = (mode: ChatMode) =>
-    claudeArguments({ mcpConfig: 'turn.mcp.json', addDirs: [], denied: [], allowed: [], reads: [], mode, ...(mode === 'plan_only' ? {} : { settingsFile: 'turn.settings.json' }), dataRules: [], version: '2.1.329' });
+    claudeArguments({ mcpConfig: 'turn.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: [], allowed: [], reads: [], mode, ...(mode === 'plan_only' ? {} : { settingsFile: 'turn.settings.json' }), dataRules: [], version: '2.1.329' });
 
 test('every mode names its permission mode: Full access the host\'s bypass, Ask first and Auto-edit the default, Plan only plan', () => {
     const expected: [ChatMode, string][] = [['full_access', 'bypassPermissions'], ['ask_first', 'default'], ['auto_edit', 'default'], ['plan_only', 'plan']];
@@ -89,7 +89,7 @@ test('every mode but Plan only carries the turn\'s settings file, whose hook blo
 });
 
 test('the PowerShell tool is the host\'s own in Full access and taken out of every other mode; Monitor is taken out of all', () => {
-    const removed = (args: string[]) => args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--setting-sources'));
+    const removed = (args: string[]) => args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--settings'));
     assert.ok(!removed(turnArgs('full_access')).includes('PowerShell'));
     assert.ok(removed(turnArgs('full_access')).includes('Monitor'));
     for (const mode of ['ask_first', 'auto_edit', 'plan_only'] as const) {
@@ -325,7 +325,7 @@ function allowedBy(args: string[], command: string): boolean {
 test('below the floor of Full access no hook rides Ask first or Auto-edit, so the host is given no allow rule for a no-card form whose verb reads a request\'s file: each reaches the permission tool, which runs its plain form with no card as the host\'s rule would, refuses it fed from the settings file or the run file, and asks about anything else', () => {
     const turn = (mode: ChatMode, hooked: boolean) => {
         const fenced = modeFence(fence, mode);
-        return claudeArguments({ mcpConfig: 'turn.mcp.json', addDirs: [], denied: fenced.commands, allowed: fenced.allowed, reads: fenced.reads, mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: hooked ? '2.1.329' : '2.1.300' });
+        return claudeArguments({ mcpConfig: 'turn.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: fenced.commands, allowed: fenced.allowed, reads: fenced.reads, mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: hooked ? '2.1.329' : '2.1.300' });
     };
     const reading = [
         'jason preference set tone_of_voice --value-file - < tone.txt',

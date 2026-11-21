@@ -95,7 +95,7 @@ test('a turn the hook rides carries no block of reads outside its folders, in Fu
 
 test('a turn the hook rides refuses no jason command for starting with an option at the host: the hook and the model judge it; below the floor and in Plan only the host still refuses it', () => {
     const args = (mode: ChatMode, hooked: boolean) =>
-        claudeArguments({ mcpConfig: 'turn.mcp.json', addDirs: [], denied: [], allowed: [], reads: [], mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: '2.1.329' });
+        claudeArguments({ mcpConfig: 'turn.mcp.json', server: 'jason_desktop_0123456789abcdef', addDirs: [], denied: [], allowed: [], reads: [], mode, ...(hooked ? { settingsFile: 'turn.settings.json' } : {}), dataRules: [], version: '2.1.329' });
     for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) assert.ok(!args(mode, true).includes('Bash(jason -*)'), mode);
     assert.ok(args('ask_first', false).includes('Bash(jason -*)'), 'below the floor');
     assert.ok(args('plan_only', false).includes('Bash(jason -*)'), 'Plan only');

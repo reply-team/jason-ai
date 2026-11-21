@@ -6,7 +6,7 @@ import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
 import { askingCardedForms, cliCommandTree } from './chat-deny.ts';
 import { followsLinksIn, heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type LiteralCommand } from './chat-literal.ts';
-import { serverName } from './chat-permission-endpoint.ts';
+import { isOwnTool } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
 
@@ -2784,8 +2784,8 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
 export const confinedVariable = 'JASON_CONFINED';
 
 /**
- * The chat's own variable, which every turn's environment carries, in every mode and on every host (`hostEnvironment`):
- * under it an option of the jason the turn runs that reads a file into a request takes standard input only, and the
+ * The chat's own variable, which every turn's environment carries, in every mode and on every host (`hostEnvironment`),
+ * whatever a settings file of the person's sets (`pinnedEnvironment`, and Codex's `shell_environment_policy`): under it an option of the jason the turn runs that reads a file into a request takes standard input only, and the
  * provider check runs a bare name only. It refuses no verb.
  */
 export const chatTurnVariable = 'JASON_CHAT_TURN';
@@ -3281,9 +3281,9 @@ function textRefused(text: string, scope: ChatScope): boolean {
     return respelledRefusal(text, scope) !== null;
 }
 
-/** True for a tool of an MCP server other than the chat's own: `mcp__<server>__<tool>`. */
+/** True for a tool of an MCP server other than the chat's own (`isOwnTool`, by the fixed prefix): `mcp__<server>__<tool>`. */
 function isPersonsTool(tool: string): boolean {
-    return tool.startsWith('mcp__') && !tool.startsWith(`mcp__${serverName}__`);
+    return tool.startsWith('mcp__') && !isOwnTool(tool);
 }
 
 const personsInputRefusal = 'That tool\'s input names one of Jason\'s own variables, Jason\'s own data, or a command this mode refuses: the chat never sends it. Nothing was sent.';
@@ -3609,7 +3609,7 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
  * before the next turn.
  */
 export function hookRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
-    if (tool.startsWith(`mcp__${serverName}__`)) return ownToolRefusal;
+    if (isOwnTool(tool)) return ownToolRefusal;
     if (tool.startsWith('mcp__')) {
         for (const text of [...stringsOf(input), valuesInOrder(input).join(' ')]) {
             const refused = textKind(text, scope);
@@ -4166,7 +4166,7 @@ export function judge(tool: string, input: Record<string, unknown>, scope: ChatS
 }
 
 function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatScope): Judgement {
-    if (tool.startsWith(`mcp__${serverName}__`)) return { verdict: 'deny', message: ownToolRefusal };
+    if (isOwnTool(tool)) return { verdict: 'deny', message: ownToolRefusal };
     // Before any table and before the command check: an argument named `command` or `file_path` is the server's to read.
     if (isPersonsTool(tool)) return judgePersonsTool(tool, input, scope);
     if (tool === 'Glob') return judgeGlob(input, scope);

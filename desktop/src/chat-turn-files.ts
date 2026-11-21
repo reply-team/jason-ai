@@ -1,5 +1,5 @@
 // What one chat turn writes, and removes when it ends: the host's MCP configuration, which names the turn's permission
-// endpoint and carries the turn's secret, and in Full access the turn's settings, whose hook carries the same secret. It lies in `<data>/desktop/turns/`, outside the chat folder, so the permission
+// endpoint, under a name of the turn's own, and carries the turn's secret, and in Full access the turn's settings, whose hook carries the same secret. It lies in `<data>/desktop/turns/`, outside the chat folder, so the permission
 // model refuses the agent a read of it and one host rule covers every turn's; the secret is never on argv and never in
 // a log. Every function here takes that folder.
 
@@ -8,7 +8,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hookedSettings } from './chat-hosts.ts';
 import type { ChatMode } from './chat-modes.ts';
-import { serverName } from './chat-permission-endpoint.ts';
+import { isTurnServerName, turnServerName } from './chat-permission-endpoint.ts';
 
 const turnIdShape = /^[0-9a-f]{24}$/;
 
@@ -18,6 +18,11 @@ export function newTurnId(): string {
 
 export function newSecret(): string {
     return randomBytes(32).toString('base64url');
+}
+
+/** A turn's own name for its permission server, with a nonce new for the turn (`turnServerName`). */
+export function newServerName(): string {
+    return turnServerName(randomBytes(8).toString('hex'));
 }
 
 /**
@@ -30,9 +35,13 @@ export function newSecret(): string {
  */
 export const hostCallLimitMs = 2_100_000;
 
-/** Pure: the configuration Claude Code reads with `--mcp-config`. */
-export function turnConfig(url: string, secret: string): object {
-    return { mcpServers: { [serverName]: { type: 'http', url, headers: { Authorization: `Bearer ${secret}` }, timeout: hostCallLimitMs } } };
+/**
+ * Pure: the configuration Claude Code reads with `--mcp-config`, its one server under the turn's own name for it
+ * (`newServerName`); a name the desktop does not give a turn's server is refused.
+ */
+export function turnConfig(url: string, secret: string, server: string): object {
+    if (!isTurnServerName(server)) throw new Error('That is not a name the desktop gives a turn\'s permission server.');
+    return { mcpServers: { [server]: { type: 'http', url, headers: { Authorization: `Bearer ${secret}` }, timeout: hostCallLimitMs } } };
 }
 
 export function turnConfigPath(turns: string, turnId: string): string {
@@ -44,10 +53,10 @@ export function turnConfigPath(turns: string, turnId: string): string {
  * Writes the turn's configuration, readable by this user alone, making the folder when it is not there; a file already
  * there is never overwritten.
  */
-export function writeTurnConfig(turns: string, turnId: string, url: string, secret: string): string {
+export function writeTurnConfig(turns: string, turnId: string, url: string, secret: string, server: string): string {
     const file = turnConfigPath(turns, turnId);
     mkdirSync(turns, { recursive: true, mode: 0o700 });
-    writeFileSync(file, `${JSON.stringify(turnConfig(url, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    writeFileSync(file, `${JSON.stringify(turnConfig(url, secret, server))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     return file;
 }
 
@@ -57,13 +66,21 @@ export function turnSettingsPath(turns: string, turnId: string): string {
 }
 
 /**
- * Writes the settings of a turn the hook rides, in its mode (`hookedSettings`), beside its MCP configuration, the same way: readable
- * by this user alone, never over a file already there.
+ * Writes the settings of a turn the hook rides, in its mode (`hookedSettings`), with what they set of the turn's environment
+ * (`pinnedEnvironment`), beside its MCP configuration, the same way: readable by this user alone, never over a file already
+ * there.
  */
-export function writeTurnSettings(turns: string, turnId: string, hookUrl: string, secret: string, mode: Exclude<ChatMode, 'plan_only'> = 'full_access'): string {
+export function writeTurnSettings(
+    turns: string,
+    turnId: string,
+    hookUrl: string,
+    secret: string,
+    mode: Exclude<ChatMode, 'plan_only'> = 'full_access',
+    turn: Parameters<typeof hookedSettings>[3] = {},
+): string {
     const file = turnSettingsPath(turns, turnId);
     mkdirSync(turns, { recursive: true, mode: 0o700 });
-    writeFileSync(file, `${JSON.stringify(hookedSettings(mode, hookUrl, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    writeFileSync(file, `${JSON.stringify(hookedSettings(mode, hookUrl, secret, turn))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     return file;
 }
 

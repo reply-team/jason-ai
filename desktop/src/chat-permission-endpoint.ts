@@ -19,10 +19,43 @@ import type { ToolAnswer } from './chat-permission-broker.ts';
 /** The protocol revisions the endpoint speaks, newest first. */
 export const protocolVersions: readonly string[] = ['2025-11-25', '2025-06-18', '2025-03-26'];
 
-export const serverName = 'jason_desktop';
+/**
+ * The fixed part of every turn's name for its permission server: a turn's own name is this, an underscore and a nonce new
+ * for the turn (`turnServerName`). A turn that runs in Full access loads the person's own MCP servers beside its own, and Claude
+ * Code connects once to a name defined in more than one place, from the source that ranks highest; no name the person
+ * gave a server of theirs, the fixed one an earlier version used among them, is a turn's, so none of theirs answers a card.
+ */
+export const serverPrefix = 'jason_desktop';
 export const toolName = 'decide';
-/** The tool's name as Claude Code's `--permission-prompt-tool` takes it. */
-export const promptToolName = `mcp__${serverName}__${toolName}`;
+
+/** A turn's own name for its permission server: the fixed prefix, an underscore and sixteen lowercase hexadecimal digits. */
+const turnServerShape = /^jason_desktop_[0-9a-f]{16}$/;
+
+/** A turn's own name for its permission server, from its nonce; a nonce of any other shape is refused. */
+export function turnServerName(nonce: string): string {
+    const name = `${serverPrefix}_${nonce}`;
+    if (!turnServerShape.test(name)) throw new Error('That nonce is not one the desktop names a turn\'s permission server by.');
+    return name;
+}
+
+/** Whether a name is one the desktop gives a turn's permission server (`turnServerName`). */
+export function isTurnServerName(name: string): boolean {
+    return turnServerShape.test(name);
+}
+
+/** The tool's name as Claude Code's `--permission-prompt-tool` takes it, on the turn's own server. */
+export function promptToolName(server: string): string {
+    return `mcp__${server}__${toolName}`;
+}
+
+/**
+ * Whether a tool is the chat's own permission tool, by the fixed prefix of its server's name: any turn's, and one of a
+ * server of the person's own under the fixed name an earlier version used, since only the person answers the chat's
+ * permission requests.
+ */
+export function isOwnTool(tool: string): boolean {
+    return tool.startsWith(`mcp__${serverPrefix}_`);
+}
 
 /**
  * What the turn's hook answers a tool use: `deny`, it does not run, and `reason` is what the agent is told; `none`, the
