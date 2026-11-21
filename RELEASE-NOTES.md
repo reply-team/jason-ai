@@ -19,133 +19,117 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.1
+# Jason 0.49.3-unwritten
 
-On Linux, Jason is now one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries, the command
-line your terminal and your agents use. The one line installs it as a deb where there is apt, updated with the system's
-packages, and everywhere else as an AppImage that updates itself; `jason uninstall` takes either off. On macOS and
-Windows, Jason is installed, updated and removed as in 0.49.0.
+Jason Desktop is now the one window onto Jason. `jason ui open`, and a click on Jason's notification on Windows and now
+on Linux, open Jason Desktop at what waits for you, and never a browser: the browser tab's own screens and the chat in a
+tab are gone. A web interface of your own keeps its door: the runtime serves your build from `<data>/ui/custom/`,
+`jason ui pair` prints the link that pairs it, and `jason ui open --web` opens it in your browser.
 
-## What is new since 0.49.0
+## What is new since 0.49.2
 
-- **The install line installs Jason Desktop on Linux.** As on macOS and Windows, the one line checks the application's
-  download against `checksums.txt`, puts it in its place and opens no window; then the `jason` the application carries
-  puts `jason` in the terminal, deploys Jason's skills for Claude Code and Codex where each is found and retires an
-  older command-line install. The system decides the form, as the next two items say.
-  [INSTALL.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md) §2 says what the script does,
-  step by step.
-- **Where there is apt (Ubuntu, Debian, Mint): the deb.** apt installs it with an administrator's password, asked once:
-  by `sudo` where the line has a terminal, and otherwise, as when an agent runs the line in your desktop session, by
-  your desktop's own password dialog. It puts Jason Desktop in `/opt/Jason` for every account of the computer, `jason`
-  in every terminal as `/usr/bin/jason`, and Jason's apt repository, `https://get.jasonharness.ai/apt/`, signed by the
-  key the package carries. While Ubuntu's own updates hold the package system, apt waits up to ten minutes for it. A
-  password not given, no session to ask in and the package system still held are each refused in their own words, and
-  nothing is installed.
-- **Everywhere else (Arch, Fedora and the rest): the AppImage.** It is placed for your account alone, with no password,
-  at `~/Applications/jason-desktop-linux-x64.AppImage`, with a menu entry and icons, and the terminal's `jason` is
-  `~/.local/bin/jason`. The line stops before anything is downloaded where the system does not let the application make
-  the user namespaces its sandbox needs, which Jason never runs without (on Arch, the `linux-hardened` kernel or a
-  setting that turns them off), or has no setuid `fusermount` to open the file (install `fuse3`).
-- **The line runs as you, with fewer options, on Linux too.** `install.sh` run as root, with `sudo`, stops before
-  anything is downloaded and says to run the line again as yourself: it asks for the password itself where the deb needs
-  one. `--install-dir` and `--no-modify-path` are refused before anything is read, since the application has its own
-  place and every install puts `jason` in the terminal. Run by an agent confined to its sandbox, where neither `sudo`,
-  `pkexec` nor `fusermount` can act, the line stops before anything is read and says to run it in your own terminal, or
-  outside the sandbox. Where the install would change a Jason Desktop that is running, it changes nothing and says to
-  quit Jason first.
-- **Jason Desktop sets Linux up at its first start of each version**, as on macOS and Windows: `jason` in the terminal,
-  the skills in place, an older command-line install retired, and the runtime started again where an install or an
-  update stopped it. A deb or an AppImage installed by hand is set up the same way.
-  [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md) says what the first start does.
-- **The deb's updates are offered, and Ubuntu's automatic updates leave them alone.** They come with the system's, from
-  Jason's apt repository: on Ubuntu, Software Updater offers a new version and installs it when you say so, as
-  `sudo apt update && sudo apt upgrade` does in a terminal, and `sudo apt-mark hold jason-desktop` stops them. The deb's
-  `jason update apply` and `jason update rollback` install nothing and print apt's commands instead. Going back from the
-  deb to 0.49.0 or earlier starts with `jason uninstall`, or with `sudo rm /etc/apt/sources.list.d/jason-desktop.sources`:
-  those releases' packages carry no key for Jason's apt source, and without it every `apt update` reports the source. Where the system
-  replaced Jason under its open window, the update item reads
-  `Restart Jason and Its Runtime to Finish the Update to <version>` and one notice says so; the item, or a click on the
-  notice, stops the runtime the old version runs, which ends a running turn and the work in progress, and starts Jason
-  again, whose start finishes the update. Where the system updated Jason while no window was open and the runtime still
-  runs the earlier version, the next start of Jason Desktop offers the same item and notice, and restarts nothing by
-  itself; `jason runtime restart` in a terminal brings the runtime up too, and so the install line says when it is run
-  over an older package. On the deb no sentence names Check for Updates, which it has no item for: where the runtime is
-  newer, or a newer release is out, Jason Desktop and its System screen name Software Updater or
-  `sudo apt update && sudo apt upgrade`.
-- **`jason status` says when the deb's updates cannot arrive, or are not finished.** A release upgrade of Ubuntu turns
-  Jason's apt source off, as it turns off every third-party source; `jason status`'s `update` check says when the source
-  is off or gone, and Software & Updates → Other Software turns it on again. The same check says when the system
-  installed a version this installation is not set up for yet: opening Jason Desktop sets it up, and where the runtime
-  still runs the earlier version, its restart item, or `jason runtime restart`, brings the runtime up.
-- **An AppImage updates itself.** Its update item, or `jason update apply` in a terminal, updates Jason Desktop and the
-  `jason` it carries together, as on macOS and Windows. The update replaces the file where it is, so you need to be able
-  to write to its folder, and keeps the previous file under `~/.jason/desktop/rollback/<version>/`. Jason Desktop needs
-  a display even with no window, so `jason update apply` from a terminal without one, an ssh session say, is refused
-  before anything is read.
-- **One removal on Linux.** `jason uninstall` in a terminal, or **Uninstall Jason…** in the Jason menu, which the tray
-  carries on Linux, takes off Jason Desktop, the terminal command, the skills it deployed, Open Jason at Login, the
-  runtime's start at logon and an older command-line install, as on macOS and Windows; Remove What Jason Placed… is
-  gone. For the deb, your system asks for an administrator's password to take the package off before anything of yours
-  is removed, and where that is refused nothing of yours goes; an AppImage goes with no password, with its menu entry,
-  its icons and its copies of `jason`. It keeps the data directory unless you add `--purge-data`, and the harness root
-  always. Removed the system's own way instead (`sudo apt purge jason-desktop`, App Center, or deleting the AppImage),
-  the application goes and your account's own files stay. For the deb, the runtime's start at logon is skipped once its
-  `jason` is gone; an AppImage's copy of `jason` under `~/.jason` stays, so `jason` still answers and the runtime still
-  starts at sign-in until `jason uninstall`. The login and menu entries are hidden either way. `jason uninstall` is the
-  whole removal.
-  [desktop.md](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#taking-it-off) says what each
-  takes off.
-- **A command-line install moves into Jason Desktop on Linux too.** `jason update apply` in a command-line install of an
-  earlier version updates it, then installs Jason Desktop in the form the install line takes, and moves the command line
-  into it, so that the terminal's `jason` is the one the application carries. The update never fails because of the
-  move: where the move cannot go on yet, the install is left as it was and `jason status` says where the move stands.
-- **Linux's one installation is the `jason` a terminal should find.** As on macOS and Windows, where another `jason`
-  answers first by name in a new terminal, the install line ends with an error that names that file, and the `path`
-  check of `jason status`, run by the `jason` Jason Desktop carries, fails, naming both files. A `jason` the application
-  does not carry, a build of your own say, keeps the check it had.
-- **An agent installing Jason on Linux has nothing to choose.** The install page's section for an agent, and the skill
-  that operates the installation, take it through the one installation on all three systems. Where the agent's harness
-  refuses the script, it downloads the file for the system, checks it against `checksums.txt` and hands it to you to
-  install or open.
+- **`jason ui open` opens Jason Desktop.** It opens the window on Needs you, and with `--approval <id>` or
+  `--question <id>` at that one item, through the desktop's own `jason-desktop:` link; `--no-open` prints that address
+  and opens nothing, for an agent to hand to you. It asks the runtime nothing and never opens a browser, so an id is
+  checked only for its kind and shape: one that is neither an approval's nor a question's is refused as the runtime
+  refuses an id it does not know (`approval_not_found`, `decision_not_found`). Where no Jason Desktop that takes its
+  links is installed for your account, as for a command-line install still waiting to move into it, it opens nothing
+  and refuses with `desktop_not_installed`. It no longer passes its own output streams to the program it starts, so a
+  program that reads its output to the end, an agent's tool call among them, is not kept waiting until the window
+  closes.
+  [Opening it](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#opening-it) says the rules on each
+  system.
+- **`jason ui pair` prints the link that pairs a page.** It sends the Runtime API's `ui.open`, which `jason ui open`
+  sent in 0.49.2, and prints what that printed: a link that pairs one page, once, within 60 seconds, with
+  `--approval <id>` or `--question <id>` at that item's address. It opens nothing. Jason Desktop pairs its own window
+  with it at each start.
+- **`jason ui open --web` opens a web interface of your own.** Where `<data>/ui/custom/` holds a build of your own,
+  an `index.html` and a `manifest.json` the runtime takes, it hands your default browser a link that pairs that
+  browser, as `jason ui pair`'s does, and `--web --no-open` prints the link. Without such a build it asks the runtime
+  nothing, opens nothing and refuses with `custom_ui_not_installed`: the release's own build is never opened in a
+  browser.
+  [A web interface of your own](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#a-web-interface-of-your-own)
+  says how such a page pairs, calls the Runtime API and follows the journal.
+- **On Linux, a click on Jason's notification opens Jason Desktop.** It opens at the one approval or question when
+  exactly one waits, and at Needs you otherwise, as `jason ui open` does; in 0.49.2 a click opened nothing of Jason's on
+  Linux. The notification waits on the session bus until it is clicked or dismissed, and the item's id stays with the
+  runtime: the notification server never receives it. Where notify-send hands on the click's activation token
+  (libnotify 0.8.8 and later), the window comes to the front. Where no Jason Desktop takes its links, nothing opens,
+  never a browser, and a second notification says why, in the words `jason ui open` would print. A click on a
+  notification from a runtime started at logon, before your desktop session set its display, opens the desktop all the
+  same, and a Jason Desktop a click started keeps running when the runtime stops. With dunst, the click is its middle
+  button.
+- **An AppImage's Jason Desktop takes its links.** Its menu entry, as the install line and the move from a command-line
+  install write it, now declares the `jason-desktop:` scheme and starts the file in a form xdg-open starts outside GNOME
+  and KDE too, and the folder's menu cache is written after it (`update-desktop-database`). So `jason ui open` and a
+  notification's click open an AppImage the install line placed or a command-line install moved into; an AppImage you
+  run from where you downloaded it has no menu entry and takes no links. The first start of this version brings the
+  entry an earlier version wrote for its file to this form, and leaves any other entry alone; `jason uninstall` writes
+  the menu cache again once the entry is gone.
+- **On Linux, a link goes where xdg-open would send it.** `jason ui open` and a click open Jason Desktop only where
+  xdg-open would start it for its scheme. Where your account's own default for `jason-desktop:` links names another
+  program, or a menu cache names an entry that is gone, they open nothing and refuse with a new code,
+  `desktop_links_elsewhere`, whose sentence names the file that sends the links elsewhere and the command or the line
+  that gives them back.
+- **A notification's click never opens a browser.** On Windows, with no Jason Desktop registered or its program gone,
+  the click opens nothing, where it opened the browser UI before, and where Windows cannot be handed the desktop's
+  address nothing else opens either.
+- **No second notification from Jason Desktop on Windows and Linux.** The runtime's notification opens Jason Desktop
+  on what waits, so the desktop no longer posts its own "Jason needs you" when its count rises; the tray's count and
+  Needs you stay. On macOS the desktop's own notification stays as it was.
+- **Jason Desktop is the one window.** Jason's screens, the Demo among them, are drawn in its window alone. Open in no
+  longer offers Browser, which opened the desktop's chat in a tab of your browser, and the desktop no longer listens on
+  `127.0.0.1` for such a tab. Over the release's build, a browser tab at the runtime's `/ui/` draws one sentence and
+  nothing else, whatever the address names: "This is the place for a web interface of your own. To build one, ask your
+  agent how." It has no link, no Demo and no console, reads no pairing and asks the runtime nothing. The page the
+  runtime serves may connect to its own origin and no other.
+- **The pages, the skills and the `ui` verbs' help say one window.** `docs/ui.md` is now the page of Jason Desktop's
+  screens, with a section on a web interface of your own, and the README, the other pages, the skills and the help of
+  the `ui` verbs say Jason Desktop, or a paired page, where they said the browser UI.
 
-## Fixed since 0.49.0
+## Fixed since 0.49.2
 
-- **A runtime started from Jason Desktop on Linux no longer holds the application's files open.** The runtime Jason
-  Desktop starts no longer inherits the application's open files, so after an AppImage's window closes, its runtime no
-  longer keeps the AppImage mounted.
-- **On Windows, a browser or a terminal the CLI opens no longer holds what `jason` was handed.** A link the CLI opens and
-  the terminal `jason session open` starts no longer inherit the handles the CLI holds as inheritable, its standard
-  streams among them, as the runtime it starts already did not: a script or an agent that runs `jason` with its output
-  captured no longer waits for that browser or terminal to close before its read ends.
+- **Reinstalling Jason Desktop after an uninstall sets up the role skills.** After `jason uninstall` that kept the
+  data directory, installing the same version again by hand, the AppImage started from a download or the deb by
+  `sudo apt install ./jason-desktop-linux-x64.deb`, set up the terminal command and the agents' skills but not the role
+  skills, so `jason status` said Not ready (`role_skills`). Its first start now sets them up too, and `jason status` no
+  longer reports `role_skills`.
 
-## Upgrading from 0.49.0
+## Upgrading from 0.49.2
 
-- **A command-line install on Linux.** `jason update apply` updates it to this version and moves it into Jason Desktop,
-  as above: where there is apt it installs the deb, asking for an administrator's password once, and elsewhere it places
-  the AppImage. Then the terminal's `jason` is the application's, `/usr/bin/jason` for the deb and `~/.local/bin/jason`
-  for the AppImage, the command-line install is retired, and a runtime the move stopped runs again from the
-  application's `jason`. Where the move waits — no password given, Jason Desktop open, a system that cannot run the
-  AppImage, or an AppImage older than this version already at `~/Applications/jason-desktop-linux-x64.AppImage` —
-  `jason status` says why and what moves it on; once that is done, `jason update apply` carries the move on.
-  [Moving a command-line install into Jason Desktop](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#moving-a-command-line-install-into-jason-desktop)
-  says each step. The one line, run instead, installs Jason Desktop and retires the command-line install the same way.
-- **A Jason Desktop of 0.49.0 on Linux.** The deb and the AppImage take this version by their own update item, the deb
-  asking for an administrator's password as before; the one line, too, installs this version's deb over an earlier one.
-  The first start of this version then sets Jason up as above, and from then on the deb's updates come with the
-  system's.
-- **Going back to a command-line install.** `jason update rollback` does not undo the move into Jason Desktop. On Linux,
-  going back is taking Jason off with `jason uninstall`, keeping the data directory, and installing 0.49.0 or 0.48.7 by
-  its own pinned line, which installs the command line on Linux, as it did: this version adds no migration to the
-  database, so either opens the same data as it is.
-  [Going back from 0.49](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back-from-049)
-  lists the steps.
+- **Where you used the browser UI.** Jason's screens and its chat are in Jason Desktop: open it as any application, or
+  with `jason ui open`, which opens it at what waits, and with `--approval <id>` or `--question <id>` at one item. A
+  browser you paired before keeps its token until you revoke it, though the release's page there no longer uses it:
+  `jason ui tokens` lists the pages paired, and `jason ui revoke <token-id>`, or Revoke all other browsers on the System
+  screen, ends one.
+- **A web interface of your own.** Its build, an `index.html` and a `manifest.json` that holds exactly `version` and
+  `api_version`, goes in `<data>/ui/custom/` (`~/.jason/ui/custom/` by default), where the runtime serves it in place of
+  the release's build at once. Jason Desktop's window is served it too and draws it in place of Jason's screens;
+  deleting `custom/` brings them back. `jason ui open --web` opens it in your browser, paired, and `jason ui pair`
+  prints a link that pairs one page, for a browser you open yourself. Its page may connect to the runtime's own origin
+  alone: a connection to another port on `127.0.0.1`, which 0.49.2 allowed, is refused.
+- **Scripts and agents that call `jason ui open`.** It now prints Jason Desktop's address,
+  `{"address":"jason-desktop://attention"}` say, where it printed a pairing link, and asks the runtime nothing. It exits
+  1 where no Jason Desktop takes its links (`desktop_not_installed`, under `--no-open` too), and on Linux outside a
+  graphical session, over ssh say, it opens nothing and exits 1 with `opener_not_started`. Take the pairing link from
+  `jason ui pair`, whose output is what `jason ui open` printed in 0.49.2.
+- **Going back.** This version adds no migration to the database, so 0.49.2 opens the same data as it is.
 
 ## Known issues
 
-- **GNOME without an extension for a tray icon shows none**, as Arch's GNOME ships; Ubuntu's GNOME shows the tray.
-  There, Uninstall Jason…, Open Jason at Login, Start the Runtime at Logon and Command Line cannot be reached from the
-  window: `jason uninstall` in a terminal takes Jason off. The update item is at the foot of Settings' list, and on
-  Ctrl+Shift+D.
-- **After an AppImage updates itself, the previous version stays mounted** until the updated window quits.
-- **GNOME lists no menu entry for an AppImage whose path holds a per-cent sign**, and neither do other launchers built
-  on GLib.
+- **On GNOME, a link without the click's token does not bring a running Jason Desktop to the front.** `jason ui open`,
+  and on Ubuntu 24.04 a notification's click (its libnotify, 0.8.3, hands on no activation token), change the running
+  window's page where it is; GNOME says Jason Desktop "is ready", and a click on that brings it forward. On Hyprland
+  the window keeps its place unless `misc:focus_on_activate` is set.
+- **On macOS, a click on Jason's notification opens nothing of Jason's**, as before; `jason ui open` opens Jason
+  Desktop at what waits.
+- **On Linux, a click reaches Jason only while its notification waits.** At most ten wait at once, a newer one ending
+  the oldest one's wait; the runtime ends every wait when it stops, so a notification shown before a stop opens
+  nothing; and notify-send before 0.7.10, or gdbus where there is no notify-send, shows a notification no click
+  reaches.
+- **Outside GNOME and KDE, a `jason ui open` that starts Jason Desktop ends after ten seconds**, saying on stderr that
+  it handed the address on (`opener_timed_out`), and exits 0: xdg-open there runs the desktop until its window closes.
+  The desktop opens all the same.
+- **An AppImage in a folder whose path holds a space or a quote takes no links.** Its menu entry can start it only by a
+  quoted path, which xdg-open outside GNOME and KDE cannot start, so `jason ui open` and a click refuse with
+  `desktop_links_elsewhere`.
