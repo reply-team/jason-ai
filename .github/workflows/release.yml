@@ -1655,6 +1655,7 @@ jobs:
           bash .github/scripts/test-cask-macos.sh left-to-homebrew
           bash .github/scripts/test-cask-macos.sh uninstall
           bash .github/scripts/test-installation-macos.sh listing after-cask-uninstall
+          bash .github/scripts/test-cask-macos.sh uninstall-left
           bash .github/scripts/test-cask-macos.sh install "$VERSION"
           bash .github/scripts/test-cask-macos.sh open "$VERSION"
           bash .github/scripts/test-cask-macos.sh zap

@@ -20,13 +20,16 @@
 #   start-runtime                  a runtime started from the carried jason, answering
 #   upgrade <version>              brew upgrade --cask: the application at <version>, the runtime the uninstall stanza
 #                                  stopped answering at <version> once a start is paid, or the note that one is owed said,
-#                                  the link resolving, brew outdated empty, and a second upgrade doing nothing
+#                                  the link resolving, brew outdated --greedy empty, and a second upgrade doing nothing
 #   uninstall                      brew uninstall --cask jason: the application, the link and Homebrew's record gone, and
-#                                  no Jason process left; what Jason set up stays, said
+#                                  no Jason process left
+#   uninstall-left                 the listing after-cask-uninstall against before: nothing differs outside what a plain
+#                                  uninstall may leave (what Jason set up, the state under ~/Library, data, harness root)
 #   carried-uninstall              the carried jason uninstall: exit 0, the application, its link and its state under
 #                                  ~/Library kept, and brew uninstall --zap --cask jason named
-#   zap                            brew uninstall --zap --cask jason, with no --force: the application, the link and
-#                                  Homebrew's record gone
+#   zap                            brew uninstall --zap --cask jason, with no --force: the application, the link,
+#                                  Homebrew's record, the wrapper and the starts at logon gone; the profile lines and
+#                                  the skills recorded, not held
 #   formula <tarball> <version>    jasonproof/test's formula, installing the command line of <tarball>, the older formula's
 #                                  release, installed and linked
 #   beside-formula                 the cask installed beside the linked formula: Homebrew's warning that it skipped the link
@@ -62,6 +65,10 @@ caskroom() { echo "$(prefix)/Caskroom/$TOKEN"; }
 version_of() { sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Contents/Resources/bundle/version.json" 2>/dev/null | head -n 1; }
 identifier_of() { /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true; }
 sha_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+# One field of a JSON object, or nothing.
+field() { python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))
+except Exception: print("")' "$1" "$2"; }
 
 # The cask from the template, at a version, for a zip, with the url as the real tap renders it or naming a file here.
 render() {
@@ -183,8 +190,8 @@ left-to-homebrew)
 
 start-runtime)
     "$CARRIED" runtime start > "$OUT/cask-runtime-start.txt" 2>&1 || true
-    "$CARRIED" runtime status > /dev/null 2>&1 || fail "no runtime answers: $(cat "$OUT/cask-runtime-start.txt")"
-    say "a runtime started from $CARRIED answers"
+    "$CARRIED" runtime status > "$OUT/cask-runtime-before.json" 2>/dev/null || fail "no runtime answers: $(cat "$OUT/cask-runtime-start.txt")"
+    say "a runtime started from $CARRIED answers: process $(field "$OUT/cask-runtime-before.json" pid), version $(field "$OUT/cask-runtime-before.json" runtime_version)"
     ;;
 
 upgrade)
@@ -197,16 +204,24 @@ upgrade)
     [ "$(version_of "$APP")" = "$version" ] || fail "$APP is $(version_of "$APP") after the upgrade, not $version"
     [ -L "$(link)" ] && [ -e "$(link)" ] || fail "$(link) does not resolve after the upgrade"
     owed="$DATA/run/start-owed.json"
+    old_pid="$(field "$OUT/cask-runtime-before.json" pid)"
+    [ -n "$old_pid" ] || fail "no runtime was recorded before the upgrade (start-runtime)"
+    if [ -f "$owed" ]; then stopped="the note that a start is owed was written ($owed)"
+    elif ! kill -0 "$old_pid" 2>/dev/null; then stopped="the old runtime's process $old_pid is gone"
+    else fail "the old runtime's process $old_pid still runs after the upgrade, and no note says a start is owed"; fi
+    kill -0 "$old_pid" 2>/dev/null && fail "the old runtime's process $old_pid still runs after the upgrade"
     sleep 10
     if "$CARRIED" runtime status > "$OUT/cask-runtime-after.json" 2>/dev/null; then
-        say "a runtime answers after the upgrade: $(tr -d '\n' < "$OUT/cask-runtime-after.json" | cut -c1-200)"
+        answered="$(field "$OUT/cask-runtime-after.json" runtime_version)"
+        case "$answered" in "$version"|"$version+"*) ;; *) fail "the runtime answering after the upgrade is $answered, not $version" ;; esac
+        say "the uninstall stanza stopped the old runtime ($stopped), and a runtime answers at $answered after the upgrade"
     elif [ -f "$owed" ]; then
-        say "the uninstall stanza stopped the runtime and left the note that a start is owed ($owed); Homebrew did not reopen the application, so nothing paid it yet"
+        say "the uninstall stanza stopped the old runtime ($stopped); Homebrew did not reopen the application, so nothing paid the owed start yet"
     else
         fail "after the upgrade no runtime answers and no note says a start is owed"
     fi
-    outdated="$(brew outdated --cask "$TEST_TAP/$TOKEN" 2>&1 || true)"
-    [ -z "$outdated" ] || fail "brew outdated --cask still names the cask: $outdated"
+    outdated="$(brew outdated --cask --greedy "$TEST_TAP/$TOKEN" 2>&1 || true)"
+    [ -z "$outdated" ] || fail "brew outdated --cask --greedy still names the cask: $outdated"
     again=0
     brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade-again.txt" 2>&1 || again=$?
     cat "$OUT/cask-upgrade-again.txt"
@@ -223,20 +238,37 @@ uninstall)
     sleep 5
     running="$(ps -axo command= | grep -iE '(Jason\.app/|/bundle/jason)' | grep -v grep || true)"
     [ -z "$running" ] || fail "a Jason process is left after brew uninstall --cask: $running"
-    left=""
-    [ -e "$HOME/.local/bin/jason" ] && left="$left the wrapper,"
-    ls "$HOME"/Library/LaunchAgents/ai.jasonharness.desktop* > /dev/null 2>&1 && left="$left the start at logon,"
-    say "brew uninstall --cask took the application, its link and Homebrew's record, and left what Jason set up:${left:- nothing} as the caveats say"
+    say "brew uninstall --cask took the application, its link and Homebrew's record"
+    ;;
+
+uninstall-left)
+    # The listing after a plain uninstall against the machine before. What it may leave, as the caveats say: what Jason
+    # set up (the wrapper, the profile lines, the starts at logon and launchd's record of them, the skills), the
+    # application's state under ~/Library (and the native libraries the carried jason extracted), the data directory and
+    # the harness root. Any other line, left or gone, fails.
+    after="$OUT/after-cask-uninstall.txt"; before="$OUT/before.txt"
+    [ -f "$after" ] && [ -f "$before" ] || fail "no listing to compare: $after and $before"
+    declared='^(local bin|profile |launch agent file|launchd |claude skills|agents skills|system-kept|updater cache|ShipIt cache|extracted|data directory|harness root)'
+    outside="$( { comm -13 "$before" "$after" | sed 's/^/+ /'; comm -23 "$before" "$after" | sed 's/^/- /'; } | grep -vE "^[+-] $declared" || true)"
+    [ -z "$outside" ] || fail "brew uninstall --cask left the machine different from before outside what it may leave: $(printf '%s' "$outside" | tr '\t\n' ' ;')"
+    say "against the machine before, a plain uninstall differs only in what it may leave: $(comm -13 "$before" "$after" | cut -f1 | sed 's|/.*||' | sort -u | tr '\n' ';')"
     ;;
 
 carried-uninstall)
+    state_places=("$HOME/Library/Preferences/$IDENTIFIER.plist" "$HOME/Library/Saved Application State/$IDENTIFIER.savedState" "$HOME/Library/Caches/$IDENTIFIER" "$HOME/Library/HTTPStorages/$IDENTIFIER" "$HOME/Library/HTTPStorages/$IDENTIFIER.binarycookies" "$HOME/Library/WebKit/$IDENTIFIER" "$HOME/Library/Application Support/$IDENTIFIER")
+    there=()
+    for place in "${state_places[@]}"; do [ -e "$place" ] && there+=("$place"); done
+    printf '%s\n' "${there[@]:-}" > "$OUT/cask-state-before-carried-uninstall.txt"
     status=0
     "$CARRIED" uninstall > "$OUT/cask-carried-uninstall.json" 2>"$OUT/cask-carried-uninstall.err" || status=$?
     cat "$OUT/cask-carried-uninstall.json"
     [ "$status" = 0 ] || fail "the carried jason uninstall exited $status: $(cat "$OUT/cask-carried-uninstall.err")"
     [ -d "$APP" ] || fail "the carried jason uninstall deleted the application Homebrew placed"
     [ -L "$(link)" ] || fail "the carried jason uninstall took the cask's link"
-    [ -e "$HOME/Library/Preferences/$IDENTIFIER.plist" ] || [ -e "$HOME/Library/Saved Application State/$IDENTIFIER.savedState" ] || [ -e "$HOME/Library/Caches/$IDENTIFIER" ] || say "no state of the application under ~/Library was there to keep"
+    for place in "${there[@]:-}"; do
+        [ -z "$place" ] || [ -e "$place" ] || fail "the carried jason uninstall took $place, the application's state Homebrew's zap takes"
+    done
+    say "the application's state under ~/Library kept: ${#there[@]} place(s) there before, each still there"
     grep -qF 'brew uninstall --zap --cask jason' "$OUT/cask-carried-uninstall.json" || fail "the carried jason uninstall does not name brew uninstall --zap --cask jason"
     [ ! -e "$HOME/.local/bin/jason" ] || fail "the carried jason uninstall left the wrapper"
     say "the carried jason uninstall exited 0, left the application, its link and its state to Homebrew, and named brew uninstall --zap --cask jason"
@@ -250,7 +282,16 @@ zap)
     [ ! -e "$APP" ] || fail "$APP is still there after the zap"
     [ ! -L "$(link)" ] && [ ! -e "$(link)" ] || fail "$(link) is still there after the zap"
     [ ! -e "$(caskroom)" ] || fail "Homebrew's record $(caskroom) is still there after the zap"
-    say "brew uninstall --zap --cask jason, with no --force, took the application, its link and Homebrew's record"
+    [ ! -e "$HOME/.local/bin/jason" ] || fail "the wrapper $HOME/.local/bin/jason is still there after the zap"
+    agents="$(ls "$HOME"/Library/LaunchAgents/ai.jason.runtime.plist "$HOME"/Library/LaunchAgents/$IDENTIFIER.plist 2>/dev/null || true)"
+    [ -z "$agents" ] || fail "a start at logon is still there after the zap: $agents"
+    for label in ai.jason.runtime "$IDENTIFIER"; do
+        ! launchctl print "gui/$(id -u)/$label" > /dev/null 2>&1 || fail "the launchd job $label is still loaded after the zap"
+    done
+    profiles="$(grep -l '\.local/bin' "$HOME"/.zprofile "$HOME"/.zshrc "$HOME"/.profile "$HOME"/.bashrc 2>/dev/null | tr '\n' ' ' || true)"
+    skills="$(ls -d "$HOME"/.claude/skills/* "$HOME"/.agents/skills/* 2>/dev/null | wc -l | tr -d ' ')"
+    say "recorded, not asserted: after the zap the profiles naming ~/.local/bin are '${profiles:-none}', and $skills skill folder(s) are under ~/.claude/skills and ~/.agents/skills"
+    say "brew uninstall --zap --cask jason, with no --force, took the application, its link, Homebrew's record, the wrapper and the starts at logon"
     ;;
 
 formula)
