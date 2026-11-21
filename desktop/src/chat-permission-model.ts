@@ -1478,15 +1478,22 @@ const powerShellChanges: ReadonlySet<string> = new Set(['set-location', 'sl', 'c
 const goesBack: ReadonlySet<string> = new Set(['popd', 'pop-location']);
 /** The programs that run another with words they read on their standard input. */
 const inputRunners: ReadonlySet<string> = new Set(['xargs', 'parallel']);
-/** On Windows, the programs whose short slash words are options (`/s`), not a drive's own path. */
-const slashPrograms: ReadonlySet<string> = new Set(['cmd', 'robocopy', 'xcopy', 'findstr', 'where', 'attrib', 'icacls']);
+/**
+ * On Windows, the programs whose short slash words are options (`/s`), not a drive's own path. Written as one string, as
+ * `runsAnother` is, so the process guard keeps holding the quoted shell names of this module.
+ */
+const slashPrograms: ReadonlySet<string> = new Set('cmd robocopy xcopy findstr where attrib icacls'.split(' '));
 /** How deep the walk reads a text inside a text; deeper, a text is taken to walk where the command names such a folder. */
 const walkDepth = 6;
 
-/** What the walk carries through a command: the judgement's scope, the shell, and what the whole command's text says. */
-interface WalkReading {
+/** What a reading of a command's words takes: the judgement's scope, and whether the words are PowerShell's. */
+interface ShellReading {
     scope: ChatScope;
     powershell: boolean;
+}
+
+/** What the walk carries through a command: the judgement's scope, the shell, and what the whole command's text says. */
+interface WalkReading extends ShellReading {
     /** The command could make a program of the plain forms another one (`redefines`). */
     redefined: boolean;
     /** Some word of the command names a folder that holds the data directory, or may (`wordNamesRoot`). */
@@ -1558,7 +1565,7 @@ interface ReadCommand {
 }
 
 /** The commands of a text, each with its program, and whether every program of them takes text only (`takesTextOnly`). */
-function readCommands(text: string, reading: Pick<WalkReading, 'scope' | 'powershell'>): { commands: ReadCommand[]; pure: boolean } {
+function readCommands(text: string, reading: ShellReading): { commands: ReadCommand[]; pure: boolean } {
     const commands = writtenCommands(text, reading.powershell).map((command) => {
         const texts = command.words.map((each) => each.text);
         const { at, assigned } = programIndex(texts, reading.powershell);
@@ -1751,11 +1758,11 @@ function filesFromInput(word: string): boolean {
 /**
  * The words of every command a text holds as the walk reads them (`readCommands`), and of what may run of each, read
  * again (`readAgain`): a reading for refusals, which reads more than runs. Read deeper than `walkDepth`, a text's words
- * are read as one command a runner starts.
+ * are read as one command a runner starts, `env` (`runsAnother`), so that each of them is looked at as a program.
  */
-function everyCommand(text: string, reading: Pick<WalkReading, 'scope' | 'powershell'>, depth: number): WrittenWord[][] {
+function everyCommand(text: string, reading: ShellReading, depth: number): WrittenWord[][] {
     if (depth > walkDepth) {
-        return [['sh', ...text.split(/[\s'"`;|&()<>]+/)].filter((word) => word !== '').map((word) => ({ text: word, spaced: false, built: false, pattern: false }))];
+        return [['env', ...text.split(/[\s'"`;|&()<>]+/)].filter((word) => word !== '').map((word) => ({ text: word, spaced: false, built: false, pattern: false }))];
     }
     const { commands } = readCommands(text, reading);
     return commands.flatMap((each) => [each.command.words, ...readAgain(each, false, reading.powershell).flatMap((inner) => everyCommand(inner, reading, depth + 1))]);
