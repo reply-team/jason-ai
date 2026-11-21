@@ -13,6 +13,8 @@ public sealed class PlantedRecords(params WingetRegistration[] winget) : IManage
 {
     public bool HomebrewReceipt(string keg) => ManagerRecords.ReadHomebrewReceipt(keg);
 
+    public HomebrewCaskRecord? HomebrewCask(string prefix) => ManagerRecords.ReadHomebrewCask(prefix);
+
     public IReadOnlyList<WingetRegistration> WingetRegistrations(string packageIdentifier) =>
         [.. winget.Where(registration => registration.Key.StartsWith(packageIdentifier, StringComparison.OrdinalIgnoreCase))];
 }
@@ -75,6 +77,51 @@ public sealed class ManagedLayouts : IDisposable
         }
 
         return new HomebrewLayout(prefix, keg, executable, link);
+    }
+
+    /// <summary>
+    /// Homebrew's older formula, its keg at <paramref name="version"/> and linked as <c>brew link</c> links it: a symbolic
+    /// link <c>&lt;prefix&gt;/bin/jason</c> to the keg's executable. Null where this account may not make a symbolic link
+    /// (<see cref="TryLink"/>).
+    /// </summary>
+    public HomebrewLayout? LinkedFormula(string version = "0.48.7")
+    {
+        var keg = Homebrew(withLink: false, version: version);
+        var link = Path.Combine(keg.Prefix, "bin", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        return TryLink(link, keg.Executable) ? keg with { Link = link } : null;
+    }
+
+    /// <summary>
+    /// What Homebrew writes as a cask's receipt, <c>Caskroom/&lt;token&gt;/.metadata/INSTALL_RECEIPT.json</c>: a JSON object
+    /// naming the Homebrew that wrote it, and what an uninstall takes off.
+    /// </summary>
+    public const string CaskReceipt = """{"homebrew_version":"4.4.0","loaded_from_api":false,"installed_on_request":true,"source":{"tap":"reply-team/tap"},"uninstall_artifacts":[{"app":["Jason.app"]},{"binary":["/opt/homebrew/bin/jason"]}]}""";
+
+    /// <summary>
+    /// A Homebrew prefix holding the cask <c>jason</c>'s record under <c>Caskroom/jason/.metadata</c>, and the
+    /// <c>config.json</c> beside it naming <paramref name="appDir"/> as the folder the install was given, where one is named.
+    /// </summary>
+    /// <param name="appDir">The <c>explicit.appdir</c> the record names, or null for none (Homebrew's <c>/Applications</c>).</param>
+    /// <param name="receipt">The receipt's text, or null for a prefix with no record.</param>
+    public string HomebrewCask(string? appDir, string? receipt = CaskReceipt)
+    {
+        var prefix = _tree.NewDirectory("homebrew");
+        var metadata = Path.Combine(prefix, "Caskroom", "jason", ".metadata");
+        Directory.CreateDirectory(metadata);
+        if (receipt is not null)
+        {
+            File.WriteAllText(Path.Combine(metadata, "INSTALL_RECEIPT.json"), receipt);
+        }
+
+        if (appDir is not null)
+        {
+            File.WriteAllText(
+                Path.Combine(metadata, "config.json"),
+                System.Text.Json.JsonSerializer.Serialize(new { @default = new { appdir = "/Applications" }, env = new { }, @explicit = new { appdir = appDir } }));
+        }
+
+        return prefix;
     }
 
     /// <summary>

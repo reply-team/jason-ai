@@ -1299,19 +1299,28 @@ internal static partial class StatusChecks
         // here, as installed: a release's image, which every release has. Another file first by name is what a person and
         // every agent typing jason runs, so this one's readiness says nothing of theirs; the application's wrapper running
         // this image, or the deb's link to it, is this jason by name.
+        // Homebrew's older formula, linked beside the jason Jason Desktop carries: an older Jason, said as a detail while the
+        // check passes, and named with what takes it off where it is the file found first.
         var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        var formula = CarriedExecutable.Of(env) is not null ? Installation.HomebrewFormula.Linked(env) : null;
         if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
+            var kegFirst = formula is not null && IsThisFile(resolved, formula.Owner.Executable);
             return new StatusCheck(
                 "path",
                 true,
                 CheckState.Failed,
                 $"'jason' resolves to {resolved}, not to this jason ({running}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
-                + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}.",
+                + (kegFirst
+                    ? $"It is Homebrew's older formula: `jason runtime stop`, then `{Installation.HomebrewFormula.UninstallCommand}`, takes it off, or run this jason by its full path, {running}."
+                    : $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}."),
                 null);
         }
 
-        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null)
+        {
+            Details = formula is null ? null : new Dictionary<string, string> { [Installation.HomebrewFormula.DetailName] = formula.Sentence() },
+        };
     }
 
     /// <summary>

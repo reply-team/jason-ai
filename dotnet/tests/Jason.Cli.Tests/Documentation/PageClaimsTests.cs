@@ -997,20 +997,25 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The package subsection offers no package for a new install: on macOS and Windows the install is Jason Desktop,
-    /// which the install script installs, and Homebrew's formula is the command line alone, so the pages stop offering it
-    /// for a new install on a Mac; the winget package is not published, so no line installs it either. They say nothing
-    /// of what becomes of the formula.
+    /// The package subsection offers one package for a new install, Homebrew's cask on an Apple silicon Mac, which installs
+    /// the same Jason Desktop the install script does; Homebrew's formula is the command line alone, so it is offered only
+    /// as what to take off first, by its own --formula command; the winget package is not published, so no line installs
+    /// it, and the README offers no package at all.
     /// </summary>
     [Fact]
-    public void The_package_subsection_offers_no_package_for_a_new_install()
+    public void The_package_subsection_offers_the_cask_alone_for_a_new_install()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("This page names no package for a new install: on macOS, Windows and Linux the route is the install script above, which installs Jason Desktop.", package, StringComparison.Ordinal);
-        Assert.DoesNotContain("brew install", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, from the candidate that carries it, Homebrew's cask installs the same Jason Desktop, from the same release:", package, StringComparison.Ordinal);
+        Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
+        Assert.Contains("Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
+        Assert.Contains("Homebrew's older formula is the command line alone, without Jason Desktop: where it is installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the way.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("This page names no package for a new install", package, StringComparison.Ordinal);
+        Assert.DoesNotMatch("brew install(?! --cask reply-team/tap/jason)", Flat(Page("docs", "INSTALL.md")));
         Assert.DoesNotContain("brew install", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.DoesNotContain("winget install", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("reinstall", package, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2552,7 +2557,9 @@ public partial class PageClaimsTests
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
 
         Assert.Contains("Where Homebrew or winget installed Jason", section, StringComparison.Ordinal);
-        Assert.Contains("`brew uninstall jason`", section, StringComparison.Ordinal);
+        Assert.Contains("`brew uninstall --formula jason`", section, StringComparison.Ordinal);
+        Assert.Contains("Where Homebrew's cask placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the application, its link and its state under `~/Library` to Homebrew: `brew uninstall --zap --cask jason` takes them off.", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("`brew uninstall jason`", section, StringComparison.Ordinal);
         Assert.Contains("`winget uninstall Reply.Jason`", section, StringComparison.Ordinal);
     }
 

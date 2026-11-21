@@ -27,6 +27,12 @@ public static class ApplicationFates
 
     /// <summary>The carried jason is not inside a folder shaped as the application's, so no application is planned.</summary>
     public const string NotFound = "not_found";
+
+    /// <summary>
+    /// macOS: Homebrew's cask placed the application (<see cref="Installation.HomebrewCask"/>), so it is left to Homebrew, with
+    /// its link and its own state under <c>~/Library</c>: <c>brew uninstall --zap --cask jason</c> takes them off.
+    /// </summary>
+    public const string LeftToHomebrew = "left_to_homebrew";
 }
 
 /// <summary>
@@ -86,6 +92,10 @@ public sealed record DesktopPlan(
     /// <summary>The ShipIt job as the plan read it, for the look before anything is removed; never written out.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     internal Autostart.LaunchdJob ShipIt { get; init; } = Autostart.LaunchdJob.Absent;
+
+    /// <summary>The Homebrew prefix whose cask placed the application, where the fate is <see cref="ApplicationFates.LeftToHomebrew"/>; never written out.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal string? HomebrewPrefix { get; init; }
 }
 
 /// <summary>
@@ -301,8 +311,12 @@ public static partial class DesktopRemoval
             application = null;
         }
 
+        var homebrew = application is not null && !keepApplication && places.Platform is SetupSystem.MacOs
+            ? Installation.HomebrewCask.Placed(application, env)
+            : null;
         var fate = application is null ? ApplicationFates.NotFound
             : keepApplication ? ApplicationFates.Kept
+            : homebrew is not null ? ApplicationFates.LeftToHomebrew
             : places.Platform switch
             {
                 SetupSystem.Windows => ApplicationFates.AfterExit,
@@ -330,6 +344,7 @@ public static partial class DesktopRemoval
                 : ApplicationStateOf(places, left),
             UpdaterJob = shipIt.State is Autostart.LaunchdJobState.Loaded or Autostart.LaunchdJobState.Running ? ShipItLabel : null,
             ShipIt = shipIt,
+            HomebrewPrefix = homebrew,
         };
     }
 
@@ -1300,8 +1315,15 @@ public static partial class DesktopRemoval
                 byHand);
     }
 
+    /// <summary>The command that takes off an application Homebrew's cask placed, with what Jason left to it.</summary>
+    public const string HomebrewZap = "brew uninstall --zap --cask jason";
+
+    /// <summary>What the report keeps, where Homebrew's cask placed the application.</summary>
+    public static string LeftToHomebrewLine(string application, string prefix) =>
+        $"The application at {application} was placed by Homebrew and is left to it, with its link {Installation.HomebrewCask.Link(prefix)} and its state under ~/Library: `{HomebrewZap}` takes them off.";
+
     /// <summary>
-    /// The application itself, the last act: kept, handed to its uninstaller, or deleted; on macOS kept with its own state,
+    /// The application itself, the last act: kept, left to Homebrew, handed to its uninstaller, or deleted; on macOS kept with its own state,
     /// and said kept, where ShipIt was found installing an update of it at the job's step (<paramref name="shipItInstalling"/>).
     /// </summary>
     public static void RemoveApplication(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems, bool shipItInstalling = false)
@@ -1317,6 +1339,9 @@ public static partial class DesktopRemoval
         {
             case ApplicationFates.Kept:
                 kept.Add($"The application at {application} is kept here: the uninstaller that asked for this removes it next.");
+                return;
+            case ApplicationFates.LeftToHomebrew:
+                kept.Add(LeftToHomebrewLine(application, plan.HomebrewPrefix!));
                 return;
             case ApplicationFates.AfterExit:
                 if (!File.Exists(Path.Combine(application, UninstallerName)))
