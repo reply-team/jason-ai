@@ -22,10 +22,11 @@ is for what they cannot explain, and you cannot know that before you have read t
 investigation on its own, and each one makes the next easier to read.
 
 **Is the runtime answering at all?** If it is not, nothing anywhere is being claimed, and every item in the
-installation looks stuck for the same reason.
+installation looks stuck for the same reason. Its `runtime` check says whether a runtime answers, and the command that
+starts one where none does.
 
 ```
-jason runtime status --human
+jason status --human
 ```
 
 **A runtime that will not start on its data.** When `jason runtime start` answers `data_newer`, the database was

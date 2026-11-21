@@ -168,7 +168,12 @@ type OpenInIsTheSeam = [
     Holds<Equal<OpenInAnswer, DesktopOpenInAnswer>>,
     Holds<Equal<JasonOnPath, DesktopOpenInJason>>,
     Holds<Equal<OpenInRefusal, DesktopRefusal>>,
-    Holds<Equal<Parameters<JasonDesktop['openIn']['open']>, [target: DesktopOpenInPlace, campaignId?: string]>>,
+    Holds<
+        Equal<
+            Parameters<JasonDesktop['openIn']['open']>,
+            [target: DesktopOpenInPlace, campaignId?: string, options?: { keep?: boolean }]
+        >
+    >,
     Holds<Equal<Parameters<JasonDesktop['openIn']['targets']>, [campaignId?: string, chatId?: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['continueChat']>, [chatId: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['changeJason']>, []>>,

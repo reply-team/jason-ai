@@ -1481,6 +1481,33 @@ body,
     font-size: 13px;
     overflow-wrap: anywhere;
 }
+/* A note that closes: a notice or an aside of a chat, or the sidebar's word that a folder did not open. Its words, its
+   button where it has one, and its close control at the end of the line. */
+.jc-console .note.closable {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.jc-console .note.closable .note-said {
+    flex: 1;
+    min-width: 0;
+}
+.jc-console .note-close {
+    flex: none;
+    display: inline-flex;
+    padding: 2px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+}
+.jc-console .note-close:hover,
+.jc-console .note-close:focus-visible {
+    opacity: 1;
+    background: var(--hover);
+}
 .jc-console .chat-pick .ask-a {
     flex-wrap: wrap;
 }

@@ -252,7 +252,8 @@ export interface StubDesktop extends JasonDesktop {
     preparing(on: boolean): void;
     /**
      * What `openIn.targets` answers: the places this computer has, the default and the folder's name. `openIn.open` of a
-     * place keeps it as the default (Copy path excepted), as the desktop does, and answers null or the refusal a test set.
+     * place keeps it as the default (Copy path excepted, and an opening asked with `keep: false`), as the desktop does, and
+     * answers null or the refusal a test set.
      * It carries no Change Jason itself unless a test sets `changeJason`, which `openIn.changeJason` answers with null or
      * the refusal a test set, changing no default.
      */
@@ -263,6 +264,8 @@ export interface StubDesktop extends JasonDesktop {
      * refusal a test set, and changes no default.
      */
     openInContinue: Map<string, DesktopOpenInContinue>;
+    /** Where each file a test drops is on this computer, which `chat.pathOf` answers; any other file is on none. */
+    paths: Map<File, string>;
     /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
@@ -301,6 +304,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const linkHandlers = new Set<(link: DesktopLink) => void>();
     const updateHandlers = new Set<() => void>();
     const calls: { name: string; args: unknown[] }[] = [];
+    const paths = new Map<File, string>();
     const refuse = new Map<string, string>();
     const actAnswers = new Map<string, ReplyAnswer | ReplyAnswer[]>();
     /** An act: recorded, and answered as the test named, else as the desktop answers it done. */
@@ -445,8 +449,9 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                     offered === undefined ? stub.openInKept : { ...stub.openInKept, continue: offered },
                 );
             }),
-            open: answering('openIn.open', (target) => {
-                if (target !== 'copy') stub.openInKept.default = target as DesktopOpenInPlace;
+            open: answering('openIn.open', (target, _campaignId, options) => {
+                const kept = (options as { keep?: boolean } | undefined)?.keep !== false;
+                if (target !== 'copy' && kept) stub.openInKept.default = target as DesktopOpenInPlace;
                 return null;
             }),
             continueChat: answering('openIn.continueChat', () => null),
@@ -481,6 +486,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             folder: 'Jason',
         },
         openInContinue: new Map(),
+        paths,
         kept,
         names,
         keep,
@@ -657,6 +663,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             cardRefused: (...args: unknown[]): Promise<null> => {
                 calls.push({ name: 'chat.cardRefused', args });
                 return Promise.resolve(null);
+            },
+            pathOf: (file: File): string => {
+                calls.push({ name: 'chat.pathOf', args: [file.name] });
+                return paths.get(file) ?? '';
             },
         },
         setup: {

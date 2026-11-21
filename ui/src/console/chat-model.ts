@@ -75,14 +75,16 @@ export type Entry =
     | { kind: 'afresh' }
     /**
      * A sentence the desktop said once, in its own words, not kept by the desktop. `folder` is the name of an ended Full
-     * access folder the sentence points at, which its Open folder button opens; null for any other.
+     * access folder the sentence points at, which its Open folder button opens; null for any other. `closed` once the
+     * person closed it or the next answer began (`noteClosed`, `expired`): no longer drawn, it still locks a choice.
      */
-    | { kind: 'notice'; text: string; folder: string | null }
+    | { kind: 'notice'; text: string; folder: string | null; closed?: true }
     /**
      * What the desktop answered an `/export` with, where it wrote the file or why it did not: said in the page beside
      * the conversation, not kept by the desktop, and no part of the conversation, so it ends no card and no plan.
+     * `closed` as a notice's.
      */
-    | { kind: 'aside'; text: string }
+    | { kind: 'aside'; text: string; closed?: true }
     /** A line of the Feed, as the desktop kept it. */
     | { kind: 'line'; line: DesktopLineEntry }
     /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
@@ -362,10 +364,10 @@ export const autoEditLine =
 /**
  * What the line under the composer says while the chat's host is Codex on the person's sign-in, outside Full access: such
  * a Codex turn leaves the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
- * named there.
+ * named there; a Full access turn reads it, and the line says so, so the mode is the one thing that decides it.
  */
 export const codexConfigLine =
-    'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
+    'In this mode the chat does not read your Codex config.toml; Full access does. A provider or profile set there is not used here; connect a key on the Connect card.';
 
 /**
  * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key,
@@ -621,17 +623,17 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'step': {
             const step: Step =
                 event.detail === undefined ? { text: event.text } : { text: event.text, detail: event.detail };
-            return { ...chat, entries: [...chat.entries, { kind: 'step', step }] };
+            return expired({ ...chat, entries: [...chat.entries, { kind: 'step', step }] });
         }
         case 'text': {
             const entry: Entry =
                 typeof event.at === 'string'
                     ? { kind: 'text', text: event.text, at: event.at }
                     : { kind: 'text', text: event.text };
-            return { ...chat, entries: [...chat.entries, entry] };
+            return expired({ ...chat, entries: [...chat.entries, entry] });
         }
         case 'permission':
-            return {
+            return expired({
                 ...chat,
                 entries: [
                     ...chat.entries,
@@ -645,7 +647,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                         ...(event.why === undefined ? {} : { why: event.why }),
                     },
                 ],
-            };
+            });
         case 'permission_gone':
             return answered(chat, event.request, 'gone');
         case 'attached':
@@ -708,6 +710,40 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
     }
 }
 
+/**
+ * The notices and asides said before the person's last message, closed: what the next answer of the conversation does
+ * as it begins, and every end of its turn does where it gave none (`ended`), the desktop's, a turn it refused or failed
+ * to start, an export's, so none outlives the turn after the one it spoke of. Each stays in the thread, closed, and still
+ * locks a choice said before it.
+ */
+function expired(chat: Chat): Chat {
+    let last = -1;
+    chat.entries.forEach((each, at) => {
+        if (each.kind === 'user') last = at;
+    });
+    if (!chat.entries.some((each, at) => at < last && closable(each))) return chat;
+    return {
+        ...chat,
+        entries: chat.entries.map((each, at) =>
+            at < last && closable(each) ? { ...each, closed: true as const } : each,
+        ),
+    };
+}
+
+/** A notice or an aside still drawn. */
+const closable = (entry: Entry): entry is Extract<Entry, { kind: 'notice' | 'aside' }> =>
+    (entry.kind === 'notice' || entry.kind === 'aside') && entry.closed !== true;
+
+/** The notice or aside at `index` closed, as its close control does; any other entry, or none there, leaves the chat. */
+export function noteClosed(chat: Chat, index: number): Chat {
+    const entry = chat.entries[index];
+    if (entry === undefined || !closable(entry)) return chat;
+    return {
+        ...chat,
+        entries: chat.entries.map((each, at) => (at === index ? { ...entry, closed: true as const } : each)),
+    };
+}
+
 /** Words joined as one message: each trimmed, the empty ones left out, a blank line between. */
 export const joined = (words: readonly (string | null | undefined)[]): string =>
     words
@@ -738,6 +774,51 @@ function givenBackAfterFailure(before: Chat, after: Chat): Chat {
 
 /** What is typed in the box. */
 export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text });
+
+/**
+ * A path quoted so that a shell reads it back whole: on macOS and Linux, a path from the root, in single quotes, inside
+ * which every sign is taken as it is, a quote written as one closed, escaped and opened again; on Windows in double
+ * quotes, since no name there holds one.
+ */
+const quotedPath = (path: string): string =>
+    path.startsWith('/') ? `'${path.split("'").join("'\\''")}'` : `"${path}"`;
+
+/**
+ * The box's text with the paths of files dropped on it put in at the caret, or over the words selected, as a terminal
+ * puts them: each quoted (`quotedPath`), a space between two, a space before them where a word ends at the caret and one
+ * after them where no space follows; and the caret's place, after them.
+ */
+export function withPaths(
+    text: string,
+    start: number,
+    end: number,
+    paths: readonly string[],
+): { text: string; caret: number } {
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+    const lead = before === '' || /\s$/.test(before) ? '' : ' ';
+    const put = lead + paths.map(quotedPath).join(' ') + (/^\s/.test(after) ? '' : ' ');
+    return { text: before + put + after, caret: before.length + put.length };
+}
+
+/** A caret a drop left to place: after the paths, in the box of the conversation `key`, once it shows `text`. */
+export interface DropCaret {
+    key: string;
+    text: string;
+    at: number;
+}
+
+/**
+ * Where the caret goes as the box of the conversation `key` shows `text`: after the dropped paths where it shows the text
+ * they were put in; nowhere for another conversation's box, nor for a text they never reached, as where the conversation
+ * was gone before they went in, so a later word typed takes no caret meant for them.
+ */
+export const dropCaretAt = (left: DropCaret | null, key: string, text: string): number | null =>
+    left !== null && left.key === key && left.text === text ? left.at : null;
+
+/** What the box says when no dropped file's path could be read, and when some could not. */
+export const noPathDropped = "A dropped file's path could not be read here; type or paste it instead.";
+export const somePathsDropped = "Some dropped files' paths could not be read here; type or paste theirs.";
 
 /**
  * The box's text added to the waiting message, under it with a blank line between, and the box cleared: what is sent
@@ -782,15 +863,16 @@ export const stopAsked = (chat: Chat): Chat => (chat.running ? everyWordBack({ .
 /** The page handed the turn's end's message to the desktop. */
 export const handed = (chat: Chat): Chat => ({ ...chat, outbox: null });
 
-/** A turn that ended: every request it still held is gone with it. */
+/** A turn that ended, by any road: every request it still held is gone with it, and so is what an earlier turn said. */
 function ended(chat: Chat): Chat {
+    const over = expired(chat);
     return {
-        ...chat,
+        ...over,
         running: false,
         stopping: false,
         resent: null,
         exporting: null,
-        entries: chat.entries.map((each) =>
+        entries: over.entries.map((each) =>
             each.kind === 'permission' && each.answer === null ? { ...each, answer: 'gone' } : each,
         ),
     };
