@@ -664,6 +664,13 @@ export class Chat {
      * again with no turn sent; never keeps the process alive, and cleared when the window closes.
      */
     #bypassEnds: NodeJS.Timeout | null = null;
+    /**
+     * Whether a Claude Code start in Full access was honoured in this run, since it began or since the last time the bypass
+     * was found not available (`#bypassGone`): it named its session in Full access. Until one is, a resumed Full access
+     * start forks (`--fork-session`), so a start refused its bypass leaves the session it resumed as it was; once one is,
+     * resumed starts no longer fork. Never on a record.
+     */
+    #fullAccessHonoured = false;
     /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
     #daily: NodeJS.Timeout;
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
@@ -1068,6 +1075,9 @@ export class Chat {
      * its cause and the mode Claude Code named.
      */
     #bypassGone(bypass: Bypass): void {
+        // Every refusal is seen, a cause that already holds included: a start begun before the hold may have been honoured
+        // within it, and the next resumed Full access start forks again.
+        this.#fullAccessHonoured = false;
         const holding = this.bypassUnavailable() === null ? null : this.#bypass;
         const { held } = bypassLeadsTo(bypass);
         if (holding !== null && (holding.until === null || held === 'one_minute')) return;
@@ -1927,7 +1937,7 @@ export class Chat {
         /** Writes the turn's settings again for Ask first, once Claude Code refused its bypass before it started. */
         let narrowSettings: ((mode: 'ask_first') => void) | null = null;
         let endpoint: Endpoint | null = null;
-        let argsFor: (resume: string | undefined) => string[];
+        let argsFor: (resume: string | undefined, fork: boolean) => string[];
         let requests = 0;
         /** Whether the log was told that a tool of this turn ran or was refused unseen by its hook (`hookFiltered`). */
         let filteredLogged = false;
@@ -2038,8 +2048,8 @@ export class Chat {
                 // leaves its agent folders holding only what it placed (`ownAgentFolder`). Every other mode keeps the rules
                 // over them, and so does a turn narrowed to Ask first.
                 const rulesNow = () => [...data, ...(running.mode === 'full_access' ? [] : chatRules(this.#platform, folder))];
-                argsFor = (resumed) =>
-                    claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, version, keyed: resolved.keyed });
+                argsFor = (resumed, fork) =>
+                    claudeArguments({ mcpConfig, server, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rulesNow(), model: resolved.model, effort: resolved.effort, resume: resumed, fork, version, keyed: resolved.keyed });
             } else {
                 argsFor = (resumed) =>
                     codexArguments({ platform: this.#platform, mode: running.mode, model: resolved.model, effort: resolved.effort, resume: resumed, environment: environmentNow() });
@@ -2104,7 +2114,7 @@ export class Chat {
          *
          * A start that throws, before any child exists, is an attempt that could not be started: it never rejects.
          */
-        const attempt = async (resumed: string | undefined, recapped: boolean, fallback: boolean): Promise<Attempted> => {
+        const attempt = async (resumed: string | undefined, recapped: boolean, fallback: boolean, fork = false): Promise<Attempted> => {
             let result: string | null | undefined;
             let shown = 0;
             let other = false;
@@ -2207,11 +2217,15 @@ export class Chat {
                     return;
                 }
                 if (line.kind === 'session') {
-                    if (resumed !== undefined && line.id !== resumed) {
+                    // A forked resume answers with a session of its own, the fork: it is named only here, once the start
+                    // was not stopped for its mode, so a refused start's fork is never recorded.
+                    if (resumed !== undefined && line.id !== resumed && !fork) {
                         other = true;
                         host?.stop();
                         return;
                     }
+                    // Set at the session line; a start stopped later by a tool_result its hook never saw is un-set by `#bypassGone`.
+                    if (resolved.program === 'claude' && running.mode === 'full_access') this.#fullAccessHonoured = true;
                     if (fallback && shown === 0) pending = line.id;
                     else name(line.id);
                 } else if (line.kind === 'result') {
@@ -2242,7 +2256,7 @@ export class Chat {
             };
             let started: HostProcess;
             try {
-                started = (this.#options.startHost ?? startHost)(launch, argsFor(resumed), {
+                started = (this.#options.startHost ?? startHost)(launch, argsFor(resumed, fork), {
                     cwd: folder,
                     env: environmentNow(),
                     stdin: turnInput(headFor(resumed), recapped ? earlier : null, text),
@@ -2301,16 +2315,21 @@ export class Chat {
             return running.stopped ? ended : again();
         };
 
-        // A resumed start stopped for its mode may already have written the person's message into the session it resumed, so
-        // it is started again in a fresh session given the recap, never in that session again: the message is held once, and
-        // the record takes the fresh session's id as a fallback's (`attempt`).
-        const startAgain = resume === undefined ? () => attempt(undefined, hostChanged, false) : () => attempt(undefined, true, true);
+        // A resumed Claude Code start in Full access forks while no Full access start was honoured in this run
+        // (`#fullAccessHonoured`): one refused its bypass then wrote the person's message into the fork alone, so the turn
+        // is started again in the session it resumed, untouched, with no recap. A resumed start that did not fork and was
+        // stopped for its mode may already have written the message into the session it resumed, so it is started again
+        // in a fresh session given the recap, never in that session again: the message is held once, and the record takes
+        // the fresh session's id as a fallback's (`attempt`).
+        const forks = resolved.program === 'claude' && resume !== undefined && running.mode === 'full_access' && !this.#fullAccessHonoured;
+        const startAgain =
+            resume === undefined ? () => attempt(undefined, hostChanged, false) : forks ? () => attempt(resume, hostChanged, false) : () => attempt(undefined, true, true);
 
         void (async () => {
             let last: Attempted = { exit: { code: null, startError: 'unknown' }, result: undefined, host: null, again: false };
             let handed: HandOver | null = null;
             try {
-                last = await unlessNarrowed(await attempt(resume, hostChanged, false), startAgain);
+                last = await unlessNarrowed(await attempt(resume, hostChanged, false, forks), startAgain);
                 if (last.again) {
                     this.#fresh(replyTo, 'not_found');
                     if (!running.stopped) last = await unlessNarrowed(await attempt(undefined, true, true), () => attempt(undefined, true, true));
