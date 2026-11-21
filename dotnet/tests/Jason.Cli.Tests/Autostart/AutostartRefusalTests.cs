@@ -57,6 +57,49 @@ public sealed class AutostartRefusalTests : IDisposable
     }
 
     /// <summary>
+    /// A user unit on a home with no <c>.config</c>: the write makes <c>.config</c>, <c>.config/systemd</c> and
+    /// <c>.config/systemd/user</c>, and a refused enable takes all three away again, so the home is as it was.
+    /// </summary>
+    [Fact]
+    public void A_refused_user_unit_on_a_home_with_no_config_leaves_no_config()
+    {
+        var home = Path.Combine(_root, "home");
+        Directory.CreateDirectory(home);
+        var unit = Path.Combine(home, ".config", "systemd", "user", "jason.service");
+
+        Assert.Throws<AutostartException>(
+            () => AutostartRegistrars.WriteThen(unit, "[Service]\nExecStart=/opt/Jason/resources/bundle/jason\n", new UTF8Encoding(false), () => throw Refusal));
+
+        Assert.True(Directory.Exists(home), "the home was there before and stays");
+        Assert.Empty(Directory.EnumerateFileSystemEntries(home));
+    }
+
+    /// <summary>
+    /// A parent that was there before stays, and so does one somebody else put a file in while the tool was asked: the
+    /// put-back stops at the first directory that is not empty.
+    /// </summary>
+    [Fact]
+    public void A_refused_user_unit_takes_back_only_the_empty_directories_it_made()
+    {
+        var home = Path.Combine(_root, "home");
+        var config = Path.Combine(home, ".config");
+        Directory.CreateDirectory(config);
+        var systemd = Path.Combine(config, "systemd");
+        var unit = Path.Combine(systemd, "user", "jason.service");
+
+        Assert.Throws<AutostartException>(
+            () => AutostartRegistrars.WriteThen(unit, "[Service]\n", new UTF8Encoding(false), () =>
+            {
+                File.WriteAllText(Path.Combine(systemd, "other.conf"), "another program's");
+                throw Refusal;
+            }));
+
+        Assert.False(Directory.Exists(Path.Combine(systemd, "user")));
+        Assert.True(File.Exists(Path.Combine(systemd, "other.conf")));
+        Assert.True(Directory.Exists(config));
+    }
+
+    /// <summary>
     /// And only that. A directory that was already there, with somebody else's file in it, is not tidied up on
     /// the way out — the refusal is about one document.
     /// </summary>
