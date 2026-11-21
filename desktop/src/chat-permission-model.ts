@@ -1391,7 +1391,15 @@ function writtenCommands(text: string, powershell: boolean): WrittenCommand[] {
                     break;
                 }
                 if (each === escape && end + 1 < text.length) {
-                    body += text[end + 1];
+                    // A POSIX shell takes a backslash inside double quotes only before a dollar, a backquote, a quote, a
+                    // backslash or a line end, the last a line joined; before any other letter both stay.
+                    const next = text[end + 1] as string;
+                    if (!powershell && !'$`"\\\n'.includes(next)) {
+                        body += each;
+                        end++;
+                        continue;
+                    }
+                    if (powershell || next !== '\n') body += next;
                     end += 2;
                     continue;
                 }

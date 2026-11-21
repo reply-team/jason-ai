@@ -414,6 +414,25 @@ test('the host\'s read-only commands read anywhere with no card in Ask first and
     }
 });
 
+test('a double-quoted Windows home path keeps its backslashes, as a POSIX shell keeps one before any letter but a dollar, a backquote, a quote, a backslash and a line end: each walker of it and a removal of it are refused by the hook, and the model\'s card each time', () => {
+    for (const command of [
+        'grep -r api_key "C:\\Users\\someone"',
+        'ls -R "C:\\Users\\someone"',
+        'du -a "C:\\Users\\someone"',
+        'find "C:\\Users\\someone" -name settings.json',
+        'tar -cf x.tar "C:\\Users\\someone"',
+        'cp -r "C:\\Users\\someone" x',
+        'rm -rf "C:\\Users\\someone"',
+        'grep -r api_key "C:\\Users\\someone\\\\"',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), { outcome: 'refused', message: searchRefusal }, command);
+        for (const judged of both('Bash', { command }, windows)) assert.equal(judged.verdict, 'ask', command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat "C:\\Users\\someone\\.jason\\config\\settings.json"' }, windows), { outcome: 'refused', message: settingsRefusal });
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls "C:\\Users\\someone\\Downloads"' }, windows), { outcome: 'runs' });
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo "a \\$b \\"c\\" d"' }, windows), { outcome: 'runs' });
+});
+
 test('a command that removes or descends from a folder that holds the data directory is refused with the walk\'s sentence, and another program run in such a folder with the sentence that says to run it in a narrower folder or name the folder it should work on; a plain form there runs', () => {
     for (const scope of scopes) {
         for (const command of ['du -sh ~', 'rm -rf ~/', 'rm -r ~', 'cd ~ && rm -rf .', 'cd / && grep -r api_key .']) {
