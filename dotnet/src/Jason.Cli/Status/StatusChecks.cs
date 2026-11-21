@@ -2489,9 +2489,13 @@ internal static partial class StatusChecks
             return new StatusCheck("autostart", false, CheckState.Unknown, failure.Message, null);
         }
 
+        // A person's turn-off is said as theirs, still optional and still absent, with the line that takes it back: whether
+        // the runtime starts at logon is never a condition of being ready.
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
+            : Jason.Cli.Autostart.AutostartOff.Stands(env.Paths, registrar)
+                ? new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`.", Repair.EnableAutostart)
+                : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 
     /// <summary>

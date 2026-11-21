@@ -967,7 +967,8 @@ written), when the runtime did not start (the files are in place; start it with 
 project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
 one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
 `jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
-not register it, and `jason status`.
+not register it, and `jason status`. A turn-off made with `jason runtime autostart disable` does not travel: the archive
+leaves `data/autostart/` out, and an import is a new machine, where the default holds.
 
 ---
 

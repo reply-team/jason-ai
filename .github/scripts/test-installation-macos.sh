@@ -32,8 +32,8 @@
 #                                  alone, the role skills; and the machine set-up an application's start runs, which
 #                                  writes nothing under a data directory. Unpinned, as an agent runs it; with pinned, by
 #                                  the pinned line, --version, after a pin naming another version was refused
-#   enable-starts-now              jason runtime autostart enable with no runtime running: whether a runtime answers
-#                                  within 30 s after it, said by name and asserted neither way
+#   enable-starts-now              jason runtime autostart enable with no runtime running: a runtime must answer
+#                                  within 30 s after it (RunAtLoad), one runtime process, and enable saying it runs now
 #   refuse-while-open              jason uninstall while Jason Desktop runs: refused, nothing removed
 #   uninstall-terminal             jason uninstall typed in a new login shell, the data directory purged; the first in a
 #                                  job reads, before it, what launchd answers an account with no login session, a
@@ -1182,25 +1182,26 @@ install)
     ;;
 
 enable-starts-now)
-    # Whether jason runtime autostart enable starts a runtime at once (the LaunchAgent carries RunAtLoad), against the
-    # page's "`enable` starts nothing now": on a machine where no runtime runs, checked first, a runtime looked for for
-    # 30 s after it, and what was seen said by name. A fact, asserted neither way.
+    # jason runtime autostart enable starts a runtime at once, as the page says: the LaunchAgent carries RunAtLoad, so the
+    # load starts it, and enable waits for that one rather than launch a second. On a machine where no runtime runs,
+    # checked first, a runtime must answer within 30 s after it, exactly one runtime process must run, and enable's
+    # stderr must say the runtime runs now.
     placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
     if within 60 'jason runtime status before enable' "$carried" runtime status > /dev/null 2>&1; then fail_held "a runtime answered before enable, so whether enable starts one could not be seen"; exit 0; fi
     if ps -axo command= | grep -F "$carried runtime run" | grep -v grep > /dev/null; then fail_held "a runtime process ran before enable, so whether enable starts one could not be seen"; exit 0; fi
-    within 60 'jason runtime autostart enable' "$carried" runtime autostart enable > "$OUT/enable-starts-now.json" 2>&1 || fail "jason runtime autostart enable failed: $(cat "$OUT/enable-starts-now.json")"
-    cat "$OUT/enable-starts-now.json"
+    within 60 'jason runtime autostart enable' "$carried" runtime autostart enable > "$OUT/enable-starts-now.json" 2> "$OUT/enable-starts-now.err" || fail "jason runtime autostart enable failed: $(cat "$OUT/enable-starts-now.json" "$OUT/enable-starts-now.err")"
+    cat "$OUT/enable-starts-now.json" "$OUT/enable-starts-now.err"
     seen=""
     waited=0
     while [ "$waited" -lt 60 ]; do
         if "$carried" runtime status > /dev/null 2>&1; then seen=yes; break; fi
         sleep 0.5; waited=$((waited + 1))
     done
-    if [ -n "$seen" ]; then
-        say "enable started the runtime at once (RunAtLoad): a runtime answered $((waited / 2)) s after jason runtime autostart enable, where none ran before"
-    else
-        say "enable started nothing now: no runtime answered within 30 s after jason runtime autostart enable"
-    fi
+    [ -n "$seen" ] || fail "enable started nothing now: no runtime answered within 30 s after jason runtime autostart enable ($(cat "$OUT/enable-starts-now.err"))"
+    grep -F "The runtime runs now" "$OUT/enable-starts-now.err" > /dev/null || fail "enable did not say the runtime runs now: $(cat "$OUT/enable-starts-now.err")"
+    running="$(ps -axo command= | grep -F "$carried runtime run" | grep -v grep | wc -l | tr -d ' ')"
+    [ "$running" = 1 ] || fail "enable left $running runtime processes running, not one: $(ps -axo pid=,command= | grep -F "$carried runtime run" | grep -v grep)"
+    say "enable started the runtime at once (RunAtLoad): a runtime answered $((waited / 2)) s after jason runtime autostart enable, where none ran before, and one runtime process runs"
     say "launchd's records after this build's autostart enable: $(launchd_records | tr '\t\n' ' ;' || true)"
     ;;
 

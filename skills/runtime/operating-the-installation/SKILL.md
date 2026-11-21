@@ -142,8 +142,12 @@ to copy — registering under a `JASON_DATA_DIR` you had exported, without sayin
 `~/.jason` at every logon and two runtimes disagreeing about which data is real. A second `enable` under a
 different directory replaces the registration rather than adding one.
 
-`enable` starts nothing now and `disable` stops nothing now; they change what happens at the *next* logon.
-Starting and stopping the runtime today is still `jason runtime start` and `jason runtime stop`.
+`enable` also starts the runtime now where none answers, on every system, and says how that went in one sentence on
+stderr; `disable` stops nothing now. `disable` is recorded as the person's word, in `autostart/off.json` in the data
+directory, so nothing turns the start at logon on again by default; `enable` takes it back, and `autostart status` says
+`turned_off`. Tell the person what `disable` says: after a restart of the computer nothing of Jason runs until
+`jason runtime start`. Stopping the runtime today is still `jason runtime stop`; where it is registered, the stop holds only
+until the next logon.
 
 **`status` is how you check it.** It reads back what the operating system holds for this account. Leave the
 registration to `enable`, `disable` and `status`: do not run, change or delete it with the operating system's own

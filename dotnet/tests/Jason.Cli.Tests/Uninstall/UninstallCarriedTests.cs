@@ -332,6 +332,8 @@ public sealed partial class UninstallCarriedTests : IDisposable
         };
         Directory.CreateDirectory(_dir.Paths.RunDirectory);
         File.WriteAllText(_dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        Written(_dir.Paths.AutostartOffFile, "{\"since\":\"2026-11-20T10:00:00Z\",\"version\":\"0.49.3\"}");
+        Written(_dir.Paths.AutostartDefaultFile, "{\"turned_on\":\"0.49.4\"}");
         var record = Path.Combine(_dir.Paths.Root, "desktop", "machine-setup.json");
         if (recorded)
         {
@@ -350,6 +352,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false, KeepApplication: keepApplication), Ct));
         Assert.True(File.Exists(_dir.Paths.StartOwedFile), "a dry run took the note back");
+        Assert.True(File.Exists(_dir.Paths.AutostartOffFile), "a dry run took the turn-off back");
         Assert.Equal(recorded, File.Exists(record));
 
         output.GetStringBuilder().Clear();
@@ -357,11 +360,15 @@ public sealed partial class UninstallCarriedTests : IDisposable
 
         Assert.True(exit == ExitCodes.Success, output.ToString());
         Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.False(File.Exists(_dir.Paths.AutostartOffFile), "the record of the turn-off outlived the uninstall");
+        Assert.False(File.Exists(_dir.Paths.AutostartDefaultFile), "the record of the update's turn-on outlived the uninstall");
         Assert.False(File.Exists(record), "the set-up's record outlived the uninstall, so a start of the same version sets nothing up");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
         var report = JsonDocument.Parse(output.ToString()).RootElement;
         var done = report.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
         Assert.Contains(done, line => line.Contains("start-owed.json", StringComparison.Ordinal));
+        Assert.Contains(done, line => line.Contains(_dir.Paths.AutostartOffFile, StringComparison.Ordinal));
+        Assert.Contains(done, line => line.Contains(_dir.Paths.AutostartDefaultFile, StringComparison.Ordinal));
         Assert.Equal(recorded, done.Any(line => line.Contains(record, StringComparison.Ordinal)));
         Assert.DoesNotContain(report.GetProperty("kept").EnumerateArray(), line => line.GetString()!.Contains("no PATH entry was looked for", StringComparison.Ordinal));
     }

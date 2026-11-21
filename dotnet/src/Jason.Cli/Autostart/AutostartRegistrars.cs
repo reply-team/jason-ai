@@ -473,6 +473,14 @@ internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home 
         AutostartRegistrars.Discard(registration.ArtifactPath);
         return new AutostartRemoval(registered, Legacy: false);
     }
+
+    /// <summary>
+    /// Whether launchd records the label as disabled in either of this account's two domains, as <c>disable</c>'s
+    /// <c>launchctl unload -w</c> leaves it; a record that cannot be read, or an account whose id is not known, says no.
+    /// </summary>
+    public bool RecordsOff() =>
+        (userId ?? AccountDatabase.UserId()) is { } account
+        && LaunchdJobs.RecordedDisabled(AutostartArtifacts.Label, LaunchdJobs.Domains(account), run ?? AutostartRegistrars.Run) == true;
 }
 
 /// <summary>A systemd user unit, enabled into the account's own default target.</summary>

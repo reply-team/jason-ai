@@ -62,4 +62,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
         State = new AutostartState(false, [], null);
         return removed;
     }
+
+    /// <summary>Whether this machine records the start as turned off itself, as launchd does after a `disable`; a test's word.</summary>
+    public bool OffRecorded { get; set; }
+
+    public bool RecordsOff() => OffRecorded;
 }
