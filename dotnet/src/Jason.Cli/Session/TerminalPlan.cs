@@ -12,16 +12,20 @@ public enum TerminalPlatform
     Linux,
 }
 
-/// <summary>A terminal program found on this machine: the name a person knows it by and the file that is started.</summary>
-public sealed record TerminalFound(string Name, string Program);
+/// <summary>
+/// A terminal program found on this machine: the name a person knows it by, the file that is started, and the terminal
+/// started in its place when that start fails (on Windows the console host behind Windows Terminal), or null.
+/// </summary>
+public sealed record TerminalFound(string Name, string Program, TerminalFound? Fallback = null);
 
 /// <summary>
 /// What is started to open a person's own agent host in a new window: the terminal's name, the whole argument list (the
 /// program first), the folder it starts in, on macOS the script Terminal runs and its file name, and on Windows the
 /// variables the console host is started with beside the CLI's own. The script's folder is made only when the launch
-/// starts, so <see cref="Argv"/> ends with <see cref="ScriptName"/> until then.
+/// starts, so <see cref="Argv"/> ends with <see cref="ScriptName"/> until then. <see cref="Fallback"/> is the launch
+/// started once in its place when its own start fails (<see cref="TerminalStarts"/>), or null.
 /// </summary>
-public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv, string WorkingDirectory, string? Script, string? ScriptName, IReadOnlyDictionary<string, string>? Variables = null);
+public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv, string WorkingDirectory, string? Script, string? ScriptName, IReadOnlyDictionary<string, string>? Variables = null, TerminalLaunch? Fallback = null);
 
 /// <summary>
 /// The installation the opened terminal's <c>jason</c> is to be: the data directory the CLI runs on, made absolute; the
@@ -32,8 +36,10 @@ public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv,
 public sealed record OwnJason(string DataDirectory, string? ExecutableFolder, string? SearchPath);
 
 /// <summary>
-/// The terminal per operating system, as pure strings. Windows starts the console host from the system directory and gives
-/// it the host after <c>--</c> (which window a person then sees is not yet measured on a machine); macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
+/// The terminal per operating system, as pure strings. Windows opens Windows Terminal where the account's WindowsApps folder
+/// holds its program, in a new window at the folder with the host after <c>--</c> (<see cref="WindowsTerminalWord"/>), and
+/// the console host from the system directory where it does not or where that start fails, given the host after
+/// <c>--</c>; macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
 /// <c>open -a Terminal</c> takes no command; Linux starts the program the <c>TERMINAL</c> variable names, else
 /// <c>x-terminal-emulator</c>, with the host as several arguments in the form that program takes, chosen by its file name
 /// (<see cref="LinuxForm"/>). A terminal the
@@ -42,10 +48,28 @@ public sealed record OwnJason(string DataDirectory, string? ExecutableFolder, st
 /// installation's own <c>jason</c> (<see cref="OwnJason"/>): every system is handed the data directory by name and the
 /// opening executable's folder first on PATH, so another <c>jason</c> earlier on the person's PATH does not win there.
 /// </summary>
-public static class TerminalPlan
+public static partial class TerminalPlan
 {
     /// <summary>The console host's file, in the system directory and nowhere else.</summary>
     public const string ConsoleHost = "conhost.exe";
+
+    /// <summary>
+    /// Windows Terminal's program: the App Execution Alias Windows keeps in the account's WindowsApps folder, which is
+    /// where it is looked for, by that full path and never on the search path.
+    /// </summary>
+    public const string WindowsTerminalProgram = "wt.exe";
+
+    /// <summary>The name Windows Terminal is known by, as a launch and the verb's answer name it.</summary>
+    public const string WindowsTerminalName = "Windows Terminal";
+
+    /// <summary>
+    /// The lowest Windows Terminal that hands a new tab the environment of the process that ran <c>wt.exe</c>, which is
+    /// where Jason sets the variables the console host's start is given: 1.18.2681.0, whose release notes say "`wt -- foo`
+    /// will once again inherit the environment from its parent (#15897)" (microsoft/terminal, release v1.18.2681.0,
+    /// 2023-09-26; the pull request bundles the environment <c>wt</c> was spawned with into its command-line arguments and
+    /// inherits it where a command line is given). An older Terminal, or one whose version cannot be read, is not used.
+    /// </summary>
+    public static readonly Version WindowsTerminalFloor = new(1, 18, 2681, 0);
 
     /// <summary>macOS's opener, by its absolute path.</summary>
     public const string MacOpener = "/usr/bin/open";
@@ -63,15 +87,19 @@ public static class TerminalPlan
     public const string PathVariable = "PATH";
 
     /// <summary>
-    /// The terminal this machine starts, or null when there is none: on Windows the console host in
-    /// <paramref name="systemDirectory"/>; on macOS the opener; on Linux <paramref name="terminalVariable"/> when it names
+    /// The terminal this machine starts, or null when there is none: on Windows Windows Terminal where
+    /// <paramref name="windowsApps"/>, a full path, holds <see cref="WindowsTerminalProgram"/> as an alias of a Windows Terminal
+    /// at least <see cref="WindowsTerminalFloor"/> (<see cref="WindowsTerminalVersion"/>), with the console host in
+    /// <paramref name="systemDirectory"/> as its fallback, else that console host alone; on macOS the opener; on Linux <paramref name="terminalVariable"/> when it names
     /// one program found by its absolute path or on <paramref name="searchPath"/>, else <c>x-terminal-emulator</c> there.
     /// </summary>
-    public static TerminalFound? Find(TerminalPlatform os, string? systemDirectory, string? terminalVariable, string? searchPath) => os switch
+    /// <param name="aliasTarget">
+    /// The program an App Execution Alias stands for, read without starting it (<see cref="ExecutionAlias.Target"/>), by
+    /// which Windows Terminal's version is read from its package folder's name; null reads none, and Windows Terminal is then not used.
+    /// </param>
+    public static TerminalFound? Find(TerminalPlatform os, string? systemDirectory, string? terminalVariable, string? searchPath, string? windowsApps = null, Func<string, string?>? aliasTarget = null) => os switch
     {
-        TerminalPlatform.Windows => string.IsNullOrWhiteSpace(systemDirectory) || !File.Exists(Path.Combine(systemDirectory, ConsoleHost))
-            ? null
-            : new TerminalFound("conhost", Path.Combine(systemDirectory, ConsoleHost)),
+        TerminalPlatform.Windows => FindOnWindows(systemDirectory, windowsApps, aliasTarget),
         TerminalPlatform.MacOs => new TerminalFound("Terminal", MacOpener),
         TerminalPlatform.Linux => FindOnLinux(terminalVariable, searchPath),
         _ => throw new ArgumentOutOfRangeException(nameof(os), os, null),
@@ -156,6 +184,17 @@ public static class TerminalPlan
 
         switch (os)
         {
+            case TerminalPlatform.Windows when IsWindowsTerminal(terminal.Program) && folder.Contains('%', StringComparison.Ordinal) && terminal.Fallback is { } plain:
+                // Windows Terminal may expand a %NAME% in the folder it is given, in its own process, which the scan of
+                // the host's words does not read, so a folder holding a % is opened by the console host for this start.
+                return Compose(os, plain, folder, host, itemId, own);
+            case TerminalPlatform.Windows when IsWindowsTerminal(terminal.Program):
+                // With a command line given, the tab inherits the environment of wt's start, the one the console host's
+                // start is given (TerminalStartInfo.For): Windows Terminal's default, measured on 1.24, and asked for by no
+                // flag, since a flag an older Terminal does not know is an error it shows while its start succeeds.
+                IReadOnlyList<string> opened = [terminal.Program, "-w", "new", "new-tab", "-d", WindowsTerminalDelimited(folder), "--", .. host.Select(WindowsTerminalWord)];
+                var fallback = terminal.Fallback is { } console ? Compose(os, console, folder, host, itemId, own) : null;
+                return new TerminalLaunch(terminal.Name, opened, folder, null, null, own is null ? null : Variables(os, own), fallback);
             case TerminalPlatform.Windows:
                 return new TerminalLaunch(terminal.Name, [terminal.Program, "--", .. host], folder, null, null, own is null ? null : Variables(os, own));
             case TerminalPlatform.Linux:
@@ -178,7 +217,13 @@ public static class TerminalPlan
     /// (<see cref="SearchPathEntry"/>). On Windows the console host runs the system's expansion over the whole command line it hands
     /// on, replacing every <c>%NAME%</c> of a variable in the environment it was started with, before the host reads a
     /// word of it: where <paramref name="inherited"/> is given, the first word that expansion would change is refused,
-    /// since the host would be given something Jason did not write. The scan reads each word alone, while the console host reads the composed
+    /// since the host would be given something Jason did not write. Windows Terminal runs the same expansion over the command
+    /// line it starts (its <c>ConptyConnection.cpp</c>), but in the Terminal's own process, over that process's environment,
+    /// which for a Terminal already running is not the block scanned here: a name only that environment holds is not caught,
+    /// and neither is a name Jason removed from the block (<c>PSModulePath</c>, the confinement and chat-turn variables),
+    /// which passes the scan here and may still be expanded there by a Terminal that holds it. That concerns the words
+    /// alone; the tab's environment is the block of wt's start, without those names.
+    /// The scan reads each word alone, while the console host reads the composed
     /// line: they differ only where a name spans two words, which takes a variable whose name holds a space or a quote. Nothing is escaped instead.
     /// </summary>
     /// <param name="own">The installation the launch carries, whose variables the console host is started with too.</param>
@@ -343,6 +388,93 @@ public static class TerminalPlan
         }
 
         return variables;
+    }
+
+    /// <summary>
+    /// One word of the host's as Windows Terminal is given it, so that its own reading turns it back into the word as the
+    /// console host's start writes it on a command line. Windows Terminal splits its argument list into commands at every
+    /// <c>;</c> not written <c>\;</c>, reading <c>\;</c> as <c>;</c>, and joins the words after <c>--</c> into the host's
+    /// command line with one space between them, wrapping a word that holds a space in double quotes and escaping nothing
+    /// (its source, <c>AppCommandlineArgs.cpp</c> and <c>Commandline.cpp</c>). So a word that needs no quotes is given as it
+    /// is; one that does is escaped by the rule <c>CommandLineToArgvW</c> reads (each run of backslashes before a quote or at
+    /// the end doubled, each quote after a backslash), and given without its quotes where it holds a space, since Windows
+    /// Terminal adds them, else with them; and every <c>;</c> is written <c>\;</c>.
+    /// </summary>
+    public static string WindowsTerminalWord(string word)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+        if (word.Length > 0 && !word.Any(character => char.IsWhiteSpace(character) || character == '"'))
+        {
+            return WindowsTerminalDelimited(word);
+        }
+
+        var escaped = new StringBuilder();
+        var backslashes = 0;
+        foreach (var character in word)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+
+            escaped.Append('\\', character == '"' ? backslashes * 2 + 1 : backslashes);
+            escaped.Append(character);
+            backslashes = 0;
+        }
+
+        escaped.Append('\\', backslashes * 2);
+        var inner = escaped.ToString();
+        return WindowsTerminalDelimited(word.Contains(' ', StringComparison.Ordinal) ? inner : "\"" + inner + "\"");
+    }
+
+    /// <summary>A word with every <c>;</c> written <c>\;</c>, which Windows Terminal reads back as <c>;</c> and never as the start of another command.</summary>
+    private static string WindowsTerminalDelimited(string word) => word.Replace(";", "\\;", StringComparison.Ordinal);
+
+    /// <summary>Whether the terminal's program is Windows Terminal's, by its file name in either separator.</summary>
+    private static bool IsWindowsTerminal(string program) =>
+        string.Equals(program[(program.AsSpan().LastIndexOfAny('/', '\\') + 1)..], WindowsTerminalProgram, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The version of the Windows Terminal an alias stands for, read from its package folder's name, the folder that holds
+    /// <paramref name="target"/> (<c>Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe</c>, or the Preview's);
+    /// null where the target is no program of such a folder.
+    /// </summary>
+    public static Version? WindowsTerminalVersion(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return null;
+        }
+
+        var parts = target.Split('\\', '/');
+        if (parts.Length < 2 || !string.Equals(parts[^1], WindowsTerminalProgram, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var match = PackageFolder().Match(parts[^2]);
+        return match.Success && Version.TryParse(match.Groups[1].Value, out var version) ? version : null;
+    }
+
+    /// <summary>A Windows Terminal package folder's name: the package, its four-part version, its architecture and its publisher's id.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^Microsoft\.WindowsTerminal(?:Preview)?_([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)_[^_]*__[a-z0-9]+\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex PackageFolder();
+
+    private static TerminalFound? FindOnWindows(string? systemDirectory, string? windowsApps, Func<string, string?>? aliasTarget)
+    {
+        var console = string.IsNullOrWhiteSpace(systemDirectory) || !File.Exists(Path.Combine(systemDirectory, ConsoleHost))
+            ? null
+            : new TerminalFound("conhost", Path.Combine(systemDirectory, ConsoleHost));
+        if (string.IsNullOrWhiteSpace(windowsApps) || !Path.IsPathFullyQualified(windowsApps) || !File.Exists(Path.Combine(windowsApps, WindowsTerminalProgram)))
+        {
+            return console;
+        }
+
+        var wt = Path.Combine(windowsApps, WindowsTerminalProgram);
+        return WindowsTerminalVersion(aliasTarget?.Invoke(wt)) is { } version && version >= WindowsTerminalFloor
+            ? new TerminalFound(WindowsTerminalName, wt, console)
+            : console;
     }
 
     /// <summary>

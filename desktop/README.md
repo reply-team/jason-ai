@@ -131,24 +131,23 @@ servers, providers and profiles with it; it still sets the cached search and `fe
 (`codexFullAccessSettings`). One on a provider's key reads the config.toml of the desktop's own `CODEX_HOME`
 (`keyedFolder`) in its place, so none of the person's, as a keyed Claude Code turn loads none of theirs.
 
-The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
-CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
-prints and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the
-CLI's own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`.
-A link the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it
-(https, a host name, no user, port or anything but printable ASCII) and hands it to the system browser through the
-navigation lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one
-account, writes it to the clipboard itself; the shared mailbox page is never copied, whatever the page asks. Nothing
-else of the desktop holds it. The page learns that a link was opened or copied, when it stops working and its pending
-entry; the CLI's output for these verbs is never logged, recorded or put into an error.
-A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process
-that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused;
-no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and `delete` passes `--yes` only after the yes. Two
-offers open only after a code that calls for them, each for the ask it answered and behind a box of its own: the
-account's shared mailbox page (`--allow-shared-page`) after `email_link.not_available`, with the CLI's warning that the
-address does not expire and lets its holder manage all of the user's mailboxes, and a forced delete (`--force`) after
-`linkedin.account_in_use`. A refusal is one sentence of the desktop's, chosen by the CLI's code; a code the desktop does
-not act on, known or not, is said by one sentence that carries it, and nothing of the CLI's own words is shown or logged.
+The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply CLI
+that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI prints
+and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
+own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link
+the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a
+host name, no user, port or anything but printable ASCII) and hands it to the system browser through the navigation
+lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one account,
+writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or
+copied, when it stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put
+into an error. A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the
+main process that names the account as the list does (a connect and a reconnect make a link and ask nothing), with
+Cancel focused; no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and
+`delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it, for the ask it
+answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A Reply that makes no
+one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing else. A refusal is
+one sentence of the desktop's, chosen by the CLI's code; a code the desktop does not act on, known or not, is said by
+one sentence that carries it, and nothing of the CLI's own words is shown or logged.
 
 ## Its own files
 

@@ -479,7 +479,7 @@ describe('the desktop’s conversations', () => {
         // The box takes the drop, so the window never goes to the file.
         expect(fireEvent.dragOver(box, carrying(notes))).toBe(false);
         expect(fireEvent.drop(box, carrying(notes, plan))).toBe(false);
-        const both = `add these lines to "${desk}1.txt" "${desk}plan.md" `;
+        const both = `add these lines to '${desk}1.txt' '${desk}plan.md' `;
         await waitFor(() => expect(box.value).toBe(both));
         expect(box.selectionStart).toBe(both.length);
         expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['1.txt'], ['plan.md']]);

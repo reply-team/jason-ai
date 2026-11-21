@@ -22,7 +22,7 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
     private const string TapOffReason =
-        "Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that carries one.";
+        "Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
 
     /// <summary>
     /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is
@@ -51,7 +51,7 @@ public partial class ReleaseWorkflowTests
         Assert.StartsWith(TapOffReason, comment, StringComparison.Ordinal);
 
         var head = string.Join(' ', lines.TakeWhile(line => line.StartsWith('#')).Select(line => line[1..].Trim()));
-        Assert.Contains("The job after it, which asked the Homebrew tap to bump its formula, is switched off.", head, StringComparison.Ordinal);
+        Assert.Contains("The job after the release, which would ask the Homebrew tap to bump its cask once that proof passed, is switched off.", head, StringComparison.Ordinal);
         Assert.DoesNotContain("a last job asks the Homebrew tap", head, StringComparison.Ordinal);
     }
 
@@ -67,7 +67,7 @@ public partial class ReleaseWorkflowTests
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var tap = TapJob();
-        Assert.Equal(PublishingJobName(jobs), Scalar(tap, "needs"));
+        Assert.Equal([PublishingJobName(jobs), "proof-macos-cask"], ((YamlSequenceNode)Node(tap, "needs")!).Children.Select(node => node.ToString()));
         Assert.Equal(TapSwitchedOff, Scalar(tap, "if"));
         Assert.Equal(SigningEnvironment, Scalar(tap, "environment"));
         Assert.Empty(Assert.IsType<YamlMappingNode>(Node(tap, "permissions")).Children);

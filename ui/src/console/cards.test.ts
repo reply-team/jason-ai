@@ -567,7 +567,6 @@ describe('a choice’s members', () => {
         'Gmail',
         'Outlook',
         // The Reply card's offers after a refusal, drawn from a table.
-        'Open the shared mailbox page…',
         'Delete anyway…',
         // The status card's page buttons, whose words are arguments of one helper (card-status.ts, `page`). A people
         // list's rows and footer draw a person's name and a count from the runtime's answer, which no list holds.

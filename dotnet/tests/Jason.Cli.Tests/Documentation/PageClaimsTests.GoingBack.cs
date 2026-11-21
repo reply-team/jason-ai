@@ -17,13 +17,16 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The newest line of each package's digest list at v0.48.7, the version and the digest of the package that release
-    /// published. A plugin 0.49 placed is one 0.48.7 runs as it is only while it is the same package.
+    /// published, for every package but Reply's. A plugin 0.49 placed is one 0.48.7 runs as it is while it is the same
+    /// package. Reply's is the one that moves in 0.49: its line is the newest of the tree, the 0.19.0 this release opened,
+    /// which 0.48.7 reads as it is because it adds no manifest key, and the section says so. Its digest is rewritten with
+    /// the package until the release ships, and this line with it.
     /// </summary>
     private static readonly (string Plugin, string Line)[] GoingBackToPackages =
     [
         ("journal-forwarder", "1.7.0 sha256:81e778ca4083860bbf6b203348963f5fa3f4745cc47dcafd93fd94962b73fae8"),
         ("ntfy", "1.0.3 sha256:d50982cc87d84c724eab1ae6bc216daed0d11055b0bd5e4592a88e8870f5d87f"),
-        ("reply", "0.18.0 sha256:b6d56ab00720225bf16cfb3bcec5c6304eb25d9c8b03301cc3429905b61de043"),
+        ("reply", "0.19.0 sha256:c1e8d3f3b4c6df785547e2d002f2bee102ee2207e727df8bb0d09ecc3a75d5e7"),
         ("slack", "1.0.0 sha256:cba4bc14aa70fd27feceb24ebdb608149fe4648ff35fde4940927c2133e448c9"),
         ("telegram", "1.0.0 sha256:808fcbbd7cc58860ed128a6ed98d348ad2dbf1b6c11d5e89fcba6a12376cdaa9"),
     ];
@@ -106,12 +109,16 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// "plugins and their grants are data 0.48.7 reads as it is": each package's newest version and digest is the one
-    /// v0.48.7 published, and there is no package 0.48.7 did not have. A package that moves in 0.49 turns this red.
+    /// v0.48.7 published, Reply's aside, which the section names as the newer one 0.49.4 placed and 0.48.7 still reads as
+    /// it is, and there is no
+    /// package 0.48.7 did not have. Any other package that moves in 0.49 turns this red, and so does a Reply package that
+    /// moves without this list and the section.
     /// </summary>
     [Fact]
     public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_7_shipped()
     {
         Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
+        Assert.Contains("The Reply package 0.49.4 or later placed differs from the one 0.48.7 shipped: it stays the newer one, 0.19.0, which 0.48.7 still reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, the same reply-cli 0.49.4 needs.", Flat(GoingBack()), StringComparison.Ordinal);
 
         var newest = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
             .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Line: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Last().Trim()))

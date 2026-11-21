@@ -128,7 +128,7 @@ public static class UpdateCommands
         // on what it began; neither replaces a file of the application's itself.
         if (CarriedExecutable.Of(env) is { } carried)
         {
-            if (!finish && RefusedAsThePackages(env, carried, "apply"))
+            if (!finish && RefusedAsThePackages(env, human, carried, "apply"))
             {
                 return ExitCodes.ApiError;
             }
@@ -147,8 +147,8 @@ public static class UpdateCommands
         }
 
         // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded.
-        if (RefusedAsRecordedCarried(env, "apply", completeToo: false)
-            || RefusedAsManaged(env, "apply"))
+        if (RefusedAsRecordedCarried(env, human, "apply", completeToo: false)
+            || RefusedAsManaged(env, human, "apply"))
         {
             return ExitCodes.ApiError;
         }
@@ -194,19 +194,19 @@ public static class UpdateCommands
         catch (UpdateException error)
         {
             // Whatever was done up to here is in the ledger, and the message says what to type next.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateFeedException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
             // What is on disk is not a ledger. `status` already answers this way; a verb that acts on the same
             // file should not answer differently, least of all with a bare line and no code.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -493,7 +493,7 @@ public static class UpdateCommands
                     PrintFinish(env, human, UpdateApplier.NothingInstalled(SemanticVersion.Current, env.Paths.Root));
                     return ExitCodes.Success;
                 case DataDirHolds.Unreadable:
-                    env.Out.WriteLine(CliErrors.Serialize(
+                    CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                         UpdateCodes.DataDirUnreadable,
                         $"The data directory at {env.Paths.Root} could not be listed, so whether an installation is there cannot be told: nothing was made and no release was read. Run jason update apply --finish again once it can be read.",
                         retryable: true));
@@ -605,7 +605,7 @@ public static class UpdateCommands
         // profile: refused before anything is read, staged or asked.
         if (env.Setup is { Elevated: true } elevated)
         {
-            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.Elevated, Elevated(elevated.Platform), retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.Elevated, Elevated(elevated.Platform), retryable: false));
             return ExitCodes.ApiError;
         }
 
@@ -641,7 +641,7 @@ public static class UpdateCommands
             }
             catch (UpdateException refused)
             {
-                env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, refused.Retryable));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(refused.Code, refused.Message, refused.Retryable));
                 return ExitCodes.ApiError;
             }
 
@@ -660,7 +660,7 @@ public static class UpdateCommands
 
         if (!handing.HasDesktop && inFlight is not { Step: >= UpdateStep.Swapped } && !(continuing && inFlight is not null))
         {
-            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "apply"), retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "apply"), retryable: false));
             return ExitCodes.ApiError;
         }
 
@@ -668,7 +668,7 @@ public static class UpdateCommands
         // even with no window: a terminal outside the desktop session (ssh, a service) has neither, and nothing is begun.
         if (env.Setup?.Platform is SetupSystem.Linux && inFlight is null && !continuing && !HasDisplay(env))
         {
-            env.Out.WriteLine(CliErrors.Serialize(
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                 UpdateCodes.CarriedByDesktop,
                 "No desktop session is running for this account to update Jason Desktop in: this terminal has no display. Use Jason Desktop's update item, or run `jason update apply` in a terminal of your desktop. Nothing was changed.",
                 retryable: false));
@@ -677,7 +677,7 @@ public static class UpdateCommands
 
         if (unread is not null)
         {
-            env.Out.WriteLine(unread is UpdateLedgerException invalid
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, unread is UpdateLedgerException invalid
                 ? CliErrors.Serialize(invalid.Code, invalid.Message, retryable: false)
                 : CliErrors.Serialize(UpdateCodes.FileRefused, $"The update ledger at {paths.Ledger} could not be read: {unread.Message} Run `jason update apply` again once it can.", retryable: true));
             return ExitCodes.ApiError;
@@ -776,17 +776,17 @@ public static class UpdateCommands
                 env.Error.WriteLine(step);
             }
 
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateFeedException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -1068,26 +1068,26 @@ public static class UpdateCommands
         string? application = null;
         if (CarriedExecutable.Of(env) is { } carried)
         {
-            if (RefusedAsAnotherRecord(env, carried) || RefusedAsThePackages(env, carried, "rollback"))
+            if (RefusedAsAnotherRecord(env, human, carried) || RefusedAsThePackages(env, human, carried, "rollback"))
             {
                 return ExitCodes.ApiError;
             }
 
             if (env.Setup is not { } places)
             {
-                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
                 return ExitCodes.ApiError;
             }
 
             application = CarriedUpdate.ApplicationFolderOf(carried.Executable, places.Platform);
             if (!File.Exists(CarriedUpdate.ApplicationOf(carried.Executable, places.Platform)))
             {
-                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
                 return ExitCodes.ApiError;
             }
         }
-        else if (RefusedAsRecordedCarried(env, "rollback", completeToo: true)
-            || RefusedAsManaged(env, "rollback"))
+        else if (RefusedAsRecordedCarried(env, human, "rollback", completeToo: true)
+            || RefusedAsManaged(env, human, "rollback"))
         {
             return ExitCodes.ApiError;
         }
@@ -1110,12 +1110,12 @@ public static class UpdateCommands
                 env.Error.WriteLine(step);
             }
 
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -1124,7 +1124,7 @@ public static class UpdateCommands
     /// Refuses, and says so, where a jason Jason Desktop carries is asked to roll back an update whose record names another
     /// file: a rollback acts on the file the record names, and that file is not this application's.
     /// </summary>
-    private static bool RefusedAsAnotherRecord(CliEnvironment env, CarriedExecutable carried)
+    private static bool RefusedAsAnotherRecord(CliEnvironment env, bool human, CarriedExecutable carried)
     {
         var path = new UpdatePaths(env.Paths).Ledger;
         UpdateLedger? ledger;
@@ -1146,7 +1146,7 @@ public static class UpdateCommands
         // the install back, so none is named.
         if (MovedFrom(env, ledger.InstallPath))
         {
-            env.Out.WriteLine(CliErrors.Serialize(
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                 UpdateCodes.CarriedByDesktop,
                 "This Jason was moved from a command-line install into Jason Desktop, and a rollback here does not take it back from 0.49; nothing was changed. "
                 + $"Going back from 0.49 is described at {PublicRepository.GoingBackFrom049}",
@@ -1154,7 +1154,7 @@ public static class UpdateCommands
             return true;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} is of the jason at {ledger.InstallPath}, not of the one the Jason desktop application carries, "
             + $"at {carried.Executable}, so this jason does not roll it back: that jason does, with `{ledger.InstallPath} update rollback`.",
@@ -1191,7 +1191,7 @@ public static class UpdateCommands
     /// acts on any record. A record that cannot be read refuses nothing here: the verb reads it again and answers as it
     /// always has. The hand-over is not taken here: it is only for the carried file running as itself.
     /// </remarks>
-    private static bool RefusedAsRecordedCarried(CliEnvironment env, string verb, bool completeToo)
+    private static bool RefusedAsRecordedCarried(CliEnvironment env, bool human, string verb, bool completeToo)
     {
         var path = new UpdatePaths(env.Paths).Ledger;
         UpdateLedger? ledger;
@@ -1213,7 +1213,7 @@ public static class UpdateCommands
             return false;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} belongs to the jason the Jason desktop application carries, at "
             + $"{carried.Executable}, so `jason update {verb}` would change a file inside the application. "
@@ -1229,7 +1229,7 @@ public static class UpdateCommands
     /// `jason update apply` and `rollback` replace nothing and say what to type; `--finish` still runs, as the application's
     /// start runs it once apt has installed a new version.
     /// </summary>
-    private static bool RefusedAsThePackages(CliEnvironment env, CarriedExecutable carried, string verb)
+    private static bool RefusedAsThePackages(CliEnvironment env, bool human, CarriedExecutable carried, string verb)
     {
         if (env.Setup?.Platform is not SetupSystem.Linux || !SetupPlaces.CarriedByDeb(carried.Executable))
         {
@@ -1248,7 +1248,7 @@ public static class UpdateCommands
                 "jason runtime start",
             }
             : new[] { "jason runtime stop", "sudo apt update && sudo apt upgrade", "jason runtime start" };
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.ManagedByPackageManager,
             $"This jason is the one Jason Desktop's package carries, at {carried.Executable}, and the package is the system's: Software Updater offers a new version "
             + $"and installs it when you say so, as apt in a terminal does, so `jason update {verb}` would replace a file the package owns. "
@@ -1284,14 +1284,14 @@ public static class UpdateCommands
     /// image every plugin host that runtime starts is launched from — under Homebrew it deletes the old keg — so the
     /// runtime is stopped before the manager's upgrade and started from the new image after it.
     /// </remarks>
-    private static bool RefusedAsManaged(CliEnvironment env, string verb)
+    private static bool RefusedAsManaged(CliEnvironment env, bool human, string verb)
     {
         if (PackageOwner.Of(env) is not { } owner)
         {
             return false;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.ManagedByPackageManager,
             $"This Jason was installed by {owner.Manager}, which keeps its own record of the version, so `jason update {verb}` "
             + $"would replace a file the package manager owns. Its version is changed through {owner.Manager}, with the "
@@ -1333,7 +1333,7 @@ public static class UpdateCommands
         {
             // There is a file and it is not a ledger. Saying so is the whole answer: acting on half a document
             // is how a person is told an update reached a step it never began.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
 
@@ -1411,7 +1411,7 @@ public static class UpdateCommands
         {
             // The feed's own code, in the envelope every other failure uses. Offline is the one worth trying
             // again; a document that is not a manifest, or an address this build will not fetch, is not.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
 

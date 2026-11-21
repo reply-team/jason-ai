@@ -216,6 +216,12 @@ public static class StatusCommand
         }
 
         output.WriteLine(table.Render());
+        foreach (var note in report.Checks.Select(check => check.Details?.GetValueOrDefault(Installation.HomebrewFormula.DetailName)).OfType<string>())
+        {
+            output.WriteLine();
+            output.WriteLine(note);
+        }
+
         output.WriteLine();
         RenderSetup(output, report.Setup);
 

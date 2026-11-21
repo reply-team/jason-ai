@@ -54,6 +54,8 @@ import { folderRefusal, readFileManager } from './open-folder';
 import { closeMark } from './icons';
 import { readUnlisted } from './recent';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
+import { chosenSection } from '../screens/settings/chosen';
+import { followUpdates } from '../screens/settings/update-state';
 import { closeMenus, sideView } from './side';
 import { StartPanel } from './start';
 import {
@@ -253,6 +255,7 @@ const commands: Partial<Record<DesktopCommand, { panel: PanelName } | { screen: 
     'navigate.people': { screen: 'people' },
     'navigate.system': { screen: 'system' },
     'navigate.settings': { screen: 'settings' },
+    'navigate.update': { screen: 'settings' },
 };
 
 /** Where a desktop command goes: a panel's name, the registered screen's own route, or nothing. */
@@ -546,6 +549,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             followHistory(to);
         });
         const made = onChatMade(chatMade);
+        // The desktop's update item, read for as long as the console is drawn: the sidebar's Settings row marks a version
+        // the desktop knows of and has not installed.
+        const updatesFollowed = followUpdates(desktop);
         // The file manager's name, for the agent's Open folder, is the computer's: read once, as the console is drawn.
         const fileManagerRead = readFileManager();
         // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
@@ -557,6 +563,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Recent.
         const unlisted = readUnlisted(api);
         return () => {
+            updatesFollowed();
             unlisted();
             shadowed();
             fileManagerRead();
@@ -566,7 +573,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         };
     }, [api, desktop, dock]);
     useEffect(() => {
-        const onFocus = () => connect.reloadOnFocus();
+        const onFocus = () => {
+            connect.reloadOnFocus();
+            void shell.reloadOnFocus(api);
+        };
         window.addEventListener('focus', onFocus);
         const onKey = (event: KeyboardEvent) => {
             if (event.key === 'Escape') closeMenus();
@@ -636,6 +646,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             can('onCommand')
                 ? desktop.onCommand((command) => {
                       if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
+                      // The update notice's click: Settings, at its Update section.
+                      if (command === 'navigate.update') chosenSection.value = 'update';
                       const to = commandTarget(command);
                       if (typeof to === 'string') dock.show(to);
                       else if (to) dock.page(to);

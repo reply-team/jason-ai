@@ -22,7 +22,9 @@
 #   by-hand <app> <version>        this build's application put in Applications by hand on a clean machine and opened, as
 #                                  a person's start opens it: the set-up ran and completed, a new login shell finds jason,
 #                                  this build's, the profile line, the skills recorded, and the set-up's report saying a
-#                                  new terminal finds this jason. The uninstall is the next step's
+#                                  new terminal finds this jason. The uninstall is the next step's. With --placed in place
+#                                  of <app>, the application something else put in place (Homebrew's cask) is opened so
+#                                  and held so, nothing copied
 #   ran-from-image-end             the disk image leg's own end: the two things the application that ran from the image
 #                                  left, removed by name where this leg's begin did not find them, logged, never a proof
 #   install <feed> <version> <script> [pinned]
@@ -2498,18 +2500,26 @@ by-hand)
     # writes, says a new terminal finds this jason. The uninstall from a new terminal and the compare are the leg's next
     # steps.
     built="$1"; version="$2"
-    [ -d "$built" ] || fail "no application at $built"
-    [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
     [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
-    place=/Applications
-    [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
-    placed="$place/Jason.app"
-    within 300 "copying this build's application into $place" ditto "$built" "$placed" || fail "this build's application could not be copied to $placed"
-    within 300 "codesign verifying this build's application" codesign --verify --deep --strict "$placed" || fail "this build's application at $placed does not verify"
-    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+    if [ "$built" = --placed ]; then
+        placed="$(app)"
+        [ -n "$placed" ] || fail "no application is in place to open"
+        within 300 "codesign verifying the application in place" codesign --verify --deep --strict "$placed" || fail "the application at $placed does not verify"
+        [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+        say "the application $version in place at $placed, its signature verifying, opened with no script run before it"
+    else
+        [ -d "$built" ] || fail "no application at $built"
+        [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
+        place=/Applications
+        [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
+        placed="$place/Jason.app"
+        within 300 "copying this build's application into $place" ditto "$built" "$placed" || fail "this build's application could not be copied to $placed"
+        within 300 "codesign verifying this build's application" codesign --verify --deep --strict "$placed" || fail "this build's application at $placed does not verify"
+        [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed"), not $version"
+        say "this build's application $version put at $placed by hand, its signature verifying, with no script run before it"
+    fi
     carried="$placed/Contents/Resources/bundle/jason"
     record="$DATA/desktop/machine-setup.json"
-    say "this build's application $version put at $placed by hand, its signature verifying, with no script run before it"
 
     # Opened as a person opens it: its first start's set-up read in its log, looked for for 180 s; the desktop's log kept
     # from here on.

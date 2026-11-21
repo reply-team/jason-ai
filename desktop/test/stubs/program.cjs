@@ -97,7 +97,7 @@ if (process.env.STUB_HANG === name) {
     // What Codex says of its version, as `codex-cli <version>`.
     process.stdout.write(`codex-cli ${process.env.STUB_CODEX_VERSION}\n`);
 } else if (said === '--version') {
-    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.21.0'}\n` :'10.9.2\n');
+    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.22.0'}\n` :'10.9.2\n');
 } else if (name === 'reply' && said === 'auth status --json') {
     // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
     const signedIn = process.env.STUB_REPLY_SIGNED_IN === 'yes';
@@ -129,11 +129,10 @@ if (process.env.STUB_HANG === name) {
 } else if (name === 'reply' && args[0] === 'account' && args[1] !== 'list') {
     // The account verbs as the Reply CLI ends them under --json: the result on stdout and exit 0, a refusal as one line
     // {"error":{...}} on stderr and exit 1 (2 for a usage.* code), exit 3 for a write whose outcome it does not know. The
-    // answer is named per verb by STUB_REPLY_ACCOUNT_<VERB>, with _SHARED where --allow-shared-page was passed and _FORCE
-    // where --force was: {"print": <result>}, {"code": <code>, "exit"?}, or {"exit", "stdout"?, "stderr"?} as it is.
+    // answer is named per verb by STUB_REPLY_ACCOUNT_<VERB>, with _FORCE where --force was passed: {"print": <result>}, {"code": <code>, "exit"?}, or {"exit", "stdout"?, "stderr"?} as it is.
     // `pending` lists nothing when none is named.
     const verb = (args[1] ?? '').toUpperCase();
-    const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--allow-shared-page') ? '_SHARED' : ''}${args.includes('--force') ? '_FORCE' : ''}`;
+    const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--force') ? '_FORCE' : ''}`;
     const named = process.env[key];
     const answer = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
     if (answer === null) {

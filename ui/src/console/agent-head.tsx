@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useApi } from '../api/context';
 import { essentials } from '../platform/console-shell';
+import { t } from '../platform/i18n';
 import { can } from '../platform/places';
 import { navigate, route, type CampaignTab, type Route } from '../router';
 import { Tabs } from '../layout/tabs';
@@ -12,9 +13,9 @@ import { isUnmade, restartChat } from './chat';
 import type { Chat } from './chat-model';
 import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
-import { begin, placeGates } from './conversation-acts';
+import { begin, placeGates, runsOn } from './conversation-acts';
 import { conversationItems, type MenuItem } from './conversation-items';
-import { openFolder } from './open-folder';
+import { openFolder, openSession } from './open-folder';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { chats, conversations } from './state';
 
@@ -55,7 +56,14 @@ function ConversationMenu({ agent }: { agent: string }) {
     const { chat, kept } = conversationOf(agent);
     const id = kept ?? chat?.id;
     const items = conversationItems(
-        { kept, id, campaignId: agent, running: chat?.running === true, removing: chat?.removing === true },
+        {
+            kept,
+            id,
+            campaignId: agent,
+            running: chat?.running === true,
+            removing: chat?.removing === true,
+            host: runsOn(chat),
+        },
         placeGates(),
     );
     useEffect(() => {
@@ -83,6 +91,7 @@ function ConversationMenu({ agent }: { agent: string }) {
         if (item.kind === 'rename' || item.kind === 'remove') void begin(kept!, item.kind, show);
         else if (item.kind === 'fresh') void restartChat(id!);
         else if (item.kind === 'folder') void openFolder(agent);
+        else if (item.kind === 'session') void openSession(agent, item.host);
     };
     return (
         <div className="agent-more-wrap" onKeyDown={keys}>
@@ -90,8 +99,8 @@ function ConversationMenu({ agent }: { agent: string }) {
                 ref={button}
                 type="button"
                 className="agent-more"
-                aria-label="More for this agent's conversation"
-                title="More"
+                aria-label={t('agent.menu.more')}
+                title={t('agent.menu.moreTitle')}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpen(!open)}
@@ -105,7 +114,7 @@ function ConversationMenu({ agent }: { agent: string }) {
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
-                <div ref={menu} className="agent-menu" role="menu" aria-label="This agent's conversation">
+                <div ref={menu} className="agent-menu" role="menu" aria-label={t('agent.menu.label')}>
                     <MenuEntries items={items} onChoose={choose} />
                 </div>
             )}

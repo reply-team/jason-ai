@@ -143,7 +143,7 @@ describe('a chat as the page keeps it', () => {
 
         it('go in at the caret, each quoted, with a space after them, as a terminal puts them', () => {
             expect(withPaths('', 0, 0, [windows])).toEqual({
-                text: `"${windows}" `,
+                text: `'${windows}' `,
                 caret: windows.length + 3,
             });
             expect(withPaths('add these lines to ', 19, 19, ['/Users/ana/1.txt'])).toEqual({
@@ -186,11 +186,53 @@ describe('a chat as the page keeps it', () => {
             expect(dropCaretAt(null, 'conv_1', 'see ')).toBeNull();
         });
 
-        it('on Windows keep double quotes, which no name there holds, and every other sign as it is', () => {
-            const signs = "C:\\Users\\ana\\$x `date` hi! it's.txt";
-            expect(put(signs)).toBe(`"${signs}" `);
-            const shared = '\\\\server\\share\\a.txt';
-            expect(put(shared)).toBe(`"${shared}" `);
+        // What each Windows form below reads back as, run through Git Bash (`printf '%s\n' <form>`) and through
+        // PowerShell 7 and Windows PowerShell 5.1 (`Write-Output <form>`); the unit project starts no shell itself.
+        //
+        //   form                                  Git Bash                    PowerShell 7 and 5.1
+        //   'C:\Users\ana\a b.txt'                the name                    the name
+        //   'C:\Users\ana\$x.txt'                 the name                    the name
+        //   'C:\Users\ana\`date`.txt'             the name                    the name
+        //   'C:\Users\ana\100% a&b;c hi!.txt'     the name                    the name
+        //   'C:\Users\Ана Ли\Desktop\1.txt'       the name                    the name
+        //   '\\server\share\a.txt'                the name                    the name
+        //   "C:\Users\ana\it's.txt"               the name                    the name
+        //   "C:\Ана’s ‘q’ ‚z‛.txt"                the name                    the name
+        //   '\\server\share\it''s.txt'            \\server\share\its.txt      the name
+        //   'C:\Users\ana\$x it''s.txt'           C:\Users\ana\$x its.txt     the name
+        //   'C:\Users\ana\`d` it’’s.txt'          C:\Users\ana\`d` it’’s.txt  the name
+        //
+        // The double quotes this form replaced lost a UNC path's first backslash in Git Bash: "\\server\share\a.txt"
+        // read back as \server\share\a.txt.
+        const dir = 'C:\\Users\\ana\\';
+
+        it('on Windows go in single quotes where the name holds no quote, as PowerShell and Git Bash both read them', () => {
+            expect(put(`${dir}a b.txt`)).toBe("'C:\\Users\\ana\\a b.txt' ");
+            expect(put(`${dir}$x.txt`)).toBe("'C:\\Users\\ana\\$x.txt' ");
+            expect(put(`${dir}\`date\`.txt`)).toBe("'C:\\Users\\ana\\`date`.txt' ");
+            expect(put(`${dir}100% a&b;c hi!.txt`)).toBe("'C:\\Users\\ana\\100% a&b;c hi!.txt' ");
+            expect(put(windows)).toBe("'C:\\Users\\Ана Ли\\Desktop\\1.txt' ");
+            expect(put('\\\\server\\share\\a.txt')).toBe("'\\\\server\\share\\a.txt' ");
+        });
+
+        it('on Windows go in double quotes where the name holds a quote, typographic ones among them, and nothing double quotes expand', () => {
+            expect(put(`${dir}it's.txt`)).toBe(`"C:\\Users\\ana\\it's.txt" `);
+            expect(put('C:\\Ана\u2019s \u2018q\u2019 \u201az\u201b.txt')).toBe(
+                '"C:\\Ана\u2019s \u2018q\u2019 \u201az\u201b.txt" ',
+            );
+        });
+
+        it('on Windows keep the quotes doubled as PowerShell reads them for a quote with a UNC path, a `$` or a backtick, which Bash reads wrong', () => {
+            expect(put("\\\\server\\share\\it's.txt")).toBe("'\\\\server\\share\\it''s.txt' ");
+            expect(put(`${dir}$x it's.txt`)).toBe("'C:\\Users\\ana\\$x it''s.txt' ");
+            expect(put(`${dir}\`d\` it\u2019s.txt`)).toBe("'C:\\Users\\ana\\`d` it\u2019\u2019s.txt' ");
+        });
+
+        it('on macOS and Linux keep every other sign as it is, a trailing space and a name in another script among them', () => {
+            expect(put('/Users/ana/$x `date` 100% a&b;c.txt')).toBe("'/Users/ana/$x `date` 100% a&b;c.txt' ");
+            expect(put("/Users/ana/it's here.txt")).toBe("'/Users/ana/it'\\''s here.txt' ");
+            expect(put('/Users/ana/Ана Ли/note ')).toBe("'/Users/ana/Ана Ли/note ' ");
+            expect(put('/Users/ana/\u2019q.txt')).toBe("'/Users/ana/\u2019q.txt' ");
         });
     });
 

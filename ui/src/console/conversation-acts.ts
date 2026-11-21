@@ -1,11 +1,19 @@
 import { can } from '../platform/places';
-import { openConversation, restartChat } from './chat';
+import { hostOf, openConversation, restartChat } from './chat';
+import { newChat, type Chat } from './chat-model';
 import { conversationItems, type ConversationAct, type ConversationFacts, type Gates } from './conversation-items';
-import { folderWord } from './open-folder';
+import { folderWord, hostsOffered } from './open-folder';
 import { changeChat, chats, conversations, inTab } from './state';
 
 // The conversation's acts as they are taken, wherever they are offered: the agent's "…" and the menu on a row of Recent.
 // Each shows the conversation first and begins there, so the person sees what is renamed, started fresh or removed.
+
+/**
+ * The host a conversation's chat runs on, by the chat's own rule (`hostOf`): the one chosen, else the first found that
+ * drives the chat, so a Claude Code below its floor gives way to Codex; a conversation the console does not hold is read
+ * as a chat that chose none. Null where none drives the chat, or the one chosen is held.
+ */
+export const runsOn = (chat: Chat | undefined): string | null => hostOf(chat ?? newChat('', null))?.id ?? null;
 
 /** What the place lets the person do, read now. */
 export function placeGates(): Gates {
@@ -16,6 +24,7 @@ export function placeGates(): Gates {
         remove: can('chat.remove'),
         tab: inTab(),
         folder: folderWord(),
+        hosts: hostsOffered(),
     };
 }
 
@@ -29,6 +38,7 @@ export function factsOf(id: string): ConversationFacts {
         campaignId: listed?.campaignId ?? chat?.campaignId ?? null,
         running: chat?.running ?? listed?.running ?? false,
         removing: chat?.removing === true,
+        host: runsOn(chat),
     };
 }
 

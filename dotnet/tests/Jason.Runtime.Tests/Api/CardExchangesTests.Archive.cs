@@ -103,6 +103,9 @@ public partial class CardExchangesTests
             Assert.Equal(CampaignStatus.Archived, archived.Status);
             Assert.Equal(archived.ArchivedAt, (await api.RecordAsync<CampaignDto>(Operations.CampaignArchive, "archive-spring-again", new { campaign_id = spring.Campaign, reason = "The spring offer has ended.", actor = Ada }, Ct)).ArchivedAt);
 
+            // An archive the runtime refuses: of an agent it does not hold, answered with its error and nothing written.
+            Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignArchive, "archive-unknown", new { campaign_id = Jason.Contracts.Ids.PublicId.New("cmp"), actor = Ada }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
+
             // What the archive cancelled: every open item, the role's among them, both approvals on open work, and the question.
             foreach (var item in new[] { work.WorkItemPublicId, asked, given })
             {

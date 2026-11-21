@@ -43,7 +43,9 @@
 // kept the person's message all the same, as Claude Code does; a start with no resume opens a session of a new id there.
 // With no plan the turn says one line and ends well. STUB_RESUME says what a resume does: "missing" fails as a session
 // that is not there (Claude Code on stderr, Codex with an error event) before anything is said, "other" answers with a
-// session other than the one asked for and goes on as a turn would.
+// session other than the one asked for and goes on as a turn would. A resume with `--fork-session` answers with a session
+// of a new id, as Claude Code does: the next one in STUB_SESSIONS, which holds what the one resumed held and then this
+// turn, the one resumed left as it was; with no folder, the id asked for and `-fork`.
 // A naming run (`naming` below) answers by STUB_NAMING, a JSON object: { "say": "words" } says them, { "use": true }
 // uses a tool first, { "block": "type" } (Claude Code) or { "item": "type" } (Codex) says a content block or an item of
 // that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "hold": "<file>" } waits until the file exists, { "touch": true } leaves a
@@ -53,6 +55,8 @@
 // when its configuration cannot be built.
 // STUB_CODEX_WARNING has Codex say a configuration warning before its thread, as a completed item of type `error`, the
 // shape codex exec --json gives one (codex-rs/exec/src/event_processor_with_jsonl_output.rs).
+// STUB_INIT_HOLD holds a Claude Code start before its init line until that file exists, so a test decides when the start
+// names its session. STUB_FAIL_START has Claude Code write those words to stderr and exit 1 before its init line.
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
@@ -168,9 +172,16 @@ async function claude(args, stdin) {
         process.stderr.write(`No conversation found with session ID: ${asked}\n`);
         process.exit(1);
     }
+    if (process.env.STUB_FAIL_START) {
+        process.stderr.write(`${process.env.STUB_FAIL_START}\n`);
+        process.exit(1);
+    }
     const store = process.env.STUB_SESSIONS || null;
     const opened = store === null ? 'stub-session-1' : `stub-session-${readdirSync(store).length + 1}`;
-    const session = asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || opened);
+    const forking = asked !== null && args.includes('--fork-session');
+    const session = forking
+        ? store === null ? `${asked}-fork` : opened
+        : asked !== null && process.env.STUB_RESUME === 'other' ? `${asked}-other` : asked ?? (process.env.STUB_HOST_SESSION || opened);
     const config = args[args.indexOf('--mcp-config') + 1];
     const prompt = promptToolOf(args);
     // The bypass mode refused before anything starts, in Claude Code's restricted mode or under a policy (seen on 2.1.329).
@@ -196,7 +207,12 @@ async function claude(args, stdin) {
     // asked for: what a real Claude Code names for a person's own login is not known here. Unset or empty, the line names
     // none.
     const named = forced ? 'default' : process.env.STUB_INIT_MODE;
-    if (store !== null) appendFileSync(join(store, session), stdin);
+    const initHold = process.env.STUB_INIT_HOLD;
+    if (initHold) while (!existsSync(initHold)) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (store !== null) {
+        if (forking && existsSync(join(store, asked))) writeFileSync(join(store, session), readFileSync(join(store, asked)));
+        appendFileSync(join(store, session), stdin);
+    }
     print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;

@@ -110,7 +110,7 @@ public static class UninstallCommand
                                    removed as itself: what it points to is never touched.
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
-        them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
+        them off: brew uninstall --formula jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
         Run as the jason Jason Desktop carries (a version.json beside the executable), on macOS, Windows and Linux,
         this takes Jason Desktop off as well, one uninstall from either door, the data directory kept unless
         --purge-data, the harness root never:
@@ -187,7 +187,10 @@ public static class UninstallCommand
             installation taken off none is; and desktop/machine-setup.json, the record of the set-up Jason
             Desktop's start ran, since what it set up is taken off and the next start sets the machine up
             again.
-          - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
+          - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted; one
+            Homebrew's cask placed, its record standing under Caskroom/jason in a Homebrew prefix, is left to
+            Homebrew (left_to_homebrew) with its link and its own state under ~/Library, and the report names
+            brew uninstall --zap --cask jason, which takes them off.
             Windows: a waiter is started, which once this command has ended runs the application's own
             uninstaller silently on its folder, so the folder goes after this ends; the report names the
             waiter's process. Once that process has ended, and only if Jason is then still listed in
@@ -678,6 +681,7 @@ public static class UninstallCommand
             ApplicationFates.Deleted => $"  last, the application, {desktop.Application}",
             ApplicationFates.AfterExit => $"  last, the application, {desktop.Application}: its own uninstaller removes it once this command has ended",
             ApplicationFates.Kept => $"  NOT touched: the application, {desktop.Application}, which the uninstaller that asked for this removes next",
+            ApplicationFates.LeftToHomebrew => $"  NOT touched: the application, {desktop.Application}, which Homebrew placed, with its link and its state under ~/Library: {DesktopRemoval.HomebrewZap} takes them off",
             ApplicationFates.Purged => $"  first, once the runtime has stopped: the package {DesktopRemoval.DebPackage}, {desktop.Application}, taken off by apt, which asks for an administrator's password",
             _ => "  no application: this jason is not inside one",
         });

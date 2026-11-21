@@ -32,7 +32,7 @@ public sealed class UninstallManagedTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Homebrew", "brew uninstall jason")]
+    [InlineData("Homebrew", "brew uninstall --formula jason")]
     [InlineData("winget", "winget uninstall Reply.Jason")]
     public async Task It_takes_off_what_is_jasons_and_leaves_the_rest_to_the_manager(string manager, string uninstall)
     {
@@ -69,7 +69,7 @@ public sealed class UninstallManagedTests : IDisposable
     /// and that the runtime is stopped first, as it always is: never the executable under what is removed.
     /// </summary>
     [Theory]
-    [InlineData("Homebrew", "brew uninstall jason")]
+    [InlineData("Homebrew", "brew uninstall --formula jason")]
     [InlineData("winget", "winget uninstall Reply.Jason")]
     public async Task The_plan_says_what_it_leaves_to_the_manager_and_that_the_runtime_is_stopped_first(string manager, string uninstall)
     {
@@ -89,7 +89,7 @@ public sealed class UninstallManagedTests : IDisposable
 
     /// <summary>The plan an agent reads carries the same: who owns what is left, and the command, as one field.</summary>
     [Theory]
-    [InlineData("Homebrew", "brew uninstall jason")]
+    [InlineData("Homebrew", "brew uninstall --formula jason")]
     [InlineData("winget", "winget uninstall Reply.Jason")]
     public async Task The_plan_an_agent_reads_names_the_manager_and_its_command(string manager, string uninstall)
     {
