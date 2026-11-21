@@ -616,6 +616,15 @@ test('a folder that holds the data directory is walked in no form but those the 
     }
 });
 
+test('a jq program that names the environment with space between the dollar and the name is refused as the joined one is', () => {
+    for (const scope of scopes) {
+        for (const command of ["jq -n '$ ENV'", "jq -n '$  ENV.HOME'", "jq -n '$\tENV'", "jq -n '$\nENV'", "jason campaign list | jq '$ ENV'"]) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: jqRefusal }, `${scope.platform}: ${JSON.stringify(command)}`);
+        }
+        assert.deepEqual(fullAccessJudgement('Bash', { command: "jason campaign list | jq '$ENVY'" }, scope).outcome, 'runs', scope.platform);
+    }
+});
+
 test('a quoted text or a here-document is read again as commands only where a shell, a runner or eval may run it: a commit message, a pull request body and a printed text holding a lone / or ~, or the words of a jq program, are data and are not refused; under sh -c, eval or a pipe into a shell the same words are read', () => {
     for (const scope of scopes) {
         for (const command of [

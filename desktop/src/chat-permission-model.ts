@@ -2015,8 +2015,8 @@ function walkRefusal(walks: WalkKind | null): string | null {
     return walks === 'walk' ? searchRefusal : walks === 'in' ? inRootRefusal : null;
 }
 
-/** A word that names jq's environment, or reads a module or a data file by jq's own words. */
-const jqReads = /(?<![A-Za-z0-9_$])(?:env|import|include|modulemeta)(?![A-Za-z0-9_])|\$ENV(?![A-Za-z0-9_])/;
+/** A word that names jq's environment, with or without space after its dollar, or reads a module or a data file by jq's own words. */
+const jqReads = /(?<![A-Za-z0-9_$])(?:env|import|include|modulemeta)(?![A-Za-z0-9_])|\$\s*ENV(?![A-Za-z0-9_])/;
 
 /** The programs whose `--files0-from` reads the names of the files they read from their input or another file. */
 const namesFromInput: ReadonlySet<string> = new Set(['sort', 'wc', 'du']);
