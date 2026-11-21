@@ -206,6 +206,13 @@ export const dataRefusal =
 export const personsRefusal =
     'That path is the person\'s own installation, and this chat runs in the demo, which does not open it: the demo\'s own `jason` answers for its data, '
     + 'such as `jason campaign list`. Nothing was done.';
+/**
+ * The hook's refusal of a path whose end it does not read (`hookPlace`): on Windows one in a device's or a volume's
+ * namespace, and one through a share of this computer that names no drive.
+ */
+export const unplacedRefusal =
+    'Jason could not place where that path leads: it is in a device\'s or a volume\'s namespace, or on a share of this computer that names no drive, and '
+    + 'the chat does not open such a path. Name the file by its drive\'s own path instead, such as `C:\\Users\\you\\Documents\\notes.md`. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat neither reads nor writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
@@ -2701,11 +2708,11 @@ function isProtected(scope: ChatScope, path: string): boolean {
 /**
  * The kind a path a file tool names is: the person's own installation in a demo, whose settings and run files among it
  * are the person's; a settings or run file; the data directory. It is read where it leads (`hookPlace`), and a path whose
- * end is not read is taken for the data directory.
+ * end is not read is refused by the sentence that says so (`unplacedRefusal`).
  */
 function pathKind(value: string, scope: ChatScope): string | null {
     const path = hookPlace(located(value, scope), scope);
-    if (path === null) return dataRefusal;
+    if (path === null) return unplacedRefusal;
     if (inPersonsOwn(scope, path)) return personsRefusal;
     if (isProtected(scope, path)) return settingsRefusal;
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, located(scope.chat, scope), path)) return dataRefusal;
@@ -2790,7 +2797,7 @@ function textKind(text: string, scope: ChatScope): string | null {
 
 /**
  * The kinds a command's text and the places its words name show, in the order the sentences are said, each place read
- * where it leads (`hookPlace`), one whose end is not read taken for the data directory.
+ * where it leads (`hookPlace`), one whose end is not read refused by the sentence that says so (`unplacedRefusal`).
  */
 function kindOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
@@ -2800,8 +2807,8 @@ function kindOver(text: string, places: readonly string[], scope: ChatScope): st
     const read = leads.filter((path): path is string => path !== null);
     if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(read, scope)) return personsRefusal;
     if (read.some((path) => isProtected(scope, path))) return settingsRefusal;
-    if (leads.includes(null) || namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope)) return dataRefusal;
-    return null;
+    if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(read, scope)) return dataRefusal;
+    return leads.includes(null) ? unplacedRefusal : null;
 }
 
 /**

@@ -24,6 +24,7 @@ import {
     personsRefusal,
     searchRefusal,
     settingsRefusal,
+    unplacedRefusal,
     type ChatScope,
     type Platform,
 } from '../src/chat-permission-model.ts';
@@ -399,7 +400,7 @@ test('a redirect spelled as Windows spells it is refused in Ask first, by the pe
     }
 });
 
-test('on Windows Full access reads this computer\'s own drive shares and the long-path forms as the drive, by Ask first\'s reader, and refuses a path in a device\'s namespace by the data sentence, which Ask first refuses too', () => {
+test('on Windows Full access reads this computer\'s own drive shares and the long-path forms as the drive, by Ask first\'s reader, and refuses a path in a device\'s namespace and a share of this computer that names no drive by the sentence that says it could not place them, which Ask first refuses too', () => {
     const named = homeScope('win32', 'C:\\Users\\someone', { machine: ['DESKTOP-1'] });
     const below = 'Users\\someone\\.jason\\config\\settings.json';
     const spellings = [
@@ -425,12 +426,13 @@ test('on Windows Full access reads this computer\'s own drive shares and the lon
     );
     for (const path of ['\\\\?\\Volume{0b3a1c2d-0000-0000-0000-100000000000}\\Users\\someone\\.jason\\config\\settings.json', '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\notes.md']) {
         for (const [tool, input] of [['Read', { file_path: path }], ['Write', { file_path: path, content: 'x' }], ['Bash', { command: `cat '${path}'` }], ['PowerShell', { command: `Get-Content '${path}'` }]] as const) {
-            assert.deepEqual(fullAccessJudgement(tool, input, named), refused(dataRefusal), `${tool} ${path}`);
+            assert.deepEqual(fullAccessJudgement(tool, input, named), refused(unplacedRefusal), `${tool} ${path}`);
             if (tool !== 'PowerShell') assert.equal(judge(tool, input, named).verdict, 'deny', `Ask first: ${tool} ${path}`);
         }
     }
     assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\localhost\\C$\\Users\\someone\\notes.md' }, named), runs, 'a file of no kind, by this computer\'s drive share');
-    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\localhost\\Users\\someone\\notes.md' }, named), refused(dataRefusal), 'a share of this computer that names no drive, which is not read');
+    assert.deepEqual(fullAccessJudgement('Read', { file_path: '\\\\localhost\\Users\\someone\\notes.md' }, named), refused(unplacedRefusal), 'a share of this computer that names no drive, which is not read');
+    assert.match(unplacedRefusal, /could not place where that path leads/);
     assert.deepEqual(fullAccessJudgement('Read', { file_path: `\\\\server\\C$\\${below}` }, named), runs, 'another computer\'s share');
 });
 
