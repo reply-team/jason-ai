@@ -938,18 +938,17 @@ file), and a command told on its input which files to read (`--files0-from`), ar
 where it can lead, and one whose brace group can name another folder is refused. On
 Windows a path that names this computer as another computer would, `\\localhost\C$\` say, is read as the drive it
 leads to, and one in a device's or a volume's namespace, or on a share of this computer that names no drive, is
-refused with the words that Jason could not place where it leads. The check reads a
-command as the shell would lead it: a relative path from the folder a change of folder led to, a variable it knows
-(your home folder's and your profile's, the drive's, the folder the shell is in, and one the command gives a value of
-its own), a `~` followed by your own account's name, and a pattern by every name it can match, for a read and a listing
-alike, so `cd "$HOME" && cat .jason/config/settings.json`, `cat ~/.jas*/config/settings.json` and `ls ~/.j*` are
-refused. What it does not read is a variable it does not know and a path a program builds while it runs: a command that
-reaches one of them so runs. The turn's folder is its own, the chat's instructions
-and agent folders in it included: before the next turn Jason writes its instructions there afresh and leaves its agent
-folders holding only what Jason placed, in a conversation's own folder and in the shared folder of a conversation an
-earlier version made alike. What Claude Code still asks about in its bypass mode is a card titled "Full access asks
-about this one", which waits thirty minutes and then is not run, and the turn goes on; one line under its title says
-that Claude Code asked about it itself, and "Allow for this chat" works on it as in Ask first. Jason does not read a
+refused with the words that Jason could not place where it leads. The check reads a command as the shell would lead
+it: a relative path from the folder a change of folder led to, a variable it knows (your home folder's and your
+profile's, the drive's, the folder the shell is in, and one the command gives a value of its own), a `~` followed by
+your own account's name, and a pattern by every name it can match, for a read and a listing alike. What it does not
+read is a variable it does not know and a path a program builds while it runs: a command that reaches one of them so
+runs. The turn's folder is its own, the chat's instructions and agent folders in it included: before the next turn
+Jason writes its instructions there afresh and leaves its agent folders holding only what Jason placed, in a
+conversation's own folder and in the shared folder of a conversation an earlier version made alike. What Claude Code
+still asks about in its bypass mode is a card titled "Full access asks about this one", which waits thirty minutes
+and then is not run, and the turn goes on; one line under its title says that Claude Code asked about it itself, and
+"Allow for this chat" works on it as in Ask first. Jason does not read a
 program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
 can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
 Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
@@ -1149,10 +1148,8 @@ Under the chat, these things differ from a terminal:
   skills it carries run with what they declare, and the cards stand in front of what the agent itself asks for.
 - **Limits that are said.** Where reads outside the folders are blocked, Claude Code's documentation leaves one case
   open, a read-only command that names no path after a `cd` the host traced outside the folders, and the desktop adds
-  nothing for it. Where Jason's check rides the turn, it reads a command as the shell would lead it, a change of
-  folder, a variable it knows and a pattern by every name it can match, `ls ~/.j*` say, included; a variable it does
-  not know and a path a program builds while it runs are not read. A network path is told by its spelling, so a mapped
-  drive reads as a local one.
+  nothing for it. Where Jason's check rides the turn, a variable it does not know and a path a program builds while
+  it runs are not read. A network path is told by its spelling, so a mapped drive reads as a local one.
 - **The CLI expands no response file, anywhere.** An argument that starts with an at sign is a word like any other, so
   `jason @args.txt` is a usage error and exits 2; a script that relied on it passes the arguments itself
   ([handbook.md](handbook.md), [the release notes](../RELEASE-NOTES.md)).
