@@ -78,11 +78,12 @@ public static class RuntimeAutostartCommands
     /// The one sentence <c>disable</c> says on stderr, and its help, about what a turn-off means: nothing of Jason starts by
     /// itself after the computer restarts.
     /// </summary>
-    internal const string RestartWarning = "After a restart of this computer nothing of Jason runs until `jason runtime start`.";
+    internal const string RestartWarning = "After a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.";
 
     /// <summary>
-    /// How long <c>enable</c> waits on macOS for the runtime the load started (<c>RunAtLoad</c>) to publish its endpoint
-    /// before it starts one itself: the wait <c>jason runtime start</c> gives the runtime it launches.
+    /// How long <c>enable</c> waits on macOS for the runtime the load started (<c>RunAtLoad</c>) to answer: the wait
+    /// <c>jason runtime start</c> gives the runtime it launches. Past it nothing is launched, since the load's runtime may
+    /// still be starting, a first start that migrates the database say, and a second one would fight it for the data.
     /// </summary>
     internal static readonly TimeSpan RunAtLoadWait = TimeSpan.FromSeconds(30);
 
@@ -97,7 +98,7 @@ public static class RuntimeAutostartCommands
         ArgumentNullException.ThrowIfNull(env);
 
         var registrar = Registrar(env);
-        bool noneBefore;
+        string? before;
         int exit;
         try
         {
@@ -106,7 +107,9 @@ public static class RuntimeAutostartCommands
                 throw AutostartRegistrars.CannotRegister();
             }
 
-            noneBefore = new DescriptorReader(env.Paths).Read() is null;
+            // The instance recorded before the load, stale or not: on macOS the load's runtime is the one that answers with
+            // another, whether a runtime ran before (a re-enable's unload stops launchd's) or a stale file was left.
+            before = new DescriptorReader(env.Paths).Read()?.InstanceId;
             registrar.Apply(Registration(env, registrar.Platform));
             if (!AutostartOff.Remove(env.Paths))
             {
@@ -120,39 +123,69 @@ public static class RuntimeAutostartCommands
             return Fail(env, human, refusal);
         }
 
-        env.Error.WriteLine(await StartNowAsync(env, registrar.Platform, noneBefore, loadWait ?? RunAtLoadWait, cancellationToken).ConfigureAwait(false));
+        env.Error.WriteLine(await StartNowAsync(env, registrar.Platform, before, loadWait ?? RunAtLoadWait, cancellationToken).ConfigureAwait(false));
         return exit;
     }
 
     /// <summary>
-    /// The runtime started now, where none answers, and the one sentence that says how it went. On macOS the load has started
-    /// it already where no runtime was recorded before (<c>RunAtLoad</c>): its endpoint is waited for first, so a second one is
-    /// never launched beside it. Then <c>jason runtime start</c>'s own routine, which reports a runtime that answers and starts
-    /// one otherwise. An environment that names no process table starts nothing, as one that names no registrar registers
-    /// nothing.
+    /// The runtime started now, where none answers, and the one sentence that says how it went. On macOS the load starts it
+    /// (<c>RunAtLoad</c>), and <c>enable</c> never launches one: it waits for a runtime that answers as another instance than
+    /// the one recorded before the load, and past the wait says that one may still be starting. Elsewhere
+    /// <c>jason runtime start</c>'s own routine, which reports a runtime that answers and starts one otherwise. An environment
+    /// that names no process table starts nothing, as one that names no registrar registers nothing.
     /// </summary>
-    private static async Task<string> StartNowAsync(CliEnvironment env, AutostartPlatform platform, bool noneBefore, TimeSpan loadWait, CancellationToken cancellationToken)
+    private static async Task<string> StartNowAsync(CliEnvironment env, AutostartPlatform platform, string? before, TimeSpan loadWait, CancellationToken cancellationToken)
     {
         if (env.Processes is null)
         {
             return "This environment starts no runtime, so none was started now: `jason runtime start` starts one.";
         }
 
-        if (platform is AutostartPlatform.MacOs && noneBefore)
+        if (platform is AutostartPlatform.MacOs)
         {
-            var reader = new DescriptorReader(env.Paths);
-            var waited = System.Diagnostics.Stopwatch.StartNew();
-            while (reader.Read() is null && waited.Elapsed < loadWait)
-            {
-                await Task.Delay(RunAtLoadPoll, cancellationToken).ConfigureAwait(false);
-            }
+            return await LoadStartedAsync(env, before, loadWait, cancellationToken).ConfigureAwait(false)
+                ? Running
+                : "The runtime starts at each logon from here on; launchd's load starts it now, and it did not answer yet, so it may still be starting: `jason runtime status` says when it runs.";
         }
 
         using var said = new StringWriter(CultureInfo.InvariantCulture);
         var started = await RuntimeStartCommand.RunAsync(env with { Out = said }, human: false, cancellationToken).ConfigureAwait(false);
         return started == ExitCodes.Success
-            ? "The runtime runs now, and starts at each logon from here on."
+            ? Running
             : $"The runtime starts at each logon from here on, but none runs now: {Refusal(said.ToString())}";
+    }
+
+    private const string Running = "The runtime runs now, and starts at each logon from here on.";
+
+    /// <summary>
+    /// macOS: whether, within the wait, a runtime answers as an instance other than <paramref name="before"/>, the one the
+    /// load started; asked as <c>jason runtime status</c> asks, which launches nothing. Where the wait runs out, a runtime that
+    /// answers as the instance before it, one launchd did not start and the load left running, still counts.
+    /// </summary>
+    private static async Task<bool> LoadStartedAsync(CliEnvironment env, string? before, TimeSpan loadWait, CancellationToken cancellationToken)
+    {
+        var reader = new DescriptorReader(env.Paths);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            if (reader.Read() is { } descriptor && !string.Equals(descriptor.InstanceId, before, StringComparison.Ordinal) && await AnswersAsync(env, cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            if (waited.Elapsed >= loadWait)
+            {
+                return before is not null && reader.Read() is { } last && string.Equals(last.InstanceId, before, StringComparison.Ordinal) && await AnswersAsync(env, cancellationToken).ConfigureAwait(false);
+            }
+
+            await Task.Delay(RunAtLoadPoll, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<bool> AnswersAsync(CliEnvironment env, CancellationToken cancellationToken)
+    {
+        using var said = new StringWriter(CultureInfo.InvariantCulture);
+        return await RuntimeStatusCommand.RunAsync(env with { Out = said }, human: false, cancellationToken).ConfigureAwait(false) == ExitCodes.Success;
     }
 
     /// <summary>The sentence of a refusal <c>jason runtime start</c> printed, or what it printed where that is no refusal.</summary>

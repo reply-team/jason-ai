@@ -12,7 +12,7 @@ namespace Jason.Cli.Autostart;
 /// kept. No archive carries either: an import is a new machine.
 /// </summary>
 /// <remarks>
-/// One JSON object, <c>{"since":"&lt;ISO-8601 UTC&gt;","version":"&lt;the jason that wrote it&gt;"}</c>. Its presence is what
+/// One JSON object, <c>{"schema":1,"since":"&lt;ISO-8601 UTC&gt;","version":"&lt;the jason that wrote it&gt;"}</c>. Its presence is what
 /// decides; a record that cannot be read still stands. On macOS launchd's own record of the label as disabled, which a
 /// <c>disable</c> leaves by <c>launchctl unload -w</c>, counts as the same word (<see cref="IAutostartRegistrar.RecordsOff"/>),
 /// so a <c>disable</c> made before this file existed still holds there.
@@ -33,6 +33,7 @@ internal static class AutostartOff
             using (var writer = new Utf8JsonWriter(stream))
             {
                 writer.WriteStartObject();
+                writer.WriteNumber("schema", 1);
                 writer.WriteString("since", moment.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
                 writer.WriteString("version", version);
                 writer.WriteEndObject();

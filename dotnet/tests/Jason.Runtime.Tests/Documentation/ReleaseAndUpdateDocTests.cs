@@ -608,7 +608,7 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains("`RunAtLoad`", page, StringComparison.Ordinal);
         Assert.Contains("holds until the next logon", page, StringComparison.Ordinal);
         Assert.Contains("`<data>/autostart/off.json`", page, StringComparison.Ordinal);
-        Assert.Contains("after a restart of this computer nothing of Jason runs until `jason runtime start`", page, StringComparison.Ordinal);
+        Assert.Contains("after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop", page, StringComparison.Ordinal);
         Assert.Contains("`jason export` carries neither: an import is a", page, StringComparison.Ordinal);
         Assert.Contains("jason runtime stop", page, StringComparison.Ordinal);
     }
