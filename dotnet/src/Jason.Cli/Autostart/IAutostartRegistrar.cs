@@ -25,6 +25,12 @@ public interface IAutostartRegistrar
 
     /// <summary>Takes it away, and says what went. Removing what is not there is not an error.</summary>
     AutostartRemoval Remove(AutostartRegistration registration);
+
+    /// <summary>
+    /// Whether the machine itself records that the runtime is not to start at logon: on macOS launchd's record of the label as
+    /// disabled, which <c>disable</c> leaves; no other platform keeps such a record, and says no.
+    /// </summary>
+    bool RecordsOff() => false;
 }
 
 /// <summary>What a removal took away, so that whatever reports it says what really happened.</summary>
