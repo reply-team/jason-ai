@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -83,6 +84,9 @@ public class JasonPathsTests
         (nameof(JasonPaths.DescriptorFile), "run/runtime.json"),
         (nameof(JasonPaths.LockFile), "run/runtime.lock"),
         (nameof(JasonPaths.StartOwedFile), "run/start-owed.json"),
+        (nameof(JasonPaths.AutostartDirectory), "autostart"),
+        (nameof(JasonPaths.AutostartOffFile), "autostart/off.json"),
+        (nameof(JasonPaths.AutostartDefaultFile), "autostart/default.json"),
         (nameof(JasonPaths.LogsDirectory), "logs"),
         (nameof(JasonPaths.WorkDirectory), "work"),
         (nameof(JasonPaths.RoleSkillsDirectory), "skills/roles"),
@@ -109,6 +113,7 @@ public class JasonPathsTests
     /// <c>jason</c> reads it; and a member added to the paths is added to the list above, or this is red.
     /// </summary>
     [Fact]
+    [Critical(Family.I2, "an updated Jason reads every path of a data directory an older one left")]
     public void A_missing_stamp_answers_every_path_as_today()
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-paths-no-stamp-" + Guid.NewGuid().ToString("N"));
@@ -124,6 +129,7 @@ public class JasonPathsTests
 
     /// <summary>Layout 2 places the six moving parts in <c>setup/</c> and the secrets file in <c>config/</c>; nothing else moves.</summary>
     [Fact]
+    [Critical(Family.I2, "an updated Jason reads every path of a data directory an older one left")]
     public void Layout_two_places_the_moving_parts_under_setup()
     {
         var paths = new JasonPaths(Scratch, 2);

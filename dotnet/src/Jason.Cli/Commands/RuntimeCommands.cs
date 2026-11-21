@@ -67,7 +67,9 @@ public static class RuntimeCommands
             env,
             "stop",
             "Ask the running runtime to shut down and wait until its process is gone. A stop takes back the note that a start is "
-                + "owed (run/start-owed.json), which an install that stopped a runtime left; with --start-owed it writes it instead.",
+                + "owed (run/start-owed.json), which an install that stopped a runtime left; with --start-owed it writes it instead. "
+                + "Where the runtime is registered to start at logon, the stop holds until the next logon, which starts it again, and "
+                + "says so on stderr; jason runtime autostart disable stops that.",
             actor,
             (parseResult, human, cancellationToken) => parseResult.GetValue(onBehalf)
                 ? RuntimeStopCommand.RunOnBehalfAsync(env, human, cancellationToken)

@@ -1610,8 +1610,20 @@ registration carries — and nothing watches it afterwards: a runtime that stops
 starts it. There is no restart policy, no `KeepAlive`, and no second process whose job is to keep the first one
 alive.
 
-**`enable` starts nothing now, and `disable` stops nothing.** They change what happens at the *next* logon.
-Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`. On macOS `disable`, and
+**`enable` also starts the runtime now, where none answers, and `disable` stops nothing.** On macOS the load starts it,
+since the LaunchAgent carries `RunAtLoad`, and `enable` waits up to thirty seconds for that runtime's endpoint before it
+starts one itself; on Windows and Linux it is started as `jason runtime start` starts it. The outcome is one sentence on
+stderr, and a start that fails leaves the registration in place. Stopping a runtime today is still `jason runtime stop`,
+and where the runtime is registered the stop says on stderr that it holds until the next logon, which starts it again.
+
+**`disable` is recorded as your word.** It writes `<data>/autostart/off.json`, the moment and the version that wrote it,
+so that nothing which turns the start at logon on by default turns it on again; on macOS launchd's own record of the label
+as disabled, which `disable` leaves, counts as the same word. `enable` removes the file, `autostart status` says
+`turned_off`, and `jason status`'s optional `autostart` check says the start was turned off by you. `disable` says on
+stderr that after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.
+`jason uninstall` removes
+`off.json`, and `default.json` beside it, also where it keeps the data, and `jason export` carries neither: an import is a
+new machine, where the default holds. On macOS `disable`, and
 `jason uninstall` with it, take the job out of launchd before its file goes — `launchctl unload -w` on the file where it is
 there, then `launchctl remove ai.jason.runtime` by its label, which holds for a job whose file is gone already, each
 waited for ten seconds at most and a job not loaded no error — so no job is left loaded with its plist gone. `-w` records

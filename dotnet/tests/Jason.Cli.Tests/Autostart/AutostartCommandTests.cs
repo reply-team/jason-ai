@@ -423,7 +423,7 @@ public class AutostartCommandTests
     /// <summary>The help of the two verbs that print a registration says what the macOS and Linux ones carry.</summary>
     [Theory]
     [InlineData("enable", "and on macOS and Linux the search path (PATH) this command runs with, since launchd's own is /usr/bin:/bin:/usr/sbin:/sbin and the systemd user manager's reads no shell profile.")]
-    [InlineData("status", "and on macOS and Linux the search path it carries, under path.")]
+    [InlineData("status", "on macOS and Linux the search path it carries, under path, and under turned_off whether you turned it off with jason runtime autostart disable.")]
     public async Task The_help_says_what_a_macos_or_linux_registration_carries(string verb, string said)
     {
         using var machine = new Machine();
