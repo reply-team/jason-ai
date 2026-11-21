@@ -1007,7 +1007,7 @@ public partial class PageClaimsTests
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, from the candidate that carries it, Homebrew's cask installs the same Jason Desktop, from the same release:", package, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, Homebrew's cask installs the same Jason Desktop, from the same release, once the tap carries it; until then the install script is the way:", package, StringComparison.Ordinal);
         Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
         Assert.Contains("Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
         Assert.Contains("Homebrew's older formula is the command line alone, without Jason Desktop: where it is installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the way.", package, StringComparison.Ordinal);
