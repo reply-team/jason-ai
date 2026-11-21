@@ -40,7 +40,8 @@ const report = (channels: NotificationChannel[], enabled = true, lastAt: string 
 
 /** The recorded system.info with the notification section a test states; the recordings hold the toast alone. */
 class Reporting extends FakeApi {
-    constructor(private readonly notifications: NotificationsInfo | null) {
+    /** What the runtime says of the channels; a test changes it to see the page read it again. */
+    constructor(public notifications: NotificationsInfo | null) {
         super();
     }
 
@@ -380,6 +381,39 @@ describe('Notifications in Settings in a browser', () => {
         expect(fake.sent('notification.disable')).toEqual({ channel: 'toast' });
     });
 
+    it('says what Windows answered at the last notification and when, never the switch as it is now', async () => {
+        const at = new Date(Date.now() - 2 * 3_600_000).toISOString();
+        const said = {
+            disabled_for_application: 'Windows answered that Jason was switched off in its notification settings.',
+            disabled_for_user: 'Windows answered that notifications were switched off for every app.',
+            disabled_by_group_policy: 'Windows answered that a group policy switched notifications off.',
+            disabled_by_manifest: 'Windows answered that the application’s manifest switched them off.',
+        };
+        for (const [reason, words_] of Object.entries(said)) {
+            inBrowser(
+                report([
+                    channel({
+                        channel: 'toast',
+                        kind: 'toast',
+                        outcome: 'silenced',
+                        reason,
+                        at,
+                        presence: 'available',
+                    }),
+                ]),
+            );
+            await waitFor(() => screen.getByText('Desktop toast'));
+            expect(words(notifications())).toContain(
+                `Not shown 2 h ago. At that notification, ${words_.charAt(0).toLowerCase()}${words_.slice(1)} Windows is asked again at the next notification.`,
+            );
+            expect(words(notifications())).not.toMatch(
+                /Jason is switched off|are switched off|switches notifications off|switches them off/,
+            );
+            cleanup();
+            shell.info.value = null;
+        }
+    });
+
     it('in the Demo, every switch is inert and says so', async () => {
         mode.value = 'demo';
         const fake = inBrowser(report([channel({ channel: 'toast', kind: 'toast' })]));
@@ -427,5 +461,59 @@ describe('Notifications in Settings inside the desktop', () => {
         expect(words(notifications())).toContain(
             'Turn one channel on or off with its switch, or with jason notification enable or disable; a provider’s channel is connected or disconnected on the Connect panel. A switch is made in your name. Every notification at once is switched in the settings file.',
         );
+    });
+    it('reads the channels again when the window takes the focus back', async () => {
+        mode.value = 'live';
+        const fake = new Reporting(
+            report([
+                channel({
+                    channel: 'toast',
+                    kind: 'toast',
+                    outcome: 'silenced',
+                    reason: 'disabled_for_application',
+                    at: new Date().toISOString(),
+                    presence: 'available',
+                }),
+            ]),
+        )
+            .answer('approval.list', 'approval.list/pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('preference.list', 'preference.list/none')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all');
+        watch(fake);
+        activatePlugins(browserPlugins);
+        localStorage.clear();
+        location.hash = '';
+        route.value = { screen: 'attention' };
+        session.clear();
+        localStorage.setItem(
+            'jason.ui.session',
+            JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
+        );
+        render(<Console api={fake} desktop={stubDesktop(setupFound)} stream={stubStream().stream} />);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.click(
+            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Settings' }),
+        );
+        await screen.findByRole('heading', { name: 'Settings', level: 1 });
+        fireEvent.click(
+            within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('button', { name: 'Notifications' }),
+        );
+        await waitFor(() => expect(words(notifications())).toContain('Not shown just now.'));
+
+        fake.notifications = report([
+            channel({
+                channel: 'toast',
+                kind: 'toast',
+                outcome: 'delivered',
+                at: new Date().toISOString(),
+                presence: 'available',
+            }),
+        ]);
+        fireEvent.focus(window);
+
+        await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
+        expect(words(notifications())).not.toContain('Not shown');
     });
 });

@@ -2503,8 +2503,9 @@ internal static partial class StatusChecks
     /// A person's own choice is never a failure: notifications switched off, or a machine with no desktop by design.
     /// Windows' switches are read as they stand now where they can be (<see cref="IToastSetting"/>), and trusted one way:
     /// a switch off now is said as a fact of now, whether the last toast was shown or not, and after a failure, which is
-    /// never hidden and comes first; a switch not off now never promises that a toast reaches anybody, it only says that
-    /// the last one, which Windows did not show, was not shown then.
+    /// never hidden and comes first; a switch on now after a toast Windows did not show because a switch was off then
+    /// counts the toast as reaching the person again, and says, dated, that the last one was not shown and the next one
+    /// will tell.
     /// A runtime in session 0 is: a service or an SSH session runs there, but on a desktop it is most likely a runtime a
     /// 0.1.0 logon task left running, and for that one the fact names the acts in the order docs/release-and-update.md
     /// §8 gives them — the registration, the stop, a start — never the stop alone, which would leave the old task to
@@ -2543,6 +2544,7 @@ internal static partial class StatusChecks
         var reaching = new List<string>();
         var onAgain = new List<string>();
         var hidden = false;
+        string? switchedOn = null;
         DateTimeOffset? lastDelivered = null;
         foreach (var channel in on)
         {
@@ -2593,7 +2595,10 @@ internal static partial class StatusChecks
             else if (channel.Kind == ChannelKinds.Toast && switchNow == ToastSwitch.NotOff && outcome == ChannelResults.Silenced
                 && channel.Reason is SilencedReasons.DisabledForApplication or SilencedReasons.DisabledForUser or SilencedReasons.DisabledByGroupPolicy)
             {
-                asides.Add($"Windows' switches for Jason's notifications read as on now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
+                // The switch read fresh is on, and the last send's answer was off: the toast reaches the person again as far
+                // as anything here can tell, and what is said is what happened, dated, and that the next one will tell.
+                reaching.Add(channel.Channel);
+                switchedOn = $"Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then; the next one will tell.";
             }
             else if (outcome == ChannelResults.Silenced)
             {
@@ -2639,6 +2644,18 @@ internal static partial class StatusChecks
         // this runtime started; either may have reached them before. The plural is defensive and unreachable today: only
         // the toast is ever written as off (ToastChannel.Off), and a plugin turned off is not a channel at all, so at most
         // one channel is on again.
+        // A toast counted again because its switch reads on now has a sentence of its own: where nothing delivered, it is
+        // the whole of what is said of the last one, and beside a delivery it follows that delivery.
+        if (switchedOn is not null && lastDelivered is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, string.Join(" ", [$"Notifications reach you by {string.Join(" and ", reaching)}; {switchedOn}", .. asides]), null);
+        }
+
+        if (switchedOn is not null)
+        {
+            asides.Insert(0, switchedOn);
+        }
+
         var last = lastDelivered is { } delivered
             ? $"the last one was delivered at {When(delivered)}."
             : notifications.LastNotificationId is null ? "nothing has needed one yet."

@@ -13,11 +13,15 @@ const notAttempted: Readonly<Record<string, string>> = {
     binding_invalid: 'The channel’s binding is not valid.',
 };
 
+/**
+ * What Windows answered when the last toast was sent, which is the only time the runtime asks it: said as what happened
+ * then, never as the switch now, since the person may have changed it since.
+ */
 const silenced: Readonly<Record<string, string>> = {
-    disabled_for_application: 'Windows did not show it: Jason is switched off in its notification settings.',
-    disabled_for_user: 'Windows did not show it: notifications are switched off for every app.',
-    disabled_by_group_policy: 'Windows did not show it: a group policy switches notifications off.',
-    disabled_by_manifest: 'Windows did not show it: the application’s manifest switches them off.',
+    disabled_for_application: 'Windows answered that Jason was switched off in its notification settings.',
+    disabled_for_user: 'Windows answered that notifications were switched off for every app.',
+    disabled_by_group_policy: 'Windows answered that a group policy switched notifications off.',
+    disabled_by_manifest: 'Windows answered that the application’s manifest switched them off.',
 };
 
 /** What a channel did with the last notification, in words, from the runtime's outcome, reason, code and class. */
@@ -33,8 +37,12 @@ export function outcomeWords(channel: NotificationChannel, now: Date): string {
             const why = [channel.code, channel.class].filter((each) => each).join(', ');
             return `Failed${when}${why ? ` (${why})` : ''}.`;
         }
-        case 'silenced':
-            return `Not shown${when}.${channel.reason && silenced[channel.reason] ? ` ${silenced[channel.reason]}` : ''}`;
+        case 'silenced': {
+            const answered = channel.reason ? silenced[channel.reason] : undefined;
+            return answered
+                ? `Not shown${when}. At that notification, ${answered.charAt(0).toLowerCase()}${answered.slice(1)} Windows is asked again at the next notification.`
+                : `Not shown${when}.`;
+        }
         case 'not_attempted':
             return (channel.reason && notAttempted[channel.reason]) || `Not attempted${when}.`;
         default:

@@ -566,7 +566,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         };
     }, [api, desktop, dock]);
     useEffect(() => {
-        const onFocus = () => connect.reloadOnFocus();
+        const onFocus = () => {
+            connect.reloadOnFocus();
+            void shell.reloadOnFocus(api);
+        };
         window.addEventListener('focus', onFocus);
         const onKey = (event: KeyboardEvent) => {
             if (event.key === 'Escape') closeMenus();

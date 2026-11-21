@@ -352,7 +352,7 @@ public sealed class NotificationsCheckTests
         "A group policy on this machine switches Windows' notifications off now, so none of Jason's is shown: only an administrator can change it.";
 
     private const string AllowsNow =
-        "Windows' switches for Jason's notifications read as on now; the last one, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then.";
+        "Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the last one, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then; the next one will tell.";
 
     /// <summary>Windows' switches as a test sets them: never this machine's own, and counted, so a read that was not needed shows.</summary>
     private sealed class FakeToastSetting(ToastSwitch? now) : IToastSetting
@@ -452,25 +452,25 @@ public sealed class NotificationsCheckTests
     }
 
     /// <summary>
-    /// A switch not off now after a toast Windows did not show because a switch was off then says so, and promises
-    /// nothing: no toast has been shown since, so the toast is not said to reach anybody.
+    /// A switch on now after a toast Windows did not show because a switch was off then counts the toast as reaching the
+    /// person again, the check ok, and says that none has been shown since the switch came on, so the next one will tell.
     /// </summary>
     [Theory]
     [InlineData("disabled_for_application")]
     [InlineData("disabled_for_user")]
     [InlineData("disabled_by_group_policy")]
-    public async Task A_switch_not_off_now_after_a_toast_not_shown_says_so_and_promises_nothing(string reason)
+    public async Task A_switch_on_now_after_a_toast_not_shown_is_ok_and_says_the_next_one_will_tell(string reason)
     {
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason)], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(ToastSwitch.NotOff)),
-            CheckState.Absent,
-            AllowsNow);
+            CheckState.Ok,
+            "Notifications reach you by toast; " + AllowsNow);
 
-        // Beside a plugin that delivers, the person is reached through the plugin, and the toast's sentence comes after.
+        // Beside a plugin that delivers, both are counted, the plugin's delivery is the last one named, and the toast's sentence comes after.
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", reason), Ntfy("delivered")], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(ToastSwitch.NotOff)),
             CheckState.Ok,
-            "Notifications reach you by ntfy; the last one was delivered at 2026-10-01 09:06 UTC. " + AllowsNow);
+            "Notifications reach you by toast and ntfy; the last one was delivered at 2026-10-01 09:06 UTC. " + AllowsNow);
     }
 
     /// <summary>A program's own manifest is no switch a person reads in Settings: a toast it silenced is said as it was.</summary>
