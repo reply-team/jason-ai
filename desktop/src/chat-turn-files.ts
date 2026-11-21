@@ -66,13 +66,21 @@ export function turnSettingsPath(turns: string, turnId: string): string {
 }
 
 /**
- * Writes the settings of a turn the hook rides, in its mode (`hookedSettings`), beside its MCP configuration, the same way: readable
- * by this user alone, never over a file already there.
+ * Writes the settings of a turn the hook rides, in its mode (`hookedSettings`), with what they set of the turn's environment
+ * (`pinnedEnvironment`), beside its MCP configuration, the same way: readable by this user alone, never over a file already
+ * there.
  */
-export function writeTurnSettings(turns: string, turnId: string, hookUrl: string, secret: string, mode: Exclude<ChatMode, 'plan_only'> = 'full_access'): string {
+export function writeTurnSettings(
+    turns: string,
+    turnId: string,
+    hookUrl: string,
+    secret: string,
+    mode: Exclude<ChatMode, 'plan_only'> = 'full_access',
+    turn: Parameters<typeof hookedSettings>[3] = {},
+): string {
     const file = turnSettingsPath(turns, turnId);
     mkdirSync(turns, { recursive: true, mode: 0o700 });
-    writeFileSync(file, `${JSON.stringify(hookedSettings(mode, hookUrl, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    writeFileSync(file, `${JSON.stringify(hookedSettings(mode, hookUrl, secret, turn))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     return file;
 }
 

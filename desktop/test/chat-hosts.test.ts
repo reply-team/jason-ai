@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { helpNouns, modeFence, readFence, withoutRequestFiles } from '../src/chat-deny.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, pinnedEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
@@ -477,6 +477,67 @@ test('a desktop started from inside a Claude Code session hands the host none of
     assert.deepEqual(Object.keys(env).sort(), ['PATH', 'JASON_CHAT_TURN', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ...Object.keys(plantedConfiguration)].sort());
     for (const [name, value] of Object.entries(plantedConfiguration)) assert.equal(env[name], value, name);
     assert.ok(!JSON.stringify(env).includes('planted-messaging-token'));
+});
+
+test('what a hooked turn\'s settings set of its environment is, for each name the desktop decides, the value the turn\'s environment holds or an empty one where it withholds it: never the scrub, a provider\'s variable or a key', () => {
+    const inherited = {
+        Path: '/usr/bin',
+        HOME: '/h',
+        JASON_DATA_DIR: '/old',
+        JASON_CHAT_TURN: '0',
+        JASON_CONFINED: '1',
+        JASON_ATTEMPT_ID: 'att_planted',
+        CLAUDE_AUTO_BACKGROUND_TASKS: '1',
+        CLAUDE_CODE_EFFORT_LEVEL: 'low',
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+        ...plantedMarkers,
+        ...plantedConfiguration,
+    };
+    const shapes = [
+        { mode: 'full_access' as const, home: '/turn-home', effortNamed: true, data: '/d' },
+        { mode: 'full_access' as const, data: null },
+        { mode: 'ask_first' as const, effortNamed: true, data: '/d' },
+        { mode: 'auto_edit' as const, data: null },
+    ];
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        for (const { mode, data, ...options } of shapes) {
+            for (const keyed of [false, true]) {
+                const provider: Record<string, string> = keyed ? { ANTHROPIC_API_KEY: 'sk-planted-pinned', CLAUDE_CONFIG_DIR: '/keyed' } : {};
+                const env = hostEnvironment(inherited, { platform, bundleVersion: null, bundle: '/b', data, program: 'claude', keyed, provider, mode, ...options });
+                const pins = pinnedEnvironment(env, options);
+                const said = `${platform} ${mode} ${JSON.stringify(options)} ${keyed}`;
+                const expected = [
+                    'PATH',
+                    'JASON_DATA_DIR',
+                    'JASON_CHAT_TURN',
+                    'JASON_CONFINED',
+                    'JASON_ATTEMPT_ID',
+                    'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR',
+                    'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS',
+                    'CLAUDE_AUTO_BACKGROUND_TASKS',
+                    ...Object.keys(plantedMarkers),
+                    ...('home' in options ? ['HOME'] : []),
+                    ...('effortNamed' in options ? ['CLAUDE_CODE_EFFORT_LEVEL'] : []),
+                ];
+                assert.deepEqual(Object.keys(pins).sort(), expected.sort(), said);
+                // Each the value the turn's environment holds, by any spelling of its name, or empty where it holds none.
+                for (const [name, value] of Object.entries(pins)) {
+                    assert.equal(value, Object.entries(env).find(([each]) => each.toUpperCase() === name)?.[1] ?? '', `${said} ${name}`);
+                }
+                assert.equal(pins.PATH, `/b${platform === 'win32' ? ';' : ':'}/usr/bin`, said);
+                assert.equal(pins.JASON_CHAT_TURN, '1', said);
+                assert.equal(pins.JASON_DATA_DIR, data ?? '', said);
+                assert.equal(pins.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR, '1', said);
+                assert.equal(pins.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1', said);
+                for (const name of ['JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${said} ${name}`);
+                if ('home' in options) assert.equal(pins.HOME, '/turn-home', said);
+                if ('effortNamed' in options) assert.equal(pins.CLAUDE_CODE_EFFORT_LEVEL, '', said);
+                assert.ok(!('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' in pins), said);
+                assert.ok(!('ANTHROPIC_API_KEY' in pins) && !('CLAUDE_CONFIG_DIR' in pins), said);
+                assert.ok(!JSON.stringify(pins).includes('sk-planted-pinned'), said);
+            }
+        }
+    }
 });
 
 test('a key provider\'s variables are added to the host\'s environment over the desktop\'s own', () => {

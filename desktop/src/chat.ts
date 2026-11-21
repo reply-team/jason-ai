@@ -35,7 +35,7 @@ import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
-import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -1930,6 +1930,25 @@ export class Chat {
         let requests = 0;
         /** Whether the log was told that a tool of this turn ran or was refused unseen by its hook (`hookFiltered`). */
         let filteredLogged = false;
+        // A start's environment is built as it starts, from the mode it starts in, as its command line is (`argsFor`), never
+        // from the conversation's record: a Full access start carries no scrub (`hostEnvironment`), and a start in Ask first,
+        // the one a turn is narrowed to before it starts or started again in after Claude Code's bypass was found not
+        // available, carries Ask first's. The settings of a turn the hook rides set the same values (`pinnedEnvironment`),
+        // written for the mode the start runs in as its environment is.
+        const environmentOptions = () => ({
+            platform: this.#platform,
+            bundle: this.#options.bundle,
+            data: this.#options.dataNamed ? paths.data : null,
+            program: resolved.program,
+            keyed: resolved.keyed,
+            provider: resolved.provider,
+            bundleVersion: this.#options.bundleVersion,
+            effortNamed: resolved.effort !== undefined,
+            mode: running.mode,
+            ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
+        });
+        const environmentNow = () => hostEnvironment(this.#options.env, environmentOptions());
+        const pinsNow = () => pinnedEnvironment(environmentNow(), environmentOptions());
         // Closes what the turn opened. The file's removal runs whatever came before it, and a removal that fails (a scanner
         // holding the file on Windows) leaves the file for the next start to remove.
         const finishFiles = async () => {
@@ -2004,10 +2023,10 @@ export class Chat {
                 const server = newServerName();
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret, server);
                 const hookUrl = endpoint.hookUrl;
-                let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode) : undefined;
+                let settingsFile = hooked && hookedMode !== null ? writeTurnSettings(paths.turns, id, hookUrl, secret, hookedMode, { env: pinsNow() }) : undefined;
                 narrowSettings = (mode) => {
                     rmSync(turnSettingsPath(paths.turns, id), { force: true });
-                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, mode);
+                    settingsFile = writeTurnSettings(paths.turns, id, hookUrl, secret, mode, { env: pinsNow() });
                 };
                 // The host's data rules name the conversations' folders present at this turn's start; one made later is
                 // refused by the permission model's data rule alone, since a deny wins over an allow and no rule says "all of
@@ -2038,23 +2057,6 @@ export class Chat {
             return;
         }
 
-        // A start's environment is built as it starts, from the mode it starts in, as its command line is (`argsFor`), never
-        // from the conversation's record: a Full access start carries no scrub (`hostEnvironment`), and a start in Ask first,
-        // the one a turn is narrowed to before it starts or started again in after Claude Code's bypass was found not
-        // available, carries Ask first's.
-        const environmentNow = () =>
-            hostEnvironment(this.#options.env, {
-                platform: this.#platform,
-                bundle: this.#options.bundle,
-                data: this.#options.dataNamed ? paths.data : null,
-                program: resolved.program,
-                keyed: resolved.keyed,
-                provider: resolved.provider,
-                bundleVersion: this.#options.bundleVersion,
-                effortNamed: resolved.effort !== undefined,
-                mode: running.mode,
-                ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
-            });
         // On Windows a read-only Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run
         // file; a Full access turn runs with no sandbox, so there is nothing to check.
         if (resolved.program === 'codex' && this.#platform === 'win32' && running.mode !== 'full_access') {

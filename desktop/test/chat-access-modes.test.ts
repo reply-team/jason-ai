@@ -20,6 +20,7 @@ import { fileLogger } from '../src/log.ts';
 import type { Programs } from '../src/programs.ts';
 import { claudeFloor, compareVersions } from '../src/host-version.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
+import { plantedMarkers } from './planted-session.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -675,6 +676,51 @@ test('Claude Code refuses its bypass mode before it starts: the turn starts agai
     assert.deepEqual(notices(next), []);
     assert.deepEqual(r.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default', 'default'], 'within the minute no bypass is asked for again');
     assert.ok(sealedLine(r.hosts().at(-1)?.args ?? []));
+});
+
+/** The `env` a turn's settings set, as the stand-in said it (`{ "pins": true }`), one per start that spoke. */
+const pinsOf = (said: ChatEvent[]) => texts(said).flatMap((text) => (text.startsWith('pins: ') && text !== 'pins: none' ? [JSON.parse(text.slice('pins: '.length)) as Record<string, string>] : []));
+
+/** Holds a turn's settings `env` to the environment its start was given: every name the value it holds, or empty where it holds none. */
+function pinsHold(host: Recorded | undefined, pins: Record<string, string> | undefined, at: string) {
+    assert.ok(pins !== undefined && host !== undefined, `${at}: the settings set an env`);
+    for (const [name, value] of Object.entries(pins)) assert.equal(value, Object.entries(host.env).find(([each]) => each.toUpperCase() === name)?.[1] ?? '', `${at}: ${name}`);
+    for (const name of ['PATH', 'JASON_CHAT_TURN', 'JASON_DATA_DIR', 'JASON_CONFINED', 'JASON_ATTEMPT_ID', 'CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) {
+        assert.ok(name in pins, `${at}: ${name}`);
+    }
+    assert.equal(pins.JASON_CHAT_TURN, '1', at);
+    for (const name of ['JASON_ATTEMPT_ID', 'CLAUDE_AUTO_BACKGROUND_TASKS', ...Object.keys(plantedMarkers)]) assert.equal(pins[name], '', `${at}: ${name}`);
+    assert.ok(!('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB' in pins), `${at}: never the scrub`);
+}
+
+test('the settings of every turn the hook rides set what the desktop decides of its environment, name by name the values its start was given, whatever the desktop inherited: in Full access, Ask first and Auto-edit, and in a start narrowed to Ask first', async (t) => {
+    const inherited = { ...plantedMarkers, JASON_CHAT_TURN: '0', JASON_ATTEMPT_ID: 'att_planted', CLAUDE_AUTO_BACKGROUND_TASKS: '1' };
+    const r = rig(t, { env: inherited });
+    const { id } = await r.chat.create();
+    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+        if (mode !== 'full_access') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        plan(r, [{ pins: true }]);
+        const said = await r.turn(id, mode, claude);
+        assert.equal(r.started.at(-1), mode, mode);
+        const [pins] = pinsOf(said);
+        pinsHold(r.hosts().at(-1), pins, mode);
+        // HOME where the turn names one, a Full access turn.
+        assert.equal(pins !== undefined && 'HOME' in pins, mode === 'full_access', `${mode}: HOME`);
+    }
+    // Plan only rides no hook and has no settings file to set it in: its settings are inline and set none.
+    await r.chat.setMode(id, 'plan_only');
+    plan(r, [{ pins: true }]);
+    assert.ok(texts(await r.turn(id, 'plan', claude)).includes('pins: none'));
+    // A Full access start whose bypass Claude Code refused is started again in Ask first, its settings written again with
+    // that start's own environment.
+    const n = rig(t, { env: { ...inherited, STUB_BYPASS: 'refused' } });
+    const fresh = await n.chat.create();
+    plan(n, [{ pins: true }]);
+    const narrowed = await n.turn(fresh.id, 'hello', claude);
+    assert.deepEqual(n.hosts().map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    const [again] = pinsOf(narrowed);
+    pinsHold(n.hosts()[1], again, 'narrowed');
+    assert.equal(again !== undefined && 'HOME' in again, false, 'narrowed: no HOME, as Ask first names none');
 });
 
 test('a new chat\'s first send runs in Full access, in Claude Code\'s bypass, on every system: no Full access turn carries the scrub, under which Claude Code 2.1.329 starts in its default mode, nor one the desktop inherited, and an Ask first turn keeps it off Linux', async (t) => {

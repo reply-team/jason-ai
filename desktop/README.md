@@ -96,7 +96,12 @@ the chat as in a terminal, with no block of reads outside the working folders. `
 the person's `defaultMode` never decides the mode; their deny and ask rules keep working, an ask a card, and their hooks
 run beside the turn's, which still sees every tool the model asks for; a hook of the person's own that rewrites a
 tool's input is their configuration acting. A hook or a rule a Full access turn leaves in the person's Claude Code
-configuration acts in every later Full access turn and in their own terminal. Every other turn keeps the sealed command
+configuration acts in every later Full access turn and in their own terminal. The settings file of every turn the hook
+rides sets, as `env`, what the desktop decides of the turn's environment (`pinnedEnvironment`): PATH, the data
+directory, `JASON_CHAT_TURN`, the folder and background variables, and empty values for what it withholds, a session's
+markers among them. Claude Code writes a settings file's `env` over the environment it was started with, and the
+turn's file outranks the person's and a project's, so a PATH or another of those variables in the person's own `env`
+does not apply in the turn, which keeps the desktop's own. Every other turn keeps the sealed command
 line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: Plan only, Ask
 first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
 browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once

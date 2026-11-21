@@ -163,6 +163,21 @@ test('the settings of a turn the hook rides: no block of reads outside the folde
     });
 });
 
+test('the settings of a turn the hook rides set, as `env`, what the desktop decides of the turn\'s environment, in every mode the hook rides, and the file written for the turn carries it', (t) => {
+    const env = { PATH: '/b:/usr/bin', JASON_CHAT_TURN: '1', JASON_DATA_DIR: '', CLAUDE_CODE_SIMPLE: '' };
+    for (const mode of ['full_access', 'ask_first', 'auto_edit'] as const) {
+        const settings = hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret', { env }) as Record<string, unknown>;
+        assert.deepEqual(settings['env'], env, mode);
+        assert.deepEqual({ ...settings, env: undefined }, { ...hookedSettings(mode, 'http://127.0.0.1:4100/hook', 'the-secret'), env: undefined }, `${mode}: nothing else changes`);
+    }
+    const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
+    t.after(() => rmSync(turns, { recursive: true, force: true }));
+    for (const mode of ['full_access', 'ask_first'] as const) {
+        const file = writeTurnSettings(turns, newTurnId(), 'http://127.0.0.1:1/hook', 's', mode, { env });
+        assert.deepEqual((JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)['env'], env, mode);
+    }
+});
+
 test('the turn\'s settings file sits beside its MCP file, readable by its user alone, and goes with it', (t) => {
     const turns = mkdtempSync(join(tmpdir(), 'jason-turns-'));
     t.after(() => rmSync(turns, { recursive: true, force: true }));

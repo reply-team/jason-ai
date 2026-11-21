@@ -22,6 +22,8 @@
 //   { "servers": true }                               Claude Code only: say "servers: " and the names the turn's MCP file gives its servers
 //   { "defences": true }                              Claude Code only: say "defences: " and the server defences the turn's settings
 //                                                    carry, inline or in their file, in a fixed order, or "none"
+//   { "pins": true }                                  Claude Code only: say "pins: " and the JSON of the `env` the turn's
+//                                                    settings set, inline or in their file, or "none"
 //   { "recover": "words" }                            Codex only: report an error that its turn then completes past
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
@@ -249,6 +251,10 @@ async function claude(args, stdin) {
             const settings = JSON.parse(given.trimStart().startsWith('{') ? given : readFileSync(given, 'utf8'));
             const carried = ['disableClaudeAiConnectors', 'deniedMcpServers', 'disableSkillShellExecution'].filter((key) => key in settings);
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `defences: ${carried.join(' ') || 'none'}` }] } });
+        } else if (step.pins !== undefined) {
+            const given = args[args.indexOf('--settings') + 1];
+            const settings = JSON.parse(given.trimStart().startsWith('{') ? given : readFileSync(given, 'utf8'));
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `pins: ${settings.env === undefined ? 'none' : JSON.stringify(settings.env)}` }] } });
         } else if (step.wait !== undefined) return wait(step.wait);
         else if (step.jam !== undefined) {
             rmSync(config, { force: true });

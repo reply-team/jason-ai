@@ -11,7 +11,7 @@ import { isTurnServerName, promptToolName } from './chat-permission-endpoint.ts'
 import { attemptVariable, chatTurnVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
 import { compareVersions, noChromeFrom } from './host-version.ts';
 import { withReplyClient } from './reply-client.ts';
-import { isSessionMarker } from './session-markers.ts';
+import { isSessionMarker, sessionMarkers } from './session-markers.ts';
 
 /**
  * What Claude Code runs without asking anyone, beside what its own rules already let run and the allow list's jason verbs
@@ -158,10 +158,15 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
  * 2026-11-20): "When multiple PreToolUse hooks return different decisions, precedence is `deny` > `defer` > `ask` >
  * `allow`." The hook sees the tool use as the model asked for it; a hook of the person's own that rewrites the input is
  * their configuration acting. An Ask first or Auto-edit turn the hook rides is sealed as Plan only's (`claudeArguments`).
+ *
+ * The file also sets, as `env`, what the desktop decides of the turn's environment (`pinnedEnvironment`), given as `env`,
+ * in every mode the hook rides: a settings file of the person's, which a Full access turn loads, or a project's, which
+ * every turn loads, could otherwise put its own PATH or its own value of a turn's variable in place of the desktop's.
  */
-export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string) {
+export function hookedSettings(mode: Exclude<ChatMode, 'plan_only'>, hookUrl: string, secret: string, turn: { env?: Readonly<Record<string, string>> } = {}) {
     return {
         ...(mode === 'full_access' ? {} : { permissions: { ask: ['WebFetch(domain:*)'] } }),
+        ...(turn.env === undefined ? {} : { env: { ...turn.env } }),
         // No settings file of the person's or a project's can switch the hook off or filter it out. Anthropic,
         // https://code.claude.com/docs/en/settings (read 2026-11-12), of command-line settings: "A key you set there
         // overrides the same key in your project and user settings files", and "Lists merge instead of overriding", so the
@@ -665,7 +670,10 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
  * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
- * `CLAUDE_CODE_EFFORT_LEVEL` (`effortNamed`), which would override it.
+ * `CLAUDE_CODE_EFFORT_LEVEL` (`effortNamed`), which would override it. What it decides holds against a settings file's
+ * `env` too: a Claude Code turn the hook rides sets the same values in its own settings file (`pinnedEnvironment`), which
+ * outranks the person's and a project's, and every other Claude Code turn loads no settings file of the person's
+ * (`claudeArguments`).
  */
 export function hostEnvironment(
     base: Readonly<Record<string, string | undefined>>,
@@ -728,6 +736,43 @@ export function hostEnvironment(
         env[noBackground] = '1';
     }
     return withReplyClient(env, options.bundleVersion);
+}
+
+/**
+ * What the settings file of a Claude Code turn the hook rides sets of the turn's environment (`hookedSettings`): for each
+ * name the desktop decides for the turn (`hostEnvironment`), the value the turn's environment holds, or an empty string for
+ * a name it withholds. Claude Code writes a settings file's `env` over the environment it was started with, and the
+ * turn's own file outranks the person's user, project and local files name by name, so no file of the person's or a
+ * project's puts another PATH, another `JASON_CHAT_TURN` or a session's marker in place of the desktop's. Anthropic,
+ * https://code.claude.com/docs/en/env-vars (read 2026-11-21): "When the same variable is set in both your shell and a
+ * settings file `env` block, the settings file value applies in most sessions. Claude Code writes each `env` entry into
+ * the process environment, replacing the value inherited from the shell."; https://code.claude.com/docs/en/settings-reference:
+ * "when more than one settings file sets a variable, the highest-precedence one applies", and of command-line settings,
+ * https://code.claude.com/docs/en/settings: "A key you set there overrides the same key in your project and user settings
+ * files". The names: PATH, the data directory, Jason's three variables of a turn, the folder and background variables,
+ * the backgrounding of tool calls and a session's markers it withholds, `HOME` where the turn names one, and
+ * `CLAUDE_CODE_EFFORT_LEVEL` where the turn names an effort. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is left out: where a file
+ * of the person's sets it in Full access, Claude Code starts in another mode and the turn is started again in Ask first,
+ * which carries it. A provider's variables are left out too, so no key is written to a file: a turn on a provider's key
+ * loads none of the person's settings (`claudeArguments`). An empty value is no value to the jason the turn runs, which
+ * reads a blank data directory as none.
+ */
+export function pinnedEnvironment(environment: Readonly<Record<string, string>>, options: { home?: string; effortNamed?: boolean }): Record<string, string> {
+    const named = (name: string) => Object.entries(environment).find(([each]) => each.toUpperCase() === name)?.[1] ?? '';
+    const names = [
+        'PATH',
+        'JASON_DATA_DIR',
+        chatTurnVariable,
+        confinedVariable,
+        attemptVariable,
+        maintainFolder,
+        noBackground,
+        'CLAUDE_AUTO_BACKGROUND_TASKS',
+        ...sessionMarkers,
+        ...(options.home !== undefined ? ['HOME'] : []),
+        ...(options.effortNamed === true ? [effortLevel] : []),
+    ];
+    return Object.fromEntries(names.map((name) => [name, named(name)]));
 }
 
 /** What one line a host prints means. */

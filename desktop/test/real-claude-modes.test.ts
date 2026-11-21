@@ -1,12 +1,13 @@
 // The real Claude Code, signed out, started as a turn of each mode is started: its command line and its environment are
 // the chat's own, built by the desktop for that turn, in a data directory, a home and a configuration directory of the
-// row's own, with nothing to sign in by. Each start is stopped at its init line, so no turn runs. The init line names the
+// row's own, with nothing to sign in by. Each start is stopped at its init line, or, where a row waits for a hook or a
+// server of the row's own configuration to write a file, once it has, so no turn runs. The init line names the
 // mode Claude Code runs in, and its standard error says when Claude Code forced its default mode. Where no `claude` is on
 // the PATH the rows are skipped, so a machine without Claude Code runs as before, and on macOS they run only where
 // `realOnMac` says so. Where `printTo` names a file, each start's command line, environment and turn files are written
 // there as the desktop built them, the turn's secret aside.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -95,7 +96,7 @@ function initOf(line: string): Record<string, unknown> | null {
  * system's application folders of the row's own, no updater and no traffic a start does not need. Every start the chat
  * makes is kept with the command line and the environment the chat built for it, and stopped at its init line.
  */
-function realDesktop(t: { after(fn: () => void | Promise<void>): void }) {
+function realDesktop(t: { after(fn: () => void | Promise<void>): void }, row: { holdUntil?: () => boolean } = {}) {
     const own = mkdtempSync(join(tmpdir(), 'jason-real-claude-'));
     const folders = Object.fromEntries(['home', 'config', 'appdata', 'local', 'temp'].map((name) => [name, join(own, name)]));
     for (const folder of Object.values(folders)) mkdirSync(folder, { recursive: true });
@@ -155,7 +156,21 @@ function realDesktop(t: { after(fn: () => void | Promise<void>): void }) {
                 onLine: (line) => {
                     if (start.init === null) {
                         start.init = initOf(line);
-                        if (start.init !== null) start.host.stop();
+                        if (start.init !== null) {
+                            // Where a row waits for something the start does after its init line, it is stopped once that
+                            // is there or ten seconds have passed, before any turn could run, there being no sign-in.
+                            const hold = row.holdUntil;
+                            if (hold === undefined) start.host.stop();
+                            else {
+                                const until = Date.now() + 10_000;
+                                const poll = setInterval(() => {
+                                    if (hold() || Date.now() > until) {
+                                        clearInterval(poll);
+                                        start.host.stop();
+                                    }
+                                }, 100);
+                            }
+                        }
                     }
                     options.onLine(line);
                 },
@@ -172,6 +187,8 @@ function realDesktop(t: { after(fn: () => void | Promise<void>): void }) {
     });
     return {
         b,
+        own,
+        config: folders.config as string,
         chat,
         starts,
         started,
@@ -243,4 +260,57 @@ test('the real Claude Code, signed out, runs each mode\'s turn in the mode its i
             }
         });
     }
+});
+
+test('the real Claude Code, signed out, keeps in a Full access turn what the desktop decides of the turn\'s environment where the person\'s own settings set another PATH and other values of the turn\'s variables: what a hook or a server of the person\'s is started with, the turn still in its bypass', { skip }, async (t) => {
+    const out = { hook: '', server: '' };
+    const desk = realDesktop(t, { holdUntil: () => existsSync(out.hook) || existsSync(out.server) });
+    const version = /\d+\.\d+\.\d+/.exec((await desk.b.programs.run('claude', ['--version'])).stdout)?.[0] ?? null;
+    if (fullAccessSentence(version) !== null) {
+        t.skip(`Claude Code ${version ?? '?'} is below the floor of Full access`);
+        return;
+    }
+    // The person's own configuration, in the row's configuration folder: settings whose env sets a PATH of their own and
+    // other values of the turn's variables, a SessionStart hook and a stdio server of theirs, each writing the environment
+    // it was started with to a file.
+    const probe = join(desk.own, 'probe');
+    mkdirSync(probe, { recursive: true });
+    const script = join(probe, 'env.cjs');
+    writeFileSync(script, "require('fs').writeFileSync(process.argv[2], JSON.stringify(process.env));\n");
+    out.hook = join(probe, 'hook.json');
+    out.server = join(probe, 'server.json');
+    const theirs = join(probe, 'their-bin');
+    mkdirSync(theirs, { recursive: true });
+    const forward = (path: string) => path.replace(/\\/g, '/');
+    const planted = { PATH: theirs, JASON_CHAT_TURN: '0', JASON_DATA_DIR: join(probe, 'their-data'), CLAUDE_JOB_DIR: join(probe, 'their-jobs'), CLAUDE_AUTO_BACKGROUND_TASKS: '1' };
+    writeFileSync(
+        join(desk.config, 'settings.json'),
+        JSON.stringify({
+            env: planted,
+            hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `"${forward(process.execPath)}" "${forward(script)}" "${forward(out.hook)}"` }] }] },
+        }),
+    );
+    writeFileSync(join(desk.config, '.claude.json'), JSON.stringify({ mcpServers: { theirs: { type: 'stdio', command: process.execPath, args: [script, out.server] } } }));
+    const { id } = await desk.chat.create();
+    await desk.turn(id);
+    const start = desk.starts[0];
+    assert.ok(start !== undefined, 'the turn started Claude Code');
+    await start.host.exited;
+    const seen = existsSync(out.hook) ? 'hook' : existsSync(out.server) ? 'server' : null;
+    t.diagnostic(`Claude Code ${version ?? '?'}: init names ${String(start.init?.permissionMode)}, environment read by the person's ${seen ?? 'nothing'}`);
+    assert.equal(start.init?.permissionMode, 'bypassPermissions', 'the turn still runs in its bypass');
+    assert.ok(seen !== null, 'a hook or a server of the person\'s was started and wrote its environment');
+    const env = JSON.parse(readFileSync(seen === 'hook' ? out.hook : out.server, 'utf8')) as Record<string, string>;
+    const named = (name: string) => Object.entries(env).find(([each]) => each.toUpperCase() === name)?.[1];
+    for (const name of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SSE_PORT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID']) {
+        t.diagnostic(`${name}=${JSON.stringify(named(name) ?? null)}`);
+    }
+    // On Windows the hook's command runs in Git Bash, which puts its own folders in front of the PATH it was given.
+    const path = (named('PATH') ?? '').split(process.platform === 'win32' ? ';' : ':');
+    assert.ok(path.includes(join(desk.b.root, 'bundle')), 'the bundle\'s folder on PATH, the PATH the desktop gave the turn');
+    assert.ok(!path.includes(theirs), 'not the PATH of the person\'s settings');
+    assert.equal(named('JASON_CHAT_TURN'), '1');
+    assert.equal(named('JASON_DATA_DIR'), desk.b.paths.data);
+    assert.equal(named('CLAUDE_JOB_DIR') ?? '', '');
+    assert.equal(named('CLAUDE_AUTO_BACKGROUND_TASKS') ?? '', '');
 });

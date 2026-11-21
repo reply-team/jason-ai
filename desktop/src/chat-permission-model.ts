@@ -2784,8 +2784,8 @@ function namesDataVariable(command: string, scope: ChatScope): boolean {
 export const confinedVariable = 'JASON_CONFINED';
 
 /**
- * The chat's own variable, which every turn's environment carries, in every mode and on every host (`hostEnvironment`):
- * under it an option of the jason the turn runs that reads a file into a request takes standard input only, and the
+ * The chat's own variable, which every turn's environment carries, in every mode and on every host (`hostEnvironment`),
+ * whatever a settings file of the person's sets (`pinnedEnvironment`, and Codex's `shell_environment_policy`): under it an option of the jason the turn runs that reads a file into a request takes standard input only, and the
  * provider check runs a bare name only. It refuses no verb.
  */
 export const chatTurnVariable = 'JASON_CHAT_TURN';
