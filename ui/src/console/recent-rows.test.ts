@@ -171,6 +171,47 @@ describe('the rows under Recent', () => {
     });
 });
 
+describe('an agent the list of agents does not hold', () => {
+    const read: Record<string, CampaignSummary> = {
+        cmp_w: { id: 'cmp_w', name: 'Winter', status: 'archived' },
+        cmp_l: { id: 'cmp_l', name: 'Late', status: 'paused' },
+    };
+    const input = {
+        conversations: [
+            conversation({ id: 'conv_w', campaignId: 'cmp_w', title: 'Winter' }),
+            conversation({ id: 'conv_l', campaignId: 'cmp_l', title: 'Late' }),
+            conversation({ id: 'conv_u', campaignId: 'cmp_unread', title: 'Unread' }),
+        ],
+        titles: () => undefined,
+        campaigns: agents,
+        approvals: [approval('cmp_l')],
+        questions: [],
+        now,
+    };
+
+    it('leaves out a conversation whose agent is archived, once that agent is read on its own', () => {
+        expect(recentRows({ ...input, agentRead: (id) => read[id] }).map((each) => each.id)).toEqual([
+            'conv_l',
+            'conv_u',
+        ]);
+    });
+
+    it('gives a conversation of an agent read on its own that agent’s name, state and what waits for it', () => {
+        const late = recentRows({ ...input, agentRead: (id) => read[id] })[0]!;
+        expect([late.agent, late.state, late.waiting, late.dot]).toEqual(['Late', 'paused', 1, 'waiting']);
+    });
+
+    it('keeps a conversation whose agent is not read yet, as one whose agent is not held', () => {
+        const rows = recentRows(input);
+        expect(rows.map((each) => each.id)).toEqual(['conv_w', 'conv_l', 'conv_u']);
+        expect(rows.map((each) => [each.agent, each.aboutAgent, each.dot])).toEqual([
+            [null, true, 'none'],
+            [null, true, 'none'],
+            [null, true, 'none'],
+        ]);
+    });
+});
+
 describe('searching and paging', () => {
     it('matches the title alone, whatever the case, and every row for no text', () => {
         const renamed = row({ title: 'Q4 push', agent: 'Spring' });

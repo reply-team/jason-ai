@@ -9,6 +9,7 @@ import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
+import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -273,6 +274,23 @@ describe('a row', () => {
         expect(ring('Help me start')?.getAttribute('title')).toBe('No agent');
         expect(ring('Archived one')?.className).toContain('none');
         expect(ring('Archived one')?.hasAttribute('title')).toBe(false);
+    });
+
+    it('leaves out the chat of an archived agent once that agent is read, and its own address still opens it', async () => {
+        const desktop = await renderConsole((desktop) => {
+            seedAgents(desktop);
+            // Winter (cmp_4) is archived: the list of agents leaves it out, so its agent is read on its own.
+            desktop.keep({ id: 'conv_w', campaignId: 'cmp_4', title: 'Winter', updatedAt: minutes(1.5) });
+        });
+        await waitFor(() => expect(agentFacts.value['cmp_4']?.campaign.status).toBe('archived'));
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        expect(titles()).not.toContain('Winter');
+        flush(() => {
+            location.hash = '#/campaigns/cmp_4/chat';
+        });
+        await waitFor(() =>
+            expect(desktop.calls.some((each) => each.name === 'chat.open' && each.args[0] === 'conv_w')).toBe(true),
+        );
     });
 
     it('opens its chat when clicked, as before', async () => {

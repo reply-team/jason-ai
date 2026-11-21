@@ -269,8 +269,10 @@ describe('a plan the AI proposes', () => {
         );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
         expect(part.textContent!.match(/\d+/g)).toEqual(['2']);
-        // The card reads the agent once; the agent's header over the chat reads it once more for itself.
+        // The card reads the agent once; the agent's header over the chat reads it once more for itself; and Recent reads
+        // it once, since the list of agents does not hold it.
         expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([
+            { campaign_id: 'cmp_5' },
             { campaign_id: 'cmp_5' },
             { campaign_id: 'cmp_5' },
         ]);

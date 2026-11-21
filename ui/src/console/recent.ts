@@ -1,7 +1,9 @@
-import { computed, signal } from '@preact/signals-react';
+import { computed, effect, signal, untracked } from '@preact/signals-react';
+import type { Api } from '../api/client';
 import { act, argsOf, define, parseArgs } from './actions';
+import { agentFacts, goneAgents, readAgent } from './agent-facts';
 import { shownAgent } from './agent-place';
-import { campaigns } from './campaigns';
+import { campaigns, read } from './campaigns';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
@@ -10,8 +12,41 @@ import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type
 import { chats, clock, conversations, currentChat } from './state';
 
 // "Recent" in the sidebar: the conversations, each with a dot, its title, what waits on the person and its age, a search
-// box and a filter in the header, ten rows at a time. Everything here is read from what the console already holds; the
-// state below is the page's own and is kept nowhere.
+// box and a filter in the header, ten rows at a time. Everything here is read from what the console already holds, but
+// the agent of a conversation the list of agents does not hold, which is read on its own, so that a conversation whose
+// agent is archived leaves Recent; the state below is the page's own and is kept nowhere.
+
+/**
+ * The agents of the conversations that the list of agents does not hold, as one key: an archived agent, which that list
+ * leaves out, or one past its first page. Empty until the list is read.
+ */
+const unlisted = computed(() => {
+    if (!read.value) return '';
+    const listed = new Set(campaigns.value.map((each) => each.id));
+    const ids = new Set<string>();
+    for (const conversation of conversations.value)
+        if (conversation.campaignId !== null && conversation.main !== true && !listed.has(conversation.campaignId))
+            ids.add(conversation.campaignId);
+    return [...ids].sort().join(' ');
+});
+
+/**
+ * Reads, on its own, the agent of each conversation the list of agents does not hold, each time which agents those are
+ * changes: so an agent the list stops holding, archived anywhere, is read once the journal has the list read again. One
+ * read as archived is not read again, since an archive is not undone, nor one the runtime does not know. Bound while the
+ * console is; the function it returns stops it.
+ */
+export function readUnlisted(api: Api): () => void {
+    return effect(() => {
+        const ids = unlisted.value;
+        untracked(() => {
+            for (const id of ids === '' ? [] : ids.split(' ')) {
+                if (agentFacts.value[id]?.campaign.status === 'archived' || goneAgents.value.has(id)) continue;
+                void readAgent(api, id);
+            }
+        });
+    });
+}
 
 /** Whether the search box is drawn, and what is typed in it. */
 const searching = signal(false);
@@ -177,6 +212,7 @@ const listed = computed(() => {
         titles: (id) => chats.value[id]?.title,
         running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
+        agentRead: (id) => agentFacts.value[id]?.campaign,
         ...needsInput(),
         now: clock.value,
     });
