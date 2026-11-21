@@ -18,6 +18,7 @@ import { fixtures } from '../test/fixtures';
 import { fromFoot, layOutChats, scrollAs } from '../test/scroll';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
+import { chosenSection } from '../screens/settings/chosen';
 import { attention, forgetNeeds } from './needs';
 import { chats, clock, conversations, currentChat, here, lines, setup, setupBusy, streamState } from './state';
 
@@ -1707,6 +1708,57 @@ describe('the console', () => {
         }
         expect(commandTarget('navigate.attention')).toBe('needs');
         expect(commandTarget('navigate.connect')).toBe('connect');
+    });
+
+    // The update notice's click: the window opens on Settings, at its Update section.
+    it('opens Settings at its Update section from the desktop’s command', async () => {
+        const settings = registry.list('screen').find((each) => each.id === 'settings')!;
+        expect(commandTarget('navigate.update')).toEqual(parseRoute(settings.href()));
+        chosenSection.value = 'appearance';
+        const { desktop } = renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        flush(() => desktop.command('navigate.update'));
+        await waitFor(() => expect(route.value.screen).toBe('settings'));
+        expect(chosenSection.value).toBe('update');
+        await waitFor(() => expect(document.querySelector('.settings')?.getAttribute('data-chosen')).toBe('update'));
+        await waitFor(() => expect(document.querySelector('[data-section="update"]')).not.toBeNull());
+        chosenSection.value = 'appearance';
+    });
+
+    // A version the desktop knows of and has not installed marks the sidebar's Settings row: one quiet dot, no count, from
+    // the moment the desktop knows of it until it is installed.
+    it('marks the sidebar’s Settings row while the desktop knows of a version it has not installed', async () => {
+        const desktop = chatDesktop();
+        const { desktop: shown } = renderConsole(pending(new FakeApi()), desktop);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        const foot = () => document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+        await waitFor(() => expect(foot()).not.toBeNull());
+        expect(foot().querySelector('.dot')).toBeNull();
+        flush(() =>
+            shown.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Download Jason 0.48.6', enabled: true },
+                said: null,
+                newer: '0.48.6',
+            }),
+        );
+        const dot = await waitFor(() => {
+            const found = foot().querySelector<HTMLElement>('.dot.w');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(dot.getAttribute('aria-label')).toBe('Jason Desktop 0.48.6 is available');
+        expect(dot.textContent).toBe('');
+        expect(words(foot()).trim()).toBe('Settings');
+        flush(() =>
+            shown.updateMoved({
+                version: '0.48.6',
+                item: { label: 'Check for Updates…', enabled: true },
+                said: null,
+                newer: null,
+            }),
+        );
+        await waitFor(() => expect(foot().querySelector('.dot')).toBeNull());
     });
 
     it('opens Performance from the desktop command, drawn from the runtime', async () => {

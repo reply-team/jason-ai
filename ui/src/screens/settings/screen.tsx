@@ -10,7 +10,8 @@ import * as shell from '../../shell/shell';
 import { SendModesSettings } from '../send-modes/settings-section';
 import { chosenSection, type SettingsSection } from './chosen';
 import { NotificationsSection } from './notifications';
-import { UpdateFooter } from './update-footer';
+import { UpdateSection } from './update-section';
+import { followUpdates, updateMark, updateShown } from './update-state';
 import { VoiceSection } from './voice';
 
 const themes: readonly ThemeChoice[] = ['light', 'dark', 'system'];
@@ -26,6 +27,7 @@ const names: Record<SettingsSection, () => string> = {
     models: () => t('settings.models'),
     notifications: () => t('settings.notifications'),
     runtime: () => 'Runtime',
+    update: () => t('settings.update'),
 };
 
 // Each section's mark in the list at the left, on the console's 24-unit grid, stroked in the current colour.
@@ -36,6 +38,7 @@ const marks: Record<SettingsSection, string[]> = {
     models: ['M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0zM12 18v4'],
     notifications: ['M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7', 'M10 20a2 2 0 004 0'],
     runtime: ['M3 12h4l3-8 4 16 3-8h4'],
+    update: ['M12 4v11', 'M7 10l5 5 5-5', 'M5 20h14'],
 };
 
 function SectionMark({ name }: { name: SettingsSection }) {
@@ -114,9 +117,13 @@ export function SettingsScreen() {
     listed.push('notifications');
     if (Added) listed.push('models');
     if (Added && shell.info.value !== null) listed.push('runtime');
+    // Update, where the desktop's own window shows its update item; marked while it knows of a version not installed.
+    if (updateShown() !== null) listed.push('update');
+    const newer = updateMark();
     const chosen = listed.includes(chosenSection.value) ? chosenSection.value : listed[0]!;
     const root = useRef<HTMLDivElement>(null);
     const { held, said } = useHiddenAlerts(root, chosen);
+    useEffect(() => followUpdates(), []);
     // Escape leaves Settings where nothing else takes the key; the console's Live has a place to leave to.
     const withWayOut = essentials();
     useEffect(() => {
@@ -165,12 +172,14 @@ export function SettingsScreen() {
                         >
                             <SectionMark name={name} />
                             {names[name]()}
+                            {name === 'update' && newer !== null && (
+                                <span className="dot w" aria-label={t('settings.update.newer', { version: newer })} />
+                            )}
                         </button>
                     ))}
                     <p className="settings-announce" role="alert">
                         {said?.text}
                     </p>
-                    <UpdateFooter />
                 </nav>
             )}
             <section data-section="appearance">
@@ -193,6 +202,7 @@ export function SettingsScreen() {
             <SendModesSettings />
             <NotificationsSection />
             {Added && <Added />}
+            <UpdateSection />
         </div>
     );
 }

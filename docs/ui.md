@@ -562,7 +562,9 @@ jason session open --setup --host codex
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
 system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
-follows it. Its **Notifications** section is [described below](#notifications-in-settings).
+follows it. Its **Notifications** section is [described below](#notifications-in-settings). In Jason Desktop's own window it
+also has an **Update** section, the last, which shows the desktop's version and its update item, and a quiet mark while
+the desktop knows of a version it has not installed ([desktop.md](desktop.md#updating)); a tab and the Demo draw none.
 
 **The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
 Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through

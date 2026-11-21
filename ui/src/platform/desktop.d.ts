@@ -96,7 +96,8 @@ export type DesktopCommand =
     | 'navigate.people'
     | 'navigate.system'
     | 'navigate.settings'
-    | 'navigate.connect';
+    | 'navigate.connect'
+    | 'navigate.update';
 
 /**
  * How hard the model thinks, as the host's own flag: one of five levels, the same words on every host. The desktop
@@ -140,7 +141,10 @@ export interface DesktopChatOptions {
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
-/** `updates.item()`: the desktop's version, its update item as the menu shows it, and what the last check found. */
+/**
+ * `updates.item()`: the desktop's version, its update item as the menu shows it, what the last check found, and the
+ * version it knows of and has not installed.
+ */
 export interface DesktopUpdateItem {
     /** The desktop's own version, as its About says it. */
     version: string;
@@ -152,6 +156,12 @@ export interface DesktopUpdateItem {
      * by itself never writes one. A desktop of an earlier version answers without it.
      */
     said?: string | null;
+    /**
+     * The version the desktop knows of and has not installed: from the look that found it, its own or the person's, until
+     * it is installed; for the deb, the one the system installed until the restart that finishes it. Null where there is
+     * none. The page marks Settings with it. A desktop of an earlier version answers without it.
+     */
+    newer?: string | null;
 }
 
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */

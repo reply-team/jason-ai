@@ -187,12 +187,17 @@ The View menu carries the keys (New Chat, What Needs You, Performance, Agents, W
 Beside Quit Jason, two more items of the Jason menu have keys of their own: the update item, Ctrl+Shift+D, and Back to
 Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
 Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
-the tray's menu or the Mac's menu bar, and in the same item at the foot of Settings' list, beside Jason Desktop's
-version, where a click does what a click in the menu does. A check you ask for says what it found, under the item in
-Settings: "Jason Desktop X is the latest version.", "Version Y is available.", that a newer version is out and is not
-offered here because you went back from it, or why it could not check; asked from the tray, the menu or the key, the
-same sentence comes as a notification too. The line goes when the item moves on, and the checks Jason makes by itself
-say nothing. At the install the key asks
+the tray's menu or the Mac's menu bar, and in the same item in Settings' own **Update** section, the last in its list,
+under Jason Desktop's version, where a click does what a click in the menu does. A check you ask for says what it found,
+under the item in Settings: "Jason Desktop X is the latest version.", "Version Y is available.", that a newer version is
+out and is not offered here because you went back from it, or why it could not check; asked from the tray, the menu or
+the key, the same sentence comes as a notification too, whose click opens the window on Settings' Update section. The
+line goes when the item moves on, and the checks Jason makes by itself say nothing; once one of them, or yours, finds a
+version, one quiet mark, a dot with no count, stands on the sidebar's Settings row and on the Update section's row and
+its item, from then until that version is installed. A download you asked for asks once, as it ends, whether to install
+now, Restart and Install or Not Now; Not Now leaves it waiting under Restart Jason and Its Runtime to Install, and nothing
+installs when you quit. The finished download is held by the running application alone: quitting Jason Desktop, or
+restarting it, forgets it, and the item starts again at Check for Updates…. At the install the key asks
 first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
 names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
 without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
@@ -1187,7 +1192,8 @@ Updates come to the Windows installer, the macOS application and the AppImage. A
 where it is, so its folder must be writable; `jason update apply` from a terminal with no display, an ssh session say, is
 refused, since the application it starts needs one. The deb's updates come with the system's, from Jason's apt
 repository, which the package adds: Software Updater offers a new version and installs it when you say so, as `sudo apt
-update && sudo apt upgrade` does, and Ubuntu's automatic updates leave it alone. There the item says "Updates Come Through the Package"; where the system
+update && sudo apt upgrade` does, and Ubuntu's automatic updates leave it alone. There the item says "Updates Come Through the Package", and
+Settings' Update section says in its place that your system updates Jason Desktop and the `jason` it carries; where the system
 installed a new version under the running window, it says "Restart Jason and Its Runtime to Finish the Update to
 `<version>`" and one notice says so: the item, or a click on the notice, stops the runtime the old version runs, which
 ends a running turn and the work in progress, and starts Jason again, whose start finishes the update. Where the system

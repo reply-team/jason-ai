@@ -244,11 +244,21 @@ export class Desk {
     }
 
     /**
+     * The version the page marks Settings with: the one the updater knows of and has not installed (`Updater.known`), or,
+     * for the deb, the one the system installed under the window until the restart that finishes it; null in a demo run,
+     * which has no update item, and where nothing is known.
+     */
+    updateNewer(): string | null {
+        if (this.demo !== null) return null;
+        return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;
+    }
+
+    /**
      * A press of the update item, on the act of the step it showed: the menu's click and key, and the page's press in
      * Settings (`updates.press`, a click on the label the page drew, `actShown`), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
      * item is disabled, and a press does nothing either. What a check found is in the item's answer wherever it was
      * asked from; asked `from` the menu, the tray or the key, whose menu closes or shows no label, it comes as a
-     * notification too, whose click shows the window.
+     * notification too, whose click opens the window on Settings' Update section.
      */
     pressUpdate(act: MenuItem['act'], byKey: boolean, from: 'menu' | 'page'): void {
         if (this.removing()) return;
@@ -261,7 +271,7 @@ export class Desk {
         const { updates } = this.deps;
         if (updates === null) return;
         void pressItem(updates, act, byKey, (question) => this.box(question)).then((said) => {
-            if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.show());
+            if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.send('navigate.update'));
         });
     }
 

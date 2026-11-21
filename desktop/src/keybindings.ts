@@ -18,6 +18,7 @@ export const desktopCommands = [
     'navigate.system',
     'navigate.settings',
     'navigate.connect',
+    'navigate.update',
 ] as const;
 
 export type DesktopCommand = (typeof desktopCommands)[number];

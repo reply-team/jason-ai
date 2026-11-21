@@ -808,13 +808,17 @@ test('the item’s key asks before it installs, which stops the runtime, and ins
     const { updates, timers } = updaterOn(scratch(t), updater);
     updates.start();
     await timers.fire();
-    // Checking and downloading act at once, by the key or by a click.
+    // Checking and downloading act at once, by the key or by a click; the download's end asks the install's question
+    // once, and Not Now leaves the download waiting under the item.
     await pressItem(updates, 'check', true, answer(0));
-    await pressItem(updates, 'download', true, answer(0));
+    assert.equal(asked.length, 0, 'a check asks nothing');
+    await pressItem(updates, 'download', true, answer(1));
     assert.deepEqual(updater.calls, ['check', 'check', 'download']);
     assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    assert.equal(asked.length, 1, 'the download’s end asks once');
+    asked.length = 0;
     await pressItem(updates, null, true, answer(0));
-    assert.equal(asked.length, 0, 'nothing but the install asks');
+    assert.equal(asked.length, 0, 'nothing but the install and the download’s end asks');
     // The key at the install asks, naming the version and what installing it stops; its default does nothing.
     await pressItem(updates, 'install', true, answer(1));
     const [question] = asked;
@@ -841,9 +845,103 @@ test('the item’s key asks before it installs, which stops the runtime, and ins
     other.updates.start();
     await other.timers.fire();
     await pressItem(other.updates, 'download', false, answer(1));
+    assert.equal(asked.length, 3, 'the download’s end asks, clicked as well');
     await pressItem(other.updates, 'install', false, answer(1));
-    assert.equal(asked.length, 2, 'a click asks nothing');
+    assert.equal(asked.length, 3, 'a click on the install asks nothing');
     assert.equal(installs(clicked), 1);
+});
+
+// The person asked for the download, so its end asks once whether to install now: the same question the key asks, whose
+// default is Not Now. Not Now leaves the download waiting under Restart Jason and Its Runtime to Install, as it waited
+// before; nothing installs at quit. A look the desktop makes by itself downloads nothing and asks nothing.
+test('the end of a download the person asked for asks once to install now; Not Now leaves the item, yes installs', async (t) => {
+    const asked: ReturnType<typeof installQuestion>[] = [];
+    const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return button;
+    };
+    const installs = (updater: { calls: string[] }) => updater.calls.filter((call) => call === 'quitAndInstall').length;
+    const later = fakeUpdater({ latest: '0.35.0' });
+    const one = updaterOn(scratch(t), later);
+    one.updates.start();
+    await one.timers.fire();
+    assert.deepEqual(later.calls, ['check'], 'the cadence downloads nothing');
+    assert.equal(asked.length, 0, 'the cadence asks nothing');
+    await pressItem(one.updates, 'download', false, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0')], 'asked once, the install’s own question');
+    assert.equal(installs(later), 0, 'Not Now installs nothing');
+    assert.deepEqual(one.updates.current, { step: 'downloaded', version: '0.35.0' });
+    assert.equal(menuItemOf(one.updates.current, true, true).label, 'Restart Jason and Its Runtime to Install 0.35.0');
+    assert.equal(later.set.some(([name, value]) => name === 'autoInstallOnAppQuit' && value === true), false, 'nothing installs at quit');
+    // The item's own press is the only way on: a click installs, asking nothing more.
+    await pressItem(one.updates, 'install', false, answer(1));
+    assert.equal(asked.length, 1);
+    assert.equal(installs(later), 1);
+
+    // Yes installs at once.
+    asked.length = 0;
+    const now = fakeUpdater({ latest: '0.35.0' });
+    const two = updaterOn(scratch(t), now);
+    two.updates.start();
+    await two.timers.fire();
+    await pressItem(two.updates, 'download', false, answer(0));
+    assert.equal(asked.length, 1);
+    assert.equal(installs(now), 1);
+
+    // A download that fails goes back to the offer and asks nothing.
+    asked.length = 0;
+    let failing = false;
+    const broken = fakeUpdater({ latest: '0.35.0', fails: () => failing });
+    const three = updaterOn(scratch(t), broken);
+    three.updates.start();
+    await three.timers.fire();
+    failing = true;
+    await pressItem(three.updates, 'download', false, answer(0));
+    assert.deepEqual(three.updates.current, { step: 'offered', version: '0.35.0' });
+    assert.equal(asked.length, 0);
+    assert.equal(installs(broken), 0);
+});
+
+// The mark's life: a version the desktop knows of and has not installed, from the look that found it until the install,
+// kept through a later look while it is still offered; none once a look finds nothing newer, and none for a version the
+// person went back from.
+test('the version known and not installed lasts from the look that found it to the install', async (t) => {
+    const updater = fakeUpdater();
+    const { updates, timers } = updaterOn(scratch(t), updater);
+    updates.start();
+    assert.equal(updates.known, null);
+    await timers.fire();
+    assert.equal(updates.known, null, 'nothing newer, nothing known');
+    updater.latest = '0.35.0';
+    await timers.fire();
+    assert.equal(updates.known, '0.35.0', 'found by a look on the cadence');
+    // A look while it is offered keeps it while it runs.
+    const looking = updates.check();
+    assert.deepEqual(updates.current, { step: 'checking' });
+    assert.equal(updates.known, '0.35.0', 'kept while a look runs');
+    await looking;
+    await updates.download();
+    assert.equal(updates.known, '0.35.0', 'downloaded');
+    // A look that finds nothing newer clears it.
+    const gone = fakeUpdater({ latest: '0.35.0' });
+    const other = updaterOn(scratch(t), gone);
+    await other.updates.check();
+    assert.equal(other.updates.known, '0.35.0');
+    gone.latest = '0.34.0';
+    await other.updates.check();
+    assert.equal(other.updates.known, null);
+    // A version the person went back from is not known as one to install.
+    const back = scratch(t);
+    writeRollback(back.rollback, { rejected: ['0.35.0'] });
+    const held = updaterOn(back, fakeUpdater({ latest: '0.35.0' }));
+    await held.updates.check(true);
+    assert.equal(held.updates.known, null);
+    // An install the installer refused keeps it known: the item offers the install again.
+    const refusing = updaterOn(scratch(t), fakeUpdater({ latest: '0.35.0', installFails: true }));
+    await refusing.updates.check();
+    await refusing.updates.download();
+    await refusing.updates.install();
+    assert.equal(refusing.updates.known, '0.35.0');
 });
 
 test('the update item’s key is named only where the item can act', () => {

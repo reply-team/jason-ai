@@ -124,8 +124,11 @@ export function menuItemOf(state: UpdateState, installed: boolean, active: boole
  * a hand on the key sees no label, and the install stops the runtime, which ends a running turn and the work in
  * progress, and restarts the desktop, so the key asks first (`installQuestion`; `ask` answers the index of the button
  * chosen) and installs only on yes; a click on the item, whose label says so, installs at once. The question reads the
- * step again, so a press the menu showed before the step moved on asks nothing. A check is the person's: it answers the
- * sentence that says what it found (`checkWords`), null when no look was made; every other act answers null.
+ * step again, so a press the menu showed before the step moved on asks nothing. A download the person asked for asks the
+ * same question once when it ends, by a click or the key: yes installs as the item would, and Not Now leaves the download
+ * waiting under the item, which installs only when pressed. The download is held in memory: a quit or a restart of the
+ * desktop forgets it, and the item starts again at Check for Updates…. A check is the person's: it answers the sentence
+ * that says what it found (`checkWords`), null when no look was made; every other act answers null.
  */
 export async function pressItem(
     updates: Pick<Updater, 'current' | 'check' | 'download' | 'install'>,
@@ -134,8 +137,14 @@ export async function pressItem(
     ask: (question: ReturnType<typeof installQuestion>) => Promise<number>,
 ): Promise<string | null> {
     if (act === 'check') return updates.check(true);
-    if (act === 'download') await updates.download();
-    else if (act === 'install' && !byKey) await updates.install();
+    if (act === 'download') {
+        await updates.download();
+        const ready = updates.current;
+        if (ready.step !== 'downloaded') return null;
+        if ((await ask(installQuestion(ready.version))) !== 0) return null;
+        const still = updates.current;
+        if (still.step === 'downloaded' && still.version === ready.version) await updates.install();
+    } else if (act === 'install' && !byKey) await updates.install();
     else if (act === 'install') {
         const state = updates.current;
         if (state.step !== 'downloaded') return null;
@@ -423,6 +432,8 @@ export class Updater {
     private state: UpdateState = { step: 'idle' };
     /** What the person's last check found, and the state it was said at; in memory only, gone at a restart. */
     private line: { said: string; failed: boolean; at: UpdateState } | null = null;
+    /** The version a look found and that is not installed yet (`known`); in memory only, gone at a restart. */
+    private knownVersion: string | null = null;
     private failures = 0;
     private downloadFailures = 0;
     private handle: unknown = null;
@@ -450,6 +461,15 @@ export class Updater {
      */
     get said(): string | null {
         return this.line?.said ?? null;
+    }
+
+    /**
+     * The version the desktop knows of and has not installed: from the look that found it, through its download, to its
+     * install, and kept while a later look runs; null once a look finds nothing newer, and never a version the person
+     * went back from. The page marks Settings with it (`updates.item`'s `newer`).
+     */
+    get known(): string | null {
+        return this.knownVersion;
     }
 
     /** Whether electron-updater can replace what runs here; read from it each time. */
@@ -754,6 +774,8 @@ export class Updater {
     /** The item's next step: a line said at another step is cleared; a look under way (`checking`) keeps it. */
     private show(state: UpdateState): void {
         this.state = state;
+        if ('version' in state) this.knownVersion = state.version;
+        else if (state.step === 'idle') this.knownVersion = null;
         if (this.line !== null && state.step !== 'checking' && !sameState(state, this.line.at)) this.line = null;
         this.deps.changed(state);
     }
