@@ -66,7 +66,7 @@ export const folderRefusal = signal<string | null>(null);
 export function folderWord(): string | null {
     if (inTab() || !can('openIn.open')) return null;
     const name = fileManager.value;
-    return name === null ? null : `Open in ${name ?? t('openIn.place.files')}`;
+    return name === null ? null : t('agent.menu.folder', { place: name ?? t('openIn.place.files') });
 }
 
 /** The agent hosts the place offers a session of: none in a tab, in the demo, or where the desktop has no Open in. */

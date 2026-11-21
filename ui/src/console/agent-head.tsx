@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useApi } from '../api/context';
 import { essentials } from '../platform/console-shell';
+import { t } from '../platform/i18n';
 import { can } from '../platform/places';
 import { navigate, route, type CampaignTab, type Route } from '../router';
 import { Tabs } from '../layout/tabs';
@@ -98,8 +99,8 @@ function ConversationMenu({ agent }: { agent: string }) {
                 ref={button}
                 type="button"
                 className="agent-more"
-                aria-label="More for this agent's conversation"
-                title="More"
+                aria-label={t('agent.menu.more')}
+                title={t('agent.menu.moreTitle')}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpen(!open)}
@@ -113,7 +114,7 @@ function ConversationMenu({ agent }: { agent: string }) {
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
-                <div ref={menu} className="agent-menu" role="menu" aria-label="This agent's conversation">
+                <div ref={menu} className="agent-menu" role="menu" aria-label={t('agent.menu.label')}>
                     <MenuEntries items={items} onChoose={choose} />
                 </div>
             )}

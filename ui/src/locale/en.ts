@@ -402,6 +402,23 @@ export const en = {
     'modes.system.note': 'An agent may set its own; it is shown under its Settings tab.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
+    // The agent's menus, the header's "…" and the menu on its row under Recent (`conversation-items.ts`).
+    'agent.menu.open': 'Open',
+    'agent.menu.folder': 'Open in {place}',
+    'agent.menu.move.start': 'Start',
+    'agent.menu.move.pause': 'Pause',
+    'agent.menu.move.resume': 'Resume',
+    'agent.menu.archive': 'Archive…',
+    'agent.menu.rename': 'Rename conversation',
+    'agent.menu.renameTitle': 'Give this conversation a name of your own',
+    'agent.menu.renameWaits': 'Send a message first; then the chat can be renamed',
+    'agent.menu.fresh': 'Start conversation fresh',
+    'agent.menu.freshTitle':
+        "The AI's next turn begins without its memory of this conversation; what is shown here stays",
+    'agent.menu.remove': 'Remove conversation',
+    'agent.menu.more': "More for this agent's conversation",
+    'agent.menu.moreTitle': 'More',
+    'agent.menu.label': "This agent's conversation",
     'agent.openHost': 'Open {host} in terminal',
     'agent.openHostTitle': "Opens a new {host} session in a terminal at this agent's folder",
     'agent.kind.sequence': 'Sequence',
