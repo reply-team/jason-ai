@@ -211,6 +211,17 @@ public static class MachineSetup
             }).ConfigureAwait(false);
         }
 
+        // A logon start registered in Homebrew's formula's time names the formula's link, or its keg: while the formula is
+        // linked it would start that older Jason at every logon, so it moves to this jason, as a retired install's does.
+        if (places.Platform is not SetupSystem.Windows)
+        {
+            await run.Step("Taking the logon start over from Homebrew's formula", () =>
+            {
+                run.RepointFormula();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
         // An AppImage's copy is per version: a logon start registered from another version's copy moves to this one, as the
         // application's own start moves it, since a terminal's update finishes here before the application starts again.
         if (places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable))
@@ -915,10 +926,83 @@ public static class MachineSetup
         }
 
         /// <summary>
+        /// macOS and Linux, Homebrew's older formula linked beside this jason: the logon registration, where it names a
+        /// jason of the formula's under its prefix (<see cref="FormulasJason"/>), registered again naming this jason, by the
+        /// rule <see cref="Reregister"/> keeps, in one line that names the formula's version. One naming anything else is left;
+        /// once the formula is gone nothing here moves it, since the link it names is then the cask's, which leads to this
+        /// jason.
+        /// </summary>
+        public void RepointFormula()
+        {
+            if ((Formula ?? HomebrewFormula.Linked(env)) is not { } formula)
+            {
+                return;
+            }
+
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            if (FormulasJason(formula, named) is { } version)
+            {
+                Reregister(named, $": it named Homebrew's formula jason {version} at {named}, which would have started that older Jason at every logon");
+            }
+        }
+
+        /// <summary>
+        /// The version of the formula's jason <paramref name="named"/> is, under the formula's prefix: its link
+        /// <c>&lt;prefix&gt;/bin/jason</c>, Homebrew's stable path <c>&lt;prefix&gt;/opt/jason/bin/jason</c>, or a keg's
+        /// <c>&lt;prefix&gt;/Cellar/jason/&lt;v&gt;/bin/jason</c>, the linked one or one an upgrade with cleanup off left;
+        /// null for anything else.
+        /// </summary>
+        private string? FormulasJason(HomebrewFormula formula, string named)
+        {
+            var prefix = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(formula.Link)));
+            if (prefix is null)
+            {
+                return null;
+            }
+
+            if (string.Equals(named, Path.GetFullPath(formula.Link), PathCase)
+                || string.Equals(named, Path.GetFullPath(formula.Owner.Executable), PathCase)
+                || string.Equals(named, Path.Combine(prefix, "opt", "jason", "bin", "jason"), PathCase))
+            {
+                return formula.Version;
+            }
+
+            var bin = Path.GetDirectoryName(named);
+            var keg = bin is null ? null : Path.GetDirectoryName(bin);
+            return string.Equals(Path.GetFileName(named), "jason", PathCase)
+                && bin is not null && string.Equals(Path.GetFileName(bin), "bin", PathCase)
+                && keg is not null && string.Equals(Path.GetDirectoryName(keg), Path.Combine(prefix, "Cellar", "jason"), PathCase)
+                ? Path.GetFileName(keg)
+                : null;
+        }
+
+        /// <summary>
         /// The logon registration, where it names the retired executable and this data directory, registered again naming
         /// this jason, the way <c>jason runtime autostart enable</c> run from it registers.
         /// </summary>
-        private bool Reregister(string old)
+        /// <param name="why">What the one line it says adds after the jason it names now, where the move has a reason to give.</param>
+        private bool Reregister(string old, string why = "")
         {
             var registrar = RuntimeAutostartCommands.Registrar(env);
             if (registrar.Platform is AutostartPlatform.Unsupported)
@@ -948,12 +1032,12 @@ public static class MachineSetup
                     // The agent is RunAtLoad: loading it now would start a runtime, which this never does. The file is moved,
                     // and launchd loads it at the next logon; nothing is unloaded either, since the runtime is already stopped.
                     registrar.Apply(registration with { Apply = [], Remove = [] });
-                    Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}; it takes effect at the next logon, and nothing was started.");
+                    Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}{why}; it takes effect at the next logon, and nothing was started.");
                     return true;
                 }
 
                 registrar.Apply(registration);
-                Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}.");
+                Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}{why}.");
                 return true;
             }
             catch (AutostartException refused)
