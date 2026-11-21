@@ -124,7 +124,7 @@ public static class FolderSessionOpener
         var terminals = env.Terminals;
         var terminal = terminals is null
             ? null
-            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env));
+            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory, terminals.AliasTarget);
         var what = hostWord ?? "a shell";
         if (terminals is null || terminal is null)
         {
@@ -147,9 +147,14 @@ public static class FolderSessionOpener
         }
 
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.Own(env));
-        if (!dryRun && !terminals.Start(launch, out var problem))
+        if (!dryRun)
         {
-            return Refuse(env, human, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
+            if (TerminalStarts.Start(terminals, launch, out var problem, out var passedOver) is not { } opened)
+            {
+                return Refuse(env, human, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
+            }
+
+            launch = TerminalStarts.Said(env.Error, launch, opened, passedOver);
         }
 
         var continuing = request.Resume is { } continued ? $", continuing its conversation {continued}" : string.Empty;
