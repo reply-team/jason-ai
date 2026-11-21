@@ -131,6 +131,7 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             openFolder: async () => refused(),
             feed: async () => refused(),
             cardRefused: async () => refused(),
+            pathOf: () => '',
         },
         links: { take: async () => null, onOpen: none },
         setup: {
@@ -198,6 +199,7 @@ export function noDesktop(): JasonDesktop {
             openFolder: async () => needsRefusal(),
             feed: async () => needsRefusal(),
             cardRefused: async () => needsRefusal(),
+            pathOf: () => '',
         },
         links: { take: async () => null, onOpen: none },
         setup: {

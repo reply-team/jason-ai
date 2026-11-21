@@ -236,8 +236,9 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * (`permissionModes`). Ask first: the host's default, with the turn's settings file, whose hook refuses three kinds
  * before the host's own rules (`hookedSettings`), from the floor of Full access; below it, the inline settings and no
  * hook. Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool
- * as any other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only: plan, the
- * plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
+ * as any other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only: plan,
+ * which on macOS and Windows Claude Code meets by starting in its default mode, since the turn carries the scrub
+ * (`scrub`); the plan list's verbs in place of the allow list's, its inline settings, and no way out of planning. In every mode the
  * nouns' help runs too, exactly as written (`helpRules`). Full access: the host's own bypass, with the turn's settings
  * file and its hook, and the PowerShell tool kept (`fullAccessRemovedTools`); what the host asks about in that mode
  * itself reaches the prompt tool. Below the floor, where no hook rides an Ask first or Auto-edit turn to read where a
@@ -593,9 +594,16 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
 };
 
 /**
- * Set on every Claude Code turn on macOS and Windows: the host strips credentials from the environment of the commands,
- * hooks and stdio servers it starts (a key provider's key among them), so the key reaches the host's own process and not
- * a read-only `echo` that runs without a card. Never set on Linux, nor passed on there when the desktop inherited it:
+ * Set on every Claude Code turn on macOS and Windows but a Full access turn: the host strips credentials from the
+ * environment of the commands, hooks and stdio servers it starts (a key provider's key among them), so the key reaches the
+ * host's own process and not a read-only `echo` that runs without a card. Never set in Full access, on any system, nor
+ * passed on there when the desktop inherited it: while the variable is set, Claude Code starts in its default mode
+ * whatever mode the start asks for, its bypass included, and says so on its standard error ("Permission mode forced to
+ * default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set", seen on 2.1.329), so no Full access turn would run in its bypass.
+ * Plan only keeps it, so on macOS and Windows a Plan only turn asks for Claude Code's plan mode and starts in its default
+ * mode, the same line said (seen on 2.1.329), and Jason's own rules hold the turn: the plan list, the deny rules, no way
+ * out of planning, `JASON_CONFINED` and the desktop's refusal of every other request.
+ * Never set on Linux either, nor passed on there when the desktop inherited it:
  * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
  * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the
  * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn sets
@@ -603,7 +611,8 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
  * block"), so Jason's data directory and the runtime's descriptor in it are hidden; and "a sandboxed command's
  * `localhost` is private to that command", so the runtime's loopback address is out of reach too. `socat` is only the
  * sandbox's network relay, which stock Ubuntu lacks, and the PID namespace the variable also brings on Linux is a
- * separate effect. On Linux a key and the credentials the turn carries reach the commands the agent runs.
+ * separate effect. In Full access, and on Linux in every mode, a key and the credentials the turn carries reach the
+ * commands the agent runs, as in a terminal session.
  */
 const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
 
@@ -633,8 +642,8 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
- * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
+ * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux outside Full
+ * access `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not in Full access nor on Linux). Every host's turn carries
  * `JASON_CHAT_TURN=1`, in every mode, whatever the desktop inherited, so the jason it runs reads a request's content from
  * standard input only and runs a provider check's program by a bare name only; every turn that can only read and propose
  * carries `JASON_CONFINED=1` beside it, Plan only on any host and every Codex turn outside Full access (Ask first, and
@@ -661,8 +670,10 @@ export function hostEnvironment(
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
         /**
-         * The turn's mode: a turn that can only read and propose sets `JASON_CONFINED`, Plan only on any host and every Codex
-         * turn outside Full access. Absent, a run that is no turn of a mode, none.
+         * The turn's mode, which the start it is given to runs in: a turn that can only read and propose sets
+         * `JASON_CONFINED`, Plan only on any host and every Codex turn outside Full access, and a Full access turn of Claude
+         * Code carries no `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (`scrub`). Absent, a run that is no turn of a mode: no
+         * `JASON_CONFINED`, and the scrub as in every mode but Full access.
          */
         mode?: ChatMode;
         /**
@@ -699,7 +710,8 @@ export function hostEnvironment(
     const readsOnly = options.mode === 'plan_only' || (options.program === 'codex' && options.mode !== undefined && options.mode !== 'full_access');
     if (readsOnly) env[confinedVariable] = '1';
     if (options.program === 'claude') {
-        if (options.platform !== 'linux') env[scrub] = '1';
+        // The one place the scrub is decided, by the system and the turn's mode: never on Linux, never in Full access.
+        if (options.platform !== 'linux' && options.mode !== 'full_access') env[scrub] = '1';
         env[maintainFolder] = '1';
         env[noBackground] = '1';
     }

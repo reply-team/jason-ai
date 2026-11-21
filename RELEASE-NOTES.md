@@ -24,6 +24,9 @@ replaces the title and the body together.
 This is a candidate, published as a pre-release. It is built on 0.49.0 and carries 0.49.2's work on Jason Desktop's
 chat, with the fixes below.
 
+It follows 0.49.1 and carries all of it: on Linux, Jason is one installation, Jason Desktop and the `jason` it carries,
+installed, updated and removed once.
+
 The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm.
 It acts on your word: when you say so, it approves and answers what waits for you, starts and archives the campaigns you
 name, and sets your sender's name and tone of voice. In the modes that ask, it asks first for anything that could let a

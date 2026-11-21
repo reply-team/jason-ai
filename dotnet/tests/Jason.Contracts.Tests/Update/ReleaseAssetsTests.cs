@@ -83,18 +83,20 @@ public class ReleaseAssetsTests
     /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
     /// checksums, the two install scripts, the five plugins' packages, the UI's and the skills', and the desktop's
     /// thirteen: the Windows installer with its blockmap and feed, each Mac architecture's dmg, zip and the zip's blockmap,
-    /// the Mac feed, and Linux's deb and AppImage with the feed that names both. Twenty-seven, and a twenty-eighth is a
-    /// decision rather than a drift.
+    /// the Mac feed, and Linux's deb and AppImage with the feed that names both; then the apt repository's four index
+    /// files, Packages, Release, InRelease and Release.gpg. Thirty-one, and a thirty-second is a decision rather than a
+    /// drift.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "the release's asset set")]
-    public void A_release_publishes_exactly_these_twenty_seven_files() =>
+    public void A_release_publishes_exactly_these_thirty_one_files() =>
         Assert.Equal(
             ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip", "jason-plugin-journal-forwarder.zip", "jason-plugin-ntfy.zip", "jason-plugin-slack.zip", "jason-plugin-telegram.zip", "jason-ui.zip", "jason-skills.zip",
                 "jason-desktop-windows-x64-setup.exe", "jason-desktop-windows-x64-setup.exe.blockmap", "latest.yml",
                 "jason-desktop-macos-arm64.dmg", "jason-desktop-macos-arm64.zip", "jason-desktop-macos-arm64.zip.blockmap",
                 "jason-desktop-macos-x64.dmg", "jason-desktop-macos-x64.zip", "jason-desktop-macos-x64.zip.blockmap", "latest-mac.yml",
-                "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage", "latest-linux.yml"],
+                "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage", "latest-linux.yml",
+                "Packages", "Release", "InRelease", "Release.gpg"],
             ReleaseAssets.Published);
 
     /// <summary>

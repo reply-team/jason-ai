@@ -39,8 +39,6 @@ public sealed class StandInPrograms
         // The setup and the window as windowed programs, the carried jason as a console program, chosen per build and held
         // by Windows_the_setup_and_the_window_the_script_starts_are_windowed_programs_and_the_carried_jason_a_console_one.
         ["Jason.Cli.Tests/Documentation/InstallDesktopScriptTests.cs"] = ["\"/target:\" + target"],
-        // jason.exe, which the scripts run inside their own console and read the output of, as the real console program.
-        ["Jason.Cli.Tests/Documentation/InstallNoticesTests.cs"] = ["\"/target:exe\""],
         // An uninstaller run the proof's wait for an uninstaller is handed, started by the row's harness with Start-Process:
         // its subsystem held by The_Windows_proof_helpers_after_an_uninstall_run_as_the_proof_runs_them.
         ["Jason.Cli.Tests/Documentation/InstallScriptTests.cs"] = ["\"/target:winexe\""],

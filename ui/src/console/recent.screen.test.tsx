@@ -9,7 +9,9 @@ import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
+import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
+import { reloadConversations } from './chat';
 import { Console } from './console';
 import { attention } from './needs';
 import { resetRecent } from './recent';
@@ -21,6 +23,17 @@ import { chats, clock, conversations } from './state';
 
 const minutes = (count: number) => new Date(Date.now() - count * 60_000).toISOString();
 
+/** The runtime the console was drawn over last, and what it was asked of one agent alone. */
+let answered: FakeApi;
+const aloneOf = (operation: string, id: string) =>
+    answered.calls.filter((each) => {
+        const body = each.body as { campaign_id?: string; campaign_ids?: string[] };
+        return (
+            each.operation === operation &&
+            (body.campaign_id === id || (body.campaign_ids?.length === 1 && body.campaign_ids[0] === id))
+        );
+    }).length;
+
 async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefined): Promise<StubDesktop> {
     const desktop = stubDesktop();
     seed(desktop);
@@ -30,6 +43,7 @@ async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefi
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
+    answered = fake;
     watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -78,6 +92,8 @@ beforeEach(() => {
     resetRecent();
     clock.value = Date.now();
     chats.value = {};
+    // What an agent's header read in an earlier row is no part of this one.
+    agentFacts.value = {};
     conversations.value = [];
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
@@ -273,6 +289,45 @@ describe('a row', () => {
         expect(ring('Help me start')?.getAttribute('title')).toBe('No agent');
         expect(ring('Archived one')?.className).toContain('none');
         expect(ring('Archived one')?.hasAttribute('title')).toBe(false);
+    });
+
+    it('leaves out the chat of an archived agent once that agent is read, and its own address still opens it', async () => {
+        const desktop = await renderConsole((desktop) => {
+            seedAgents(desktop);
+            // Winter (cmp_4) is archived: the list of agents leaves it out, so its agent is read on its own.
+            desktop.keep({ id: 'conv_w', campaignId: 'cmp_4', title: 'Winter', updatedAt: minutes(1.5) });
+        });
+        await waitFor(() => expect(aloneOf('campaign.get', 'cmp_4')).toBe(1));
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        expect(titles()).not.toContain('Winter');
+        flush(() => {
+            location.hash = '#/campaigns/cmp_4/chat';
+        });
+        await waitFor(() =>
+            expect(desktop.calls.some((each) => each.name === 'chat.open' && each.args[0] === 'conv_w')).toBe(true),
+        );
+    });
+
+    it('reads an agent the list of agents does not hold by its state alone, once, and on a change only the new one', async () => {
+        const desktop = await renderConsole((desktop) => {
+            seedAgents(desktop);
+            desktop.keep({ id: 'conv_w', campaignId: 'cmp_4', title: 'Winter', updatedAt: minutes(1.5) });
+            desktop.keep({ id: 'conv_g', campaignId: 'cmp_gone', title: 'Archived one', updatedAt: minutes(10.5) });
+        });
+        await waitFor(() =>
+            expect([aloneOf('campaign.get', 'cmp_4'), aloneOf('campaign.get', 'cmp_gone')]).toEqual([1, 1]),
+        );
+        await waitFor(() => expect(titles()).not.toContain('Winter'));
+        // An agent the runtime does not know keeps its conversation, as one whose agent is not held.
+        expect(titles()).toContain('Archived one');
+        // A conversation of one more agent the list does not hold: that agent alone is read.
+        desktop.keep({ id: 'conv_p', campaignId: 'cmp_5', title: 'Winter plan', updatedAt: minutes(0.5) });
+        await flush(() => reloadConversations());
+        await waitFor(() => expect(aloneOf('campaign.get', 'cmp_5')).toBe(1));
+        expect([aloneOf('campaign.get', 'cmp_4'), aloneOf('campaign.get', 'cmp_gone')]).toEqual([1, 1]);
+        // Its state and nothing else: neither its people nor its work.
+        for (const id of ['cmp_4', 'cmp_gone', 'cmp_5'])
+            expect([aloneOf('campaign.summary', id), aloneOf('workitem.list', id)], id).toEqual([0, 0]);
     });
 
     it('opens its chat when clicked, as before', async () => {

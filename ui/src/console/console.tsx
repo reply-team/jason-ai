@@ -18,6 +18,7 @@ import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
 import { NoDesktopPage } from './no-desktop';
 import { OpenIn } from './open-in';
+import { RowMenu } from './row-menu';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -49,6 +50,9 @@ import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
 import { Painted } from './painted';
 import { Palette } from './palette';
+import { folderRefusal, readFileManager } from './open-folder';
+import { closeMark } from './icons';
+import { readUnlisted } from './recent';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
 import { closeMenus, sideView } from './side';
 import { StartPanel } from './start';
@@ -542,14 +546,20 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             followHistory(to);
         });
         const made = onChatMade(chatMade);
+        // The file manager's name, for the agent's Open folder, is the computer's: read once, as the console is drawn.
+        const fileManagerRead = readFileManager();
         // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
         const shadowed = effect(() => {
             void chats.value;
             void conversations.value;
             untracked(retireShadowed);
         });
+        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Recent.
+        const unlisted = readUnlisted(api);
         return () => {
+            unlisted();
             shadowed();
+            fileManagerRead();
             made();
             followed();
             unbound();
@@ -729,6 +739,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         </div>
                     </div>
                     <Palette system={desktop.platform} />
+                    <RowMenu />
                 </>
             )}
         </div>
@@ -741,10 +752,43 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
  */
 function SideFailure() {
     const failure = conversationsFailure.value;
-    return failure === null ? null : (
-        <div className="note am side-note" role="alert">
-            {failure}
-        </div>
+    const folder = folderRefusal.value;
+    return (
+        <>
+            {failure !== null && (
+                <div className="note am side-note" role="alert">
+                    {failure}
+                </div>
+            )}
+            {/* Why an agent's folder did not open in the file manager, until it is closed or opened again. */}
+            {folder !== null && (
+                <div className="note am side-note closable" role="alert">
+                    <span className="note-said">{folder}</span>
+                    <button
+                        type="button"
+                        className="note-close"
+                        aria-label="Close"
+                        title="Close"
+                        onClick={() => (folderRefusal.value = null)}
+                    >
+                        <svg
+                            width={14}
+                            height={14}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            {closeMark.map((each) => (
+                                <path key={each} d={each} />
+                            ))}
+                        </svg>
+                    </button>
+                </div>
+            )}
+        </>
     );
 }
 

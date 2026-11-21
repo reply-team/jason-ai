@@ -99,8 +99,8 @@ tool's input is their configuration acting. A hook or a rule a Full access turn 
 configuration acts in every later Full access turn and in their own terminal. Every other turn keeps the sealed command
 line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: Plan only, Ask
 first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
-browser tab, as root, started again after Claude Code refused or turned off its bypass, or once the hook was found
-filtered out. That line is `--setting-sources project`, `--strict-mcp-config`
+browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
+the hook was found filtered out. That line is `--setting-sources project`, `--strict-mcp-config`
 with the turn's MCP file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true`, deny
 the browser's server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) and turn off a skill's shell
 commands (`disableSkillShellExecution: true`): `serverDefences`, in `claudeTurnSettings`, `planTurnSettings` and the
@@ -147,7 +147,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
-  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own. `jason
+  uninstall` that keeps the data removes it, since it takes off what the set-up placed.
 - `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder (`folder: 'own'` on its record), where
   every turn of it runs, in every mode. It is made at the conversation's first turn. Removing the conversation moves it,
   one rename, to `chat-full-ended/<conversation id>-<moment>/`, where the sweep removes it seven days later; so does a
@@ -174,11 +175,13 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
   of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
   the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
-  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but on Linux, where a Claude
-  Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that prints it leaves it in the
-  transcript. Each folder keeps the
-  transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
-  provider.
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but in Full access, and on
+  Linux in every mode, where a Claude Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that
+  prints it leaves it in the transcript. No Full access turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, nor passes on one
+  the desktop inherited, since Claude Code starts in its default mode while it is set ("Permission mode forced to
+  default"): in Full access a key and the credentials the turn carries reach the commands the agent runs, as in a
+  terminal session. Each folder keeps the transcripts of its provider's turns, one Claude Code folder per provider since
+  a conversation keeps one session per provider.
 - How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
   key run through Claude Code (Anthropic, DeepSeek, Kimi, GLM, MiniMax), a retry or an end the host reports for a
   refused key ends the turn at once with one sentence naming the provider's card in Connect: a 401 or a failed
@@ -383,7 +386,9 @@ applies to the turns a person starts by sending, from the next one on.
   `jason` command of the allow list, its input nothing, a here-document or one file in the turn's folders. Anything else
   is a card, as before. Codex runs in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it
   acts, so Ask first on Codex reads and proposes, and the menu says so (`codexModeSays` in the page).
-- **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
+- **Plan only** reads and proposes and changes nothing. Claude Code is started with `--permission-mode plan`; on macOS
+  and Windows, where the turn carries `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (`scrub` in `src/chat-hosts.ts`), it starts in
+  its default mode instead, saying so on its standard error, and the rules below hold the turn just the same. Its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
@@ -474,18 +479,37 @@ applies to the turns a person starts by sending, from the next one on.
   in Ask first. A card kept on a record from an earlier desktop may carry an older reason, which the page still says.
 - **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
   alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
-- **When the bypass is not available.** The turn runs in Ask first and the chat says why once, in one shape, "Full
-  access is not available here: <why>" (`bypassSentences`), and "Full access is not available here until Jason Desktop
-  starts again: <why>" where a turn showed the cause; the record keeps Full access. The causes: the desktop runs as root
-  (`getuid`), under which Claude Code refuses the mode; Claude Code's settings turn it off
-  (`disableBypassPermissionsMode`, the person's own or an administrator's), which its init line shows by naming the
-  default mode first, so that start is stopped there, what of the person's own configuration runs as a session starts
-  having started with it, and the turn starts again at once in Ask first's own shape: its settings and its sealed
-  line, no PowerShell, every page asked about and the host's rules over the chat's own names; Claude Code refuses
-  the mode before it starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so
-  the turn starts again at once in the same shape; or a tool ran that the hook never saw (below). The first cause
-  stands, in memory, until the desktop starts again, and every later Claude Code turn of a Full access chat runs in Ask first
-  meanwhile.
+- **When the bypass is not available.** The turn runs in Ask first and each conversation is told why once in each hold
+  of the cause, by the cause that holds whatever a start found within it, in one shape, "Full access is not available
+  here: <why>" (`bypassSentence`), "Full access is not
+  available here right now: <why>" where the cause holds a minute, and "Full access is not available here until Jason
+  Desktop starts again: <why>" where a tool ran that the hook never saw. The record keeps Full access, and the box says
+  so with what the menu draws: "This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat
+  stays set to Full access." (`askFirstThisTurn`); a turn stopped for a tool the hook never saw ends in the same words
+  (`unguardedSentence`). The causes: the desktop runs as root (`getuid`), under which Claude Code refuses the mode;
+  Claude Code starts the turn in another mode, which its init line names first, so that start is stopped there, what of
+  the person's own configuration runs as a session starts having started with it, and the turn starts again at once in
+  Ask first's own shape: its settings, its sealed line, its environment, no PowerShell, every page asked about and the
+  host's rules over the chat's own names. Every start of a turn meets this, the fresh session after a resume Claude Code could not find included (`unlessNarrowed` in `Chat`), and each start's environment is built from
+  the mode it starts in as it starts, as its command line is. A resumed turn starts again in a fresh session given the
+  recap (`startAgain`), never in the session it resumed: the stopped start may already have written the message there,
+  which a resume would then hold twice; the record takes the fresh session's id. The word the init line names is read
+  from a closed table of Claude Code's modes
+  (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and once the
+  start has ended its standard error is matched against Claude Code's own words "Permission mode forced to default"
+  (`forcedDefault`), a closed match, nothing else of what it wrote being read: matched, the cause is `forced_default`,
+  "Claude Code said it forced its permission mode to default."; not, the sentence names the mode, "Claude Code did not
+  start in its bypass mode, and named its default mode instead.", and no setting is named. Claude Code refuses the mode
+  before it starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn
+  starts again at once in the same shape; or a tool ran that the hook never saw (below). A cause a turn found holds a
+  minute (`bypassHeldMs`), in memory: the Claude Code turns of a Full access chat in that minute run in Ask first and
+  ask for no bypass, so the host is not started twice on every turn while the cause stays; the menu draws Ask first and
+  is drawn again when the minute ends; and the first Full access turn after it asks for the bypass again, so a cause
+  that went away needs no restart of the desktop. Running as root, and a tool the hook never saw, hold until the
+  desktop starts again. The desktop's log says each cause that comes to hold, by its cause and the mode named, running
+  as root once as the desktop starts (`chat_bypass_unavailable`), so `jason logs --source desktop` tells the cases
+  apart. What a cause leads to, for the turn that found it and the turns after it, and for how long, is decided in one
+  place (`bypassLeadsTo` in `src/chat-modes.ts`).
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options), nor what an MCP server or connector of the person's own,
   which a Full access turn loads, does with the input of one of its tools: that input is read as its strings are
@@ -683,8 +707,12 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   `window.open` that leaves it goes to the system browser only when it is `https:`.
 - `contextIsolation` on, `nodeIntegration` off, `sandbox` on; no webview attached, and of the permissions a page asks
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
-- The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
-  of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- The preload exposes `window.jasonDesktop` and nothing else. Every call but one is answered only when it comes from the
+  top frame of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+  The one is `chat.pathOf`, a dropped file's path, which the preload answers itself, with no channel to the main process
+  and so with no check of the origin. That is safe because Electron reads a path only from a `File`, and a page holds a
+  `File` only when the person dropped it there or picked it: a page learns the path of no file it was not given. The
+  preload answers it only for a page served over `http:`, as the runtime's is, and with an empty path for any other.
 - On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
   of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
   window is dragged by that band and by the console's top strip, every control on them excepted. So that the window
@@ -882,7 +910,7 @@ runtime, and an update goes on without a look. Once the files are in place, at e
 or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
 waited for (`customInstall`): `jason` on this account's Path, the skills for Claude Code and Codex where each is found, and an older
 command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
-done never fails the install. On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+done never fails the install. On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which
 carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
 carried `jason uninstall` (`docs/release-and-update.md` §9), which takes off what Jason and Jason Desktop placed and
 leaves the data directory unless told otherwise and the harness root always. A person's uninstall from Installed apps
@@ -913,23 +941,31 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
   Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
   desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
-  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the
+  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Uninstall Jason…. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, and where a new terminal's PATH lacks that folder
-  it writes the installer's PATH lines into the shell profiles by the installer's own rule (`src/path-command.ts`,
-  `src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)). On macOS and Windows the
-  item is the machine set-up's report instead (`src/machine-setup.ts`), and `jason install` places the command.
+- The Command Line item is the machine set-up's report, as on macOS and Windows (`commandIsSetup` in
+  `src/machine-setup.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)): a start of a new version
+  runs the carried `jason install` with the login shell's PATH as `--terminal-path`, from the `jason` the deb carries or
+  from an AppImage's copy under `<data>/desktop/bundle/<version>/`, never from the mount, and runs none where there is no
+  copy. From the deb the terminal's `jason` is the package's own `/usr/bin/jason`, which the package's scripts write;
+  from an AppImage it is `jason install`'s wrapper in `~/.local/bin`, with the installer's PATH lines where a new
+  terminal's PATH lacks that folder. The login shell is asked from the PATH the start was handed less what an earlier
+  start added to its own (`handedPath` in `src/shell-path.ts`): a desktop an update or the mode switch starts inherits that
+  start's PATH, its usual places at the end and its AppImage mount in front, and a profile that keeps the PATH it is
+  given, as Arch's does, would otherwise print them back as a terminal's. `src/path-command.ts` remains only for a system
+  the set-up does not cover.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
   at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
-  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon or a PATH command the person
-  set up from another version's copy is set up again from this one at each start, the same act as turning it on; one
+  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon the person set up from
+  another version's copy is set up again from this one at each start, the same act as turning it on, and the copy's own
+  `jason install` writes the wrapper anew; one
   never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
   the one an update kept to go back to, one something set up still names, and one the running runtime was started
   from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
@@ -940,25 +976,36 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu
   24.04 and later, as shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the
   program make the user namespaces its sandbox uses; neither package has yet been seen on such a machine.
-- Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
-  `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
-  the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
-  updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
-  open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
-  machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
-- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which, once confirmed, takes
-  the steps `src/uninstall.ts` lists (its dialogs are `src/remove-placed.ts`), stopping the runtime first and going no
-  further when it does not stop, says what came of each and what to do by hand for one that failed, and offers to quit
-  Jason. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
-  the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders,
-  `~/.jason-demo` and `~/Jason-demo` (the data directory's and the harness root's own names with `-demo` after them),
-  only where each carries the mark the desktop wrote into it, `.jason-demo-folder`, once the demo's runtime is stopped. It then says what removes the
-  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
-  that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-  `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
-  off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
-  `<data>/desktop/bundle/<version>/jason` for an AppImage:
+- Updates come to the AppImage through electron-updater, which replaces the file where it is and keeps the AppImage
+  file itself under `<data>/desktop/rollback/<version>/`. Each start of an AppImage records its file in
+  `<data>/desktop/appimage.json` (`recordAppImage` in `src/linux-package.ts`), and so does an update that installs it
+  under a new name, so that the command line's update hands over to that file; a terminal's `--update-apply` request is
+  taken by an AppImage alone (`requestSupport` in `src/update-request.ts`). The deb's electron-updater is turned off
+  (`updaterOf`): the system updates the package from Jason's apt repository, so the update item says "Updates Come
+  Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
+  running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
+  (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
+  it, then a relaunch, whose machine set-up finishes that update. A start that finds the runtime this application's own
+  `jason` started still running an older build, the system having updated the package while no window was open, offers
+  the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
+  the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
+  or the system's update where the runtime is newer. If a version the deb's updater recorded does
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
+  replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
+  update apply`. The updater's cache is
+  `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+- Uninstall Jason… in the Jason menu (and the tray's; `src/uninstall-door.ts`) is the one uninstall, as on macOS: it asks
+  first, with a box for the data directory, Cancel the default, and on the person's word starts the carried `jason
+  uninstall` on its own with `--wait-for` this process's id, and quits. For the deb the verb takes the package
+  `jason-desktop` off first, once the runtime has stopped, purged by apt through the system's own password dialog, and
+  removes nothing of the account's when that is refused; for an AppImage it removes its menu entry, its icons, the copies
+  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system.
+  The system's own removal leaves the account's files, and what they start is made harmless: the autostart entry and
+  the AppImage's menu entry name the file they start as `TryExec=` (`autostartEntry` in `src/login-item.ts`), and the
+  runtime's systemd user unit carries `ConditionPathExists=`. When Jason will not start, take off by hand what it placed.
+  Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each `<data>/desktop/bundle/<version>/jason` for an
+  AppImage:
 
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
      application's: stop it with `<that jason> runtime stop`. A runtime of any other `jason` stays.
@@ -972,6 +1019,8 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
      `export PATH="…/.local/bin:$PATH"` line under it out of `~/.profile`, `~/.bash_profile`, `~/.bash_login`,
      `~/.bashrc`, `~/.zprofile` and `~/.zshrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
+  6. Remove the application: `sudo apt purge jason-desktop` for the deb; for an AppImage the file, its menu entry
+     `~/.local/share/applications/jason-desktop.desktop` and its icons under `~/.local/share/icons/hicolor/`.
 
 ## Building and testing
 
@@ -1010,8 +1059,9 @@ node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version 0.35.0-r
 JASON_VERSION=0.35.0-rc.1 npm run package -- --linux --x64   # dist/: the deb, the AppImage, latest-linux.yml
 ```
 
-The program is `jason-desktop-app`, so the deb's `/usr/bin` link never takes `jason-desktop`, the name the PATH command
-falls back to. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
+The program is `jason-desktop-app`, so the deb's `/usr/bin` link to it never takes `jason-desktop`, the name an earlier
+version's PATH command fell back to; the deb's own scripts (`installer/deb/`) add `/usr/bin/jason` and Jason's apt
+source, signed by the key the package carries, and take them back. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
 forms are packed at once from one folder, and the deb writes `resources/package-type` into it, which makes
 electron-updater update a package as a deb, so the configuration starts the deb only once the AppImage is built.
 

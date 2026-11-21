@@ -22,10 +22,11 @@ is for what they cannot explain, and you cannot know that before you have read t
 investigation on its own, and each one makes the next easier to read.
 
 **Is the runtime answering at all?** If it is not, nothing anywhere is being claimed, and every item in the
-installation looks stuck for the same reason.
+installation looks stuck for the same reason. Its `runtime` check says whether a runtime answers, and the command that
+starts one where none does.
 
 ```
-jason runtime status --human
+jason status --human
 ```
 
 **A runtime that will not start on its data.** When `jason runtime start` answers `data_newer`, the database was
@@ -34,7 +35,7 @@ to update this Jason, as the refusal's own sentence says: `jason update apply`, 
 Desktop. Never restore an older backup over the database, delete anything in the data directory, or start an older
 build on it to get past the refusal: the data is the newer version's, and only that version or a later one reads it.
 
-**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason status`'s optional `move` check says
+**A command-line install moving into Jason Desktop.** On macOS, Windows and Linux, `jason status`'s optional `move` check says
 where the move of a command-line install into Jason Desktop stands. It never stops work: until the move retires it, the
 command-line install answers as `jason`, its runtime with it. Where the check names a command, that is the repair, run
 on the person's word; where it names none, the move waits on something no command typed here changes, and the check says

@@ -115,9 +115,22 @@ public static class ReleaseAssets
         "jason-desktop-linux-x64.deb", "jason-desktop-linux-x64.AppImage", "latest-linux.yml",
     ];
 
+    /// <summary>
+    /// The index of the flat apt repository a release is, for the desktop's deb: <c>Packages</c>, the deb's control fields
+    /// with its file name, size and hashes; <c>Release</c>, which names Jason as its origin and gives Packages' hashes;
+    /// and <c>Release</c> signed, clearsigned as <c>InRelease</c> and detached as <c>Release.gpg</c>, with the key whose
+    /// public half is <c>install/jason-desktop-archive-keyring.gpg</c>. apt reads them beside the deb, so the names are
+    /// the ones apt asks a flat repository for.
+    /// </summary>
+    /// <remarks>
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>; the runtime never reads them. A release
+    /// without them leaves every machine whose apt reads the repository with an error at its next update.
+    /// </remarks>
+    public static IReadOnlyList<string> AptIndex { get; } = ["Packages", "Release", "InRelease", "Release.gpg"];
+
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui, Skills, .. Desktop];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin, JournalForwarderPlugin, NtfyPlugin, SlackPlugin, TelegramPlugin, Ui, Skills, .. Desktop, .. AptIndex];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>

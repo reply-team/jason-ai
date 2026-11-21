@@ -1880,25 +1880,28 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// install.sh's job and install.ps1's assemble their feed from the archives their run packaged, which is all three only on
-    /// a run that builds macOS. The feed in the layout 0.1.0 published names all three archives, so that step runs there
-    /// only, in both jobs.
+    /// install.sh's job is the apt route's leg, run against the deb and the index the desktop job built and uploaded: it
+    /// needs that job, runs under the same condition, and has no condition of its own on a step, so whenever the desktop
+    /// job runs this one runs too, and a change to the install line, the package or the leg is never passed by a skip.
     /// </summary>
     [Fact]
-    public void The_install_jobs_require_the_archives_their_run_packaged()
+    public void The_install_line_s_job_runs_whenever_the_desktop_job_does_against_what_it_uploaded()
     {
-        foreach (var name in new[] { "install-sh" })
-        {
-            var steps = Steps(Mapping(Jobs(), name));
-            var assembling = Assert.Single(steps, step => Scalar(step, "name") == "Assemble the feed the way a release is assembled");
-            Assert.Contains("-Require ${{ needs.version.outputs.rids }}", Scalar(assembling, "run"), StringComparison.Ordinal);
-
-            var fixture = Assert.Single(steps, step => Scalar(step, "name") == "Install from the schema-1 fixture, the feed layout 0.1.0 published");
-            Assert.Equal(Macos, Scalar(fixture, "if"));
-            Assert.All(steps.Where(step => step != fixture), step => Assert.Null(Scalar(step, "if")));
-        }
-
-        Assert.DoesNotContain("-Require win-x64,linux-x64,osx-arm64", Read(Ci), StringComparison.Ordinal);
+        var job = Mapping(Jobs(), "install-sh");
+        var desktop = Mapping(Jobs(), "desktop");
+        Assert.Equal(["version", "desktop"], Assert.IsType<YamlSequenceNode>(Node(job, "needs")).Children.Select(need => need.ToString()));
+        Assert.Equal(Linux, Scalar(job, "if"));
+        Assert.Equal(Scalar(desktop, "if"), Scalar(job, "if"));
+        Assert.Null(Node(job, "continue-on-error"));
+        var steps = Steps(job);
+        Assert.All(steps, step => Assert.Null(Node(step, "if")));
+        Assert.All(steps, step => Assert.Null(Node(step, "continue-on-error")));
+        // The deb alone: the leg makes its own key and both releases, so nothing else of the desktop job's is read, and it
+        // is called with the one folder it takes (a second argument ends it with its usage line).
+        Assert.Equal(
+            ["ci-desktop-linux-x64-desktop"],
+            steps.Where(step => Scalar(step, "uses") == "actions/download-artifact@v7").Select(step => Scalar(Mapping(step, "with"), "name")));
+        Assert.EndsWith("bash .github/scripts/test-apt-route.sh apt", (Scalar(steps[^1], "run") ?? "").Trim(), StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -285,6 +285,34 @@ describe('the start screen', () => {
         );
     });
 
+    it('puts the path of a file dropped on the box in at the caret, quoted, says one it could not read, and goes nowhere', async () => {
+        const desktop = renderConsole(stubDesktop());
+        await ready();
+        fireEvent.change(box(), { target: { value: 'people like those in  please' } });
+        box().setSelectionRange(21, 21);
+        const list = new File(['x'], 'leads.csv');
+        const path = 'C:\\Users\\Ана Ли\\Desktop\\leads.csv';
+        desktop.paths.set(list, path);
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        // The box takes the drop, so the window never goes to the file.
+        expect(fireEvent.dragOver(box(), carrying(list))).toBe(false);
+        expect(fireEvent.drop(box(), carrying(list))).toBe(false);
+        const put = `people like those in "${path}" please`;
+        await waitFor(() => expect(box().value).toBe(put));
+        expect(box().selectionStart).toBe(put.length - ' please'.length);
+        expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['leads.csv']]);
+        expect(screen.queryByText(unread)).toBeNull();
+        // A file that is not on this computer puts nothing in, and the box says so, until a word is typed.
+        expect(fireEvent.drop(box(), carrying(new File(['z'], 'made.txt')))).toBe(false);
+        await waitFor(() => within(startForm()).getByText(unread));
+        expect(box().value).toBe(put);
+        fireEvent.change(box(), { target: { value: `${put}, in Poland` } });
+        await waitFor(() => expect(screen.queryByText(unread)).toBeNull());
+        // Nothing is sent by a drop: Start still waits for its button.
+        expect(calls(desktop, 'chat.create')).toEqual([]);
+    });
+
     it('starts a set-up chat with what is sent, on the AI that is connected, and shows the chat', async () => {
         const desktop = renderConsole(stubDesktop());
         await waitFor(() => startForm());

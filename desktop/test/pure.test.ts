@@ -14,7 +14,7 @@ import { hosts, keyedFolder, keyProviders, keyWord, notTheChatYet, providerEnvir
 import { isFeed, isTheme, parseSettings } from '../src/settings.ts';
 import { versionsDifferSentence } from '../src/setup.ts';
 import { pluginValid, runtimeVersionIn, statusFacts, versionAtLeast, versionIn } from '../src/setup-model.ts';
-import { loginShell, loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
+import { handedPath, loginShell, loginShellOptions, pathFromOutput, withUsualPlaces } from '../src/shell-path.ts';
 
 // ---- One installation ----------------------------------------------------------------------------------------------
 
@@ -152,6 +152,22 @@ test('the system screen’s sentence names Check for Updates when the runtime is
     assert.doesNotMatch(sentence, /jason update/);
 });
 
+test('on the deb the system screen’s sentence never names Check for Updates, which the deb has no item for', () => {
+    // This application's own runtime of an older build: the restart item the start offers, or the CLI's restart.
+    const ours = versionsDifferSentence('0.49.1', '0.49.2', true, null, true) ?? '';
+    assert.match(ours, /Choose Restart Jason and Its Runtime to Finish the Update to 0\.49\.2 in the desktop's Jason menu, or in the menu of its icon in the tray, or run `jason runtime restart`, to bring them to one version\./);
+    // A newer runtime, this application's or another's: this desktop is behind, and the system updates it.
+    for (const own of [true, false]) {
+        const behind = versionsDifferSentence('0.50.0', '0.49.2', own, null, true) ?? '';
+        assert.match(behind, /Update Jason Desktop through your system, with Software Updater or `sudo apt update && sudo apt upgrade` in a terminal, to bring them to one version\./, `ours: ${own}`);
+    }
+    // Another installation's older runtime is still brought up by its own jason update.
+    assert.match(versionsDifferSentence('0.48.2', '0.49.2', false, null, true) ?? '', /Run `jason update`/);
+    for (const [runtime, own] of [['0.49.1', true], ['0.50.0', true], ['0.50.0', false], ['0.48.2', false]] as const) {
+        assert.doesNotMatch(versionsDifferSentence(runtime, '0.49.2', own, 'Ctrl+Shift+D', true) ?? '', /Check for Updates/, `${runtime}, ours: ${own}`);
+    }
+});
+
 test('a log names a CLI verb by its closed list, never by its arguments', () => {
     assert.equal(verbOf(['status']), 'status');
     assert.equal(verbOf(['runtime', 'stop']), 'runtime stop');
@@ -245,6 +261,23 @@ test('on Linux the usual places are the same less Homebrew’s macOS folder, wit
     const entries = withUsualPlaces('/usr/bin', home, 'linux').split(delimiter);
     assert.deepEqual(entries, ['/usr/bin', join(home, '.local', 'bin'), join(home, '.claude', 'local'), join(home, '.npm-global', 'bin'), '/usr/local/bin', '/home/linuxbrew/.linuxbrew/bin']);
     assert.ok(withUsualPlaces('/usr/bin', home, 'darwin').split(delimiter).includes('/opt/homebrew/bin'));
+});
+
+test('the PATH a start was handed: the usual places an earlier start ended it with and every AppImage mount’s folders come off, and the person’s own stay', { skip: process.platform === 'win32' }, () => {
+    const home = resolve('/home/x');
+    const bin = join(home, '.local', 'bin');
+    const earlier = '/tmp/.mount_jason-COlmoo';
+    const mount = '/tmp/.mount_jason-gnldDa';
+    const handed = withUsualPlaces(`${earlier}:${earlier}/usr/sbin:/usr/local/bin:/usr/bin`, home, 'linux');
+    assert.equal(handedPath(`${mount}:${mount}/usr/sbin:${handed}`, mount, home, 'linux'), '/usr/local/bin:/usr/bin');
+    // Where it stands before the end, a usual place is the person's own and stays.
+    const own = [bin, '/usr/bin', join(home, '.npm-global', 'bin'), '/opt/tools/bin'].join(delimiter);
+    assert.equal(handedPath(own, undefined, home, 'linux'), own);
+    assert.equal(handedPath('/tmp/appimage_extracted_ab12:/tmp/appimage_extracted_ab12/usr/sbin:/usr/bin', '/tmp/appimage_extracted_ab12/', home, 'linux'), '/usr/bin', 'an AppImage extracted and run, by the folder APPDIR names');
+    assert.equal(handedPath('/tmp/mount_x/bin:/home/x/.mounts/bin:/usr/bin', 'relative', home, 'linux'), '/tmp/mount_x/bin:/home/x/.mounts/bin:/usr/bin', 'a folder beside a mount is not one');
+    assert.equal(handedPath(withUsualPlaces('/usr/bin:/bin', home, 'darwin'), undefined, home, 'darwin'), '/usr/bin:/bin');
+    const windows = `C:\\Windows;${bin}`;
+    assert.equal(handedPath(windows, undefined, home, 'win32'), windows, 'the PATH Windows hands is the person’s own');
 });
 
 test('the login shell is asked on macOS and Linux, its default the one each starts a terminal with when SHELL names none', () => {

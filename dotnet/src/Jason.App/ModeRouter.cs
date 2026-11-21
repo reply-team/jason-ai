@@ -186,6 +186,15 @@ public static class ModeRouter
         LinkHandler.RunAsync(args, CliEnvironment.Default(), cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>
-        CliApp.RunAsync(args, CliEnvironment.Default(), cancellationToken);
+    private static Task<int> RunCli(string[] args, CancellationToken cancellationToken)
+    {
+        // What a parent handed this process open, Jason Desktop's files above all, would keep an AppImage's own process alive
+        // while the uninstall looks for an open window; the uninstall needs none of it.
+        if (args is ["uninstall", ..])
+        {
+            Jason.Cli.Process.StandardStreams.CloseInherited();
+        }
+
+        return CliApp.RunAsync(args, CliEnvironment.Default(), cancellationToken);
+    }
 }
