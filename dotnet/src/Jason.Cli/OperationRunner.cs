@@ -58,7 +58,7 @@ public static class OperationRunner
 
         if (!response.IsSuccess)
         {
-            CliErrors.Print(env.Out, options.Human, ErrorText(response));
+            CliErrors.Print(env.Out, options.Human, ExitCodes.ApiError, ErrorText(response));
             options.AfterError?.Invoke(response);
             return ExitCodes.ApiError;
         }
@@ -121,7 +121,7 @@ public static class OperationRunner
         {
             // The runtime took the request, so it is reachable: this is the request's own end, not a dead runtime, and a
             // repeat starts the same work over rather than finding it done.
-            CliErrors.Print(env.Out, human, CliErrors.Serialize(
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                 CliErrors.RequestTimedOut,
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -194,7 +194,7 @@ public static class OperationRunner
 
     private static int Fail(CliEnvironment env, bool human, string code, string message, bool retryable = true)
     {
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable));
+        CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 }

@@ -164,39 +164,48 @@ public static class CliErrors
     /// <summary><c>session open</c> at a folder: the terminal was found and did not start.</summary>
     public const string TerminalStartFailed = "terminal_start_failed";
 
-    /// <summary>The codes that say no runtime could be asked, exit 3, rather than that one understood and refused.</summary>
-    private static readonly HashSet<string> NotReached = new(StringComparer.Ordinal) { NoDescriptor, RuntimeUnreachable, Unauthorized, StaleDescriptor };
-
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 
     /// <summary>
     /// An error envelope as a person reads it under <c>--human</c>: the message the runtime or this CLI gave, behind
-    /// its code in parentheses so it can be quoted — <c>Refused (campaign_not_found): The campaign cmp_… was not
-    /// found.</c> where the request was understood and refused, <c>Not reached (runtime_unreachable): …</c> where no
-    /// runtime could be asked. Text that is not an envelope with a code is handed back as it is.
+    /// its code in parentheses so it can be quoted, and a label the exit code chooses — <c>Not reached (runtime_unreachable): …</c>
+    /// for exit 3, no runtime could be asked, and <c>Refused (campaign_not_found): The campaign cmp_… was not found.</c>
+    /// for any other. A refusal worth repeating ends <c>It can be tried again.</c>, and each of the envelope's details
+    /// follows on a line of its own, <c>  field: code (message)</c>, every one of them. Text that is not an envelope with
+    /// a code is handed back as it is.
     /// </summary>
-    public static string Sentence(string envelope)
+    public static string Sentence(string envelope, int exitCode)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        ErrorBody? error;
         try
         {
-            if (JsonSerializer.Deserialize<ErrorResponse>(envelope, JasonJson.Options)?.Error is { Code.Length: > 0 } error)
-            {
-                return $"{(NotReached.Contains(error.Code) ? "Not reached" : "Refused")} ({error.Code}): {error.Message}";
-            }
+            error = JsonSerializer.Deserialize<ErrorResponse>(envelope, JasonJson.Options)?.Error;
         }
         catch (JsonException)
         {
+            return envelope;
         }
 
-        return envelope;
+        if (error is not { Code.Length: > 0 })
+        {
+            return envelope;
+        }
+
+        var label = exitCode == ExitCodes.RuntimeUnavailable ? "Not reached" : "Refused";
+        var lines = new List<string> { $"{label} ({error.Code}): {error.Message}{(error.Retryable ? " It can be tried again." : string.Empty)}" };
+        lines.AddRange((error.Details ?? []).Select(detail => $"  {detail.Field}: {detail.Code} ({detail.Message})"));
+        return string.Join(Environment.NewLine, lines);
     }
 
-    /// <summary>Prints an error envelope on <paramref name="output"/>: as it is, or under <c>--human</c> as its <see cref="Sentence"/>.</summary>
-    public static void Print(TextWriter output, bool human, string envelope)
+    /// <summary>
+    /// Prints an error envelope on <paramref name="output"/>: as it is, or under <c>--human</c> as its <see cref="Sentence"/>
+    /// for the exit code the call returns.
+    /// </summary>
+    public static void Print(TextWriter output, bool human, int exitCode, string envelope)
     {
         ArgumentNullException.ThrowIfNull(output);
-        output.WriteLine(human ? Sentence(envelope) : envelope);
+        output.WriteLine(human ? Sentence(envelope, exitCode) : envelope);
     }
 }

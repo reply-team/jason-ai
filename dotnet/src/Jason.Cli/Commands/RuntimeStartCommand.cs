@@ -75,7 +75,7 @@ public static class RuntimeStartCommand
             if (unfinished.Replacing)
             {
                 var (code, message) = unfinished.Refusal("Nothing was started.");
-                CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable: false));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(code, message, retryable: false));
                 return ExitCodes.ApiError;
             }
 
@@ -141,7 +141,7 @@ public static class RuntimeStartCommand
                 // to find it out, and an agent and the desktop branch on the code, never on the words around it.
                 if (NewerData(said) is { } newer)
                 {
-                    CliErrors.Print(env.Out, human, CliErrors.Serialize(DataNewer.Code, newer, retryable: false));
+                    CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(DataNewer.Code, newer, retryable: false));
                     return ExitCodes.ApiError;
                 }
 
@@ -456,7 +456,7 @@ public static class RuntimeStartCommand
 
     private static int Fail(CliEnvironment env, bool human, string message, bool retryable)
     {
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(CliErrors.RuntimeStartFailed, message, retryable));
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(CliErrors.RuntimeStartFailed, message, retryable));
         return ExitCodes.ApiError;
     }
 }

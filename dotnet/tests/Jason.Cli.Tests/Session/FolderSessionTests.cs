@@ -1070,6 +1070,58 @@ public sealed class FolderSessionTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Under <c>--human</c> a refusal is said once, its sentence on stdout; without it the envelope on stdout and the
+    /// sentence on stderr, as before.
+    /// </summary>
+    [Fact]
+    public async Task A_host_not_on_the_search_path_is_said_once_under_human()
+    {
+        _run.Programs.AddProgram("claude");
+        SystemPowerShell();
+
+        const string sentence = "codex's program 'codex' is not on this machine's search path, so nothing was started.";
+
+        await SaidOnceAsync(
+            ["session", "open", "--host", "codex"],
+            "{\"error\":{\"code\":\"host_not_found\",\"message\":\"codex\\u0027s program \\u0027codex\\u0027 is not on this machine\\u0027s search path, so nothing was started.\",\"retryable\":false}}",
+            sentence,
+            "Refused (host_not_found): " + sentence);
+    }
+
+    [Fact]
+    public async Task No_terminal_is_said_once_under_human()
+    {
+        _run.Programs.AddProgram("claude");
+        File.Delete(_run.ConsoleHost);
+
+        var sentence = "No terminal was found to start claude_code in, so nothing was started; in a terminal of your own, go to " + _root + ".";
+
+        await SaidOnceAsync(
+            ["session", "open"],
+            "{\"error\":{\"code\":\"terminal_not_found\",\"message\":\"" + sentence + "\",\"retryable\":false}}",
+            sentence,
+            "Refused (terminal_not_found): " + sentence);
+    }
+
+    private async Task SaidOnceAsync(string[] words, string envelope, string sentence, string said)
+    {
+        var plain = await _run.Cli(words);
+        var plainOut = _run.Output.ToString();
+        var plainError = _run.Error.ToString();
+        _run.Output.GetStringBuilder().Clear();
+        _run.Error.GetStringBuilder().Clear();
+        var human = await _run.Cli([.. words, "--human"]);
+
+        Assert.Equal(ExitCodes.ApiError, plain);
+        Assert.Equal(ExitCodes.ApiError, human);
+        Assert.Empty(_run.Terminals.Launches);
+        HumanErrorPins.Pin(envelope, plainOut);
+        HumanErrorPins.Pin(sentence, plainError);
+        HumanErrorPins.Pin(said, _run.Output.ToString());
+        Assert.Equal(string.Empty, _run.Error.ToString());
+    }
+
     /// <summary>Windows PowerShell where the system keeps it, under the system directory the recorder names.</summary>
     private string SystemPowerShell()
     {

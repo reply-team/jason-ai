@@ -105,7 +105,7 @@ public static class RuntimeStopCommand
         var look = reader.Look();
         if (look.Descriptor is not { } descriptor)
         {
-            CliErrors.Print(env.Out, human, CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
+            CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
             return ExitCodes.RuntimeUnavailable;
         }
 
@@ -118,7 +118,7 @@ public static class RuntimeStopCommand
         if (!response.IsSuccess)
         {
             answered?.Invoke(false);
-            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -141,7 +141,7 @@ public static class RuntimeStopCommand
             return ExitCodes.Success;
         }
 
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             CliErrors.ShutdownTimeout,
             $"The runtime acknowledged the shutdown but had not exited after {Seconds(waited)} s.",
             retryable: true));

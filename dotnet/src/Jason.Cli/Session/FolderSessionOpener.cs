@@ -269,7 +269,7 @@ public static class FolderSessionOpener
 
         if (!response.IsSuccess)
         {
-            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return (ExitCodes.ApiError, null);
         }
 

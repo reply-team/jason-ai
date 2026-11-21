@@ -187,7 +187,7 @@ public static class RuntimeAutostartCommands
 
     private static int Fail(CliEnvironment env, bool human, AutostartException refusal)
     {
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
         return ExitCodes.ApiError;
     }
 

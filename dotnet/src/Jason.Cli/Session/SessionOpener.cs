@@ -47,7 +47,7 @@ public static class SessionOpener
 
         if (!response.IsSuccess)
         {
-            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -274,13 +274,16 @@ public static class SessionOpener
     }
 
     /// <summary>
-    /// A refusal of a session with no item: the API's error envelope on stdout with <paramref name="code"/> (under
-    /// <c>--human</c> its <see cref="CliErrors.Sentence"/>), the sentence on stderr, and exit 1.
+    /// A refusal of a session with no item: the API's error envelope on stdout with <paramref name="code"/> and the
+    /// sentence on stderr; under <c>--human</c> once, its <see cref="CliErrors.Sentence"/> on stdout alone; exit 1.
     /// </summary>
     internal static int Refuse(CliEnvironment env, bool human, string code, string message)
     {
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable: false));
-        env.Error.WriteLine(message);
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(code, message, retryable: false));
+        if (!human)
+        {
+            env.Error.WriteLine(message);
+        }
         return ExitCodes.ApiError;
     }
 

@@ -129,7 +129,7 @@ public static class UiCommands
 
         if (!response.IsSuccess)
         {
-            CliErrors.Print(env.Out, human, OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 

@@ -85,7 +85,7 @@ public static class JournalWatch
                     return Fail(env, human, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale.");
                 }
 
-                CliErrors.Print(env.Out, human, OperationRunner.ErrorText(refusal));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(refusal));
                 return ExitCodes.ApiError;
             }
 
@@ -161,7 +161,7 @@ public static class JournalWatch
 
     private static int Fail(CliEnvironment env, bool human, string code, string message, bool retryable = true)
     {
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(code, message, retryable));
+        CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 

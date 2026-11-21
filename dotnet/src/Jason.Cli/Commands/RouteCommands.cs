@@ -222,7 +222,7 @@ public static class RouteCommands
         }
 
         var running = info is null ? "The runtime that is running could not be asked what it knows" : $"The runtime that is running ({info.RuntimeVersion}) does not know channel routes";
-        CliErrors.Print(env.Out, human, CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             CliErrors.RuntimeTooOld,
             $"{running}, so it would ignore --channel and answer or change the operation's own route instead. Nothing was sent. Restart the runtime if it was updated without a restart, or update Jason.",
             retryable: false));
