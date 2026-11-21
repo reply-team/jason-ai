@@ -66,6 +66,59 @@ public class ReplyEmailLimitClockTests
             block);
     }
 
+    /// <summary>
+    /// The daily limit's block clears no later than the next midnight UTC, whatever wait reply-cli names: the mailbox is free
+    /// to send again tomorrow. Today used up names a wait to the end of today, which is that midnight; an email held for a
+    /// later day that is already full names a wait to the end of that day, weeks out, and the block still clears at the next
+    /// midnight, when the mailbox is tried again.
+    /// </summary>
+    [Theory]
+    // Today used up: the wait Reply names runs to the end of today.
+    [InlineData("2026-11-18T13:45:10.250Z", "36889.75")]
+    // A later due day already full: the wait runs to the end of that day, three weeks out.
+    [InlineData("2026-11-18T13:45:10.250Z", "1851289.75")]
+    // A wait just past the midnight, and one at the year's turn.
+    [InlineData("2026-11-18T13:45:10.250Z", "36890")]
+    [InlineData("2026-12-31T23:59:59.000Z", "86400")]
+    public void The_daily_limit_s_block_clears_no_later_than_the_next_midnight_utc(string now, string wait)
+    {
+        var block = BlockAt(now, "email.limit_reached", 429, "contact.dailyLimitReached", wait);
+        var midnight = new DateTimeOffset(DateTimeOffset.Parse(now, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).UtcDateTime.Date, TimeSpan.Zero).AddDays(1);
+
+        Assert.Equal(
+            $$"""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"{{midnight.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}}"}""",
+            block);
+    }
+
+    /// <summary>
+    /// The cap is the daily limit's alone: the active contacts renew on a day Reply knows and the package does not, so a
+    /// wait reply-cli names past the next midnight is kept.
+    /// </summary>
+    [Fact]
+    public void A_long_wait_on_the_active_contacts_is_kept()
+    {
+        var block = BlockAt("2026-11-18T13:45:10.250Z", "email.limit_reached", 429, "contact.activeContactsLimitReached", wait: "1851289.75");
+
+        Assert.Equal(
+            """{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"2026-12-10T00:00:00.000Z"}""",
+            block);
+    }
+
+    /// <summary>
+    /// A mailbox that cannot send direct emails at all is the mailbox's block for its limit, read by Reply's code or by
+    /// reply-cli's own: Reply names no moment it lifts, so the block names none, whatever the clock says.
+    /// </summary>
+    [Theory]
+    [InlineData("email.sending_disabled", "contact.emailAccountSendingDisabled")]
+    [InlineData("email.sending_disabled", null)]
+    [InlineData("reply.refused", "contact.emailAccountSendingDisabled")]
+    public void A_mailbox_that_cannot_send_is_its_block_with_no_moment(string cliCode, string? replyCode)
+    {
+        var block = BlockAt("2026-11-18T13:45:10.250Z", cliCode, 403, replyCode, wait: null);
+
+        Assert.Equal("""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit"}""", block);
+    }
+
     /// <summary>The active contacts renew on a day Reply does not say: with no wait named, the block names no moment.</summary>
     [Fact]
     public void The_active_contacts_block_names_no_moment_without_a_wait()
@@ -81,7 +134,7 @@ public class ReplyEmailLimitClockTests
     /// <paramref name="now"/> and the CLI's <c>retry_after</c> the JavaScript value <paramref name="wait"/> spells, or none:
     /// the row <c>rowOf</c> reads, ended by <c>fail</c>.
     /// </summary>
-    private static string BlockAt(string now, string cliCode, int status, string replyCode, string? wait)
+    private static string BlockAt(string now, string cliCode, int status, string? replyCode, string? wait)
     {
         var at = DateTimeOffset.Parse(now, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         using var engine = new Engine(options =>
@@ -93,7 +146,8 @@ public class ReplyEmailLimitClockTests
         engine.Execute("var host = { fail: function (failure) { return failure; } };");
         engine.SetValue("errors", engine.Modules.Import("./modules/errors.js"));
 
-        var said = new JsonObject { ["code"] = cliCode, ["status"] = status, ["reply_code"] = replyCode };
+        var said = new JsonObject { ["code"] = cliCode, ["status"] = status };
+        if (replyCode is not null) said["reply_code"] = replyCode;
         var written = engine.Evaluate(
             $$"""
             (function () {

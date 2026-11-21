@@ -10,7 +10,15 @@ absorbed by a release of this package alone.
   under `details.limit`; a mailbox that cannot send direct emails at all as `email.sending_disabled`; and whether a send
   bounced, its kind and its moment, on `reply direct-send get`. With an older reply-cli the reload refuses the program,
   `executable_incompatible`, and the package is `unavailable` until reply-cli is updated (`npm install -g reply-cli`);
-  the other packages load as before. Nothing the package does with what reply-cli prints has changed.
+  the other packages load as before.
+- A mailbox Reply says cannot send direct emails at all now, its daily limit 0 or its team's plan sending nothing
+  (`email.sending_disabled`, Reply's `contact.emailAccountSendingDisabled`), is now the mailbox's block for its `limit`
+  with no `clears_at`, read by either code, and the message waits on it; with reply-cli 0.22.0 it was a permanent
+  `provider_call_failed` asking for a package update. Its note says what to change in Reply. Met by a command run from
+  no sending account, it is `sender_unavailable`, permanent.
+- The block of a mailbox's daily limit now clears no later than the next midnight UTC, whatever wait reply-cli names:
+  Reply names the end of an email's due day as the wait when that later day is already full, and the mailbox is free to
+  send tomorrow, so a send held for a far day no longer holds the mailbox for weeks. A shorter wait is still kept.
 
 ## 0.18.0
 

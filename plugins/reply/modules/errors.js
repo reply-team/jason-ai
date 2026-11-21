@@ -213,9 +213,11 @@ export const COMMANDS = {
 // the mark decides it — which is why `inbox reply` being marked a write is what keeps a lost reply from being sent again.
 //
 // `reply_code:<code>` is a refusal read by Reply's own code alone, before any other key, on every refusal the CLI explains,
-// whatever its status and whatever code the CLI gave it: under `message.send`, Reply's two limits on a direct email, which
-// reply-cli from 0.22.0 prints as `email.limit_reached` and earlier ones as `rate_limited`. An answer at 500 or above is the
-// lost answer whatever code it carries, read by `cli.js` before any row is. The two are named nowhere else.
+// whatever its status and whatever code the CLI gave it: under `message.send`, Reply's refusals of a direct email for the
+// mailbox, its daily limit and the account's active contacts, which reply-cli prints as `email.limit_reached` with the
+// limit under `details.limit`, and a mailbox that cannot send direct emails at all, which it prints as
+// `email.sending_disabled`, the one of them also keyed by the CLI's own code. An answer at 500 or above is the lost answer
+// whatever code it carries, read by `cli.js` before any row is. These codes are named nowhere else.
 //
 // `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live
 // account: Reply answers a filing under a category it does not hold, on a thread it does, as a missing thread. The
@@ -419,6 +421,8 @@ export const CODES = {
       "linkedin.limit_reached": "sender_blocked_limit",
       "reply_code:contact.dailyLimitReached": "mailbox_daily_limit",
       "reply_code:contact.activeContactsLimitReached": "mailbox_active_contacts_limit",
+      "reply_code:contact.emailAccountSendingDisabled": "mailbox_sending_disabled",
+      "email.sending_disabled": "mailbox_sending_disabled",
       "linkedin.not_connected": "not_a_connection",
       "linkedin.no_inmail_credits": "no_inmail_credits",
       "linkedin.message_too_long": "text_too_long",
@@ -1517,7 +1521,7 @@ export const ROWS = {
         "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the message again once the allowance renews."
       },
       "mailbox_daily_limit": {
-        "when": "The send answered Reply's code `contact.dailyLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the mailbox has sent as many direct emails today as Reply allows it, or, for an email held for later, already holds as many held emails as its daily limit, naming a record of the send in the state `failed` or not. Reply counts the mailbox's day in UTC, so the block clears at the next midnight UTC, or as long after the answer as the CLI said to wait (`retry_after`) where it said. The record a refusal names is dead and is not kept.",
+        "when": "The send answered Reply's code `contact.dailyLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`email.limit_reached`, with `daily` under `details.limit`), naming a record of the send in the state `failed` or not. It says one of two things: the mailbox has sent as many direct emails today as Reply allows it, or the email is held for a later day that is already full, as many emails being due from the mailbox that day as its limit for that day. Reply counts the mailbox's day in UTC, so the block clears at the next midnight UTC, or sooner where the CLI said to wait less (`retry_after`), and never later: a wait reaching past the next midnight, as one to the end of a later due day does, clears at that midnight, when the mailbox is tried again. The record a refusal names is dead and is not kept.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
@@ -1527,13 +1531,27 @@ export const ROWS = {
         "note": "The mailbox has sent as many direct emails today as Reply allows it, so nothing was sent. The message waits on the mailbox's block and goes once Reply's day turns, at midnight UTC, and a trial gets past it."
       },
       "mailbox_active_contacts_limit": {
-        "when": "The send answered Reply's code `contact.activeContactsLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
+        "when": "The send answered Reply's code `contact.activeContactsLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`email.limit_reached`, with `active_contacts` under `details.limit`): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
         "keeps_no_send": true,
         "unnamed_sender": "mailbox_limit_spent",
         "note": "The account has emailed as many contacts in its billing period as its plan allows, so nothing was sent. While this block stands every email from this mailbox waits, to people already in conversation too. Raise the limit at Reply or wait for the period to renew; the message goes once a trial gets past the block."
+      },
+      "mailbox_sending_disabled": {
+        "when": "The send answered Reply's code `contact.emailAccountSendingDisabled`, read by that code on a refusal reply-cli explained whatever its status, or reply-cli's own code for it, `email.sending_disabled`: Reply says the mailbox cannot send direct emails at all now, its daily limit being 0 or its team's plan sending nothing, and it sent nothing and made no record. It concerns the mailbox and its team, not this email, so it is the mailbox's block; Reply names no moment it lifts, so the block names none and the runtime tries it on its own cadence.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "limit" },
+        "unnamed_sender": "mailbox_cannot_send",
+        "note": "The mailbox, or its team, cannot send direct emails now: Reply says the mailbox's daily limit is 0 or the team's plan does not send, so nothing was sent. In Reply, give the mailbox a daily limit above 0, or put the team's plan right. Every email from this mailbox waits on the block, and goes once a trial finds it can send."
+      },
+      "mailbox_cannot_send": {
+        "when": "Only where a command that ran from no sending account answered `contact.emailAccountSendingDisabled` or `email.sending_disabled`: a block names the account it holds, and there is none to name. Every other such refusal is the mailbox's block (`mailbox_sending_disabled`).",
+        "code": "sender_unavailable",
+        "class": "permanent",
+        "note": "Reply says a mailbox, or its team, cannot send direct emails now — its daily limit is 0 or the team's plan does not send — so nothing was sent. Give the mailbox a daily limit above 0 in Reply, or put the team's plan right, then propose the message again."
       },
       "mailbox_limit_spent": {
         "when": "Only where a command that ran from no sending account, such as a read on the way to the send, answered Reply's code `contact.dailyLimitReached` or `contact.activeContactsLimitReached`: a block names the account it holds, and there is none to name. Every other such refusal is the mailbox's block (`mailbox_daily_limit`, `mailbox_active_contacts_limit`).",
@@ -2239,16 +2257,20 @@ function messageOf(row, observed, operation) {
 // then a row that knows when its limit renews says so (`clears`: `next_utc_day`, the next midnight UTC, for a mailbox's
 // daily limit, which Reply counts in UTC), and otherwise the runtime tries the block on its own cadence: Reply's
 // allowances renew by the day or the week, and a moment far enough out would be written with a year the block contract
-// does not take.
+// does not take. A row that renews by the day clears no later than that midnight, whatever wait the CLI named: Reply
+// names the end of an email's due day as its wait when that later day is full, and the mailbox is then free to send
+// tomorrow, so the block says what is true of the mailbox, not of that one day.
 const LONGEST_WAIT_SECONDS = 365 * 24 * 60 * 60;
 
 function blockOf(row, observed) {
   const block = row.block;
   const wait = observed.retry_after;
   const now = Date.now();
-  const clears = typeof wait === "number" && Number.isFinite(wait) && wait >= 0 && wait <= LONGEST_WAIT_SECONDS
+  const midnight = row.clears === "next_utc_day" ? nextUtcDay(now) : undefined;
+  const named = typeof wait === "number" && Number.isFinite(wait) && wait >= 0 && wait <= LONGEST_WAIT_SECONDS
     ? new Date(now + wait * 1000).toISOString()
-    : row.clears === "next_utc_day" ? nextUtcDay(now) : undefined;
+    : undefined;
+  const clears = named === undefined ? midnight : midnight !== undefined && Date.parse(named) > Date.parse(midnight) ? midnight : named;
   return compact({
     scope: block.scope,
     sender_external_id: block.scope === "sender" ? observed.sender : undefined,
