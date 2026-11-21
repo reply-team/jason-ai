@@ -60,6 +60,7 @@ public sealed partial class InstallCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Critical(Family.I4, "set-up stops a runtime started from the formula's keg and leaves the keg")]
     public async Task A_runtime_started_from_the_formulas_keg_is_stopped_as_a_retired_installs_is_and_the_keg_is_left(bool commandLineInstallToo)
     {
         var old = commandLineInstallToo ? PlantMacCommandLineInstall() : null;

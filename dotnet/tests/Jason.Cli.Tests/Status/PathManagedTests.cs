@@ -1,5 +1,6 @@
 using Jason.Cli.Status;
 using Jason.Cli.Tests.Installation;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -133,6 +134,7 @@ public sealed class PathManagedTests : IDisposable
     /// prints below the table. Without the formula there is no detail.
     /// </summary>
     [Fact]
+    [Critical(Family.I4, "status names the linked formula beside the carried jason")]
     public async Task A_linked_formula_beside_the_carried_jason_is_a_detail_of_the_passing_path_check()
     {
         var keg = _layouts.LinkedFormula();

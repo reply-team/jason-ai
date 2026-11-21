@@ -1,4 +1,5 @@
 using Jason.Cli.Installation;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Installation;
 
@@ -14,6 +15,7 @@ public sealed class HomebrewFormulaTests : IDisposable
         new(TextWriter.Null, TextWriter.Null, new Jason.Contracts.Discovery.JasonPaths(Path.Combine(prefix, "data")), Managers: records, Variables: new Dictionary<string, string> { [HomebrewCask.PrefixVariable] = prefix });
 
     [Fact]
+    [Critical(Family.I4, "a link into Homebrew's keg is read as the older formula's")]
     public void A_link_to_the_formulas_keg_is_the_formula_linked_and_said_with_what_takes_it_off()
     {
         var keg = _layouts.LinkedFormula();
