@@ -272,6 +272,21 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(node, Path.GetFullPath((string)Answer()["program"]!));
     }
 
+    /// <summary>On Windows with Windows Terminal there, --shell opens Windows PowerShell in it, by the same rule as an item.</summary>
+    [Fact]
+    public async Task Shell_on_windows_opens_powershell_in_windows_terminal_where_it_is_there()
+    {
+        var shell = SystemPowerShell();
+        var wt = _run.WithWindowsTerminal();
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--shell"));
+
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", launch.WorkingDirectory, "--", shell], launch.Argv);
+        Assert.Equal([_run.ConsoleHost, "--", shell], launch.Fallback!.Argv);
+        Assert.Equal("Windows Terminal", (string?)Answer()["terminal"]);
+    }
+
     /// <summary>On Windows --shell is Windows PowerShell from the system directory, never the search path; no host is read.</summary>
     [Fact]
     public async Task Shell_on_windows_opens_powershell_from_the_system_directory()

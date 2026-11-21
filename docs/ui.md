@@ -396,10 +396,16 @@ may run is your host's own permission settings' to decide. An item that no longe
 is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
 why: run it in a terminal and it prints the refusal and how to do the same by hand.
 
-- **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
-  then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
-  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
-  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+- **Windows** opens Windows Terminal where your account has it: `wt.exe` in your WindowsApps folder
+  (`%LOCALAPPDATA%\Microsoft\WindowsApps`, where Windows keeps its alias; never one found on the search path), as
+  `wt -w new new-tab -d <folder> -- <host> <words>`, a new window at the folder. Windows Terminal joins the words after
+  `--` into one command line itself and splits its own arguments at every `;`, so each word is handed over in the form
+  that join turns back into the word, and each `;` as `\;`: a folder or a brief with spaces, quotes, `;`, `$` or `^`
+  arrives as written. Where there is no Windows Terminal, or it does not start, Jason starts the console host,
+  `conhost.exe` from the system folder, with the host after `--`: once, and the command says so on stderr. Which window
+  the console host shows, a plain console window or one of your default terminal's, is not yet measured on a machine.
+  Both replace every `%NAME%` of a variable across the command line they hand on,
+  before the host reads a word of it, so a word they would change starts nothing: a host's program, a folder the brief
   names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
   the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
