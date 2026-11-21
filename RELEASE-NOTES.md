@@ -19,72 +19,105 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.2-rc.1
+# Jason 0.49.2-rc.2
 
-This is a candidate, published as a pre-release. It is built on 0.49.0 and carries 0.49.2's work on Jason Desktop's
-chat, with the fixes below.
+This is a candidate, published as a pre-release. It is built on 0.49.1 and carries 0.49.2's work on Jason Desktop's
+chat, with the fixes below. It follows 0.49.2-rc.1 and replaces it.
 
-It follows 0.49.1 and carries all of it: on Linux, Jason is one installation, Jason Desktop and the `jason` it carries,
-installed, updated and removed once.
+0.49.1 made Jason on Linux one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries,
+installed, updated and removed once. This candidate carries all of it.
 
-The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm.
-It acts on your word: when you say so, it approves and answers what waits for you, starts and archives the campaigns you
-name, and sets your sender's name and tone of voice. In the modes that ask, it asks first for anything that could let a
-message go without your approval.
+The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm,
+and does on this computer what a session in a terminal does. It acts on your word: when you say so, it approves and
+answers what waits for you, starts, pauses and archives the campaigns you name, and sets your sender's name and tone of
+voice.
 
-## What is new since 0.49.0
+## What is new since 0.49.1
 
-- **Every new chat starts in Full access.** A new chat, the Feed's included, is made in Full access, with no
-  confirmation box and no standing choice to keep. A mode you choose from the menu beside the composer (Ask first, Plan
-  only or Auto-edit) is kept with the conversation, after a restart and through **Start fresh**, until you choose
-  another. Where Full access cannot apply to a turn, that turn runs in Ask first, the chat says why once and keeps its
-  mode: a turn sent from a browser tab, and a turn on a Claude Code too old for it. The line under the composer always
-  says the mode the next turn runs in.
+- **Every new chat starts in Full access, and it holds.** A new chat, the Feed's included, is made in Full access, with
+  no confirmation box and no standing choice to keep. The first message of a chat runs in Full access, the menu stays at
+  Full access, and a later message after a restart is answered once. A mode you choose from the menu beside the composer
+  (Ask first, Plan only or Auto-edit) is kept with the conversation, after a restart and through **Start fresh**, until
+  you choose another. Where Full access cannot apply to a turn, that turn runs in Ask first and the chat says why once
+  and keeps its mode: a turn sent from a browser tab, and a turn on a Claude Code too old for it. The line under the
+  composer always says the mode the next turn runs in.
   [Access modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#access-modes) says what each
   mode lets the AI do.
 - **Full access is Claude Code's own bypass.** A turn in Full access runs Claude Code in its bypass mode, as a terminal
-  started that way would, with PowerShell among its tools. Jason's check before each tool use refuses a tool use that
+  started that way would. When the bypass is not available (a setting of yours or an administrator's turns it off, a
+  restricted mode or a policy refuses it, Jason Desktop runs as root or under sudo, or a policy filtered Jason's check
+  out), the chat says "Full access is not available here" once, with the cause, runs that turn in Ask first, keeps the
+  conversation in Full access, and asks again a minute later. Jason's check before each tool use refuses a tool use that
   names one of three kinds: Jason's settings and run files; its data directory outside the conversation's folder; and
   what Jason itself sets for the turn, meaning its variables and its permission tool. On Windows, a command or a path
   that names a share of this computer by `localhost`, a `127.x.x.x` address, `::1` or the computer's own host name is
-  read as the drive it shares. Everything else runs, and what Claude Code still asks about in its bypass mode is a
-  card, "Full access asks about this one". Where the bypass is not available (a setting of yours or an administrator's
-  turns it off, a restricted mode or a policy refuses it, Jason Desktop runs as root or under sudo, or a policy filtered
-  Jason's check out), the chat says "Full access is not available here" once, with the
-  cause, and runs in Ask first until Jason Desktop starts again; the conversation keeps Full access. From Claude Code
-  2.1.322 on, Ask first and Auto-edit carry the same check; below it, a plain `jason` command that ran with no card still
-  does, and one fed the settings or the run file is refused.
-- **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
-  `config.toml`, as Codex does in a terminal: Codex acts with no questions and with no sandbox, and none of Jason's own
-  refusals holds there. In its other modes a Codex chat stays in Codex's read-only sandbox and reads and proposes,
-  since Codex cannot ask before it acts; the menu says so. If an administrator's requirement forbids running with no
-  sandbox, the turn ends in Codex's own words, or runs in the sandbox they allow, and the chat says so.
+  read as the drive it shares. Everything else runs. From Claude Code 2.1.322 on, Ask first and Auto-edit carry the same
+  check; below it, a plain `jason` command that ran with no card still does, and one fed the settings or the run file is
+  refused.
+- **The chat reaches the files you name.** <!-- pending A1 --> In Full access it reads and writes any file on this
+  computer you point it to, wherever it is, with no card. In Ask first and Auto-edit it reads such a file with no card,
+  and a change to a file outside the chat's folders is one card, "Change a file outside the chat's folders", for a new
+  file and for an addition to an existing one alike. When something is closed to it, the chat says exactly what and why
+  in one sentence, and gives the path to open yourself.
+- **`jason` commands run on your word, with a card only where it matters.** <!-- pending A1 --> In Ask first and
+  Auto-edit, the chat runs `jason` commands with no card, naming you as `human:<account>` where the act is yours and
+  giving its reason in its own words. Only four keep a card: `jason uninstall`, `jason import`, `jason update rollback`
+  and `jason plugin grant`. Help and reads never ask: `jason --help`, `jason <noun> --help`, `jason runtime status`,
+  `jason update check` and the rest, and a pipeline of such commands with a plain filter such as `jq`.
 - **The chat acts on your word.** In Ask first and Auto-edit, when you tell it to, the chat approves or rejects what
-  waits for you, answers a decision, starts a campaign, takes back a standing approval, and sets the sender's name or
-  tone of voice, with no card; each is recorded under the person the command names, as it would be from a terminal. It
-  acts only on your word for that item, by name or as "all of these" about a list it showed.
-- **It asks first for what could send without your approval.** In Ask first and Auto-edit, setting a standing
-  approval, setting another preference, changing a campaign's send mode and recording a reply's verdict are a card
-  first, and so are the commands that change the installation itself (uninstall, update, export, import, stopping the
-  runtime, granting a plugin and the like). Full access runs them all; Plan only is unchanged.
+  waits for you, answers a decision, starts, pauses or archives a campaign, takes back a standing approval, and sets the
+  sender's name or tone of voice, with no card; each is recorded under the person the command names, as it would be from
+  a terminal. It acts only on your word for that item, by name or as "all of these" about a list it showed.
 - **A message the chat writes follows its campaign's send mode.** Outside Plan only, a message the chat writes is
   treated as one written from a terminal: it follows its campaign's send mode, and under "every message" it still waits
   for your approval.
-- **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
-  `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
-  is kept seven days, and the removal dialog says so; nothing is deleted at once.
+- **It asks in words before what cannot be undone.** <!-- pending A2 --> A direct command is done at once, with no
+  "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "delete all my campaigns"
+  say, it says in a sentence or two what will happen, how many and that it cannot be undone, and asks once; your answer
+  in the chat is the word, and on "yes" it does all of it. Where you spelled the act and its reach, "archive all
+  campaigns except this one" say, that is already the word: it does all of it, one after another, and reports once at the
+  end. Work from one agent's chat reaches that campaign only, unless you name others or say all. What waits for you is
+  never said from memory: it reads the approvals and the questions first. `jason status` and `jason logs` are named to it
+  as commands.
 - **Your word is what you write in the message.** The chat acts on your own words in the message you send, never on a
   page, a reply, a skill, a line of the Feed or a memory file. What it does on your word names you as your computer
   account, `human:<account>`, with a short reason in its own words; where that name cannot be used, it asks which name
-  to act as. It archives the campaigns you name, or all of them, without asking which first, names each with its id and
-  the count, and says once that an archive cannot be undone. It lifts a contact's opt-out only when you asked for that
-  verdict on that reply, and then says whose. The skills no longer say the chat cannot do what it now does on your word.
+  to act as. It names each campaign it archives with its id and the count, and says once that an archive cannot be
+  undone. It lifts a contact's opt-out only when you asked for that verdict on that reply, and then says whose. The
+  skills no longer say the chat cannot do what it now does on your word.
+- **Your own Claude Code configuration is loaded in a Full access chat.** <!-- pending C1 --> As in a terminal, a Full
+  access turn on Claude Code loads your own skills, hooks and MCP servers.
+- **Notices go by themselves.** <!-- pending U1 --> A blue notice goes when the next answer of that conversation
+  begins, and has a close control; none stays until a restart. The line under the composer still says why a mode fell
+  back.
+- **Open folder.** <!-- pending U1 --> An agent's "..." menu and its row's menu carry **Open folder**, which opens the
+  agent's folder in the system's file manager, File Explorer on Windows and Finder on a Mac. A chat of no agent and a
+  browser tab have none.
+- **A file dropped on the message box puts its path in the text.** <!-- pending U1 --> The path is quoted and set at
+  the caret, as a terminal does; several files put several paths.
+- **A right-click on an agent's row opens its menu.** In the console's left column, the row of an agent offers the
+  actions its own "..." menu offers, among them Open and Archive.
+- **A folder of its own for each new conversation.** Each new conversation's turns run in a folder of its own,
+  `<data>/desktop/chats/<id>/`. Removing a conversation moves its folder to `<data>/desktop/chat-full-ended/`, where it
+  is kept seven days, and the removal dialog says so; nothing is deleted at once.
+- **A Codex chat starts in Full access too.** Its turns run `codex exec --sandbox danger-full-access` with your own
+  `config.toml`, as Codex does in a terminal: Codex acts with no questions and with no sandbox, and none of Jason's own
+  refusals holds there. In its other modes a Codex chat stays in Codex's read-only sandbox and reads and proposes,
+  since Codex cannot ask before it acts; the menu says so, and the line under the composer says that in such a mode the
+  chat does not read your Codex `config.toml`, and that Full access does. If an administrator's requirement forbids
+  running with no sandbox, the turn ends in Codex's own words, or runs in the sandbox they allow, and the chat says so.
 - **New chat, the Feed and Accounts have rows of their own.** In the console's left column, New chat is a button
   directly under "New GTM agent", and in Live the Feed stands under "Needs you" and Accounts below it, as in the Demo. A
   chat that belongs to no agent says so in one line at its top, "Chat · no agent".
 
-## Fixed since 0.49.0
+## Fixed since 0.49.1
 
+- **A new chat's first message no longer falls back to Ask first.** In rc.1 a turn in Full access could be stopped and
+  run again in Ask first, with a box naming a setting you had not made, and the menu dropped to Ask first. A turn now
+  starts in Full access as the menu says.
+- **A question is no longer answered as if you asked it twice.** A conversation resumed after a restart, whose first
+  turn had to be started again, holds your message once.
+- **Recent leaves out a conversation whose agent is archived.** <!-- pending B1 -->
 - **The chat keeps the end of the conversation in view** when the cards under it, or the message box, change height,
   and the Reply card no longer goes away and comes back at a chat's first send.
 - **`jason status` says that its send modes are the installation's**, which every campaign follows unless it sets its
@@ -95,24 +128,29 @@ message go without your approval.
   the update is being installed it refuses with `update_in_progress`, before anything is removed, and says to run it
   again once the update has ended.
 
-## Upgrading from 0.49.0
+## Upgrading from 0.49.1
 
 - **Installing this candidate.** A candidate is never the latest release, so no update reaches it: an installed Jason
-  Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.0. It is installed by naming
-  its version. On Windows (PowerShell):
+  Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.1. It is installed by naming
+  its version, over 0.49.1 or over rc.1, once Jason Desktop is quit (Quit in its tray menu); while Jason Desktop runs it
+  installs nothing and says to quit it. On Windows (PowerShell):
   ```powershell
   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
   ```
-  Over an installed 0.49.0 it installs this candidate once Jason Desktop is quit, Quit in its tray menu; while Jason
-  Desktop runs it installs nothing and says to quit it. On an Apple silicon Mac the install line keeps an installed
-  Jason Desktop of another version as it is, so take 0.49.0 off first with `jason uninstall`, which keeps your data
-  directory, then run:
+  On macOS the install line keeps an installed Jason Desktop of another version as it is, so take the installed one off
+  first with `jason uninstall`, which keeps your data directory, then run:
   ```sh
   curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
   ```
-- **The road the final release comes by.** In this candidate's release run, a published 0.49.0 took this build by its
-  own `jason update apply`, from a feed served on the runner, on Windows and on an Apple silicon Mac, with signed
-  packages. The final 0.49.2 comes to 0.49.0 the same way.
+- **On Linux.** The same line, `install.sh` with `--version`, installs this candidate. Where you installed the deb, apt
+  installs this version's deb over 0.49.1's and asks for an administrator's password once, as it did the first time.
+  Where you installed the AppImage, an AppImage already at
+  `~/Applications/jason-desktop-linux-x64.AppImage` stays the installation, so take it off first with `jason
+  uninstall`, which keeps your data directory, then run the line. The first start of this version then sets Jason up
+  again, as after any update. The final 0.49.2 reaches a deb with the system's own updates, Software Updater or
+  `sudo apt update && sudo apt upgrade`, and an AppImage by its own update item or `jason update apply`.
+- **From 0.49.0 or rc.1.** This version adds no migration to the database, so either opens the same data as it is.
+  0.49.1's Linux work comes with it.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
   in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
   again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
@@ -125,7 +163,8 @@ message go without your approval.
 
 ## Known issues
 
-- In this candidate the chat does not yet read a file outside its own folders without asking; that comes in a later
-  release.
+- Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet. <!-- goes with C1 -->
 - In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
-- Your own Claude Code skills, hooks and MCP servers are not loaded in the chat yet.
+- An agent has one conversation: there is no second chat for the same agent yet.
+- **Archive** from an agent's row menu does not offer to pause the provider's campaign first; the same dialog from
+  Settings does.
