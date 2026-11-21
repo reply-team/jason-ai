@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../../api/session';
 import type { NotificationChannel, NotificationsInfo } from '../../api/types';
 import { Console } from '../../console/console';
@@ -39,6 +39,13 @@ const report = (channels: NotificationChannel[], enabled = true, lastAt: string 
 });
 
 /** The recorded system.info with the notification section a test states; the recordings hold the toast alone. */
+/** The page's clock in the rows that read a time: noon, and a notification two hours before it. */
+const noon = '2026-10-01T12:00:00Z';
+const tenOClock = '2026-10-01T10:00:00Z';
+
+const toastChannel = (fields: Partial<NotificationChannel>): NotificationChannel =>
+    channel({ channel: 'toast', kind: 'toast', presence: 'available', ...fields });
+
 class Reporting extends FakeApi {
     /** What the runtime says of the channels; a test changes it to see the page read it again. */
     constructor(public notifications: NotificationsInfo | null) {
@@ -382,35 +389,29 @@ describe('Notifications in Settings in a browser', () => {
     });
 
     it('says what Windows answered at the last notification and when, never the switch as it is now', async () => {
-        const at = new Date(Date.now() - 2 * 3_600_000).toISOString();
-        const said = {
-            disabled_for_application: 'Windows answered that Jason was switched off in its notification settings.',
-            disabled_for_user: 'Windows answered that notifications were switched off for every app.',
-            disabled_by_group_policy: 'Windows answered that a group policy switched notifications off.',
-            disabled_by_manifest: 'Windows answered that the application’s manifest switched them off.',
-        };
-        for (const [reason, words_] of Object.entries(said)) {
-            inBrowser(
-                report([
-                    channel({
-                        channel: 'toast',
-                        kind: 'toast',
-                        outcome: 'silenced',
-                        reason,
-                        at,
-                        presence: 'available',
-                    }),
-                ]),
-            );
-            await waitFor(() => screen.getByText('Desktop toast'));
-            expect(words(notifications())).toContain(
-                `Not shown 2 h ago. At that notification, ${words_.charAt(0).toLowerCase()}${words_.slice(1)} Windows is asked again at the next notification.`,
-            );
-            expect(words(notifications())).not.toMatch(
-                /Jason is switched off|are switched off|switches notifications off|switches them off/,
-            );
-            cleanup();
-            shell.info.value = null;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(noon));
+        try {
+            const said: Record<string, string> = {
+                disabled_for_application:
+                    'Not shown 2 h ago. At that notification, Windows answered that Jason was switched off in its notification settings. Windows is asked again at the next notification.',
+                disabled_for_user:
+                    'Not shown 2 h ago. At that notification, Windows answered that notifications were switched off for every app. Windows is asked again at the next notification.',
+                disabled_by_group_policy:
+                    'Not shown 2 h ago. At that notification, Windows answered that a group policy switched notifications off. Windows is asked again at the next notification.',
+                disabled_by_manifest:
+                    'Not shown 2 h ago. At that notification, Windows answered that the application’s manifest switched them off. Windows is asked again at the next notification.',
+            };
+            for (const [reason, sentence] of Object.entries(said)) {
+                inBrowser(report([toastChannel({ outcome: 'silenced', reason, at: tenOClock })]));
+                await waitFor(() => screen.getByText('Desktop toast'));
+                expect(words(notifications())).toContain(sentence);
+                expect(words(notifications())).not.toContain('Windows did not show it');
+                cleanup();
+                shell.info.value = null;
+            }
+        } finally {
+            vi.useRealTimers();
         }
     });
 

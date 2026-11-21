@@ -40,7 +40,7 @@ export function outcomeWords(channel: NotificationChannel, now: Date): string {
         case 'silenced': {
             const answered = channel.reason ? silenced[channel.reason] : undefined;
             return answered
-                ? `Not shown${when}. At that notification, ${answered.charAt(0).toLowerCase()}${answered.slice(1)} Windows is asked again at the next notification.`
+                ? `Not shown${when}. At that notification, ${answered} Windows is asked again at the next notification.`
                 : `Not shown${when}.`;
         }
         case 'not_attempted':
