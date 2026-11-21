@@ -493,28 +493,72 @@ describe('The menu on a row of Recent', () => {
             ).toEqual([{ campaign_id: 'cmp_1', operation: 'campaign.pause' }]);
         });
 
-        it('offers the provider’s own way alone where the route cannot pause it, or could not be read', async () => {
+        const jasonFirst =
+            "To stop it first, ask in this agent's chat to pause it in Reply, and archive once that work has finished; or pause it in Reply itself.";
+        const ownWay = 'To stop it first, pause it in Reply itself, then archive.';
+
+        it('offers Jason’s pause first only where the route can pause it: not where it cannot, nor where it was not read', async () => {
+            await renderConsole((api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause'));
+            expect((await archiveSpring()).provider.textContent).toContain(jasonFirst);
+            cleanup();
             await renderConsole((api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause-unusable'));
             const unusable = await archiveSpring();
-            expect(unusable.provider.textContent).toContain(
-                'To stop it first, pause it in Reply itself, then archive.',
-            );
-            expect(unusable.provider.textContent).not.toContain('chat');
+            expect(unusable.provider.textContent).toContain(ownWay);
+            expect(unusable.provider.textContent).not.toContain(jasonFirst);
             cleanup();
             await renderConsole((api) => {
                 api.unreachable('route.resolve');
             });
             const unread = await archiveSpring();
-            expect(unread.provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
+            expect(unread.provider.textContent).toContain(ownWay);
+            expect(unread.provider.textContent).not.toContain(jasonFirst);
         });
 
-        it('says a refused archive in the dialog, as Settings does, and keeps the dialog open', async () => {
+        it('offers nothing about a provider’s campaign where none is linked to the agent', async () => {
+            const fake = { value: null as FakeApi | null };
+            await renderConsole((api) => {
+                fake.value = api;
+            });
+            fireEvent.contextMenu(await row('Autumn'));
+            await waitFor(() => menu()!);
+            fireEvent.click(item('Archive…'));
+            const dialog = await waitFor(() => document.querySelector<HTMLElement>('[role="dialog"]')!);
+            await waitFor(() =>
+                expect(within(dialog).getByRole('button', { name: 'Archive' })).not.toHaveProperty('disabled', true),
+            );
+            expect(within(dialog).queryByRole('region', { name: /^The campaign in / })).toBeNull();
+            expect(dialog.textContent).not.toContain(jasonFirst);
+            expect(dialog.textContent).not.toContain('To stop it first');
+            expect(fake.value!.calls.some((each) => each.operation === 'route.resolve')).toBe(false);
+        });
+
+        it('offers Jason’s pause first in a tab the desktop opened too, where its chat is', async () => {
+            await renderConsole(
+                (api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause'),
+                undefined,
+                'tab',
+            );
+            expect((await archiveSpring()).provider.textContent).toContain(jasonFirst);
+        });
+
+        it('says an archive the runtime refuses in the dialog, in the runtime’s words, and keeps the dialog open', async () => {
+            await renderConsole((api) => {
+                api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause');
+                api.answerAnyRequest('campaign.archive', 'campaign.archive/archive-unknown');
+            });
+            const { dialog, provider } = await archiveSpring();
+            expect(provider.textContent).toContain(jasonFirst);
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+            await waitFor(() => expect(within(dialog).getByText("No campaign with id 'cmp_3'.")).toBeTruthy());
+            expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+        });
+
+        it('says an archive the runtime never answers in the dialog, and keeps the dialog open', async () => {
             await renderConsole((api) => {
                 api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause');
                 api.unreachable('campaign.archive');
             });
-            const { dialog, provider } = await archiveSpring();
-            expect(provider.textContent).toContain("ask in this agent's chat to pause it in Reply");
+            const { dialog } = await archiveSpring();
             fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
             await waitFor(() => expect(within(dialog).getByText('TypeError: Failed to fetch')).toBeTruthy());
             expect(document.querySelector('[role="dialog"]')).toBe(dialog);
