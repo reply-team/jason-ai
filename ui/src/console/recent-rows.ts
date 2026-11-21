@@ -42,8 +42,9 @@ export interface RecentInput {
     running?: (id: string) => boolean | undefined;
     campaigns: readonly CampaignSummary[];
     /**
-     * An agent `campaigns` does not hold, as it was read on its own (`agent-facts.ts`): an archived one, which that list
-     * leaves out, or one past its first page. Undefined while it has not been read; absent for none read.
+     * An agent `campaigns` does not hold, as it was read on its own (`recent.ts`): an archived one, which that list leaves
+     * out, or one past its first page. Undefined while it has not been read, and for one the runtime does not know;
+     * absent for none read.
      */
     agentRead?: (id: string) => CampaignSummary | undefined;
     approvals: readonly ApprovalSummary[];

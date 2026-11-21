@@ -283,8 +283,9 @@ conversation is made at your first message or choice in it. The desktop's window
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
 no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
 the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
-conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. An archived campaign's
-conversation leaves Recent; the campaign's own **Chat** still opens it. What happens in
+conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. A conversation
+leaves Recent once its campaign is read as archived, and the campaign's own **Chat** still opens it; a conversation
+whose campaign the runtime does not know stays. What happens in
 the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
 conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the AI hears the lines that came with your
