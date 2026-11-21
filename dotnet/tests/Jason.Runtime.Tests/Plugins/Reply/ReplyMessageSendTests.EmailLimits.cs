@@ -109,7 +109,7 @@ public partial class ReplyMessageSendTests
         {
             // Run within the wait of a midnight: the daily block clears at that midnight instead.
             var clears = DateTimeOffset.Parse((string?)error.Block!["clears_at"] ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-            Assert.True(clears <= NextMidnight(after), $"{clears:O} is past the next midnight UTC.");
+            Assert.True(clears >= NextMidnight(before) && clears <= NextMidnight(after), $"{clears:O} is not the next midnight UTC.");
         }
         else
         {
