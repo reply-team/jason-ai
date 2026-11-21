@@ -949,7 +949,9 @@ alike. What it does not
 read is a variable it does not know and a path a program builds while it runs: a command that reaches one of them so
 runs. The turn's folder is its own, the chat's instructions and agent folders in it included: before the next turn
 Jason writes its instructions there afresh and leaves its agent folders holding only what Jason placed, in a
-conversation's own folder and in the shared folder of a conversation an earlier version made alike. What Claude Code
+conversation's own folder and in the shared folder of a conversation an earlier version made alike. Two conversations
+an earlier version made share that folder, so while both run a turn, one may read a skill the other's turn rewrote;
+the next turn of each starts from Jason's files. What Claude Code
 still asks about in its bypass mode is a card titled "Full access asks about this one", which waits thirty minutes
 and then is not run, and the turn goes on; one line under its title says that Claude Code asked about it itself, and
 "Allow for this chat" works on it as in Ask first. Jason does not read a
