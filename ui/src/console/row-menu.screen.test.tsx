@@ -2,11 +2,13 @@ import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@test
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { loadMode, mode } from '../platform/mode';
-import { setPlace } from '../platform/places';
+import { Bridge } from '../platform/bridge';
+import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
+import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -14,6 +16,7 @@ import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
+import { hostsOffered } from './open-folder';
 import { closeMenus } from './side';
 import { forgetWaiting } from './waiting';
 import { activePanel, chats, conversations, feedId, lines, setup, setupError } from './state';
@@ -68,6 +71,7 @@ const holdAgent = (fake: FakeApi, id: string) =>
 async function renderConsole(
     adjust: (fake: FakeApi) => void = () => undefined,
     seed: (desktop: StubDesktop) => void = () => undefined,
+    place: 'window' | 'tab' = 'window',
 ): Promise<StubDesktop> {
     const desktop = stubDesktop({ ...setupFound });
     seed(desktop);
@@ -75,8 +79,14 @@ async function renderConsole(
     desktop.keep({ id: autumn, campaignId: 'cmp_2', title: 'Autumn' });
     desktop.keep({ id: winter, campaignId: 'cmp_4', title: 'Winter' });
     desktop.keep({ id: setupChat, title: 'Set-up' });
-    setPlace('window');
-    await loadMode(desktop);
+    let used: Parameters<typeof Console>[0]['desktop'] = desktop;
+    let held: Bridge | null = null;
+    if (place === 'tab') {
+        held = new Bridge({ port: 43210, secret: standInSecret }, standInBridge(desktop).fetch);
+        used = tabDesktop(held);
+        setPlace('tab', used);
+    } else setPlace('window');
+    await loadMode(used);
     const fake = api();
     adjust(fake);
     watch(fake);
@@ -90,7 +100,8 @@ async function renderConsole(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} bootstrapped />);
+    session.bridge.value = held;
+    render(<Console api={fake} desktop={used} stream={stubStream().stream} bootstrapped />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
     // The agents are listed, so each row's state is known.
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
@@ -108,6 +119,8 @@ const words = (at: HTMLElement) =>
 const item = (name: string) => within(menu()!).getByRole('menuitem', { name });
 /** The agent's folder in the file manager, named as Open in names it: here by the page's word, the stand-in's label being empty. */
 const folder = 'Open in File manager';
+/** The agent host in a terminal at the agent's folder: Claude Code, the first Open in found, where the chat names none. */
+const hostItem = 'Open Claude Code in terminal';
 const restarts = (desktop: StubDesktop) =>
     desktop.calls.filter((each) => each.name === 'chat.restart').map((each) => each.args[0]);
 
@@ -210,15 +223,15 @@ describe('The menu on a row of Recent', () => {
         });
         const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
         fireEvent.contextMenu(await row('Spring'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Pause', 'Archive…', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, hostItem, 'Pause', 'Archive…', ...rest]));
         closeMenus();
         fireEvent.contextMenu(await row('Autumn'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, 'Start', 'Archive…', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, hostItem, 'Start', 'Archive…', ...rest]));
         closeMenus();
         // Winter, archived, is not among the agents listed: while its own read has not answered, its row has Open, its
         // folder and the conversation's acts alone; read as archived, the row leaves Recent, and its menu with it.
         fireEvent.contextMenu(await row('Winter'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, hostItem, ...rest]));
         await flush(async () => readWinter());
         await waitFor(() => expect(menu()).toBeNull());
         expect(within(recent()).queryByRole('button', { name: 'Winter' })).toBeNull();
@@ -276,6 +289,152 @@ describe('The menu on a row of Recent', () => {
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => menu()!);
         expect(item(folder)).toBeTruthy();
+    });
+
+    describe('the agent host in a terminal', () => {
+        /** The places Open in answers, with the agent hosts `keep` names alone. */
+        const hostsOnly = (desktop: StubDesktop, keep: readonly string[]) => {
+            desktop.openInKept.places = desktop.openInKept.places.filter(
+                (each) => (each.id !== 'claude' && each.id !== 'codex') || keep.includes(each.id),
+            );
+        };
+        const opened = (desktop: StubDesktop) =>
+            desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args);
+
+        it('opens the host in a terminal at the row’s agent’s folder, silently, leaving the window’s Open in where it was', async () => {
+            const desktop = await renderConsole(undefined, (desktop) => (desktop.openInKept.default = 'vscode'));
+            await pick('Autumn', hostItem);
+            await waitFor(() => expect(opened(desktop)).toEqual([['claude', 'cmp_2', { keep: false }]]));
+            expect(desktop.openInKept.default).toBe('vscode');
+            // The terminal opening is the answer: nothing is shown or said.
+            await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
+            expect(document.querySelector(`[data-pane="chat:${autumn}"]`)).toBeNull();
+            expect(within(side()).queryByRole('alert')).toBeNull();
+            expect(document.querySelector('.open-in-toast')).toBeNull();
+        });
+
+        it('says a refusal beside the sidebar until closed', async () => {
+            const desktop = await renderConsole();
+            desktop.refuse.set('openIn.open', 'No terminal was found to start claude in, so nothing was started.');
+            await pick('Spring', hostItem);
+            const said = await waitFor(() => within(side()).getByRole('alert'));
+            expect(said.textContent).toBe('No terminal was found to start claude in, so nothing was started.');
+            expect(opened(desktop)).toEqual([['claude', 'cmp_1', { keep: false }]]);
+            fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
+            await waitFor(() => expect(within(side()).queryByRole('alert')).toBeNull());
+        });
+
+        it('names the host the agent’s chat is set to use, Codex, where it is found', async () => {
+            // Codex is found here, as Open in found it.
+            const desktop = await renderConsole(undefined, (desktop) => {
+                desktop.status = {
+                    ...desktop.status,
+                    hosts: desktop.status.hosts.map((each) =>
+                        each.id === 'codex' ? { ...each, found: true, version: '0.130.0', install: null } : each,
+                    ),
+                };
+            });
+            // Autumn's last turn was sent to Codex, as the desktop keeps it.
+            desktop.keep({
+                id: autumn,
+                campaignId: 'cmp_2',
+                title: 'Autumn',
+                chosen: { host: 'codex', model: null, effort: null },
+            });
+            fireEvent.click(await row('Autumn'));
+            await waitFor(() => expect(chats.value[autumn]?.host).toBe('codex'));
+            fireEvent.contextMenu(await row('Autumn'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!).slice(0, 3)).toEqual(['Open', folder, 'Open Codex in terminal']);
+            fireEvent.click(item('Open Codex in terminal'));
+            await waitFor(() => expect(opened(desktop)).toEqual([['codex', 'cmp_2', { keep: false }]]));
+        });
+
+        it('offers one host where both are found, Codex where it alone is, and none where neither is', async () => {
+            await renderConsole();
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!).filter((each) => each?.endsWith(' in terminal'))).toEqual([hostItem]);
+            cleanup();
+            await renderConsole(undefined, (desktop) => hostsOnly(desktop, ['codex']));
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => expect(words(menu()!).slice(0, 3)).toEqual(['Open', folder, 'Open Codex in terminal']));
+            cleanup();
+            await renderConsole(undefined, (desktop) => hostsOnly(desktop, []));
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!).slice(0, 3)).toEqual(['Open', folder, 'Pause']);
+        });
+
+        it('is not offered before Open in has read its places, nor for a chat about no agent', async () => {
+            await renderConsole(undefined, (desktop) => (desktop.openIn.targets = () => new Promise(() => undefined)));
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+            cleanup();
+            await renderConsole();
+            fireEvent.contextMenu(await row('Set-up'));
+            await waitFor(() => menu()!);
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+        });
+
+        it('is not offered in a tab the desktop opened', async () => {
+            await renderConsole(undefined, undefined, 'tab');
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!)[0]).toBe('Open');
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
+        });
+
+        it('is not offered where there is no desktop', async () => {
+            await renderConsole();
+            expect(hostsOffered().map((each) => each.label)).toEqual(['Claude Code', 'Codex']);
+            // The same rows, drawn where the page has no desktop: the menu opens, with neither the folder nor the host.
+            setPlace('none');
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!)[0]).toBe('Open');
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
+            expect(hostsOffered()).toEqual([]);
+        });
+
+        it('offers Codex for a chat that chose no host where Claude Code is below the chat’s floor, as the chat runs', async () => {
+            const desktop = await renderConsole(undefined, (desktop) => {
+                desktop.status = {
+                    ...desktop.status,
+                    hosts: desktop.status.hosts.map((each) =>
+                        each.id === 'claude'
+                            ? {
+                                  ...each,
+                                  version: '2.1.200',
+                                  belowFloor: 'Claude Code 2.1.200 is older than the chat needs.',
+                              }
+                            : each.id === 'codex'
+                              ? { ...each, found: true, version: '0.130.0', install: null }
+                              : each,
+                    ),
+                };
+            });
+            fireEvent.click(await row('Autumn'));
+            await waitFor(() => expect(chats.value[autumn]).toBeDefined());
+            expect(chats.value[autumn]!.host).toBeNull();
+            fireEvent.contextMenu(await row('Autumn'));
+            await waitFor(() => menu()!);
+            expect(words(menu()!).slice(0, 3)).toEqual(['Open', folder, 'Open Codex in terminal']);
+            fireEvent.click(item('Open Codex in terminal'));
+            await waitFor(() => expect(opened(desktop)).toEqual([['codex', 'cmp_2', { keep: false }]]));
+        });
+
+        it('is not offered in the demo', async () => {
+            await renderConsole(undefined, (desktop) => (desktop.modeKept = 'demo'));
+            expect(mode.value).toBe('demo');
+            fireEvent.contextMenu(await row('Spring'));
+            await waitFor(() => menu()!);
+            expect(item(folder)).toBeTruthy();
+            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
+        });
     });
 
     it('opens a move’s dialog named for the row’s agent, where another conversation is shown', async () => {
@@ -522,17 +681,17 @@ describe('The menu on a row of Recent', () => {
         try {
             fireEvent.contextMenu(await row('Spring'), { clientX: 780, clientY: 590, button: 2 });
             const opened = await waitFor(() => menu()!);
-            // Seven acts, 210 high: kept 4 inside the right and the bottom.
+            // Eight acts, 240 high: kept 4 inside the right and the bottom.
             expect(opened.style.getPropertyValue('--row-menu-x')).toBe('566px');
-            expect(opened.style.getPropertyValue('--row-menu-y')).toBe('386px');
-            // The agent is no longer listed, and its own read has not answered: five acts, 150 high, placed again.
+            expect(opened.style.getPropertyValue('--row-menu-y')).toBe('356px');
+            // The agent is no longer listed, and its own read has not answered: six acts, 180 high, placed again.
             flush(() => {
                 consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.filter(
                     (each) => each.id !== 'cmp_1',
                 );
             });
-            await waitFor(() => expect(within(menu()!).getAllByRole('menuitem')).toHaveLength(5));
-            expect(menu()!.style.getPropertyValue('--row-menu-y')).toBe('446px');
+            await waitFor(() => expect(within(menu()!).getAllByRole('menuitem')).toHaveLength(6));
+            expect(menu()!.style.getPropertyValue('--row-menu-y')).toBe('416px');
         } finally {
             spy.mockRestore();
             Object.defineProperty(window, 'innerWidth', { value: size.width, configurable: true });
