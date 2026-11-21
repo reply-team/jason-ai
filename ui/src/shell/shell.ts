@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals-react';
 import { Unpaired, type Api } from '../api/client';
 import { session } from '../api/session';
-import type { SystemInfo } from '../api/types';
+import type { NotificationsInfo, SystemInfo } from '../api/types';
 
 export const info = signal<SystemInfo | null>(null);
 
@@ -24,7 +24,7 @@ let patched = 0;
  * Puts the notification channels an operation answered into the page's `system.info`, as `notification.enable` and
  * `notification.disable` answer them. A focus read that began before it and ends after it is dropped.
  */
-export function patchNotifications(notifications: SystemInfo['notifications']): void {
+export function patchNotifications(notifications: NotificationsInfo | null): void {
     patched += 1;
     if (info.value) info.value = { ...info.value, notifications };
 }
