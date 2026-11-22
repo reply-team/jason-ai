@@ -163,15 +163,20 @@ function DashboardPanel({ inSight }: { inSight: boolean }) {
 }
 
 /** Needs you, whose rows are read whole while it is drawn, so that an approval is approved only once it has been. */
-function NeedsPanel() {
+function NeedsPanel({ inSight }: { inSight: boolean }) {
     useEffect(() => needs.drawNeeds(), []);
+    // A note of what left is said only of what left in sight.
+    useEffect(() => {
+        needs.sightNeeds(inSight);
+        return () => needs.sightNeeds(false);
+    }, [inSight]);
     return <Painted className="painted" view={needs.needsView} />;
 }
 
 const panels: Readonly<Record<PanelName, (inSight: boolean) => ReactNode>> = {
     start: () => <StartPanel />,
     dashboard: (inSight) => <DashboardPanel inSight={inSight} />,
-    needs: () => <NeedsPanel />,
+    needs: (inSight) => <NeedsPanel inSight={inSight} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
     connect: () => (
