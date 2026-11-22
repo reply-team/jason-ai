@@ -1829,12 +1829,13 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var updater = Plant(Path.Combine(XdgCache, "jason-desktop-updater"));
         var harnessRoot = Plant(Path.Combine(Home, "Jason"));
         var (env, output, remover) = Environment(places, copy);
-        // The cache tool writes the folder's cache from the entries left there: here none declares a type.
+        // The cache tool writes the folder's cache from the entries left there: here none declares a type. Its stand-in is
+        // named as this machine's lookup finds a program: on Windows a bare name is found only as an .exe or a .com.
         var tools = Plant(Path.Combine(Home, "tools"));
-        Written(Path.Combine(tools, AppImageMenuEntry.CacheTool), "not run");
+        var cacheToolFile = Written(Path.Combine(tools, AppImageMenuEntry.CacheTool + (OperatingSystem.IsWindows() ? ".exe" : string.Empty)), "not run");
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(Path.Combine(tools, AppImageMenuEntry.CacheTool), UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(cacheToolFile, UnixFileMode.UserRead | UnixFileMode.UserExecute);
         }
 
         var cacheTool = new FakeProgramRunner(request =>
@@ -1850,7 +1851,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         var plan = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
         Assert.Equal("deleted", plan.GetProperty("application_fate").GetString());
         Assert.Equal(file, plan.GetProperty("application").GetString());
-        Assert.Equal([Path.Combine(XdgData, "applications")], cacheTool.Requested.Single(request => request.Program.EndsWith(AppImageMenuEntry.CacheTool, StringComparison.Ordinal)).Arguments);
+        Assert.Equal([Path.Combine(XdgData, "applications")], cacheTool.Requested.Single(request => request.Program == cacheToolFile).Arguments);
         foreach (var gone in new[] { wrapper, profile, skill, atLogin ?? menu, menu, cache, Path.Combine(desktop, "appimage.json"), file }.Concat(icons))
         {
             Assert.False(File.Exists(gone), $"{gone} is still there");
