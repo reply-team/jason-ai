@@ -188,9 +188,9 @@ test('rule 18 of the chat\'s instructions names exactly the nouns whose help run
     assert.doesNotMatch(rule, /refused|exactly those three words/);
 });
 
-test('the person\'s word runs with no card outside Plan only in five verbs and two preference keys, each verb on the deny list and none on the allow list or the plan list', () => {
+test('the person\'s word runs with no card outside Plan only in six verbs and two preference keys, each verb on the deny list and none on the allow list or the plan list', () => {
     const fence = readFence(desktop);
-    assert.deepEqual([...personsWordVerbs].sort(), ['approval approve', 'approval reject', 'approval unset-standing', 'campaign start', 'decision answer']);
+    assert.deepEqual([...personsWordVerbs].sort(), ['approval approve', 'approval reject', 'approval unset-standing', 'campaign review', 'campaign start', 'decision answer']);
     assert.deepEqual([...personsWordPreferenceKeys].sort(), ['sender.identity', 'tone_of_voice']);
     assert.deepEqual([...personsWordForms].sort(), [...personsWordVerbs, 'preference set sender.identity', 'preference set tone_of_voice', 'preference unset sender.identity', 'preference unset tone_of_voice'].sort());
     for (const verb of [...personsWordVerbs, 'preference set', 'preference unset']) {

@@ -32,6 +32,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Transition("start", "Start a draft campaign, or resume a paused one. " + ActorOption.RefusedInsideARun, Operations.CampaignStart, env, actor));
         campaign.Subcommands.Add(Transition("pause", "Pause an active campaign.", Operations.CampaignPause, env, actor));
         campaign.Subcommands.Add(Transition("archive", "Archive a campaign. Archiving is final.", Operations.CampaignArchive, env, actor));
+        campaign.Subcommands.Add(Review(env, actor));
         campaign.Subcommands.Add(UpdateContext(env, actor));
         campaign.Subcommands.Add(SetSendMode(env, actor));
         campaign.Subcommands.Add(AddContacts(env, actor));
@@ -326,6 +327,54 @@ public static class CampaignCommands
             return await OperationRunner
                 .RunAsync(env, operation, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
                 .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// Asks a campaign's manager for a review now, on the person's word: the default actor applies, as it does to a start,
+    /// and the runtime refuses it from inside a run.
+    /// </summary>
+    private static Command Review(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "review",
+            "Ask the campaign's manager for a review now. --depth quick, the default, is a quick look (the manager's quick_look "
+            + "entry); --depth deep is a deep review (deep_review). The answer is the check-in it made, the same work item the "
+            + "dispatcher makes when a review falls due: follow it with jason workitem get. It moves the quick look's clock as "
+            + "every review does, and leaves the deep review's grid alone, so the daily deep review still comes at its moment. "
+            + "Refused for a campaign that is not active (campaign_not_active), while a check-in is open or held "
+            + "(review_already_open, naming it), and once the manager's launches of the day are spent (launches_spent: jason "
+            + "launches lift lifts them). " + ActorOption.RefusedInsideARun);
+        var id = CampaignId();
+        var depth = new Option<string?>("--depth")
+        {
+            Description = $"How deep a review to ask for: {string.Join(" or ", ReviewDepths.All)}. Absent, a quick look.",
+        };
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(depth);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var asked = parseResult.GetValue(depth);
+            if (asked is not null && !ReviewDepths.All.Contains(asked, StringComparer.Ordinal))
+            {
+                throw new UsageException($"--depth takes {string.Join(" or ", ReviewDepths.All)}; '{asked}' is not one of them.");
+            }
+
+            var body = RequestBody.Empty()
+                .Set("campaign_id", parseResult.GetValue(id))
+                .Set("depth", asked)
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+
+            return OperationRunner.RunAsync(
+                env, Operations.CampaignReview, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken);
         });
 
         return command;

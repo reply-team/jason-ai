@@ -63,7 +63,7 @@ public static class ActorOption
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
             + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
-            + "setting a campaign's send mode and starting a campaign are refused there, "
+            + "setting a campaign's send mode, starting a campaign and asking its manager for a review are refused there, "
             + "and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, "
             + "since nothing inside a run changes Jason itself. "
             + "Reopening an ended line is refused there too unless it names, with --decision, the question the person answered.",
