@@ -158,7 +158,7 @@ function headerBody(about: About, account?: string | null): string {
         return `${lead} This conversation is the Feed, the person's main chat: it is about no campaign, and a campaign made in it keeps a conversation of its own.`;
     }
     if (campaign === null) {
-        return `${lead} This conversation is about no campaign yet: it is where a campaign is set up.`;
+        return `${lead} This conversation is a chat about no campaign, which the person's screen calls a chat about no agent.`;
     }
     const parts = [`${lead} This conversation is about the campaign ${campaign.id}.`];
     if (campaign.name === null) {

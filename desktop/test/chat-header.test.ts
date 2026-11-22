@@ -13,10 +13,12 @@ const campaign = (name: string | null, fields: { status?: string; folder?: strin
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
 });
 
-test('a set-up chat\'s header says it is about no campaign yet, in one paragraph of the desktop\'s words', () => {
+test('a chat about no campaign is said to be a chat about no agent, in one paragraph of the desktop\'s words, and nothing in it sets one up', () => {
     const said = header({ campaign: null });
     assert.match(said, /^Jason, not the person, wrote this first paragraph\./);
-    assert.match(said, /about no campaign yet/);
+    assert.match(said, / This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\.$/);
+    // Rule 7 sets an agent up only when the person asks: the paragraph offers none and says nothing of a set-up.
+    assert.doesNotMatch(said, /set.?up|setting|\byet\b|where a campaign/i);
     assert.doesNotMatch(said, /\n/);
 });
 

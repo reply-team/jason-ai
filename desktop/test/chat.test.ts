@@ -1324,7 +1324,12 @@ test('the instruction text holds the twenty-three rules in plain words, and says
     assert.match(rules[5]!, /first paragraph of a message, written by Jason, says which campaign this conversation is about\. Work on that campaign only, unless/);
     assert.match(rules[5]!, /asks about another without naming an act on it, say so and tell them to open that campaign's conversation/);
     assert.match(rules[5]!, /The person's screen calls a campaign an agent, so a person who says agent means a campaign\./);
-    assert.match(rules[6]!, /a set-up chat, about no campaign yet, create at most one campaign in it; Jason then makes this conversation that campaign's, or asks the person which\./);
+    // A chat about no campaign is a plain chat about no agent: no set-up is offered, any campaign may be spoken of, and an
+    // agent is made, at most one, only when the person asks; the hand-over after it is the desktop's, as before.
+    assert.equal(
+        rules[6],
+        "7. A conversation about no campaign that is not the Feed is a chat about no agent: answer what the person asks, and do not offer to set one up, in your words or on a card. In it you may speak of any campaign, as in the Feed, and rule 6 does not hold you to one. When the person asks you to make an agent, create at most one campaign in it; Jason then makes this conversation that campaign's, or asks the person which.",
+    );
     // Both forms of handing content, exactly: a quoted here-document closed by EOF alone, and a file in the chat folder.
     assert.ok(rules[7]!.includes("For short content write `--file - <<'EOF'` with the quotes, then the body, then `EOF` alone on the last line and nothing after it."), rules[7]);
     assert.ok(rules[7]!.includes('For long content, write it to a file in this chat folder and hand it with `--file - < file`.'), rules[7]);
@@ -1393,7 +1398,7 @@ test('the instruction text holds the twenty-three rules in plain words, and says
     // help is given, and where the mode only reads and proposes, or where root help does not run, a noun's own.
     assert.equal(
         rules[17],
-        "18. Before you type a jason command you have not used in this conversation, load the skill for that work and take the verb from it. Never guess a verb, and never try verbs to find out which one exists: a verb that does not exist fails, and one that no rule allows waits as a card the person may not see. Two verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, and `jason logs` reads its log files. To read a noun's verbs and their options, run `jason <noun> --help` with one of these nouns: `approval`, `audience`, `block`, `campaign`, `contact`, `decision`, `events`, `journal`, `operation`, `plugin`, `preference`, `project`, `reply`, `report`, `role`, `rolenote`, `route`, `sender`, `subscription`, `suppression`, `workitem`. A verb's own options are in `jason <noun> <verb> --help`, and `jason --help` lists the nouns; where this mode only reads and proposes, or where `jason --help` does not run, read only `jason <noun> --help`.",
+        "18. Before you type a jason command you have not used in this conversation, load the skill for that work and take the verb from it. Never guess a verb, and never try verbs to find out which one exists: a verb that does not exist fails, and one that no rule allows waits as a card the person may not see. When the person names a jason command themselves, run the one they named; where it is refused or does not exist, say exactly what was answered. Never run another in its place. Seven verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, `jason logs` reads its log files, `jason doctor` collects the installation into one diagnostic file, and `jason export`, `jason import`, `jason install` and `jason uninstall` act on the installation itself. To read a noun's verbs and their options, run `jason <noun> --help` with one of these nouns: `approval`, `audience`, `block`, `campaign`, `contact`, `decision`, `events`, `journal`, `operation`, `plugin`, `preference`, `project`, `reply`, `report`, `role`, `rolenote`, `route`, `sender`, `subscription`, `suppression`, `workitem`. The CLI has eight nouns more, each with verbs of its own: `launches`, `notification`, `profile`, `runtime`, `session`, `skills`, `ui` and `update`; `jason runtime status`, for one, says whether the runtime answers. A verb's own options are in `jason <noun> <verb> --help`, and `jason --help` lists the nouns; where this mode only reads and proposes, or where `jason --help` does not run, read only `jason <noun> --help`.",
     );
     // The person's word on an approval, a question or a standing approval is given for that item, or for all of a list shown,
     // named as the header names them with a reason in the chat's own words, and the answer says what was done. A verdict that
@@ -1515,8 +1520,15 @@ test('what waits is read fresh, never said from memory', () => {
     assert.match(ruleOf(19), /Never say from memory what waits: run `jason approval list` and `jason decision list` first, each time\./);
 });
 
-test('jason status and jason logs are named as verbs of their own', () => {
-    assert.match(ruleOf(18), /Two verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, and `jason logs` reads its log files\./);
+test('the verbs with no noun are named as the CLI has them, and jason runtime status beside jason status', () => {
+    assert.match(ruleOf(18), /Seven verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, `jason logs` reads its log files,/);
+    assert.match(ruleOf(18), /`jason runtime status`, for one, says whether the runtime answers\./);
+});
+
+test('a jason command the person named is the one run, and what it answered is said, never another in its place', () => {
+    assert.match(ruleOf(18), /When the person names a jason command themselves, run the one they named; where it is refused or does not exist, say exactly what was answered\. Never run another in its place\./);
+    const text = instructionText().toString('utf8');
+    assert.equal(text.split('Never run another in its place.').length, 2, 'said once, in rule 18');
 });
 
 test('a file the person names is read wherever it is, written in Full access, and Jason\'s own files stay refused', () => {
@@ -1554,7 +1566,7 @@ test('prints the instructions a turn is given, the memory file and the words on 
     printed.unshift('===== the memory file, CLAUDE.md and AGENTS.md alike =====', memory);
     assert.match(printed.join('\n'), /Keep to these twenty-three rules in every turn\./);
     assert.match(printed.join('\n'), /This conversation is about the campaign cmp_01ABC\./);
-    assert.match(printed.join('\n'), /This conversation is about no campaign yet/);
+    assert.match(printed.join('\n'), /This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\./);
     process.stdout.write(`${printed.join('\n')}\n`);
 });
 
