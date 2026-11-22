@@ -152,7 +152,8 @@ the steps a launch plan most often drops.
 ### Sending capability is a hard stop, not a warning
 
 Sending capability is read first. No healthy sender is a **hard stop** — the user must connect one. Never
-attempt to send anyway, and never route around it. A capacity budget reporting `remaining:
+attempt to send anyway, and never route around it. A start of Jason's campaign is no send; the set-up says it plainly
+and the person may still start. A capacity budget reporting `remaining:
 unknown` is a real answer and is not the same fact as ample remaining (A6). Where authentication
 fails, `authentication_requirement.list` names what has to be published — **publishing it is not
 ours to do.** It happens in a system this contract has no reach into, usually owned by another
@@ -307,7 +308,7 @@ used (M4), so "too early to say" is a reportable answer rather than a guess.
 
 ## Safety
 
-Activating a campaign, enrolling contacts into a live one, resuming a paused campaign and
+For a provider's programme: activating a campaign, enrolling contacts into a live one, resuming a paused campaign and
 lifting a freeze are all **releases of sending**, and each is approved against a preview that
 names its backlog (E3). Pausing is the cheap direction: `campaign.pause` and `enrollment.pause`
 are `auto` and never wait for permission, while `campaign.resume`, `campaign.unfreeze` and
@@ -316,7 +317,8 @@ up (L6).
 
 `campaign.archive` is refused while active enrolments remain unless those are first stopped with
 a reason — retiring a campaign is its own act with its own confirmation, never a tail-end step of
-a launch. A single message to one named person is `message.send` at `confirm_each`, which is a
+a launch. Jason's own campaign is resumed and archived on the person's word, as `managed-campaign-work` says. A
+single message to one named person is `message.send` at `confirm_each`, which is a
 different gate from anything on this page. Full rules: `approval-boundaries`.
 
 ## Related skills

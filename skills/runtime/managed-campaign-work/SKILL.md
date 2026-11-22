@@ -817,7 +817,7 @@ EOF
 jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the wrong copy went out in step 2'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --not-before 2026-11-02T09:00:00Z --reason 'the person said not before Monday'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason 'the person wants this one first'
-jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the corrected copy is in place'
+jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the person said the corrected copy is in place: start it again'
 ```
 
 **"Ignore the limit" lets held work go today, and only on the person's word.** Work held at a daily limit of launches

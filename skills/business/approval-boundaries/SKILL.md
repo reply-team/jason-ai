@@ -35,7 +35,7 @@ directions.
 - Use when you are unsure whether an earlier approval still covers what you are about to do.
   The answer is usually no; this skill says when.
 - Do NOT use it to look up provider mechanics — scoped credentials and their enforcement
-  belong to the adapter pack.
+  belong to the provider's plugin.
 - Do NOT restate the derivation inside another skill. Two copies of a gate is how one of them
   ends up wrong; read it here.
 - Do NOT treat it as optional because the user seems in a hurry. Speed is not consent, and
@@ -322,8 +322,8 @@ picked up; `escalation.resolve` records how it ended and whether the work return
 **Pre-authorisation is bounded**, conversationally and mechanically. A decision the user made in
 advance about a bounded scope — this campaign, this list, this volume, this window — is not a
 blanket permission; and the credential the run holds is scoped to only what the workflow needs,
-so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The adapter
-pack documents how the scoping is expressed.
+so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The provider's
+plugin documents how the scoping is expressed.
 
 **A gate hit always leaves a record.** A silent stall is indistinguishable from a crash.
 `approval.request` and `escalation.raise` are that record while the run is alive;
