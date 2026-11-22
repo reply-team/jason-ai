@@ -583,6 +583,48 @@ public static class DomainErrors
         new("decision_not_about_reply", $"Decision '{id}' was not raised by a run that recorded a verdict on this reply; a verdict carries the answer to the question asked about its own reply.");
 
     /// <summary>
+    /// A reopen records whose decision it was: the person who said so, or the run that carries their answer, named.
+    /// </summary>
+    public static InvalidRequestException ReopenActorRequired() =>
+        new("actor_required", "actor.id is required on a reopen: what is recorded has to name whose word reopened the line, a person's or the run's that carries their answer.");
+
+    /// <summary>
+    /// A reopen sent from inside a run that names no question: a run carries the person's decision only as the question
+    /// they answered, and the person's own word is given outside any run. The attempt is quoted as the request named it.
+    /// </summary>
+    public static ForbiddenException ReopenInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Reopening a line is the person's decision: from inside a run, name the question they answered about it in decision_id, or raise it as a decision.");
+
+    /// <summary>A role or an attempt reopening a line with no question named: deciding it for the person.</summary>
+    public static InvalidRequestException ReopenNotHuman(ActorType type) =>
+        new(
+            "reopen_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot reopen a line on its own word; reopening is the person's decision: name the question they answered about it in decision_id.");
+
+    /// <summary>A reopen carries the answer to a question of its own campaign; another campaign's is refused as if it were not there.</summary>
+    public static InvalidRequestException ReopenDecisionNotFound(string id) =>
+        new("decision_not_found", $"Decision '{id}' is not a question of this campaign; a reopen carries the answer to one of its own.");
+
+    /// <summary>A question nobody has answered, or one taken back, has no answer for a reopen to carry.</summary>
+    public static InvalidRequestException ReopenDecisionNotAnswered(string id, DecisionStatus status) =>
+        new(
+            "decision_not_answered",
+            $"Decision '{id}' is {SnakeCaseEnumConverter<DecisionStatus>.Format(status)}; only an answered question carries a person's answer into a reopen.");
+
+    /// <summary>What a reopen carries as the person's decision has to have been given by a person who gave their name.</summary>
+    public static InvalidRequestException ReopenDecisionNotHuman(string id) =>
+        new("decision_not_human", $"Decision '{id}' was not answered by a named person; only a person's answer reopens a line.");
+
+    /// <summary>
+    /// A person's answer is about the end of a line: the question names, among its references, the <c>contacts_finished</c>
+    /// line of this campaign that ended it. A question about anything else is no answer about this.
+    /// </summary>
+    public static InvalidRequestException ReopenDecisionNotAboutFinish(string id) =>
+        new("decision_not_about_finish", $"Decision '{id}' names no contacts_finished line of this campaign among its references; a reopen carries the answer to the question asked about the end of a line.");
+
+    /// <summary>
     /// A standing approval is a decision made in advance, so it is refused to whoever may not decide: the code a decision's
     /// refusal carries, in the words of what was being done. No role and no run grants one.
     /// </summary>

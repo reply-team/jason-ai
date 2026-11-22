@@ -17,6 +17,21 @@ public static partial class JournalKinds
     public const string ContextUpdated = "context_updated";
     public const string ContactsAdded = "contacts_added";
     public const string ContactsRemoved = "contacts_removed";
+
+    /// <summary>
+    /// One request ended people's lines in a campaign, which cancels their open touches there: the counts of its items, the
+    /// people whose line it ended, and the reason, which is required.
+    /// </summary>
+    public const string ContactsFinished = "contacts_finished";
+
+    /// <summary>One request continued the lines of people held in a campaign: the counts of its items and the people enrolled again.</summary>
+    public const string ContactsContinued = "contacts_continued";
+
+    /// <summary>
+    /// One request reopened people's ended lines in a campaign: the counts of its items, the people enrolled again, and the
+    /// question whose answer carried the person's decision where a run sent it.
+    /// </summary>
+    public const string ContactsReopened = "contacts_reopened";
     public const string ContactCreated = "contact_created";
     public const string ContactUpdated = "contact_updated";
     public const string ContactArchived = "contact_archived";
@@ -371,6 +386,9 @@ public static partial class JournalKinds
         ContextUpdated,
         ContactsAdded,
         ContactsRemoved,
+        ContactsFinished,
+        ContactsContinued,
+        ContactsReopened,
         ContactCreated,
         ContactUpdated,
         ContactArchived,

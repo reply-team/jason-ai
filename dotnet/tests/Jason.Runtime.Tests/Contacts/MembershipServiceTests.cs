@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Contacts;
 
-public class MembershipServiceTests
+public partial class MembershipServiceTests
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
 

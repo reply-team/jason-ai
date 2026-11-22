@@ -45,6 +45,41 @@ public sealed record RemoveContactsSummary(int Removed, int NotMember, int Alrea
 public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSummary Summary, IReadOnlyList<RemoveContactsItemResult> Items);
 
 /// <summary>
+/// Ends the line with each person named in a campaign: an enrolled or paused member becomes finished, and their open
+/// touches there are cancelled. <c>reason</c> is required: ending a line is a judgement, and the line records why.
+/// </summary>
+public sealed record FinishContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, ActorRef? Actor, string? Reason);
+
+public sealed record FinishContactsItemResult(int Index, FinishContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record FinishContactsSummary(int Finished, int AlreadyFinished, int NotMember, int Excluded, int Rejected);
+
+public sealed record FinishContactsResult(string CampaignId, FinishContactsSummary Summary, IReadOnlyList<FinishContactsItemResult> Items);
+
+/// <summary>Continues the line with each person named in a campaign: a paused member is enrolled again.</summary>
+public sealed record ContinueContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, ActorRef? Actor, string? Reason);
+
+public sealed record ContinueContactsItemResult(int Index, ContinueContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record ContinueContactsSummary(int Continued, int NotPaused, int NotMember, int Excluded, int Rejected);
+
+public sealed record ContinueContactsResult(string CampaignId, ContinueContactsSummary Summary, IReadOnlyList<ContinueContactsItemResult> Items);
+
+/// <summary>
+/// Reopens the line with each person named in a campaign: a finished member is enrolled again. It is the person's
+/// decision, carried two ways: their own word, from a named <c>human</c> outside any run, or a run that names, in
+/// <c>decision_id</c>, the question of the campaign a named person answered about the <c>contacts_finished</c> line that
+/// ended those people's lines.
+/// </summary>
+public sealed record ReopenContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, string? DecisionId, ActorRef? Actor, string? Reason);
+
+public sealed record ReopenContactsItemResult(int Index, ReopenContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record ReopenContactsSummary(int Reopened, int NotFinished, int NotMember, int Excluded, int NotInDecision, int Rejected);
+
+public sealed record ReopenContactsResult(string CampaignId, ReopenContactsSummary Summary, IReadOnlyList<ReopenContactsItemResult> Items);
+
+/// <summary>
 /// The people of the campaigns <c>campaign_ids</c> names (one to a hundred, archived ones included), or of the one
 /// <c>campaign_id</c> names, or of every campaign <c>campaign.list</c> shows when neither is given; both is refused.
 /// Each person is listed once. Excluded members are hidden unless <c>state</c> asks for them. <c>summary</c> lists the

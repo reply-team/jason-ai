@@ -105,9 +105,18 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
 
     /// <summary>
     /// Everything a campaign still has open, or — with a contact — everything it still has open about that person. A
-    /// campaign archived keeps the work its contracts say runs in an archived campaign: a search's stop.
+    /// campaign archived keeps the work its contracts say runs in an archived campaign: a search's stop. With
+    /// <paramref name="operations"/>, only the open provider work of those operations: a line ended stops the person's
+    /// touches and leaves their conversation, and every other item, to run.
     /// </summary>
-    public async Task<int> CancelOpenAsync(JasonDbContext db, int campaignId, int? contactId, ActorRef actor, string reason, CancellationToken cancellationToken)
+    public async Task<int> CancelOpenAsync(
+        JasonDbContext db,
+        int campaignId,
+        int? contactId,
+        ActorRef actor,
+        string reason,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? operations = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         var query = db.WorkItems.Include(w => w.Attempts).Where(w => w.CampaignId == campaignId && !Finished.Contains(w.Status));
@@ -118,6 +127,12 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
         else
         {
             query = query.Where(w => w.Operation == null || !RunsInArchivedCampaign.Contains(w.Operation));
+        }
+
+        if (operations is not null)
+        {
+            var only = operations.ToArray();
+            query = query.Where(w => w.Operation != null && only.Contains(w.Operation));
         }
 
         return await CancelAllAsync(db, await query.ToListAsync(cancellationToken).ConfigureAwait(false), actor, reason, cancellationToken).ConfigureAwait(false);
