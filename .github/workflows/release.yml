@@ -1695,7 +1695,8 @@ jobs:
       # Every single wait inside a leg is bounded at 5 minutes or less: a hang fails with what was running, the desktop's
       # log, Gatekeeper's lines and the screen, long before a leg's limit of 30 minutes or the job's of 150.
       # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
-      # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
+      # Homebrew, then installed and opened again, the first open's set-up record still holding so that no set-up runs, and
+      # zapped, and the machine compared with the machine before.
       - name: Install with the cask, uninstall it, and zap it
         if: ${{ !cancelled() }}
         timeout-minutes: 30
@@ -1712,7 +1713,7 @@ jobs:
           bash .github/scripts/test-installation-macos.sh listing after-cask-uninstall
           bash .github/scripts/test-cask-macos.sh uninstall-left
           bash .github/scripts/test-cask-macos.sh install "$VERSION" --after-plain-uninstall
-          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION" --set-up-recorded
           bash .github/scripts/test-cask-macos.sh zap
           bash .github/scripts/test-installation-macos.sh listing after-cask-zap
           bash .github/scripts/test-installation-macos.sh compare after-cask-zap before

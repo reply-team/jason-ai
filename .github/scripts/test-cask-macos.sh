@@ -20,12 +20,15 @@
 #                                  first-open confirmation answered as a person's click answers it (approved, below); no
 #                                  wrapper at ~/.local/bin/jason before the open or, after a plain uninstall, only the one
 #                                  it is declared to leave: the application's wrapper, running the carried jason
-#   open <version> [--beside-formula]
+#   open <version> [--beside-formula|--set-up-recorded]
 #                                  the application opened as a person opens it, its first start's set-up waited for, its
 #                                  record written anew, and the application quit again (test-installation-macos.sh
 #                                  by-hand --placed holds that start in full, on a machine with no wrapper yet); beside the
 #                                  linked formula the set-up reports the formula as a problem, so no record is written, and
-#                                  the wait is for the set-up's end in the desktop's log instead
+#                                  the wait is for the set-up's end in the desktop's log instead; with the record of an
+#                                  earlier start of this version from this place still there (a plain uninstall keeps the
+#                                  data directory), the start runs no set-up: the record held there before, this start's
+#                                  own lines and its process waited for, no set-up line after it and the record unchanged
 #   left-to-homebrew               the carried jason uninstall --dry-run says application_fate left_to_homebrew
 #   start-runtime                  a runtime started from the carried jason, answering
 #   upgrade <version>              brew upgrade --cask: the application at <version>, the runtime the uninstall stanza
@@ -173,6 +176,21 @@ last_finished = finished[-1] if finished else {}
 print("%d %s %s %d %s" % (len(ran), last_ran.get("Exit", "none"), str(last_ran.get("Completed", "none")).lower(), len(finished), str(last_finished.get("Completed", "none")).lower()))' "$DATA"
 }
 
+# How many lines of the event $1 the desktop's log holds in this data directory, of the version $2 where one is given.
+event_count() {
+    python3 -c 'import glob,json,os,sys
+count = 0
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == sys.argv[2] and (sys.argv[3] == "" or event.get("Version") == sys.argv[3]):
+            count += 1
+print(count)' "$DATA" "$1" "${2:-}"
+}
+
 # The cask from the template, at a version, for a zip, with the url as the real tap renders it or naming a file here.
 render() {
     local version="$1" sha="$2" url="${3:-}" target="$4"
@@ -307,17 +325,38 @@ install)
     ;;
 
 open)
-    version="$1"; beside="${2:-}"
-    case "$beside" in ''|--beside-formula) ;; *) fail "open takes <version> [--beside-formula], not '$beside'" ;; esac
+    version="$1"; mode="${2:-}"
+    case "$mode" in ''|--beside-formula|--set-up-recorded) ;; *) fail "open takes <version> [--beside-formula|--set-up-recorded], not '$mode'" ;; esac
     record="$DATA/desktop/machine-setup.json"
     [ "$(version_of "$APP")" = "$version" ] || fail "$APP is $(version_of "$APP"), not $version"
+    if [ "$mode" = --set-up-recorded ]; then
+        # The record an earlier start of this version from this place wrote, which the desktop reads as the set-up done:
+        # it names this version, the carried jason of $APP and a report.
+        [ -f "$record" ] || fail "no set-up record at $record before this open, though an earlier start of $version from $APP wrote one"
+        held="$(python3 -c 'import json,sys
+record = json.load(open(sys.argv[1], encoding="utf-8"))
+print("yes" if record.get("ran_for") == sys.argv[2] and record.get("ran_from") == sys.argv[3] and isinstance(record.get("report"), dict) else "no: ran_for %s, ran_from %s, a report %s" % (record.get("ran_for"), record.get("ran_from"), isinstance(record.get("report"), dict)))' "$record" "$version" "$CARRIED" 2>&1)" || held="no: it could not be read ($held)"
+        [ "$held" = yes ] || fail "the set-up record at $record does not hold for $version from $CARRIED before this open: $held"
+        say "before this open the set-up record at $record holds for $version from $CARRIED"
+    fi
     before="$(stat -f %m "$record" 2>/dev/null || echo 0)"
     lines_before="$(setup_lines)" || fail "the desktop's log could not be read before the open"
+    started_before="$(event_count desktop_started "$version")" || fail "the desktop's log could not be read before the open"
+    shown_before="$(( $(event_count demo_shown) + $(event_count window_loaded) ))" || fail "the desktop's log could not be read before the open"
     sleep 1
     say "opening $APP; its quarantine attribute: $(xattr -p com.apple.quarantine "$APP" 2>/dev/null || echo none)"
     ( bounded 60 "open $APP" open "$APP" ) || { pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true; fail "open $APP did not end within 60 s, or failed"; }
     until=$(( $(date +%s) + 180 ))
-    if [ "$beside" = --beside-formula ]; then
+    if [ "$mode" = --set-up-recorded ]; then
+        # The record holds, so this start runs no set-up and writes no line of one: what it shows of itself is its own
+        # desktop_started line at this version, then the window's (demo_shown, or window_loaded in Live), with its process up.
+        while [ "$(event_count desktop_started "$version")" -le "$started_before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
+        if [ "$(event_count desktop_started "$version")" -le "$started_before" ]; then seen_at_bound; fail "the application's start wrote no desktop_started line at $version within 180 s of the open"; fi
+        while [ "$(( $(event_count demo_shown) + $(event_count window_loaded) ))" -le "$shown_before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
+        if [ "$(( $(event_count demo_shown) + $(event_count window_loaded) ))" -le "$shown_before" ]; then seen_at_bound; fail "the application's start showed no window (no demo_shown or window_loaded line) within 180 s of the open"; fi
+        pgrep -f "$APP/Contents/MacOS/" > /dev/null || fail "the application's process is not up after its start showed its window"
+        say "this start of $version wrote its desktop_started line and showed its window, its process up"
+    elif [ "$mode" = --beside-formula ]; then
         # Beside the linked formula the set-up reports the formula as a problem and leaves it as it is, so it does not
         # complete, and the desktop writes its record only where both steps completed: the set-up's end is the finishing
         # step's line after this open, in the desktop's own log.
@@ -339,7 +378,13 @@ open)
     until=$(( $(date +%s) + 60 ))
     while pgrep -f "$APP/Contents/MacOS/" > /dev/null && [ "$(date +%s)" -lt "$until" ]; do sleep 1; done
     pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true
-    if [ "$beside" = --beside-formula ]; then say "the application $version opened from $APP, its first start's set-up ended, and quit"
+    if [ "$mode" = --set-up-recorded ]; then
+        # With the start quit: no set-up ran, and the record is as it was.
+        lines_after="$(setup_lines)" || fail "the desktop's log could not be read after the open"
+        [ "$(echo "$lines_after" | cut -d' ' -f1)" = "$(echo "$lines_before" | cut -d' ' -f1)" ] || fail "the start ran a set-up though the record held for $version from $CARRIED: $(echo "$lines_before" | cut -d' ' -f1) machine_setup_ran line(s) before the open, $(echo "$lines_after" | cut -d' ' -f1) after"
+        [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" = "$before" ] || fail "the set-up record at $record changed at a start where it held for $version from $CARRIED"
+        say "the application $version opened from $APP, ran no set-up since the record held, left the record at $record as it was, and quit"
+    elif [ "$mode" = --beside-formula ]; then say "the application $version opened from $APP, its first start's set-up ended, and quit"
     else say "the application $version opened from $APP, its first start's set-up written to $record, and quit"; fi
     ;;
 
