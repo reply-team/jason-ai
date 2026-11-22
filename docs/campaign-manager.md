@@ -57,6 +57,14 @@ line. These kinds summon a review:
 | `audience_search_held` | The provider holds one of the campaign's searches — paused there, out of credits or at the plan's contact limit — so it spends nothing and finds nobody until a person acts at the provider. The runtime tells nobody directly; telling the person, by one question, is the manager's (§10). Said once per hold. |
 | `campaign_started` | The campaign went live, at its first start or after a pause. What it needs now is the manager's — work for its people, or a look at what changed while it stood — rather than a cadence later. At most one review per going live: two starts within one scan, or a start while a check-in is open, give one. Nothing reads what the line says, so a start after a pause summons one as the first start does. |
 
+**Which line is the cause.** One read summons at most one review, and its brief names one line as the cause. That
+line is the first of the highest-ranked kind the read holds: `campaign_started` ranks first, then
+`inbound_reply_observed`, then every other kind equally, where the first line wins. So a reply read behind a failure is
+the cause, and a start read behind a reply is. The rank reads the kind and nothing else, and it chooses only which line
+is named: `qualifying_count` still counts every line that qualified, the watermark still moves to the last line read,
+and a check-in's own lines are passed over before anything is ranked. The brief's `trigger` and `cause` name the chosen
+line, and so does the check-in's entry (§5), so the two always agree.
+
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
 go well. `workitem_expired` and `workitem_cancelled` are out: the cadence catches them soon enough.
@@ -182,6 +190,26 @@ The runtime writes the brief, and the brief is identifiers and constants:
 A scheduled review carries `review_intent: "scheduled"` and names no trigger and no cause. Everything
 else a review needs, it reads for itself through the CLI — the campaign, its work, its chronicle, its
 contacts, and the role note that is the manager's own memory of this campaign.
+
+**The entry.** A check-in is created with one of the manager's entries — the named way into its job that the review
+starts from — chosen from what caused it:
+
+| the summon has | entry |
+|---|---|
+| cause `campaign_started`, and the cause line is the campaign's first such line by id | `start` |
+| cause `campaign_started`, and the cause line is any later such line | `resume` |
+| cause `inbound_reply_observed` | `inbound_reply` |
+| a cause of any other kind | none: the general text |
+| no cause, and the scheduled review is due | `quick_look` |
+
+The choice reads the cause's kind, one comparison of identifiers — whether the cause line is the smallest journal id
+among the campaign's `campaign_started` lines — and whether the review was due. It reads no line's `old`, `new`, `key`
+or reason, so a start after a pause is told from a first start without reading either. A cause wins over the cadence.
+The entry is not a key of the brief: the work item carries it (`entry` in `workitem.get`), and the launch envelope
+carries it as `entry: {name, text}`, where `text` is the file `entries/<name>.md` of the manager's folder, whole
+([work execution](work-execution.md), "The launch envelope"). A check-in with no entry has `entry: null` there, and is
+the manager's general text. Where the manager's folder has no file of that name, `text` is null and the review runs on
+the role's skill alone.
 
 **`cause.decision_id` names a question when the answer to one is what woke this review**, and is `null`
 otherwise — like `work_item_id` and `attempt_id`, the brief writes every key it knows about and leaves

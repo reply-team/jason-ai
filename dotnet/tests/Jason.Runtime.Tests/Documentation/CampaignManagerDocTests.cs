@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Decisions;
 using Jason.Runtime.Dispatch;
@@ -175,6 +176,121 @@ public partial class CampaignManagerDocTests
         Assert.DoesNotContain("nothing sets it in this version", page, StringComparison.Ordinal);
         Assert.DoesNotContain("ships with escalation", page, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The table of entries §5 prints is the function the summon calls, row for row: each row's situation is read off
+    /// the page, put to <see cref="ManagerEntryChoice.Choose"/>, and its answer held to the entry the row prints. A row
+    /// added to the function and not the page, or the page and not the function, is red here.
+    /// </summary>
+    [Fact]
+    public void The_entry_table_the_page_prints_is_the_function_the_summon_calls()
+    {
+        var rows = EntryRows(Read());
+
+        Assert.Equal(5, rows.Count);
+        var named = rows
+            .Select(row => Backticked(row.Situation))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var (situation, printed) in rows)
+        {
+            var expected = printed.StartsWith("none", StringComparison.Ordinal) ? null : Assert.IsType<string>(Backticked(printed));
+            if (expected is not null)
+            {
+                Assert.True(RoleEntries.Carries(ManagerCheckIn.Role, expected), expected);
+            }
+
+            foreach (var inputs in Situations(situation, named))
+            {
+                var answered = ManagerEntryChoice.Choose(inputs);
+                Assert.True(
+                    expected == answered,
+                    $"The page prints '{printed}' for '{situation}', and the function answers '{answered ?? "none"}' for {inputs}.");
+            }
+        }
+
+        // And every name the function can give is a row's.
+        var printedNames = rows.Select(row => Backticked(row.Entry)).OfType<string>().Order(StringComparer.Ordinal);
+        Assert.Equal(
+            [ManagerEntryChoice.InboundReply, ManagerEntryChoice.QuickLook, ManagerEntryChoice.Resume, ManagerEntryChoice.Start],
+            printedNames);
+    }
+
+    /// <summary>The rank §2 states, in the order the summon ranks by.</summary>
+    [Fact]
+    public void The_page_states_the_rank_a_burst_is_caused_by()
+    {
+        var page = Flattened(Read());
+
+        Assert.True(ManagerTriggers.Rank(JournalKinds.CampaignStarted) < ManagerTriggers.Rank(JournalKinds.InboundReplyObserved));
+        Assert.True(ManagerTriggers.Rank(JournalKinds.InboundReplyObserved) < ManagerTriggers.Rank(JournalKinds.WorkItemFailed));
+        Assert.Equal(ManagerTriggers.Rank(JournalKinds.WorkItemFailed), ManagerTriggers.Rank(JournalKinds.DecisionAnswered));
+        Assert.Contains(
+            $"`{JournalKinds.CampaignStarted}` ranks first, then `{JournalKinds.InboundReplyObserved}`, then every other kind equally, where the first line wins",
+            page,
+            StringComparison.Ordinal);
+        Assert.Contains("`qualifying_count` still counts every line that qualified", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a row's situation puts to the function. A row naming a kind is that kind, as the campaign's first such line
+    /// where it says "first" and a later one where it says "later"; a row of "any other kind" is every default trigger no
+    /// other row names; a row of no cause is the cadence come round.
+    /// </summary>
+    private static IEnumerable<ManagerEntryInputs> Situations(string situation, IReadOnlySet<string> named)
+    {
+        if (situation.StartsWith("no cause", StringComparison.Ordinal))
+        {
+            Assert.Contains("is due", situation, StringComparison.Ordinal);
+            return [new ManagerEntryInputs(CauseKind: null, FirstStart: false, ReviewDue: true)];
+        }
+
+        if (situation.Contains("any other kind", StringComparison.Ordinal))
+        {
+            var others = ManagerOptions.Default.Where(kind => !named.Contains(kind)).ToList();
+            Assert.NotEmpty(others);
+            return others.Select(kind => new ManagerEntryInputs(kind, FirstStart: false, ReviewDue: false));
+        }
+
+        var cause = Assert.IsType<string>(Backticked(situation));
+        Assert.Contains(cause, ManagerOptions.Default);
+        var first = situation.Contains("first", StringComparison.Ordinal);
+        var later = situation.Contains("later", StringComparison.Ordinal);
+        Assert.False(first && later, situation);
+        if (cause == JournalKinds.CampaignStarted)
+        {
+            Assert.True(first || later, $"A row of {cause} says whether its line is the first or a later one: '{situation}'.");
+        }
+
+        return [new ManagerEntryInputs(cause, FirstStart: first, ReviewDue: false)];
+    }
+
+    /// <summary>The rows of the table under "| the summon has | entry |", as its two cells.</summary>
+    private static List<(string Situation, string Entry)> EntryRows(string page)
+    {
+        var lines = page.Split('\n').Select(line => line.TrimEnd('\r')).ToList();
+        var header = lines.FindIndex(line => line == "| the summon has | entry |");
+        Assert.True(header >= 0, "The page prints no table of entries.");
+        Assert.Equal("|---|---|", lines[header + 1]);
+
+        return lines
+            .Skip(header + 2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Trim('|').Split('|'))
+            .Select(cells => (cells[0].Trim(), cells[1].Trim()))
+            .ToList();
+    }
+
+    /// <summary>The first text between backticks in a cell, or null where there is none.</summary>
+    private static string? Backticked(string cell)
+    {
+        var match = Code().Match(cell);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    [GeneratedRegex("`([^`]+)`")]
+    private static partial Regex Code();
 
     private static string Read() =>
         File.ReadAllText(Path.Combine(DocumentsDirectory(), "campaign-manager.md"));
