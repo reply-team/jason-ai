@@ -597,8 +597,14 @@ public partial class BlockServiceTests
         }
 
         // A read that filters by block says so in a WHERE; the waits a listed item carries join their block in an ON instead.
+        // The item listing is split, one statement per collection an item carries: the items, their persons' held
+        // memberships (whether a touch waits on a paused line) and their live attempts, each filtered by the block again.
         var reads = recorder.Commands.Where(c => FiltersByBlock().IsMatch(c.Text) && c.Text.Contains("FROM \"work_item_waits\"", StringComparison.Ordinal)).ToList();
-        Assert.True(reads.Count == 2, $"Expected the item listing and the block listing, read {reads.Count}:{Environment.NewLine}{string.Join(Environment.NewLine, reads.Select(r => r.Text))}");
+        var listed = string.Join(Environment.NewLine, reads.Select(r => r.Text));
+        Assert.True(reads.Count == 4, $"Expected the item listing's three statements and the block listing, read {reads.Count}:{Environment.NewLine}{listed}");
+        Assert.Single(reads, read => read.Text.Contains("FROM \"provider_blocks\" AS \"p\"", StringComparison.Ordinal));
+        Assert.Single(reads, read => read.Text.Contains("FROM \"campaign_contacts\"", StringComparison.Ordinal));
+        Assert.Single(reads, read => read.Text.Contains("FROM \"attempts\"", StringComparison.Ordinal));
         foreach (var read in reads)
         {
             var plan = PlanOf(harness, read);
@@ -613,7 +619,9 @@ public partial class BlockServiceTests
         }
 
         // The items the waits name are each read by their key: no walk of the items, by the table or by any index of it.
-        var items = Assert.Single(reads, read => read.Text.Contains("FROM \"work_items\" AS \"w\"", StringComparison.Ordinal));
+        var items = Assert.Single(reads, read => read.Text.Contains("FROM \"work_items\" AS \"w\"", StringComparison.Ordinal)
+            && !read.Text.Contains("FROM \"campaign_contacts\"", StringComparison.Ordinal)
+            && !read.Text.Contains("FROM \"attempts\"", StringComparison.Ordinal));
         var itemPlan = PlanOf(harness, items);
         Assert.True(
             itemPlan.Contains("SEARCH w USING INTEGER PRIMARY KEY (rowid=?)") && !Scans(itemPlan, "w"),
