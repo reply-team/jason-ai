@@ -526,7 +526,9 @@ first start; the start's answer shows the campaign with it. Only the first start
 campaign that was already live when its installation was upgraded is never given one. So a person who wants none clears
 it after the start, `--clear audience_threshold`, and it stays cleared through every pause and resume. A null before the
 start means only that the start has not happened yet. While the probe's people are still landing, a reserve under the
-default is said once and recovers as the pages land; the recovery wakes nobody.
+default is said once and recovers as the pages land; the recovery wakes nobody, and the check-in the low line wakes asks
+nothing while the probe is unfinished: the manager asks at once only where the reserve is really spent, with no search
+of the campaign under way.
 
 **Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about

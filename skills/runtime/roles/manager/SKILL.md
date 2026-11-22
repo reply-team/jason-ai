@@ -547,7 +547,12 @@ the probe, with a ceiling of ten probes' worth of people. The person gives it by
 **Where no top-up can bring more, ask at once.** When the reserve is low and no top-up can be made that an allowance
 covers or that parks for the person — the audience is exhausted, its latest verdict is `replace` or `stop`, no verdict
 has been given yet, or no audience of the campaign's is a search's — raise one question to the person at this review,
-and do not leave it to the next deep review: the lead time is the point. Say how many people nobody has started on are
+and do not leave it to the next deep review: the lead time is the point. While a search of the campaign is still
+followed (its `ended_as` is null) or waits for the person's approval, the probe included, a low reserve asks nothing
+and creates nothing: say in your line that the reserve is low because the probe has not landed, and the review the
+search's end summons plans the batch. After that, a low reserve asks nothing while no verdict is in yet and the
+analyst's item that will give one is still open: say in your line when the judgement is due. Where no analyst's item is
+open, because none was made or it ended or failed with no verdict, ask. Say how many people nobody has started on are
 left, how many lines are still running, and the choices: more people from the person, a new audience by the planner, or
 let the campaign finish with the people it holds. Where a top-up you created parks for the person, its preview is that
 question, so raise none beside it. Ask once: a question already waiting about the reserve is the person asked, and a

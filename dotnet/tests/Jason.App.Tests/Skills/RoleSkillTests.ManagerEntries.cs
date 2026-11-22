@@ -161,6 +161,43 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A low reserve is a question only where the reserve is really spent. While a search of the campaign is still followed
+    /// or waits for the person, the probe included, it asks nothing and creates nothing, and the review the search's end
+    /// summons plans the batch; after that, it waits for a verdict only while the analyst's item that gives one is open, so
+    /// with no such item open the question is asked. The page says the same of the check-in the low line wakes.
+    /// </summary>
+    [Fact]
+    public void A_low_reserve_asks_nothing_while_its_search_or_its_judgement_is_under_way()
+    {
+        const string Search = "While a search of the campaign is still followed (its `ended_as` is null) or waits for the person's approval, the probe included, a low reserve asks nothing and creates nothing: say in your line that the reserve is low because the probe has not landed, and the review the search's end summons plans the batch.";
+        const string Judgement = "After that, a low reserve asks nothing while no verdict is in yet and the analyst's item that will give one is still open: say in your line when the judgement is due.";
+        const string Ask = "Where no analyst's item is open, because none was made or it ended or failed with no verdict, ask.";
+
+        var head = Flattened("manager");
+        var section = head[head.IndexOf("**Where no top-up can bring more, ask at once.**", StringComparison.Ordinal)..];
+        section = section[..section.IndexOf("## What you may decide yourself", StringComparison.Ordinal)];
+        foreach (var said in new[] { Search, Judgement, Ask })
+        {
+            Assert.Contains(said, section, StringComparison.Ordinal);
+        }
+
+        var start = FlattenedEntry("manager", "start");
+        var low = start[start.IndexOf("## A low reserve at the start", StringComparison.Ordinal)..];
+        foreach (var said in new[] { Search, Judgement, Ask })
+        {
+            Assert.Contains(said, low, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("starts with fewer than its threshold (twenty unless changed) people nobody has started on", start, StringComparison.Ordinal);
+
+        var page = Whitespace().Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "campaign-manager.md")), " ");
+        Assert.Contains(
+            "the recovery wakes nobody, and the check-in the low line wakes asks nothing while the probe is unfinished: the manager asks at once only where the reserve is really spent, with no search of the campaign under way.",
+            page,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A campaign that starts with fewer untouched people than a batch has its low reserve in the same pass as its start,
     /// and the start's entry answers it once, by asking at once where no allowance covers a top-up.
     /// </summary>
