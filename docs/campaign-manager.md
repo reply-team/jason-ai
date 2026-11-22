@@ -163,7 +163,7 @@ deep review in minutes on a real machine. So:
 - going live writes the grid, the first time and at every resume, to that moment plus the interval in force then: the
   grid starts from the start, and after a resume it starts again, so the days a campaign stood paused are not deep
   reviews it owes;
-- a deep review, and nothing else, moves the grid on by whole intervals to its first moment after the review was
+- a deep review the summon makes, and nothing else, moves the grid on by whole intervals to its first moment after the review was
   created: a runtime that was down for three days runs one deep review, not three, and comes back onto the grid it
   started from;
 - a quick look or a triggered review never moves the grid;
@@ -205,8 +205,8 @@ The two clocks:
   followed by the grid's at the first scan after it ends.
 
 The request writes one `review_requested` line, under the person and their reason, keyed by the depth and naming the
-check-in and its entry. It is no trigger and cannot be named one usefully: it summons nothing, and a program cannot
-subscribe to it. It is refused, in this order, and refused writes nothing:
+check-in and its entry. It summons nothing unless it is listed in `Manager:Triggers`, where it summons the review after
+it, and a program cannot subscribe to it. It is refused, in this order, and refused writes nothing:
 
 1. from inside a run, `decided_inside_a_run`, whatever actor it names: a review asked for is a person's word, and a
    check-in that asked for its own successor would review for ever;

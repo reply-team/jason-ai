@@ -230,7 +230,7 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   with the detail `invalid` on `name`, here and by `campaign.update`.
 - `campaign.get`: Jason's campaign, read without calling a provider. Every answer that carries a campaign whole says, in
   `deep_review_due_at`, the next moment of its deep review's grid: written when it goes live and moved by each deep
-  review, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
+  review the summon makes, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
   at that moment ([the campaign manager](campaign-manager.md) §4).
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
