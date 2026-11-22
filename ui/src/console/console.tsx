@@ -42,7 +42,7 @@ import {
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
-import { readUnavailable, resetUnavailable } from './unavailable';
+import { readUnavailable, resetUnavailable, unavailableRead } from './unavailable';
 import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
@@ -608,6 +608,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         // The Feed's id comes with the desktop's first answer, which a link to the Feed waits for.
         const feedAsked = askFeed();
         let pending: ReturnType<typeof setTimeout> | null = null;
+        // Whether the stream has been open: its first open follows the read made above, a later one a gap in it.
+        let wasOpen = false;
         const journal =
             stream ??
             pageStream(
@@ -677,6 +679,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 if (state.fresh && state.last === null && (!before.fresh || before.last !== null)) {
                     catchUpFeed();
                     readActsAgain(api);
+                }
+                // The stream open again after it closed may have missed a restart's load of the plugins, which a resume
+                // does not send; and a first open reads what the start could not.
+                if (state.status === 'open' && before.status !== 'open') {
+                    if (wasOpen || !unavailableRead()) void readUnavailable(api);
+                    wasOpen = true;
                 }
                 streamState.value = state;
             }),

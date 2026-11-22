@@ -121,7 +121,44 @@ describe('A routed plugin the runtime holds back, in the mode strip', () => {
     });
 });
 
+describe('The line after the stream comes back', () => {
+    it('is read again when the stream reconnects, a restart’s plugins_reloaded line never seen', async () => {
+        const fake = api(['plugin.list/card-accounts-reply', 'plugin.list/reply-unavailable']);
+        const stream = await renderConsole('live', fake);
+        await waitFor(() => expect(fake.calls.filter((each) => each.operation === 'plugin.list')).toHaveLength(1));
+        // The first open follows the read the console made as it started, and reads nothing again.
+        flush(() => stream.open());
+        await new Promise((done) => setTimeout(done, 20));
+        expect(fake.calls.filter((each) => each.operation === 'plugin.list')).toHaveLength(1);
+        expect(alerts()).toEqual([]);
+        // The runtime restarts: the stream closes, connects again and opens, and no line about the load is sent.
+        flush(() => stream.close());
+        await waitFor(() => expect(stream.opened).toHaveLength(2), { timeout: 3000 });
+        flush(() => stream.open());
+        await waitFor(() => expect(alerts()).toHaveLength(1));
+    });
+
+    it('is read when the stream first opens, where the read as the console started failed', async () => {
+        const fake = api(['plugin.list/reply-unavailable']);
+        const back = fake.unreachable('plugin.list');
+        const stream = await renderConsole('live', fake);
+        await new Promise((done) => setTimeout(done, 20));
+        expect(alerts()).toEqual([]);
+        back();
+        flush(() => stream.open());
+        await waitFor(() => expect(alerts()).toHaveLength(1));
+    });
+});
+
 describe('More than two routed plugins held back', () => {
+    it('says one with no problem listed in a sentence of its own, with no colon left bare', () => {
+        unavailablePlugins.value = [{ id: 'tool', label: 'tool', problem: '' }];
+        render(<ModeStrip />);
+        expect(alerts().map((each) => each.textContent)).toEqual([
+            'tool is unavailable, so its work does not run. Accounts',
+        ]);
+    });
+
     it('are said in one line that counts them, each of up to two in a line of its own', () => {
         const one = { id: 'a', label: 'A (a)', problem: 'Problem a.' };
         unavailablePlugins.value = [one, { id: 'b', label: 'B (b)', problem: 'Problem b.' }];

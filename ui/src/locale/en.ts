@@ -165,6 +165,7 @@ export const en = {
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
     'plugin.unavailable.one': '{name} is unavailable, so its work does not run: {problem}',
+    'plugin.unavailable.bare': '{name} is unavailable, so its work does not run.',
     'plugin.unavailable.many': '{n} plugins your routes name are unavailable, so their work does not run.',
     'plugin.unavailable.open': 'Accounts',
     'mode.preparing': 'Preparing the demo…',

@@ -201,11 +201,6 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
-    /// <summary>
-    /// A second contact under the address of one already planted. Reply's create path publishes no word for an
-    /// address the account already holds, so an account can come to hold the same person twice — and a lookup by
-    /// address then finds two.
-    /// </summary>
     /// <summary>The stand-in reports this version to `--version` instead of its release's: a reload finds it older.</summary>
     public ReplyAccount WithCliVersion(string version)
     {
@@ -213,6 +208,11 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// A second contact under the address of one already planted. Reply's create path publishes no word for an
+    /// address the account already holds, so an account can come to hold the same person twice — and a lookup by
+    /// address then finds two.
+    /// </summary>
     public ReplyAccount WithDuplicate(int id, int of)
     {
         var original = Contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == of)

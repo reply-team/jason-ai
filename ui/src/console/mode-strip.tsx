@@ -38,7 +38,10 @@ function Unavailable() {
             ? [{ key: 'many', said: t('plugin.unavailable.many', { n: String(shown.length) }) }]
             : shown.map((each) => ({
                   key: each.id,
-                  said: t('plugin.unavailable.one', { name: each.label, problem: each.problem }),
+                  said:
+                      each.problem === ''
+                          ? t('plugin.unavailable.bare', { name: each.label })
+                          : t('plugin.unavailable.one', { name: each.label, problem: each.problem }),
               }));
     return (
         <>

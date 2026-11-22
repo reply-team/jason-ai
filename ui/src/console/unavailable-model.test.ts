@@ -45,6 +45,12 @@ describe('An unavailable plugin a route names', () => {
         expect(unavailableRouted(listed('plugin.list/card-accounts-reply'), new Set(['reply']))).toEqual([]);
     });
 
+    it('carries no problem text where the runtime lists none', () => {
+        expect(
+            unavailableRouted([{ id: 'tool', name: null, status: 'unavailable', problems: [] }], new Set(['tool'])),
+        ).toEqual([{ id: 'tool', label: 'tool', problem: '' }]);
+    });
+
     it('is named by its id where its manifest gives no name', () => {
         expect(pluginLabel('tool', null)).toBe('tool');
         expect(pluginLabel('tool', '')).toBe('tool');

@@ -425,10 +425,10 @@ public sealed class FakeInstallation : HttpMessageHandler
         return new PluginPackage(id, SemanticVersion.Parse(version), files, memory.ToArray(), digest);
     }
 
-    /// <summary>The package placed in the plugins directory, as an install of it leaves it.</summary>
     /// <summary>What <c>plugin.reload</c> answers, the registry's JSON; a test sets the plugins it lists.</summary>
     public string ReloadAnswer { get; set; } = "{\"plugins\":[]}";
 
+    /// <summary>The package placed in the plugins directory, as an install of it leaves it.</summary>
     public FakeInstallation WithInstalledPlugin(PluginPackage package)
     {
         var directory = Paths.PluginPackageDirectory(package.Id);
