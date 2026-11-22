@@ -1643,6 +1643,12 @@ body,
     height: 100%;
     overflow-y: auto;
 }
+/* A row's menu opens its dialog in a frame beside the shell, not in a pane: the frame scopes the palette's tokens, which
+   inherit through it, and draws no box. A box of the panel's height there would be a second window's height under the
+   shell, and the page would scroll past the sidebar and the chat to the empty frame behind the dialog's layer. */
+.jc-console .harness.row-dialog {
+    display: contents;
+}
 /* The shell's grid is a sidebar column and a content column; with no sidebar the one child would sit in the sidebar's
    column, so the hosted page has the one column, as wide as the panel. */
 .jc-console .harness .app.chromeless {

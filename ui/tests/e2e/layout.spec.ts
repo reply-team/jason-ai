@@ -122,3 +122,37 @@ test('in the console Needs you is drawn across the whole wide area, as its two p
         FILLS,
     );
 });
+
+test('in the console a dialog a row menu opens draws nothing between its layer and the page', async ({
+    page,
+    jason,
+}) => {
+    await page.setViewportSize(WIDE);
+    await page.addInitScript(quietDesktop);
+    await jason.campaignCreate('Row dialog');
+    const { url } = await jason.uiOpen();
+    await page.goto(url);
+    await expect(page.locator('.jc-console .area')).toBeVisible();
+    const side = page.locator('.jc-console .side');
+    await side.getByRole('button', { name: 'More for Row dialog' }).click();
+    await page.getByRole('menuitem', { name: 'Archive…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Archive Row dialog' });
+    await expect(dialog).toBeVisible();
+    // Under the dialog's translucent layer, at a point of the sidebar, the next thing drawn is the sidebar itself: the
+    // frame the dialog stands in draws no box of its own over the page, and the page is the window's height.
+    const seen = await page.evaluate(() => {
+        const box = document.querySelector('.jc-console .side')!.getBoundingClientRect();
+        const stack = document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        const under = stack.find((each) => !each.closest('.overlay'));
+        return {
+            under: under === undefined ? null : `${under.tagName.toLowerCase()}.${under.className}`,
+            inSide: under?.closest('.side') !== null && under !== undefined,
+            height: document.documentElement.scrollHeight,
+            window: window.innerHeight,
+        };
+    });
+    expect(seen.inSide, `the first thing drawn under the dialog's layer ${JSON.stringify(seen)}`).toBe(true);
+    expect(seen.height, `the page's height ${JSON.stringify(seen)}`).toBe(seen.window);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+});

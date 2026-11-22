@@ -704,6 +704,28 @@ describe('Needs you', () => {
             await waitFor(() => expect(needs().querySelector('.needs-left')).toBeNull());
         });
 
+        it('says nothing of an item that left while the panel was not open', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            const desktop = await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+            const section = () => document.querySelector<HTMLElement>('section[data-pane="needs"]')!;
+            // The person goes to Agents: Needs you is kept, hidden, and the item it showed is decided elsewhere.
+            flush(() => desktop.command('navigate.campaigns'));
+            await waitFor(() => expect(section().hidden).toBe(true));
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_2');
+            await waitFor(() => expect(section().querySelector('[data-row="apr_1"]')).toBeNull());
+            // Back in Needs you: the next item is shown, and no word is said of one the person never saw leave.
+            fireEvent.click(
+                within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }),
+            );
+            await waitFor(() => expect(section().hidden).toBe(false));
+            await settle();
+            expect(pane().dataset['id']).toBe('apr_2');
+            expect(needs().querySelector('.needs-left')).toBeNull();
+        });
+
         it('stays on the question shown when an approval arrives above it', async () => {
             const journal = stubStream();
             const fake = new FakeApi()
