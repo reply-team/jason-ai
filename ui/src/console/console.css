@@ -2497,6 +2497,50 @@ body,
     background: var(--hover);
     color: var(--ink);
 }
+/* The plus of a section header: a 20px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
+   the plus in the accent's text colour (6.4:1 on the tint in light, 6.9:1 in dark).
+   The icon box is 22px, so the drawn cross (14/24 of it) is about 13px; the box overflows the 18px inside, the cross does not. */
+.jc-console {
+    --plus-tint: 14%;
+    --plus-edge: 38%;
+    --plus-tint-hover: 26%;
+}
+:root[data-theme='dark'] .jc-console {
+    --plus-tint: 20%;
+    --plus-edge: 45%;
+    --plus-tint-hover: 32%;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console {
+        --plus-tint: 20%;
+        --plus-edge: 45%;
+        --plus-tint-hover: 32%;
+    }
+}
+.jc-console .rbtn.plus {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    margin: 0 0 0 5px;
+    border: 1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg));
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg));
+    color: var(--accent-text);
+}
+.jc-console .rbtn.plus svg {
+    flex: none;
+    width: 22px;
+    height: 22px;
+}
+.jc-console .rbtn.plus:hover {
+    background: color-mix(in srgb, var(--accent) var(--plus-tint-hover), var(--side-bg));
+    border-color: var(--accent);
+    color: var(--accent-text);
+}
+.jc-console .rbtn.plus:focus-visible {
+    outline: 2px solid var(--accent, var(--ink));
+    outline-offset: 1px;
+}
 .jc-console .rbtn[data-active='true'] {
     color: var(--accent);
 }
@@ -2507,6 +2551,12 @@ body,
 }
 .jc-console .rbtn[disabled]:hover {
     background: none;
+    color: var(--faint);
+}
+.jc-console .rbtn.plus[disabled],
+.jc-console .rbtn.plus[disabled]:hover {
+    background: none;
+    border-color: var(--line);
     color: var(--faint);
 }
 .jc-console .recent .menu {
@@ -2527,7 +2577,8 @@ body,
 .jc-console .menuitem[role='menuitemradio'] svg {
     grid-row: auto;
 }
-/* A row of AGENTS or CHATS and its three dots, shown on hover and on focus, over the row's right end. */
+/* A row of AGENTS or CHATS and its three dots, shown on hover and on keyboard focus, over the row's right end. A row left selected by a click keeps focus
+   without :focus-visible, so a selected row at rest shows its time. */
 .jc-console .rrow {
     position: relative;
 }
@@ -2549,8 +2600,11 @@ body,
     opacity: 0;
 }
 .jc-console .rrow:hover .rdots,
-.jc-console .rrow:focus-within .rdots,
 .jc-console .rrow.menu-open .rdots {
+    opacity: 1;
+}
+/* Its own rule: an engine without :has() drops this one and keeps the two above. */
+.jc-console .rrow:has(:focus-visible) .rdots {
     opacity: 1;
 }
 .jc-console .rdots:hover {

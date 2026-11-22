@@ -1621,13 +1621,28 @@ jobs:
             echo "$tag's $name matches its checksums.txt"
           done
 
+      # The id of the folder this build's jason extracts its native libraries to under ~/.net/jason, read with the host's
+      # base pointed elsewhere, so that every compare tells it from the previous release's, as the macOS proof does.
+      - name: Read the folder this build's jason extracts its native libraries to
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          unpacked="$RUNNER_TEMP/extract-probe-archive"
+          mkdir -p "$unpacked"
+          ditto -x -k "$FEED/jason-desktop-macos-arm64.zip" "$unpacked"
+          bash .github/scripts/test-installation-macos.sh extracted "$unpacked/Jason.app/Contents/Resources/bundle/jason"
+
+      # The machine a person's is: Claude Code's and Codex's folders, and a quick-start skill of the person's own under
+      # ~/.agents/skills, as the macOS proof's machine has, which the first start leaves alone and jason status names.
       - name: The machine before anything is installed
         id: before
         if: ${{ !cancelled() }}
         timeout-minutes: 20
         shell: bash
         run: |
-          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills"
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills/quick-start"
+          printf "a person's own skill" > "$HOME/.agents/skills/quick-start/SKILL.md"
           bash .github/scripts/test-installation-macos.sh listing before
 
       - name: Make the test taps and audit the cask as the real tap renders it
