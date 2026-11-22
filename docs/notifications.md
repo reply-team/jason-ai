@@ -45,7 +45,7 @@ Eight things, and only these:
   the responder drafted needs, parked at the campaign's next claim, which in a quiet campaign is the next scan, is said
   in the same pointer; a verdict recorded after its run already ended wakes one by its own line.
   The pointer counts each reply once, by the key every verdict on it carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
-  person records outside a run is one they already know of, the desktop chat's is never a person's, and an automatic
+  person records outside a run is one they already know of, one recorded under the chat's mark is never a person's, and an automatic
   answer, a bounce, an opt-out and a verdict that does not say are no person's reply: none of them is counted, and an
   opt-out tells nobody. `Notifications:Replies` turns this one off alone (§9). Who replied, and in which campaign, the
   person's agent reads from those lines; the pointer says only how many.

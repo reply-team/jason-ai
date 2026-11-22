@@ -244,8 +244,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_sta
 them is an `approved` approval whose reason is `automatic_mode`, decided under the name of the person who set the mode,
 with a line `approval_automatic_applied` in the campaign's chronicle. A send the mode held waits as any approval does,
 and its reason says why: `approval get --human` gives it as a sentence on its `Why:` line, and the facts on its
-`Send mode:` line. Give the person that sentence with the send. A send written in Jason's chat always waits for the
-person, whatever the send mode or a standing approval says.
+`Send mode:` line. Give the person that sentence with the send. A send the chat of Jason Desktop writes follows the
+send mode, as one written in a terminal does; only one written under the chat's mark, by a chat turn that can only read
+and propose, always waits for the person, whatever the send mode or a standing approval says.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_automatic_applied
@@ -309,8 +310,8 @@ should every message wait, or go automatically? And the same for people who have
   reaches anyone who asked not to be contacted, and it touches no operation that is not a message to a person. A
   message still waits for the person where its creator or a reviewer doubted it, where neither the critic nor a person
   passed its text, where the contact has a reply not yet judged, where it answers an automatic reply, a bounce or a
-  request to stop, or a conversation marked for the person, where it was written in Jason's chat, and once the
-  campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
+  request to stop, or a conversation marked for the person, where a chat turn that can only read and propose wrote it,
+  and once the campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
   next send and leaves what already waits where it is.
 - **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
   automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
