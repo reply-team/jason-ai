@@ -526,8 +526,8 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role plann
 **A top-up is a search naming the audience by its number, and a count.** The audience to top up is the one the
 allowance names, which `campaign audience` shows with its ceiling, `max_people`, the people its searches already asked
 for, `people`, and `max_per_search`. Where none is in force, it is the audience the latest verdict judged `working`;
-before any verdict, create no top-up: say in your line that the reserve is low and when the judgement is due, and ask
-the person as "Where no top-up can bring more" below says.
+before any verdict, create no top-up: say in your line that the reserve is low and when the judgement is due, and
+follow "Where no top-up can bring more" below.
 Never top up an audience whose latest verdict is `replace` or `stop`, even while the allowance still names it, which it
 does until the person approves the next audience's probe: say so in your line, and leave the reserve low meanwhile,
 since the person is already asked, after `replace` by the next audience's probe and after `stop` by your one question. Ask for the allowance's `max_per_search`, or the probe's size where it

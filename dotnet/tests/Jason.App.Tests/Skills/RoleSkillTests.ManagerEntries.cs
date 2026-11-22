@@ -201,6 +201,11 @@ public partial class RoleSkillTests
             Assert.Contains(said, section, StringComparison.Ordinal);
         }
 
+        // The top-up's paragraph points to that rule rather than asking: before any verdict it asks nothing while the
+        // analyst's item is open.
+        Assert.Contains("before any verdict, create no top-up: say in your line that the reserve is low and when the judgement is due, and follow \"Where no top-up can bring more\" below.", head, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask the person as \"Where no top-up can bring more\" below says", head, StringComparison.Ordinal);
+
         var start = FlattenedEntry("manager", "start");
         var low = start[start.IndexOf("## A low reserve at the start", StringComparison.Ordinal)..];
         foreach (var said in new[] { Search, Judgement, Ask })
