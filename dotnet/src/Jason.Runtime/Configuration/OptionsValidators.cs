@@ -607,6 +607,28 @@ public sealed class SendingOptionsValidator : IValidateOptions<SendingOptions>
 }
 
 /// <summary>
+/// The ceiling of touches a person may have in one campaign, within its bounds: at least one, since there is no zero and
+/// no unlimited, and at most twenty.
+/// </summary>
+public sealed class LinesOptionsValidator : IValidateOptions<LinesOptions>
+{
+    public ValidateOptionsResult Validate(string? name, LinesOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(
+            failures,
+            LinesOptions.Section + ":" + nameof(LinesOptions.MaxTouches),
+            options.MaxTouches,
+            LinesOptions.MinimumTouches,
+            LinesOptions.MaximumTouches);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
 /// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to and an age
 /// between an hour and thirty days.
 /// </summary>
