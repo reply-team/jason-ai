@@ -37,11 +37,10 @@ public static partial class ProjectSlug
 
     /// <summary>
     /// The folder name a name makes, by the rule a project's slug is made by, with <paramref name="noun"/> where that rule
-    /// says <c>project</c>: <c>campaign-</c> and six hexadecimal characters for a campaign whose name leaves too little,
-    /// <c>-campaign</c> after a device name. A campaign has no slug — only its folder's leaf is made this way, once, when
-    /// the folder is.
+    /// says <c>project</c>. A campaign's folder is not named this way: its leaf is when it was made and the end of its id
+    /// (<c>CampaignLeaf</c>), so its name is free to change.
     /// </summary>
-    public static string Leaf(string name, string noun)
+    private static string Leaf(string name, string noun)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(noun);

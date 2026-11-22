@@ -1,5 +1,6 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach } from 'vitest';
+import { enrolReads } from '../console/enrol-route';
 import { forgetEdits } from '../screens/attention/reasking';
 import { takeUnanswered } from './fake-api';
 
@@ -14,6 +15,9 @@ configure({ asyncUtilTimeout: 15_000 });
 // A request the test recorded no answer for fails it, even when the screen caught the error and showed a failure.
 // A message edited on the page is the page's own memory, which a test starts without.
 beforeEach(() => forgetEdits());
+
+// Where each campaign's enrolment was last read is the page's own memory too: a test reads it afresh.
+beforeEach(() => (enrolReads.value = {}));
 
 afterEach(() => {
     cleanup();

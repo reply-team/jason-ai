@@ -426,7 +426,10 @@ with its problems listed, and change nothing else: the set still activates and t
 stay usable. An autostarted runtime sees a different search path than a shell does, and one
 uninstalled vendor tool must not empty the registry. Only the entries of the search path that are full
 paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a
-program found only there is `executable_missing`. `probe_timed_out` is a binding pattern that did
+program found only there is `executable_missing`. A missing program's message and an
+`executable_incompatible` one end on the repair in the runtime's own words, naming no package manager: for a program
+older than `min_version` it is "Install '<name>' <min_version> or later where the runtime can see it and run
+`jason plugin reload`." `probe_timed_out` is a binding pattern that did
 not finish its load-time probe on either of a start's two loads (below); a live reload refuses such
 a package as `field_invalid` instead.
 

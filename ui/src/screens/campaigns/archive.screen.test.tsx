@@ -52,8 +52,8 @@ function before(): FakeApi {
         .answer('route.resolve', 'route.resolve/archive-pause');
 }
 
-/** The app paired and opened at an address, inside the desktop (with a chat to open) or in a browser tab (without). */
-function open(api: FakeApi, to: Route, { chat = true }: { chat?: boolean } = {}) {
+/** The app paired and opened at an address, inside the desktop's window, with a chat to ask in. */
+function open(api: FakeApi, to: Route) {
     watch(api);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -66,7 +66,7 @@ function open(api: FakeApi, to: Route, { chat = true }: { chat?: boolean } = {})
     location.hash = href(to);
     route.value = to;
     const app = <App api={api} uiApiVersion="v1" />;
-    render(chat ? <CampaignChat.Provider value={() => {}}>{app}</CampaignChat.Provider> : app);
+    render(<CampaignChat.Provider value={() => {}}>{app}</CampaignChat.Provider>);
 }
 
 const sent = (api: FakeApi, operation: string) => api.calls.filter((c) => c.operation === operation).map((c) => c.body);
@@ -138,15 +138,6 @@ describe('Archiving an agent from its Settings', () => {
         expect(provider.textContent).toContain(
             "To stop it first, ask in this agent's chat to pause it in Reply, and archive once that work has finished; or pause it in Reply itself.",
         );
-    });
-
-    it("in a browser tab, where there is no chat to ask, the way to stop it first is the provider's own", async () => {
-        open(before(), settings, { chat: false });
-        const dialog = await confirmation();
-
-        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
-        expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
-        expect(provider.textContent).not.toContain('chat');
     });
 
     it('Archive sends one archive with the reason, however often it is pressed, then the list says what happened', async () => {

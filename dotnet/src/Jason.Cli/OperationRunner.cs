@@ -42,14 +42,15 @@ public static class OperationRunner
     /// <summary>
     /// 3 when the runtime cannot be reached or rejects the token (the envelope is on stdout), 1 when the API
     /// answers with an error (its body verbatim, or an envelope when the body is not JSON) or <c>--prompt</c> cannot read
-    /// the answer (one line on stderr), 0 on success (the body verbatim, or the rendered text).
+    /// the answer (one line on stderr), 0 on success (the body verbatim, or the rendered text). Under <c>--human</c> an
+    /// envelope is said as its <see cref="CliErrors.Sentence"/>, on the same stream and with the same exit code.
     /// </summary>
     public static async Task<int> RunAsync(CliEnvironment env, string operation, JsonObject body, RunOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(options);
 
-        var (exitCode, response) = await SendAsync(env, operation, body, cancellationToken).ConfigureAwait(false);
+        var (exitCode, response) = await SendAsync(env, operation, body, options.Human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exitCode;
@@ -57,7 +58,7 @@ public static class OperationRunner
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(ErrorText(response));
+            CliErrors.Print(env.Out, options.Human, ExitCodes.ApiError, ErrorText(response));
             options.AfterError?.Invoke(response);
             return ExitCodes.ApiError;
         }
@@ -90,7 +91,14 @@ public static class OperationRunner
     /// than show it. A runtime that cannot be reached is still reported here — exit code 3, envelope on
     /// stdout, no response — because that answer is the same for every caller.
     /// </summary>
-    public static async Task<(int ExitCode, RuntimeResponse? Response)> SendAsync(CliEnvironment env, string operation, JsonObject body, CancellationToken cancellationToken)
+    public static Task<(int ExitCode, RuntimeResponse? Response)> SendAsync(CliEnvironment env, string operation, JsonObject body, CancellationToken cancellationToken) =>
+        SendAsync(env, operation, body, human: false, cancellationToken);
+
+    /// <summary>
+    /// The same, with the envelope of a runtime that cannot be reached, or of a request it did not answer in time, said
+    /// as its <see cref="CliErrors.Sentence"/> under <c>--human</c>. A caller that reads what was printed asks without it.
+    /// </summary>
+    public static async Task<(int ExitCode, RuntimeResponse? Response)> SendAsync(CliEnvironment env, string operation, JsonObject body, bool human, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(body);
@@ -100,7 +108,7 @@ public static class OperationRunner
         if (look.Descriptor is not { } descriptor)
         {
             // A descriptor closed to this account does not open on a retry; a missing one appears once a runtime starts.
-            return (Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied), null);
+            return (Fail(env, human, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied), null);
         }
 
         using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock, confined: env.Confined());
@@ -113,7 +121,7 @@ public static class OperationRunner
         {
             // The runtime took the request, so it is reachable: this is the request's own end, not a dead runtime, and a
             // repeat starts the same work over rather than finding it done.
-            env.Out.WriteLine(CliErrors.Serialize(
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                 CliErrors.RequestTimedOut,
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -123,16 +131,16 @@ public static class OperationRunner
         }
         catch (HttpRequestException ex)
         {
-            return (Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer ({ex.Message}). The descriptor may be stale."), null);
+            return (Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer ({ex.Message}). The descriptor may be stale."), null);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return (Fail(env, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time."), null);
+            return (Fail(env, human, CliErrors.RuntimeUnreachable, $"The runtime at {descriptor.BaseUrl} did not answer in time."), null);
         }
 
         if (response.StatusCode == 401)
         {
-            return (Fail(env, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale."), null);
+            return (Fail(env, human, CliErrors.Unauthorized, "The runtime rejected the capability token from the descriptor; the descriptor is stale."), null);
         }
 
         return (ExitCodes.Success, response);
@@ -184,9 +192,9 @@ public static class OperationRunner
         }
     }
 
-    private static int Fail(CliEnvironment env, string code, string message, bool retryable = true)
+    private static int Fail(CliEnvironment env, bool human, string code, string message, bool retryable = true)
     {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
+        CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 }

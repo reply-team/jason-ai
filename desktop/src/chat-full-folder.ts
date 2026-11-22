@@ -1,15 +1,17 @@
-// The folder a Full access grant works in. Each confirmation makes `<data>/desktop/chat-full/<id>/`: its top is owned by
-// the desktop as the chat folder's is (`ownAgentFolder`), the recorded skills are copied in, and the Full access turns of
-// that one conversation run there and nothing else does. When the grant ends the folder moves, at once, to
-// `<data>/desktop/chat-full-ended/<id>-<moment>/`, the moment in its name being when it moved, and is kept seven days.
-// A bounded sweep removes it after that: it walks by `lstat`, never follows a link, checks that a folder it is about to
-// enter is the one it looked at, stops after a number of entries it is given and takes up again at the next pass. A
-// failure leaves the folder and says a code; nothing here ever refuses a turn.
+// The ended place, `<data>/desktop/chat-full-ended/`, where a folder goes to be kept seven days before it is removed. Two
+// kinds of folder go there. The folders an earlier desktop made for each Full access grant, `<data>/desktop/chat-full/<id>/`,
+// which no desktop makes now: for one release a start still moves each one left there. And a conversation's own folder,
+// `<data>/desktop/chats/<conversation id>/`, where every turn of it runs (`ownConversationFolder`): moved when the
+// conversation is removed, or at a start when no record names it. Each is named `<id>-<moment>` there, the moment being
+// when it moved. Nothing is moved out of a place that is not a real folder, a link or a junction included, nor into an
+// ended place that is not one. A bounded sweep removes a folder seven days after its move: it walks by `lstat`, never
+// follows a link, checks that a folder it is about to enter is the one it looked at, stops after a number of entries it
+// is given and takes up again at the next pass. A failure leaves the folder where it is and says a code; nothing here
+// ever refuses a turn or removes a folder at the moment it moves.
 
-import { copyFileSync, lstatSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, writeFileSync, type BigIntStats } from 'node:fs';
+import { lstatSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, type BigIntStats } from 'node:fs';
 import { join } from 'node:path';
-import { ownAgentFolder, skillsFolders } from './chat-agent-folder.ts';
-import { newConversationId } from './chat-conversations.ts';
+import { conversationIdShape, newConversationId } from './chat-conversations.ts';
 
 /** How long an ended grant's folder is kept, from the moment it moved. */
 export const keptDays = 7;
@@ -20,8 +22,11 @@ export const sweepCap = 50_000;
 
 /** A grant's id: 26 Crockford characters, the moment in the first ten. */
 export const grantIdShape = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-/** The name of an ended grant's folder: the grant's id, a dash and the moment it moved, in milliseconds. */
-export const endedNameShape = /^([0-9A-HJKMNP-TV-Z]{26})-([0-9]{10,16})$/;
+/**
+ * The name of an ended folder: a grant's id or a conversation's (`conv_` and 26 characters), a dash and the moment it
+ * moved, in milliseconds.
+ */
+export const endedNameShape = /^((?:conv_)?[0-9A-HJKMNP-TV-Z]{26})-([0-9]{10,16})$/;
 
 export function newGrantId(now = Date.now()): string {
     return newConversationId(now).slice('conv_'.length);
@@ -36,67 +41,7 @@ export interface FullFolders {
     records: string;
 }
 
-/** A grant's folder could not be made: the system's error code, never its text or a path. */
-export class GrantFolderUnmade extends Error {
-    readonly code: string;
-
-    constructor(code: unknown) {
-        super('The folder for Full access could not be made, so Full access was not given.');
-        this.name = 'GrantFolderUnmade';
-        this.code = typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : 'unknown';
-    }
-}
-
-/** Copies the regular files and folders below `from` into `to`; a link or anything else is not copied. */
-function copyOwn(from: string, to: string): void {
-    for (const name of readdirSync(from)) {
-        const source = join(from, name);
-        const stat = lstatSync(source);
-        if (stat.isDirectory()) {
-            mkdirSync(join(to, name), { recursive: true });
-            copyOwn(source, join(to, name));
-        } else if (stat.isFile()) {
-            copyFileSync(source, join(to, name));
-        }
-    }
-}
-
-/**
- * Makes a grant's folder, with the recorded skills in it. The chat folder's skills folders are read as they stand (every
- * turn puts them right first), copied, and the copy put right against the records as the chat folder's top is, so only
- * what the desktop recorded, with the bytes recorded, is there. Returns the folder's path.
- */
-export function makeGrantFolder(folders: FullFolders, id: string, chat: string, records: string, conversation?: string): string {
-    if (!grantIdShape.test(id)) throw new Error('That is not a grant id the desktop made.');
-    const folder = join(folders.full, id);
-    try {
-        mkdirSync(folders.full, { recursive: true, mode: 0o700 });
-        mkdirSync(folder);
-        if (conversation !== undefined) {
-            mkdirSync(folders.records, { recursive: true, mode: 0o700 });
-            writeFileSync(recordOf(folders, id), conversation, { mode: 0o600 });
-        }
-        for (const host of skillsFolders) {
-            const skills = join(chat, host.folder, 'skills');
-            let stat;
-            try {
-                stat = lstatSync(skills);
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-                throw error;
-            }
-            if (!stat.isDirectory()) continue;
-            mkdirSync(join(folder, host.folder, 'skills'), { recursive: true });
-            copyOwn(skills, join(folder, host.folder, 'skills'));
-        }
-        ownAgentFolder(folder, records);
-    } catch (error) {
-        throw new GrantFolderUnmade((error as NodeJS.ErrnoException | null)?.code);
-    }
-    return folder;
-}
-
-/** The name an ended folder has: the grant's id and the moment it moved. */
+/** The name an ended folder has: the grant's or the conversation's id and the moment it moved. */
 export const endedName = (id: string, now: number): string => `${id}-${now}`;
 
 /**
@@ -111,16 +56,75 @@ const recordOf = (folders: FullFolders, id: string): string => join(folders.reco
  */
 export function endGrantFolder(folders: FullFolders, id: string, now: number, said: (code: string) => void = () => {}): string | null {
     if (!grantIdShape.test(id)) throw new Error('That is not a grant id the desktop made.');
-    const from = join(folders.full, id);
+    return moveToEnded(folders, folders.full, id, now, said);
+}
+
+/**
+ * Moves a conversation's own folder, `<chats>/<id>/`, to the ended place, named with the moment it moved, where the sweep
+ * removes it seven days later. Returns the name it has there; null when the folder is not there, or could not be moved
+ * (a terminal still holds it, on Windows), and then it stays where it is, everything in it, for a later start.
+ */
+export function endConversationFolder(chats: string, folders: FullFolders, id: string, now: number, said: (code: string) => void = () => {}): string | null {
+    if (!conversationIdShape.test(id)) throw new Error('That is not a conversation id the desktop made.');
+    const place = folderKind(chats);
+    if (place === 'other') said('ENOTDIR');
+    if (place !== 'folder') return null;
+    return moveToEnded(folders, chats, id, now, said);
+}
+
+/**
+ * At a start, the conversations' folders no record names: those whose conversation was removed while a terminal held
+ * the folder, or whose record went another way. Each is moved to the ended place, its seven days counted from now. The
+ * caller names the records, and calls this only when every record was read: a record that cannot be read names no
+ * folder, so none is moved then. A name that is no conversation's id is left alone. Returns the names they have there.
+ */
+export function moveOwnLeftovers(chats: string, folders: FullFolders, recorded: ReadonlySet<string>, now: number, said: (code: string) => void = () => {}): string[] {
+    const place = folderKind(chats);
+    if (place === 'other') said('ENOTDIR');
+    if (place !== 'folder') return [];
+    let names: string[];
     try {
-        lstatSync(from);
+        names = readdirSync(chats);
+    } catch (error) {
+        said(codeOf(error));
+        return [];
+    }
+    const moved: string[] = [];
+    for (const name of names) {
+        if (!conversationIdShape.test(name) || recorded.has(name)) continue;
+        const ended = moveToEnded(folders, chats, name, now, said);
+        if (ended !== null) moved.push(ended);
+    }
+    return moved;
+}
+
+/** What stands at a name, by `lstat`: a folder itself, nothing, or anything else, a link or a junction to a folder included. */
+function folderKind(path: string): 'folder' | 'none' | 'other' {
+    try {
+        const stat = lstatSync(path);
+        return stat.isDirectory() && !stat.isSymbolicLink() ? 'folder' : 'other';
+    } catch (error) {
+        return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT' ? 'none' : 'other';
+    }
+}
+
+/**
+ * Moves `<from>/<id>` to the ended place as `<id>-<now>`, one rename, so nothing in it is removed now. The ended place
+ * is made where it is not, and nothing is moved into one that is not a real folder. Null when there is nothing to move
+ * or the move failed, which says a code.
+ */
+function moveToEnded(folders: FullFolders, from: string, id: string, now: number, said: (code: string) => void): string | null {
+    const path = join(from, id);
+    try {
+        lstatSync(path);
     } catch {
         return null;
     }
     const name = endedName(id, now);
     try {
         mkdirSync(folders.ended, { recursive: true, mode: 0o700 });
-        renameSync(from, join(folders.ended, name));
+        if (folderKind(folders.ended) !== 'folder') throw Object.assign(new Error('not a folder'), { code: 'ENOTDIR' });
+        renameSync(path, join(folders.ended, name));
     } catch (error) {
         said(codeOf(error));
         return null;
@@ -255,11 +259,14 @@ export function sweepEnded(folders: FullFolders, options: SweepOptions): Swept {
         try {
             remove(path, ops.lstat(path));
             swept.removed++;
-            // The folder is gone, and with it the desktop's record of whom it was for.
-            try {
-                unlinkSync(recordOf(folders, parts[1] ?? ''));
-            } catch {
-                // Nothing recorded, or left for the next sweep's folder-less pass.
+            // The folder is gone, and with it the desktop's record of whom a grant's was for; a conversation's has none.
+            const id = parts[1] ?? '';
+            if (grantIdShape.test(id)) {
+                try {
+                    unlinkSync(recordOf(folders, id));
+                } catch {
+                    // Nothing recorded, or left for the next sweep's folder-less pass.
+                }
             }
         } catch (error) {
             if (error instanceof Capped) {

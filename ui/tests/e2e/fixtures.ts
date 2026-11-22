@@ -16,7 +16,7 @@ export { expect };
 
 /**
  * Opens a page Live's sidebar draws no row for through Search, as a person does: the sidebar's own Search row (found by
- * its action, since Recent's "Search agents" button shares the name's prefix), the query, Enter on the first result.
+ * its action, which names it whatever its words), the query, Enter on the first result.
  */
 export async function openBySearch(page: Page, text: string): Promise<void> {
     await page.locator('.jc-console .side [data-action="side.search"]').click();

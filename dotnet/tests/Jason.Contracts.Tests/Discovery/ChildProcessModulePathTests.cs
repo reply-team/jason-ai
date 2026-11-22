@@ -173,7 +173,10 @@ public class ChildProcessModulePathTests
             return null;
         }
 
-        var start = ChildProcess.StartInfo(pwsh, ChildKind.SystemToolWithInput);
+        // The product's door makes the start, as it does for every child of the product's; the start cache is the
+        // child's own, as every test's PowerShell 7 has.
+        using var tree = new Jason.Runtime.Tests.TempTree();
+        var start = Jason.Runtime.Tests.ChildPwsh.WithOwnCache(ChildProcess.StartInfo(pwsh, ChildKind.SystemToolWithInput), tree.Root);
         var (exit, output) = Run(start, "[Console]::Out.Write($env:PSModulePath)");
         return exit == 0 && output.Length > 0 ? output : null;
     }

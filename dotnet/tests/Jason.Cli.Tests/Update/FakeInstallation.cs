@@ -425,6 +425,9 @@ public sealed class FakeInstallation : HttpMessageHandler
         return new PluginPackage(id, SemanticVersion.Parse(version), files, memory.ToArray(), digest);
     }
 
+    /// <summary>What <c>plugin.reload</c> answers, the registry's JSON; a test sets the plugins it lists.</summary>
+    public string ReloadAnswer { get; set; } = "{\"plugins\":[]}";
+
     /// <summary>The package placed in the plugins directory, as an install of it leaves it.</summary>
     public FakeInstallation WithInstalledPlugin(PluginPackage package)
     {
@@ -670,8 +673,8 @@ public sealed class FakeInstallation : HttpMessageHandler
                 return Json(new DrainResponse(State, RunningAttempts));
 
             case "plugin.reload":
-                // The registry a reload answers; what it holds is not read by the verbs that ask it here.
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"plugins\":[]}", Encoding.UTF8, "application/json") };
+                // The registry a reload answers: no plugin unless a test names what it lists.
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ReloadAnswer, Encoding.UTF8, "application/json") };
 
             case "system.shutdown":
                 if (RefusesToStop)

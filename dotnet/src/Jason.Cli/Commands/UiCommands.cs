@@ -192,7 +192,7 @@ public static class UiCommands
             return ExitCodes.ApiError;
         }
 
-        var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, cancellationToken).ConfigureAwait(false);
+        var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exit;
@@ -200,7 +200,7 @@ public static class UiCommands
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 

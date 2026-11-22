@@ -96,7 +96,7 @@ public sealed partial class CopyPromptTests
         var run = await Run(["approval", "get", "apr_1", "--prompt"], Fixture("approval.get", "pending-with-preview"), campaign: Fixture("campaign.get", "in-project-with-folder"));
 
         Assert.Equal(ExitCodes.Success, run.Exit);
-        Assert.Contains("Campaign folder: ~/Jason/projects/acme-corp/campaigns/q3-leads", run.Output, StringComparison.Ordinal);
+        Assert.Contains("Campaign folder: ~/Jason/projects/acme-corp/campaigns/2026-10-16-090000-cmp001", run.Output, StringComparison.Ordinal);
         Assert.Equal(["approval.get", "campaign.get"], run.Asked);
     }
 

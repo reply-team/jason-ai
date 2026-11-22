@@ -31,6 +31,7 @@ import {
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
+import { agentMaking, newAgent } from './new-agent';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
 import * as needs from './needs';
@@ -238,7 +239,8 @@ define('dash.trends', (_args, element) => {
     }
     void reloadTrends();
 });
-define('dash.new', () => here().dock.show('start'));
+// The agent is made at the click, and its place opens on its Chat (`new-agent.ts`).
+define('dash.new', () => void newAgent());
 define('dash.needs', () => here().dock.show('needs'));
 define('dash.agents', () => here().dock.show('campaigns'));
 define('dash.item', ([kind, id]) => {
@@ -346,7 +348,12 @@ function header(waiting: Count): Html {
                       </button>`
                     : null
             }
-            <button class="btn ${waiting.n > 0 ? '' : 'p'}" type="button" ${act('dash.new')}>
+            <button
+                class="btn ${waiting.n > 0 ? '' : 'p'}"
+                type="button"
+                ${act('dash.new')}
+                ${agentMaking.value ? html`disabled aria-busy="true"` : null}
+            >
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
         </div>

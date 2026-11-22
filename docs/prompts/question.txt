@@ -1,6 +1,6 @@
 Jason is waiting for a person's answer to a question: dec_1, in campaign cmp_1.
 
-Campaign folder: ~/Jason/projects/acme-corp/campaigns/q3-leads
+Campaign folder: ~/Jason/projects/acme-corp/campaigns/2026-10-16-090000-cmp001
 Read its memory file, AGENTS.md: it holds what the person keeps about this campaign. If you can, work from that folder.
 
 Use the skill approvals-and-questions. If your agent host does not have it, install the skills for the host you are running in with jason skills install --host <host>, where <host> is one of: claude_code, codex, copilot_cli, cursor_cli, gemini_cli, antigravity_cli. Then start the skill.

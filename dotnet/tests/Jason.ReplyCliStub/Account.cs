@@ -42,6 +42,20 @@ internal static partial class Account
     private const string MarkerFile = ".jason-stand-in";
     private const string CallsFile = "calls.jsonl";
 
+    /// <summary>
+    /// The file a test's store names an older release in, so that a reload finds this stand-in too old; read only beside
+    /// the marker, as everything here is.
+    /// </summary>
+    private const string VersionFile = ".jason-stand-in-version";
+
+    /// <summary>The version a test's store asks this stand-in to report, or null for the release's own.</summary>
+    public static string? ReportedVersion()
+    {
+        var store = Locate();
+        var file = Path.Combine(store, VersionFile);
+        return File.Exists(Path.Combine(store, MarkerFile)) && File.Exists(file) ? File.ReadAllText(file).Trim() : null;
+    }
+
     /// <summary>Where this provider's identifiers start; the number is meaningless, its stability is not.</summary>
     private const int FirstContactId = 1001;
 

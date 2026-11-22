@@ -28,9 +28,10 @@ public enum CheckState
 /// reading a version does not parse a sentence written for a person, and it carries nothing the fact could not.
 /// </remarks>
 /// <param name="Details">
-/// Fields of the fact, by name, and null on every check that has none; omitted from the body when null. Two checks
-/// carry them: <c>role_skills</c>, the deployment in the role root, and <c>send_modes</c>, each mode in force and its
-/// source as the runtime's own words.
+/// Fields of the fact, by name, and null on every check that has none; omitted from the body when null. Three checks
+/// carry them: <c>role_skills</c>, the deployment in the role root, <c>send_modes</c>, each mode in force and its
+/// source as the runtime's own words, and <c>path</c>, <c>homebrew_formula</c>, where Homebrew's older formula is linked
+/// beside the jason Jason Desktop carries, which <c>--human</c> prints below the table while the check passes.
 /// </param>
 public sealed record StatusCheck(
     string Name,

@@ -864,6 +864,30 @@ public class CampaignCommandsTests
     }
 
     /// <summary>
+    /// The campaign's folder is said beside its project, so a person who stands in a folder named by when a campaign was
+    /// made and the end of its id finds which campaign it is; one with no folder recorded says none.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_the_campaign_s_folder_or_none()
+    {
+        const string Folder = "/home/marta/Jason/projects/default/campaigns/2026-11-21-084507-7h5nrd";
+        var withFolder = JsonSerializer.Serialize(
+            new CampaignDto("cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", "New agent 3", CampaignStatus.Draft, "prj_A", "default", new JsonObject(), [], null, null, Moment, Moment, null, FolderPath: Folder),
+            JasonJson.Options);
+        var withNone = JsonSerializer.Serialize(
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject(), [], null, null, Moment, Moment, null),
+            JasonJson.Options);
+        using var folder = new CliRun(withFolder);
+        using var none = new CliRun(withNone);
+
+        Assert.Equal(ExitCodes.Success, await folder.RunAsync("campaign", "get", "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", "--human"));
+        Assert.Equal(ExitCodes.Success, await none.RunAsync("campaign", "get", "cmp_A", "--human"));
+
+        Assert.Matches("(?m)^Project: +default \\(prj_A\\)\\r?\\nFolder: +" + System.Text.RegularExpressions.Regex.Escape(Folder) + "\\r?$", folder.Text);
+        Assert.Matches("(?m)^Folder: +none\\r?$", none.Text);
+    }
+
+    /// <summary>
     /// The runtime keeps two context keys that differ only in case as two keys, and the rendering reads its answer the
     /// same way: a create the runtime performed is shown, both keys listed, rather than refused after the fact.
     /// </summary>

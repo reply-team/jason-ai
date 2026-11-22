@@ -51,3 +51,16 @@ export function entryOf(path: string): 'present' | 'unresolved' | null {
         return 'unresolved';
     }
 }
+
+/**
+ * An existing file's identity, as the operating system reports it: its volume, its file number and how many links it
+ * has; null when nothing is there, it is no file, or it cannot be read.
+ */
+export function identityOf(path: string): { volume: bigint; file: bigint; links: bigint } | null {
+    try {
+        const stat = statSync(path, { bigint: true });
+        return stat.isFile() ? { volume: stat.dev, file: stat.ino, links: stat.nlink } : null;
+    } catch {
+        return null;
+    }
+}

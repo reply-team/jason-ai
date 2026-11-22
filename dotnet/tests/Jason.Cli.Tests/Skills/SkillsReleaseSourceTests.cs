@@ -597,22 +597,13 @@ public class SkillsReleaseSourceTests
     /// </summary>
     private static (int Exit, string Stdout, string Stderr) Pwsh(params string[] arguments)
     {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it, and the release is only ever built there.");
-
-        var start = new ProcessStartInfo(pwsh!)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
+        // A start cache of the child's own, gone with the child.
+        using var tree = new TempTree();
+        var start = ChildPwsh.StartInfo(tree.Root);
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         foreach (var argument in (string[])["-NoProfile", "-NonInteractive", .. arguments])
         {
             start.ArgumentList.Add(argument);

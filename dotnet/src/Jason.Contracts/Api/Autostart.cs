@@ -19,6 +19,11 @@ namespace Jason.Contracts.Api;
 /// process that registered it, null for a LaunchAgent or a user unit that carries none, which launchd or the systemd user
 /// manager starts on its own; null on Windows.
 /// </param>
+/// <param name="TurnedOff">
+/// Whether the person turned the start at logon off with <c>jason runtime autostart disable</c>: the record it writes in the
+/// data directory, <c>autostart/off.json</c>, or on macOS launchd's own record of the label as disabled. <c>enable</c> takes
+/// it back.
+/// </param>
 public sealed record AutostartStatusResponse(
     bool Registered,
     string Platform,
@@ -26,4 +31,5 @@ public sealed record AutostartStatusResponse(
     string? Executable,
     bool? ExecutableExists,
     string? ArtifactPath,
-    string? Path = null);
+    string? Path = null,
+    bool TurnedOff = false);

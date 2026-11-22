@@ -208,9 +208,9 @@ public class UiCommandsTests
     }
 
     /// <summary>
-    /// Under JASON_CONFINED, set on every chat turn of Jason Desktop, the whole ui noun stays refused, its two new forms
-    /// with it: open, whose window the chat already is, and pair, which hands out a link with the runtime's rights. Breaks if
-    /// the chat can open a page or get a pairing link through either.
+    /// Under JASON_CONFINED, set on every chat turn of Jason Desktop that can only read and propose, the whole ui noun stays
+    /// refused, its two new forms with it: open, whose window the chat already is, and pair, which hands out a link with the
+    /// runtime's rights. Breaks if such a turn can open a page or get a pairing link through either.
     /// </summary>
     [Theory]
     [InlineData("open")]

@@ -401,7 +401,8 @@ when it is made.
 changes is who has already decided. The rule on standing approvals holds here word for word: it is a person's, by name,
 and never inferred from urgency, a role's request or a person's patience; no role sets it, and a request from inside a
 run is refused. It does not cover a send that any author or reviewer doubted (`ask_person` on the send, or a review that
-doubts it), one written or edited in the desktop's chat, or one past the campaign's daily ceiling of automatic sends
+doubts it), one written or edited under the chat's mark, by a turn of Jason Desktop's chat that can only read and
+propose, or one past the campaign's daily ceiling of automatic sends
 (`Sending:AutomaticMaxPerDay`): each of these waits for the person whatever the mode and whatever standing approval would
 cover it. Nor does it cover a send whose text neither the critic the runtime made for it nor a person passed as it now
 reads, a send to a contact with a reply not judged yet, or an answer to an automatic reply, a bounce or a request to

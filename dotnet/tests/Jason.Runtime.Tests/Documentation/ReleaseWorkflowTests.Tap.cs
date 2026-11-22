@@ -10,6 +10,40 @@ namespace Jason.Runtime.Tests.Documentation;
 /// </summary>
 public partial class ReleaseWorkflowTests
 {
+    /// <summary>
+    /// The cask proof's taps step trusts each test tap right after <c>brew tap-new</c> makes it, before style, audit and
+    /// install read it: a tap made that way is not trusted, and Homebrew ignores its casks until it is. A brew with no
+    /// <c>brew trust</c>, or a trust that exits non-zero, fails the step in one sentence that names it; nothing is swallowed.
+    /// </summary>
+    [Fact]
+    public void The_cask_proof_trusts_each_test_tap_it_makes_and_fails_where_it_cannot()
+    {
+        var script = Read([".github", "scripts", "test-cask-macos.sh"]);
+        var start = script.IndexOf("\ntaps)\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the cask proof has no taps step");
+        var taps = script[start..script.IndexOf("\n    ;;\n", start, StringComparison.Ordinal)];
+
+        var made = taps.IndexOf("brew tap-new --no-git \"$tap\"", StringComparison.Ordinal);
+        var trusted = taps.IndexOf("brew trust \"$tap\"", StringComparison.Ordinal);
+        Assert.True(made >= 0 && trusted > made, "the taps step does not trust each tap after brew tap-new makes it");
+        Assert.True(trusted < taps.IndexOf("render \"$version\"", StringComparison.Ordinal), "a tap is rendered into before it is trusted");
+        Assert.Contains("brew help trust > /dev/null 2>&1 || fail \"this runner's brew has no brew trust", taps, StringComparison.Ordinal);
+        Assert.Contains("[ \"$status\" = 0 ] || fail \"brew trust $tap exited $status", taps, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| true", taps, StringComparison.Ordinal);
+        Assert.Equal(1, CountOf(script, "brew tap-new --no-git"));
+
+        // Homebrew's words that it ignores an untrusted tap's casks fail the proof, and no wider pattern, so a harmless
+        // warning that says "ignoring" of something else does not.
+        Assert.Contains("grep -qiE 'not trusted|ignoring (formulae|casks)|tap trust is required'", script, StringComparison.Ordinal);
+
+        // In the workflow the taps are made, and so trusted, before the audit and before the first install.
+        var workflow = Read([".github", "workflows", "release.yml"]);
+        var tapsStep = workflow.IndexOf("test-cask-macos.sh taps", StringComparison.Ordinal);
+        Assert.True(tapsStep >= 0, "release.yml runs no taps step of the cask proof");
+        Assert.True(tapsStep < workflow.IndexOf("test-cask-macos.sh audit", StringComparison.Ordinal), "release.yml audits the cask before its taps are made and trusted");
+        Assert.True(tapsStep < workflow.IndexOf("test-cask-macos.sh install", StringComparison.Ordinal), "release.yml installs the cask before its taps are made and trusted");
+    }
+
     private const string TapRequestToken = "github_pat_00NOTAREALTOKEN";
 
     private const string TapDispatch = "https://api.github.com/repos/reply-team/homebrew-tap/actions/workflows/bump.yml/dispatches";
@@ -22,7 +56,7 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
     private const string TapOffReason =
-        "Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that carries one.";
+        "Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
 
     /// <summary>
     /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is
@@ -51,7 +85,7 @@ public partial class ReleaseWorkflowTests
         Assert.StartsWith(TapOffReason, comment, StringComparison.Ordinal);
 
         var head = string.Join(' ', lines.TakeWhile(line => line.StartsWith('#')).Select(line => line[1..].Trim()));
-        Assert.Contains("The job after it, which asked the Homebrew tap to bump its formula, is switched off.", head, StringComparison.Ordinal);
+        Assert.Contains("The job after the release, which would ask the Homebrew tap to bump its cask once that proof passed, is switched off.", head, StringComparison.Ordinal);
         Assert.DoesNotContain("a last job asks the Homebrew tap", head, StringComparison.Ordinal);
     }
 
@@ -67,7 +101,7 @@ public partial class ReleaseWorkflowTests
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var tap = TapJob();
-        Assert.Equal(PublishingJobName(jobs), Scalar(tap, "needs"));
+        Assert.Equal([PublishingJobName(jobs), "proof-macos-cask"], ((YamlSequenceNode)Node(tap, "needs")!).Children.Select(node => node.ToString()));
         Assert.Equal(TapSwitchedOff, Scalar(tap, "if"));
         Assert.Equal(SigningEnvironment, Scalar(tap, "environment"));
         Assert.Empty(Assert.IsType<YamlMappingNode>(Node(tap, "permissions")).Children);

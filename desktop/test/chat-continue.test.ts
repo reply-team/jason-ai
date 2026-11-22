@@ -1,6 +1,7 @@
 // "Continue this chat" in a terminal, as far as the chat's record goes: beside each session a host named, the record keeps
-// whether a plain turn named it (the person's own login, outside Full access), and the conversation offers a session to
-// continue only for Claude Code or Codex, only one a plain turn named, and says whether a turn of it runs now.
+// whether a plain turn named it (the person's own login, in any mode, Full access among them), and the conversation
+// offers a session to continue only for Claude Code or Codex, only one a plain turn named, and says whether a turn of it
+// runs now.
 
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -81,7 +82,7 @@ test('a conversation offers its session to continue only for Claude Code or Code
     assert.deepEqual(continuableOf(record({ sessions: { codex: 'thread-b' }, plain_sessions: ['codex'], chosen: { host: 'codex', model: null, effort: null } })), { host: 'codex', session: 'thread-b' });
     const rows: [string, Conversation][] = [
         ['no session kept', record({ chosen: { host: 'claude', model: null, effort: null } })],
-        ['no mark: a record of an earlier desktop, or a session a Full access turn named', record({ sessions: { claude: 'session-a' }, chosen: { host: 'claude', model: null, effort: null } })],
+        ['no mark: a record of an earlier desktop, or a session no plain turn named', record({ sessions: { claude: 'session-a' }, chosen: { host: 'claude', model: null, effort: null } })],
         ['a key provider’s session', record({ sessions: { deepseek: 'session-k' }, plain_sessions: ['deepseek'], chosen: { host: 'deepseek', model: null, effort: null } })],
         ['the last turn was on a key provider', record({ sessions: { claude: 'session-a', deepseek: 'session-k' }, plain_sessions: ['claude'], chosen: { host: 'deepseek', model: null, effort: null } })],
         ['the last turn was on another host, which named none', record({ sessions: { claude: 'session-a' }, plain_sessions: ['claude'], chosen: { host: 'codex', model: null, effort: null } })],
@@ -122,7 +123,6 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
         keyFor: (id) => keys[id],
         fence: () => fence,
         sandboxOutside: outsideStandIn,
-        confirmFullAccess: async () => true,
         fullAccessOffered: true,
         emit(id, event) {
             const said = events.get(id) ?? [];
@@ -165,7 +165,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
 }
 
 for (const host of ['claude', 'codex'] as const) {
-    test(`a plain ${host} turn marks the session it named, and the chat offers that session to continue`, async (t) => {
+    test(`a plain ${host} turn marks the session it named, and the chat offers that session to continue in the conversation's own folder`, async (t) => {
         const r = rig(t);
         const { id } = await r.chat.create();
         await r.turn(id, 'Hello', { host });
@@ -173,7 +173,7 @@ for (const host of ['claude', 'codex'] as const) {
         const session = kept.sessions[host];
         assert.ok(session !== undefined);
         assert.deepEqual(kept.plain_sessions, [host]);
-        assert.deepEqual(r.chat.continuable(id), { host, session, running: false });
+        assert.deepEqual(r.chat.continuable(id), { host, session, running: false, folder: join(r.b.paths.chats, id) });
     });
 }
 
@@ -186,25 +186,22 @@ test('a Plan only turn is a plain turn: its session is marked', async (t) => {
     assert.equal(r.chat.continuable(id)?.host, 'claude');
 });
 
-test('a Full access turn marks no session, and takes the mark from the one it continued: the chat offers nothing', async (t) => {
+test('a Full access turn is a plain turn on the person\'s own login: its session is marked, and the chat offers it to continue', async (t) => {
     const r = rig(t);
     const fresh = await r.chat.create();
     await r.chat.setMode(fresh.id, 'full_access', 'claude');
     await r.turn(fresh.id, 'Go', { host: 'claude' });
-    assert.ok(r.kept(fresh.id).sessions.claude !== undefined);
-    assert.equal(r.kept(fresh.id).plain_sessions, undefined);
-    assert.equal(r.chat.continuable(fresh.id), null);
-    // A plain session that a Full access turn then continued is no plain one any longer.
+    const session = r.kept(fresh.id).sessions.claude;
+    assert.ok(session !== undefined);
+    assert.deepEqual(r.kept(fresh.id).plain_sessions, ['claude'], 'the session a Full access turn named is marked');
+    assert.equal(r.chat.continuable(fresh.id)?.session, session, 'and the chat offers it');
+    // A plain session that a Full access turn then continued stays one to continue.
     const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'ask_first');
     await r.turn(id, 'Hello', { host: 'claude' });
     assert.deepEqual(r.kept(id).plain_sessions, ['claude']);
     await r.chat.setMode(id, 'full_access', 'claude');
     await r.turn(id, 'Go on', { host: 'claude' });
-    assert.equal(r.kept(id).plain_sessions, undefined);
-    assert.equal(r.chat.continuable(id), null);
-    // Back in Ask first, the next plain turn names it again, and it is offered again.
-    await r.chat.setMode(id, 'ask_first', 'claude');
-    await r.turn(id, 'And now', { host: 'claude' });
     assert.deepEqual(r.kept(id).plain_sessions, ['claude']);
     assert.equal(r.chat.continuable(id)?.host, 'claude');
 });

@@ -419,7 +419,7 @@ public partial class ReplyErrorTableTests
             }
         }
 
-        Assert.True(blocked == 6, $"the table has {blocked} rows that say a block; the two sends have two each, and message.send two more for a mailbox's limits.");
+        Assert.True(blocked == 7, $"the table has {blocked} rows that say a block; the two sends have two each, and message.send three more for a mailbox's limits and a mailbox that cannot send.");
 
         var shared = ReplyErrorTable.Shared["account_or_sender_blocked"]!.AsObject();
         Assert.Equal(("provider_blocked", "blocked"), (Text(shared, "code"), Text(shared, "class")));
@@ -473,7 +473,8 @@ public partial class ReplyErrorTableTests
     /// <summary>
     /// Reply's two refusals of a direct email for a limit it counts are read by Reply's own code, on <c>message.send</c>
     /// alone, whatever reply-cli calls them: each is the mailbox's block for its limit, which keeps nothing of the record a
-    /// refusal may name. The daily limit clears at the next midnight UTC, when Reply counts a new day; the active contacts
+    /// refusal may name. A third refusal is read the same way, a mailbox that cannot send direct emails at all
+    /// (<c>contact.emailAccountSendingDisabled</c>), held by its own test below. The daily limit clears at the next midnight UTC, when Reply counts a new day; the active contacts
     /// say no moment. A command that ran from no sending account ends in the contract's word for a spent allowance.
     /// </summary>
     [Fact]
@@ -504,6 +505,70 @@ public partial class ReplyErrorTableTests
             .SelectMany(operation => operation.Value!.AsObject().Select(entry => entry.Key))
             .Concat(ReplyErrorTable.Codes["shared"]!.AsObject().Select(entry => entry.Key));
         Assert.DoesNotContain(elsewhere, key => key.StartsWith(ReplyCodeKey, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A mailbox Reply says cannot send direct emails at all, its daily limit 0 or its team's plan sending nothing, is the
+    /// mailbox's block for its limit, keyed by Reply's code and by reply-cli's own: it concerns the sender and not the call,
+    /// and Reply did nothing, so work waits on it. Reply names no moment it lifts, so the row names none; its note says what
+    /// the person changes in Reply, and never to sign in again. A command run from no sending account ends permanent.
+    /// Only `message.send` reads it: `conversation.reply` cannot meet it through reply-cli, and `message.status` maps no
+    /// failure code of a held send at all, passing it on as the send's own.
+    /// </summary>
+    [Fact]
+    public void A_mailbox_that_cannot_send_is_the_mailbox_s_block_by_either_code()
+    {
+        var codes = ReplyErrorTable.Codes["per_operation"]!["message.send"]!.AsObject();
+        var rows = ReplyErrorTable.Own("message.send");
+
+        Assert.Equal(
+            ["mailbox_sending_disabled", "mailbox_sending_disabled"],
+            new[] { "reply_code:contact.emailAccountSendingDisabled", "email.sending_disabled" }.Select(code => (string?)codes[code]));
+        var row = rows["mailbox_sending_disabled"]!.AsObject();
+        Assert.Equal(("provider_blocked", "blocked"), (Text(row, "code"), Text(row, "class")));
+        Assert.Equal("""{"scope":"sender","reason":"limit"}""", row["block"]!.ToJsonString());
+        Assert.Null(row["clears"]);
+        var note = Text(row, "note");
+        Assert.Contains("cannot send direct emails now", note, StringComparison.Ordinal);
+        Assert.Contains("daily limit above 0", note, StringComparison.Ordinal);
+        Assert.Contains("plan", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("sign in", note, StringComparison.OrdinalIgnoreCase);
+        var unnamed = rows[Text(row, "unnamed_sender")]!.AsObject();
+        Assert.Equal(("sender_unavailable", "permanent"), (Text(unnamed, "code"), Text(unnamed, "class")));
+        Assert.DoesNotContain("sign in", Text(unnamed, "note"), StringComparison.OrdinalIgnoreCase);
+
+        var elsewhere = ReplyErrorTable.Codes["per_operation"]!.AsObject()
+            .Where(operation => operation.Key != "message.send")
+            .SelectMany(operation => operation.Value!.AsObject().Select(entry => entry.Key))
+            .Concat(ReplyErrorTable.Codes["shared"]!.AsObject().Select(entry => entry.Key));
+        Assert.DoesNotContain(elsewhere, key => key.Contains("sending_disabled", StringComparison.Ordinal) || key.Contains("SendingDisabled", StringComparison.Ordinal));
+        Assert.DoesNotContain(ReplyErrorTable.Codes["per_operation"]!["message.status"]!.AsObject(), entry => entry.Key.StartsWith(ReplyCodeKey, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The two limits' rows say what reply-cli prints for them, `email.limit_reached` with the limit under `details.limit`,
+    /// and no longer the `rate_limited` at 429 earlier ones printed; the daily one says both things Reply means by it, today
+    /// used up and a later due day already full, and that its block clears no later than the next midnight UTC. reply-cli
+    /// always keeps Reply's code, so the CLI's own code is no key of theirs.
+    /// </summary>
+    [Fact]
+    public void The_two_limits_say_what_reply_cli_prints_and_the_daily_one_both_of_its_cases()
+    {
+        var rows = ReplyErrorTable.Own("message.send");
+        var codes = ReplyErrorTable.Codes["per_operation"]!["message.send"]!.AsObject();
+        var daily = Text(rows["mailbox_daily_limit"]!.AsObject(), "when");
+        var contacts = Text(rows["mailbox_active_contacts_limit"]!.AsObject(), "when");
+
+        foreach (var when in new[] { daily, contacts })
+        {
+            Assert.DoesNotContain("`rate_limited` at 429 today", when, StringComparison.Ordinal);
+            Assert.Contains("`email.limit_reached`", when, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("today", daily, StringComparison.Ordinal);
+        Assert.Contains("later day that is already full", daily, StringComparison.Ordinal);
+        Assert.Contains("never later", daily, StringComparison.Ordinal);
+        Assert.False(codes.ContainsKey("email.limit_reached"), "reply-cli keeps Reply's code; the two limits are read by it alone.");
     }
 
     /// <summary>

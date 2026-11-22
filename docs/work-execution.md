@@ -416,7 +416,7 @@ approval row of its own is covered when, in this order: its operation is one a s
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
 (its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
-and its drafts are asked), or by a person who gave their name outside the desktop's chat, or carries a person's answer — a verdict whose
+and its drafts are asked), or by a person who gave their name, outside any run and not under the chat's mark (§The chat's mark), or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
@@ -437,7 +437,7 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
 `ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
 and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
-in the desktop's chat, which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
+under the chat's mark (§The chat's mark), which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
 automatic mode would have released the send and its campaign has reached `Sending:AutomaticMaxPerDay` for the day,
 which never slips (§The claim rule). A reply or a message that names no verdict is not asked about.
 
@@ -548,7 +548,7 @@ send waiting on it, after any items its `wait_on` named. A keyed repeat answers 
 create that loses the race on its key leaves no critic behind. A create or a patch that names `send_review` is refused
 `not_allowed` at that field, on every item, whoever sends it, so an item that carries the key was made by the runtime
 and its brief was never changed. Nothing is created under `every_message`, for a send that carries `ask_person`, for one
-written in the desktop's chat, for one about nobody, or where no critic could be launched (no profile resolves for it
+written under the chat's mark, for one about nobody, or where no critic could be launched (no profile resolves for it
 and no entry command does), and the send is then not held. The modes and the contact's kind are read for this once, when
 the send is created: a later change neither adds nor removes the critic, and the claim reads them again when it decides,
 so a contact cold at the create and warm by the claim has no pass and parks `not_reviewed`. No second critic is created
@@ -588,8 +588,10 @@ guard as a standing approval, and in this order:
    is not read, and the send parks as it always did.
 2. **The contact's warmth**, read from the campaign's chronicle (§Cold, warm or waiting). Where the mode for the contact's warmth is
    `every_message`, the send parks as it always did.
-3. **Written in the chat?** A send created, or whose input was edited, by a call the desktop's chat made parks for the
-   person: `sent_from_chat`.
+3. **Written under the chat's mark?** A send created, or whose input was edited, by a call that carried the chat's mark
+   (§The chat's mark) parks for the person: `sent_from_chat`. A send the desktop's chat writes in Ask first, Auto-edit or
+   Full access on Claude Code, or in Full access on Codex, carries no mark and goes on to the next step, as a send from a
+   terminal does.
 4. **A doubt** stands about the send (§Doubts about a send), whoever raised it: `doubted`.
 5. **The contact waits on a verdict**: `awaiting_judgement` where a reply of theirs has not been judged since it moved,
    `awaiting_nature` where it was judged without saying what kind of reply it is.
@@ -601,7 +603,7 @@ guard as a standing approval, and in this order:
    that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
    or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
 7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
-   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   wrote it, outside a run and not under the chat's mark, or where the critic the runtime created for this send did:
    the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
    actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
    and whose context was changed since by nobody but the runtime's own actors: a change by a person, a role or the
@@ -621,10 +623,11 @@ above, and its preview carries `send_mode`, the facts and never the code: the `m
 `campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
 and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
 no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
-approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
-a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
-its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written in the desktop's chat always waits for the person,
-whatever the send mode, `every_message` included.
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written under the chat's
+mark, a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written under the chat's
+mark always waits for the person, whatever the send mode, `every_message` included; one the desktop's chat writes in Ask
+first, Auto-edit or Full access is not marked and follows the campaign's send mode.
 
 **A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and
 reads no review again, so a review sent then is refused `not_reviewable`. It reads the contact's warmth once more: where
@@ -633,8 +636,12 @@ a reply of theirs landed since and waits for a verdict, the row is superseded an
 Whatever the pre-flight refuses is refused before the mode is asked, and work released under it is still held by an
 open block of its account.
 
-**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which the desktop's chat sets on
-every turn) carries the header `Jason-Confined`. The runtime records it on the work it creates under it, as
+**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which any caller may set, and
+which every turn of the desktop's chat set before 0.49.2) carries the header `Jason-Confined`. The desktop sets the
+variable on every chat turn that can only read and propose: Plan only on any host, and every Codex turn outside Full
+access (Ask first, and Auto-edit, which runs as it). Plan only writes nothing, so a marked line is one a chat wrote
+before 0.49.2, one a Codex turn outside Full access wrote where its read-only sandbox let `jason` reach the runtime, or
+one any other confined caller wrote. The runtime records it on the work it creates under it, as
 `confined: true` on the `workitem_created` line, and on the first edit of its input made under it, as a
 `workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
 back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
@@ -646,6 +653,18 @@ review (`workitem_reviewed`) and on a standing approval's set line (`standing_ap
 A verdict so marked lifts no opt-out, and under a standing approval it vouches for no draft as a person's verdict
 (`verdict_not_authentic`) unless it carries a person's answered decision, which is read as the decision records it; a
 review so marked is no person's pass, and a set line so marked sets nothing (`no_standing_approval`).
+
+**A chat turn that can act.** In Ask first, Auto-edit and Full access on Claude Code, and in Full access on Codex, the
+desktop's chat sets `JASON_CHAT_TURN` on the turn and not `JASON_CONFINED`. The variable holds the file half of a call and nothing else: an option
+that reads a file's content into a request takes only standard input, and `status --provider-cli` runs only a bare name
+found on the search path. It refuses no verb and sends no header, so the runtime marks nothing: a line the chat writes
+there is recorded under the actor the command names, as a line written from a terminal is, and a send it writes follows
+the campaign's send mode. Which commands such a turn runs, and which it shows the person as a card first, is the
+turn's mode's to decide ([desktop](desktop.md)). Like `JASON_CONFINED`, the variable holds the call it is set on and
+nothing that call starts: a runtime the CLI starts, the role work a runtime launches and the terminal `session open`
+opens drop it. The runtime's one line for it is in
+[`AiRoleCommand`](../dotnet/src/Jason.Runtime/Execution/AiRoleCommand.cs), which takes both variables out of the
+environment of the role work it launches. A turn that can only read and propose sets both.
 
 Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
 operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
@@ -1020,7 +1039,7 @@ One JSON object is written to the child's standard input, which is then closed:
   "memory_files": {
     "client": "…/Jason/AGENTS.md",
     "project": "…/Jason/projects/acme-corp/AGENTS.md",
-    "campaign": "…/Jason/projects/acme-corp/campaigns/q3-marketing-leads/AGENTS.md"
+    "campaign": "…/Jason/projects/acme-corp/campaigns/2026-11-21-084507-7h5nrd/AGENTS.md"
   },
   "resumption": {
     "previous_attempt_id": "att_…",

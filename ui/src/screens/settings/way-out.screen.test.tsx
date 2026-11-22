@@ -6,7 +6,6 @@ import { newChat } from '../../console/chat-model';
 import { attention } from '../../console/needs';
 import { startDraft, startMaking, startMode, startPick, startWaiting } from '../../console/start';
 import { activePanel, chats, conversations, here, lines, setup, setupError } from '../../console/state';
-import { fullAccessStanding } from '../../platform/full-access';
 import { mode } from '../../platform/mode';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
@@ -64,7 +63,6 @@ beforeEach(() => {
     startMaking.value = null;
     startMode.value = null;
     startPick.value = newChat('', null);
-    fullAccessStanding.value = null;
 });
 
 afterEach(() => {

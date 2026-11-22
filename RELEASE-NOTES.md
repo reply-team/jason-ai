@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.3-unwritten
+# Jason 0.49.3-rc.1
 
 Jason Desktop is now the one window onto Jason. `jason ui open`, and a click on Jason's notification on Windows and now
 on Linux, open Jason Desktop at what waits for you, and never a browser: the browser tab's own screens and the chat in a
@@ -51,9 +51,9 @@ tab are gone. A web interface of your own keeps its door: the runtime serves you
   [A web interface of your own](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#a-web-interface-of-your-own)
   says how such a page pairs, calls the Runtime API and follows the journal.
 - **On Linux, a click on Jason's notification opens Jason Desktop.** It opens at the one approval or question when
-  exactly one waits, and at Needs you otherwise, as `jason ui open` does; in 0.49.2 a click opened nothing of Jason's on
-  Linux. The notification waits on the session bus until it is clicked or dismissed, and the item's id stays with the
-  runtime: the notification server never receives it. Where notify-send hands on the click's activation token
+  exactly one waits, and at Needs you otherwise, as `jason ui open` does; in 0.49.2 a click on it opened nothing of
+  Jason's on Linux. The notification waits on the session bus until it is clicked or dismissed, and the item's id stays
+  with the runtime: the notification server never receives it. Where notify-send hands on the click's activation token
   (libnotify 0.8.8 and later), the window comes to the front. Where no Jason Desktop takes its links, nothing opens,
   never a browser, and a second notification says why, in the words `jason ui open` would print. A click on a
   notification from a runtime started at logon, before your desktop session set its display, opens the desktop all the

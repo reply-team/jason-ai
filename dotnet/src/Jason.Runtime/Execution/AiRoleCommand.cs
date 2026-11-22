@@ -145,6 +145,7 @@ public sealed class AiRoleCommand(
         // confinement of the call that ran this runtime in the foreground is that call's, never a role's.
         startInfo.Environment.Remove(UpdateLaunch.Variable);
         startInfo.Environment.Remove(Confinement.Variable);
+        startInfo.Environment.Remove(Confinement.ChatTurnVariable);
 
         Process process;
         try

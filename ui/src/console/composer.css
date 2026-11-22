@@ -47,6 +47,41 @@
     margin: 0 0 14px;
 }
 
+/* An agent made at the click asks Start's question in its own Chat until its first message: the heading as Start's,
+   with Start's AI card and the chat's box under it, and the chips below. */
+.jc-console .agent-opening {
+    width: min(820px, 100%);
+    margin: 0 auto;
+    padding: 10vh 24px 14px;
+}
+.jc-console .agent-opening .start-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 0 26px;
+}
+.jc-console .agent-opening .start-mark {
+    width: 38px;
+    height: 38px;
+    flex: none;
+}
+.jc-console .agent-opening .start-title h2 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+.jc-console .agent-opening .start-ai {
+    margin: 0 0 14px;
+}
+.jc-console .chat-panel .agent-opening .cform {
+    width: auto;
+    max-width: none;
+    margin: 0;
+}
+
 /* The box: the words, and the row under them. The form holds the box and the line under it. */
 .jc-console .cform {
     max-width: 780px;

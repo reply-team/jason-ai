@@ -135,7 +135,7 @@ public class ProjectEndpointTests
 
         var relinked = await api.RecordAsync<ProjectLinkResult>(Operations.ProjectLink, "relinked", new { path = moved, reason = "moved with the other clients" }, Ct);
         Assert.Equal((moved, LinkFolderOutcome.Relinked), (relinked.Project.FolderPath, relinked.Folder));
-        Assert.Equal([new LinkedCampaign(leads.Id, Path.Combine(moved, "campaigns", "q3-leads"), LinkCampaignOutcome.Relinked)], relinked.Campaigns);
+        Assert.Equal([new LinkedCampaign(leads.Id, Path.Combine(moved, "campaigns", Harness.TestHarness.LeafOf(leads, TimeZoneInfo.Utc)), LinkCampaignOutcome.Relinked)], relinked.Campaigns);
 
         var spring = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring push" }, Ct);
         var autumn = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn push" }, Ct);

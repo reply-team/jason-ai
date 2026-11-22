@@ -1,7 +1,9 @@
-# The jason commands the desktop's chat never runs, one per line.
+# The jason commands the desktop's chat never runs in Plan only, one per line.
 #
-# The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by
-# the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.
+# In Plan only the listed commands are refused by the host's tool fence, and a command that names a listed operation is
+# refused by the desktop; there a person runs them, in the page or in a terminal. An operation is told from a command
+# by its dot. In Ask first, Auto-edit and Full access the turn's mode decides each instead (modeFence in
+# desktop/src/chat-deny.ts).
 #
 # The command lines below are written from ConfinedVerbs.Table by DesktopDenyListTests, the table the CLI refuses under
 # JASON_CONFINED; a line taken out or added here by hand is red there until JASON_UPDATE_FIXTURES=1 writes the file

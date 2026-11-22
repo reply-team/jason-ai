@@ -31,6 +31,7 @@ const host = (fields: Partial<DesktopHost>): DesktopHost => ({
     belowFloor: null,
     fullAccess: null,
     autoEdit: null,
+    runs: { window: {}, tab: {} },
     ...fields,
 });
 

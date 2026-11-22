@@ -1,12 +1,12 @@
-// Pure: why a Full access turn still puts a request on a card. It reads the two judgements the broker already made, Full
-// access's and Ask first's, and names the case by a closed code; it changes neither and decides nothing. The page says
-// each code in its own words (ui/src/locale/en.ts, `fullAccess.why.*`). The tool's name is the one part of a request a
-// code may carry, for the two cases a card names its tool by; nothing else of the request goes with it.
+// Pure: why a Full access card asks, by a closed code the page says in its own words (ui/src/locale/en.ts,
+// `fullAccess.why.*`). Full access is the host's own bypass, and the turn's hook answers nothing but its refusals, so a
+// card of a Full access turn is one the host asked about itself (`host_asked`). The other codes are those an earlier
+// Full access held its requests by, which a record may still keep on a card, and which the page still says. The tool's
+// name is the one part of a request a code may carry, for the two cases a card names its tool by.
 
 import type { HeldReason } from './chat-literal.ts';
-import { personsToolTitle, serversTitle, type FullAccessJudgement, type Judgement } from './chat-permission-model.ts';
 
-/** Every reason a shell command is held for, once: a reason added to `HeldReason` does not compile until it is here. */
+/** Every reason an earlier Full access held a shell command for, once: a reason added to `HeldReason` does not compile until it is here. */
 const commandReasons = {
     expansion: true,
     escape: true,
@@ -44,27 +44,6 @@ const commandReasons = {
     link: true,
 } as const satisfies Record<HeldReason, true>;
 
-/**
- * Ask first's card titles that Full access holds rather than runs, each with the code of its case. Every title Ask first
- * can give is either one of these, one of the cards Full access runs, or one that names its tool (below); a test holds
- * the titles the permission model writes to that.
- */
-export const requestTitles: ReadonlyMap<string, RequestReason> = new Map<string, RequestReason>([
-    [personsToolTitle, 'request.own_tool'],
-    ['Change the AI\'s own settings', 'request.settings'],
-    ['Change a repository\'s own files', 'request.repository'],
-    ['Change a folder\'s Jason marker', 'request.marker'],
-    ['Change the skills or settings the AI loads', 'request.loads'],
-    ['Change instructions the AI reads', 'request.instructions'],
-    [serversTitle, 'request.server_list'],
-    ['Write or run a jason that is not the desktop\'s', 'request.local_jason'],
-    // Not reached today: this card comes only from a command, and in Full access every command is read literally and
-    // named `command.search`. Kept so that the title is placed, with a sentence true for it.
-    ['Change where the shell finds programs', 'request.search'],
-    ['Use a path Windows reads as another name', 'request.windows_name'],
-    ['Use a path that begins with ~', 'request.tilde_path'],
-]);
-
 const requestReasons = [
     'request.own_tool',
     'request.settings',
@@ -80,15 +59,15 @@ const requestReasons = [
     'request.other',
 ] as const;
 
-/** The case of a request that is not a shell command, by Ask first's card for it. */
+/** The case of a request that was not a shell command, by Ask first's card for it, as an earlier Full access held it. */
 export type RequestReason = (typeof requestReasons)[number];
 
 /** The two cases a card names its tool by: a file tool given no file, and a tool Jason does not know. */
 export type ToolReason = 'request.no_file_named' | 'request.unknown_tool';
 
 /**
- * Why Full access asks about one request: a shell command by the closed reason it was held for, any other request by
- * Ask first's card for it, and `host_asked` where Full access would have run it and the host asked all the same.
+ * Why a Full access card asks: `host_asked`, the host asked about it itself; a kept card from before may carry a shell
+ * command's closed reason, or Ask first's card for any other request, as an earlier Full access held it.
  */
 export type FullAccessWhy =
     | { reason: `command.${HeldReason}` | RequestReason | 'host_asked' }
@@ -97,34 +76,8 @@ export type FullAccessWhy =
 /** A tool's name as a card may carry it: the host's own spelling of a name, never anything else of the request. */
 const toolShape = /^[A-Za-z0-9_.:-]{1,128}$/;
 
-/**
- * Why the card of a Full access turn asks: `full` is Full access's judgement of the request and `judged` Ask first's
- * card for it, both as the broker made them. Held with a reason, a shell command; held with none, Ask first's card says
- * which case; run by Full access and asked about all the same, the host asked.
- */
-export function fullAccessWhy(full: FullAccessJudgement, judged: Extract<Judgement, { verdict: 'ask' }>, tool: string): FullAccessWhy {
-    if (full.outcome === 'runs') return { reason: 'host_asked' };
-    if (full.outcome === 'held' && full.reason !== undefined) return { reason: `command.${full.reason}` };
-    const titled = requestTitles.get(judged.title);
-    if (titled !== undefined) return { reason: titled };
-    if (toolShape.test(tool)) {
-        if (judged.title === `Use ${tool} with no file named`) return { reason: 'request.no_file_named', tool };
-        if (judged.title === `Use ${tool}`) return { reason: 'request.unknown_tool', tool };
-    }
-    return { reason: 'request.other' };
-}
-
-/**
- * The card's `why`, or none where working it out failed: a failure here leaves the card exactly as it was before there
- * was a why, and never costs the card.
- */
-export function whyOrNone(work: () => FullAccessWhy): { why?: FullAccessWhy } {
-    try {
-        return { why: work() };
-    } catch {
-        return {};
-    }
-}
+/** The why of every card a Full access turn shows: the host asked about it itself. */
+export const hostAsked: FullAccessWhy = { reason: 'host_asked' };
 
 /** Whether a kept card's `why` is one the table can say: a known code, and a tool's name only where its code takes one. */
 export function isFullAccessWhy(value: unknown): value is FullAccessWhy {

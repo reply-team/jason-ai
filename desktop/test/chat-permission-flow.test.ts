@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { PermissionBroker, type BrokerEvent } from '../src/chat-permission-broker.ts';
-import { openEndpoint, serverName, toolName } from '../src/chat-permission-endpoint.ts';
+import { openEndpoint, toolName } from '../src/chat-permission-endpoint.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, writeTurnConfig } from '../src/chat-turn-files.ts';
 import { dataLayout, desktopPaths, settingsFilesOf } from '../src/paths.ts';
@@ -14,6 +14,9 @@ const require = createRequire(import.meta.url);
 const client = require('./stubs/mcp-http.cjs') as {
     decide: (configFile: string, server: string, tool: string, name: string, input: Record<string, unknown>) => Promise<{ behavior: string; message?: string; updatedInput?: unknown }>;
 };
+
+/** The turn's own name for its permission server, which the client calls the tool by, as the host does. */
+const serverName = 'jason_desktop_0123456789abcdef';
 
 /** One turn wired as the chat wires it: the broker, the turn's endpoint and the turn's configuration file. */
 async function turn(t: { after: (fn: () => void | Promise<void>) => void }) {
@@ -27,7 +30,7 @@ async function turn(t: { after: (fn: () => void | Promise<void>) => void }) {
     broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: settingsFilesOf(paths.data), denied: ['runtime'], deniedOperations: [], home: root, real: realPathOf });
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input) => broker.ask(id, tool, input) });
-    const config = writeTurnConfig(paths.turns, id, endpoint.url, secret);
+    const config = writeTurnConfig(paths.turns, id, endpoint.url, secret, serverName);
     t.after(async () => {
         broker.endTurn(id);
         await endpoint.close();

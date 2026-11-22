@@ -13,9 +13,8 @@ import type {
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
 import { countCancels, jasonMayPauseFirst, many, nothingOpen, type Cancels } from './archive-model';
-import { useCampaignChat } from './campaign-chat';
 import { unfinishedStatuses } from './kind';
-import { provider } from './pause-dialog';
+import { provider, type Movable } from './pause-dialog';
 import * as store from './store';
 import { ReasonField } from '../../layout/reason-field';
 
@@ -65,7 +64,7 @@ async function readCancels(api: Api, id: string): Promise<Cancels> {
     return countCancels(work, approvals, questions);
 }
 
-const pinOf = (campaign: Campaign) => (campaign.external_ids ?? []).find((p) => p.kind === 'campaign');
+const pinOf = (campaign: Movable) => (campaign.external_ids ?? []).find((p) => p.kind === 'campaign');
 
 /** Whether the agent's route for the provider's pause is usable; read only for a pinned agent that could pause first. */
 async function readUsable(api: Api, record: Campaign): Promise<boolean | null> {
@@ -181,12 +180,12 @@ function TheProvidersCampaign({ name, pin, jasonFirst }: { name: string; pin: st
 /** What the archive cancelled, as the confirmation counted it, or null where it could not: for the page's word after. */
 export type WasOpen = Cancels | null;
 
-type DialogProps = { campaign: Campaign; onDone: (archived: Campaign, open: WasOpen) => void; onClose: () => void };
+/** The agent to archive: its id, name and status as any list carries them, and its provider's pins where they were read. */
+type DialogProps = { campaign: Movable; onDone: (archived: Campaign, open: WasOpen) => void; onClose: () => void };
 
 /** The confirmation: the agent named, that it cannot be undone, and what it cancels, read as it opens. */
 export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const api = useApi();
-    const chat = useCampaignChat() !== null;
     const [read, setRead] = useState<Read | null>(null);
     const [reading, setReading] = useState(0);
     const [reason, setReason] = useState('');
@@ -242,7 +241,7 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const pin = pinOf(agent);
     const name = provider(agent);
     const jasonFirst =
-        chat && read?.kind === 'open' && read.record !== null && jasonMayPauseFirst(read.record.status, read.usable);
+        read?.kind === 'open' && read.record !== null && jasonMayPauseFirst(read.record.status, read.usable);
     const open: WasOpen = read?.kind === 'open' && 'cancels' in read.counted ? read.counted.cancels : null;
     return (
         <Dialog

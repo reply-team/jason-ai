@@ -2,7 +2,7 @@
 // Electron, so the channel names are written here as they are in ipc.ts; a test holds the two lists together. No event
 // object, no ipcRenderer and no Node reaches the page: each member passes its own arguments and returns the answer.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 type Handler = (...args: never[]) => void;
 
@@ -26,7 +26,8 @@ const desktop = {
         onEvent: (handler: Handler) => subscribe('jason:chat.event', handler),
         list: () => ipcRenderer.invoke('jason:chat.list'),
         open: (chatId: string) => ipcRenderer.invoke('jason:chat.open', chatId),
-        create: (campaignId?: string, host?: string) => ipcRenderer.invoke('jason:chat.create', campaignId, host),
+        create: (campaignId?: string) => ipcRenderer.invoke('jason:chat.create', campaignId),
+        createAgent: (clickId: string) => ipcRenderer.invoke('jason:chat.createAgent', clickId),
         remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
         restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
         attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),
@@ -35,11 +36,12 @@ const desktop = {
         openFolder: (name: string) => ipcRenderer.invoke('jason:chat.openFolder', name),
         feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
         cardRefused: (chatId: string, kind: string, failure: string) => ipcRenderer.invoke('jason:chat.cardRefused', chatId, kind, failure),
-    },
-    fullAccess: {
-        standing: () => ipcRenderer.invoke('jason:fullAccess.standing'),
-        takeBack: () => ipcRenderer.invoke('jason:fullAccess.takeBack'),
-        onChanged: (handler: Handler) => subscribe('jason:fullAccess.changed', handler),
+        // Read here, from the file the page was given by a drop, and never through the main process: no channel carries it.
+        // The one member answered here rather than through a channel, and so with no check of the origin (`src/ipc.ts`):
+        // Electron reads a path only from a File, which a page holds only when the person dropped it there or picked it,
+        // so a page learns the path of no file it was not given. Only a page served over http, as the runtime's is, is
+        // answered at all; any other page the window holds is told none.
+        pathOf: (file: File) => (location.protocol === 'http:' ? webUtils.getPathForFile(file) : ''),
     },
     theme: {
         get: () => ipcRenderer.invoke('jason:theme.get'),
@@ -62,7 +64,8 @@ const desktop = {
     },
     openIn: {
         targets: (campaignId?: string, chatId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId, chatId),
-        open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
+        open: (target: string, campaignId?: string, options?: { keep?: boolean }) =>
+            ipcRenderer.invoke('jason:openIn.open', target, campaignId, options),
         continueChat: (chatId: string) => ipcRenderer.invoke('jason:openIn.continueChat', chatId),
         changeJason: () => ipcRenderer.invoke('jason:openIn.changeJason'),
     },

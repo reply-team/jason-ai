@@ -2,7 +2,7 @@
  * The AI providers' keys: the desktop's own, encrypted by the operating system (Electron's `safeStorage`) into
  * `<data>/desktop/provider-keys`. A key is read back only to start an agent host with it; it never reaches the
  * installation's settings, the desktop's settings, a log or any other process but the commands a Claude Code turn runs
- * on Linux, which carry no scrub there (`chat-hosts.ts`).
+ * in Full access, and on Linux in every mode, which carry no scrub (`chat-hosts.ts`).
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';

@@ -134,7 +134,7 @@ public class SkillSequenceTests
         const string Lately = $"jason campaign activity cmp_{Placeholder} --since 2026-10-09T00:00:00Z --until now";
         const string Behind = $"jason campaign list-contacts cmp_{Placeholder} --summary failed";
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
-        const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
+        const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason 'the person widened the audience'";
 
         foreach (var line in new[] { FindProject, MakeProject, Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Standing, Lately, Behind, Change })
         {
@@ -250,7 +250,7 @@ public class SkillSequenceTests
         const string List = "jason approval list --human";
         const string Read = $"jason approval get apr_{Placeholder}";
         const string Approve =
-            $"jason approval approve apr_{Placeholder} --actor human:ada --reason \"checked the list\"";
+            $"jason approval approve apr_{Placeholder} --actor human:ada --reason 'checked the list'";
 
         foreach (var line in new[] { List, Read, Approve })
         {

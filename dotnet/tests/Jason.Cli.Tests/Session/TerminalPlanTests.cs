@@ -1,5 +1,6 @@
 using Jason.Cli.Session;
 using Jason.Cli.Tests.Process;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Tests.Session;
@@ -540,11 +541,389 @@ public sealed class TerminalPlanTests : IDisposable
         StandIn(bin, "x-terminal-emulator");
 
         Assert.True(Path.IsPathFullyQualified(TerminalPlan.Find(TerminalPlatform.Windows, system, null, null)!.Program));
+        var apps = Folder("WindowsApps");
+        StandIn(apps, "wt.exe");
+        Assert.True(Path.IsPathFullyQualified(TerminalPlan.Find(TerminalPlatform.Windows, system, null, null, apps, CurrentTerminal)!.Program));
         Assert.StartsWith("/", TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!.Program, StringComparison.Ordinal);
         foreach (var variable in new[] { null, "kitty", kitty })
         {
             Assert.True(Path.IsPathFullyQualified(TerminalPlan.Find(TerminalPlatform.Linux, null, variable, bin)!.Program));
         }
+    }
+
+    /// <summary>
+    /// Windows opens Windows Terminal where the account's WindowsApps folder holds its program, <c>wt.exe</c>, the App
+    /// Execution Alias Windows puts there: in a new window of its own (<c>-w new new-tab</c>), at the folder (<c>-d</c>),
+    /// with the host's words after <c>--</c>. The console host's launch rides along as the fallback, the same folder, words
+    /// and variables, for a start of Windows Terminal that fails.
+    /// </summary>
+    [Fact]
+    public void Windows_opens_windows_terminal_from_the_windows_apps_folder_with_the_console_host_behind_it()
+    {
+        var system = Folder("System32");
+        var conhost = StandIn(system, "conhost.exe");
+        var apps = Folder("WindowsApps");
+        var wt = StandIn(apps, "wt.exe");
+        var own = new OwnJason("C:/Users/marta/jason-test", "C:/Users/marta/AppData/Local/Programs/Jason", "C:/Windows/System32");
+
+        var found = TerminalPlan.Find(TerminalPlatform.Windows, system, terminalVariable: null, searchPath: null, windowsApps: apps, aliasTarget: CurrentTerminal);
+        Assert.NotNull(found);
+        Assert.Equal("Windows Terminal", found.Name);
+        Assert.Equal(wt, found.Program);
+        Assert.Equal(new TerminalFound("conhost", conhost), found.Fallback);
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, found, "C:/Jason/campaigns/Spring launch", ["C:/Tools/claude.exe", "Go."], Item, own);
+
+        Assert.Equal("Windows Terminal", launch.Terminal);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", "C:/Jason/campaigns/Spring launch", "--", "C:/Tools/claude.exe", "Go."], launch.Argv);
+        Assert.Equal("C:/Jason/campaigns/Spring launch", launch.WorkingDirectory);
+        Assert.Null(launch.Script);
+        var fallback = launch.Fallback;
+        Assert.NotNull(fallback);
+        Assert.Equal("conhost", fallback.Terminal);
+        Assert.Equal([conhost, "--", "C:/Tools/claude.exe", "Go."], fallback.Argv);
+        Assert.Equal(launch.WorkingDirectory, fallback.WorkingDirectory);
+        Assert.Equal(launch.Variables, fallback.Variables);
+        Assert.Null(fallback.Fallback);
+    }
+
+    /// <summary>
+    /// Without Windows Terminal's program in the WindowsApps folder, or without a WindowsApps folder that is a full path,
+    /// Windows starts the console host as before; and Windows Terminal is never taken from the search path, for the reason
+    /// the console host is not.
+    /// </summary>
+    [Fact]
+    public void Windows_without_windows_terminal_starts_the_console_host_and_never_takes_wt_from_the_search_path()
+    {
+        var system = Folder("System32");
+        var conhost = StandIn(system, "conhost.exe");
+        var planted = Folder("planted");
+        StandIn(planted, "wt.exe");
+        var empty = Folder("WindowsApps");
+
+        foreach (var apps in new[] { null, "", empty, "WindowsApps" })
+        {
+            var found = TerminalPlan.Find(TerminalPlatform.Windows, system, terminalVariable: null, searchPath: planted, windowsApps: apps, aliasTarget: CurrentTerminal);
+            Assert.Equal(new TerminalFound("conhost", conhost), found);
+        }
+    }
+
+    /// <summary>
+    /// A folder holding a <c>%</c> is opened by the console host for that start, since Windows Terminal may expand a
+    /// <c>%NAME%</c> in the folder it is given; any other folder is opened by Windows Terminal.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Jason\100%done", false)]
+    [InlineData(@"C:\Jason\%USERNAME%", false)]
+    [InlineData(@"C:\Jason\%", false)]
+    [InlineData(@"C:\Jason\done", true)]
+    public void A_folder_holding_a_percent_sign_is_opened_by_the_console_host(string folder, bool windowsTerminal)
+    {
+        var console = new TerminalFound("conhost", "C:/Windows/System32/conhost.exe");
+        var terminal = new TerminalFound("Windows Terminal", "C:/WindowsApps/wt.exe", console);
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, terminal, folder, ["C:/Tools/claude.exe", "Go."], Item);
+
+        Assert.Equal(windowsTerminal ? "Windows Terminal" : "conhost", launch.Terminal);
+        if (!windowsTerminal)
+        {
+            Assert.Equal(["C:/Windows/System32/conhost.exe", "--", "C:/Tools/claude.exe", "Go."], launch.Argv);
+            Assert.Equal(folder, launch.WorkingDirectory);
+            Assert.Null(launch.Fallback);
+        }
+    }
+
+    /// <summary>Windows Terminal found where the console host is not is started alone: there is nothing to fall back to.</summary>
+    [Fact]
+    public void Windows_terminal_without_the_console_host_has_no_fallback()
+    {
+        var apps = Folder("WindowsApps");
+        var wt = StandIn(apps, "wt.exe");
+
+        var found = TerminalPlan.Find(TerminalPlatform.Windows, Folder("System32"), null, null, apps, CurrentTerminal);
+
+        Assert.Equal(new TerminalFound("Windows Terminal", wt), found);
+        Assert.Null(TerminalPlan.Compose(TerminalPlatform.Windows, found!, "C:/Jason", Host, Item).Fallback);
+    }
+
+    /// <summary>
+    /// Windows Terminal reads its own argument list before the host does: it splits it into commands at every <c>;</c> not
+    /// written <c>\;</c>, and joins the words after <c>--</c> into the host's command line with a space between them,
+    /// wrapping in double quotes only a word that holds a space and escaping nothing. So each word is handed over in the
+    /// form that join turns into the word as the console host's start writes it, and every <c>;</c> as <c>\;</c>. These rows
+    /// read Windows Terminal's argument list back the way it reads it (its own source, <c>AppCommandlineArgs.cpp</c> and
+    /// <c>Commandline.cpp</c>), and the joined command line by Windows' own <c>CommandLineToArgvW</c>: every folder and word
+    /// arrives as it was given. Nothing is started.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Jason\campaigns\Spring launch", "Go.")]
+    [InlineData(@"C:\Jason\a;b", "one;two")]
+    [InlineData(@"C:\Jason\x\;y", @"a\;b")]
+    [InlineData(@"C:\Jason\it's $HOME ^x", "it's $HOME ^x")]
+    [InlineData(@"C:\Jason\semi; space;", "\"quoted\"")]
+    [InlineData(@"C:\", "say \"hi\" there")]
+    [InlineData(@"C:\Jason\trailing\", @"C:\a b\")]
+    [InlineData(@"C:\Jason", @"C:\a\\")]
+    [InlineData(@"C:\Jason", "")]
+    [InlineData(@"C:\Jason", "tab\tonly")]
+    [InlineData(@"C:\Jason", "line\nonly")]
+    [InlineData(@"C:\Jason", "-w")]
+    [InlineData(@"C:\Jason", Prompt)]
+    public void Windows_terminal_hands_the_folder_and_every_word_on_intact(string folder, string word)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The joined command line is read back by Windows' own CommandLineToArgvW.");
+        var terminal = new TerminalFound("Windows Terminal", @"C:\Users\marta\AppData\Local\Microsoft\WindowsApps\wt.exe");
+        string[] host = [@"C:\Program Files\claude\claude.exe", "--flag", word, "last"];
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, terminal, folder, host, Item);
+
+        var (startingDirectory, commandLine) = WindowsTerminalReads(launch.Argv);
+        Assert.Equal(folder, startingDirectory);
+        Assert.Equal(host, CommandLineToArgv(commandLine));
+    }
+
+    /// <summary>
+    /// The launch's argument list as Windows Terminal reads it: no word holds a <c>;</c> it would take as the start of
+    /// another command, each <c>\;</c> is read as <c>;</c>, the window and the tab are asked for, the folder follows
+    /// <c>-d</c>, and the words after <c>--</c> are joined as its own source joins them.
+    /// </summary>
+    private static (string StartingDirectory, string CommandLine) WindowsTerminalReads(IReadOnlyList<string> argv)
+    {
+        var delimiter = new System.Text.RegularExpressions.Regex(@"^;|[^\\];");
+        foreach (var word in argv.Skip(1))
+        {
+            Assert.False(delimiter.IsMatch(word), $"Windows Terminal would split '{word}' into two commands.");
+        }
+
+        var read = argv.Skip(1).Select(word => word.Replace("\\;", ";", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["-w", "new", "new-tab", "-d"], read.Take(4));
+        Assert.Equal("--", read[5]);
+        var line = string.Join(' ', read.Skip(6).Select(word => word.Contains(' ', StringComparison.Ordinal) ? "\"" + word + "\"" : word));
+        return (read[4], line);
+    }
+
+    private static string[] CommandLineToArgv(string commandLine)
+    {
+        var argv = CommandLineToArgvW(commandLine, out var count);
+        Assert.NotEqual(IntPtr.Zero, argv);
+        try
+        {
+            return Enumerable.Range(0, count).Select(at => System.Runtime.InteropServices.Marshal.PtrToStringUni(System.Runtime.InteropServices.Marshal.ReadIntPtr(argv, at * IntPtr.Size))!).ToArray();
+        }
+        finally
+        {
+            LocalFree(argv);
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CommandLineToArgvW(string commandLine, out int count);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr LocalFree(IntPtr memory);
+
+    /// <summary>
+    /// <c>--shell</c> on Windows starts Windows PowerShell; in Windows Terminal, as in the console host, the start is made
+    /// without the <c>PSModulePath</c> the CLI inherited, since the tab is handed the caller's environment.
+    /// </summary>
+    [Fact]
+    public void Windows_terminal_starting_windows_powershell_is_started_without_the_module_path()
+    {
+        var powerShell = Path.Combine(Path.GetTempPath(), "WindowsPowerShell", "v1.0", "powershell.exe");
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, new TerminalFound("Windows Terminal", Path.Combine(Path.GetTempPath(), "wt.exe")), "C:/Jason", [powerShell], Item);
+
+        var start = TerminalStartInfo.For(TerminalPlatform.Windows, launch.Argv, launch.WorkingDirectory, launch.Variables);
+
+        Assert.DoesNotContain(start.Environment, pair => string.Equals(pair.Key, ChildProcess.ModulePathVariable, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A start of Windows Terminal that fails falls back to the console host once and says so; a fallback that fails too
+    /// is a start that failed, naming both; a launch with no fallback is tried once. Nothing is started: the starter records.
+    /// </summary>
+    [Fact]
+    public void A_windows_terminal_that_does_not_start_falls_back_to_the_console_host_once()
+    {
+        var console = new TerminalFound("conhost", "C:/Windows/System32/conhost.exe");
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, new TerminalFound("Windows Terminal", "C:/WindowsApps/wt.exe", console), "C:/Jason", Host, Item);
+
+        var refusing = new RefusingStarter("C:/WindowsApps/wt.exe");
+        var started = TerminalStarts.Start(refusing, launch, out var problem, out var passedOver);
+        Assert.Same(launch.Fallback, started);
+        Assert.Null(problem);
+        Assert.Equal("it was refused", passedOver);
+        Assert.Equal(["C:/WindowsApps/wt.exe", "C:/Windows/System32/conhost.exe"], refusing.Tried);
+
+        var both = new RefusingStarter("C:/WindowsApps/wt.exe", "C:/Windows/System32/conhost.exe");
+        Assert.Null(TerminalStarts.Start(both, launch, out problem, out passedOver));
+        Assert.Equal("it was refused; conhost did not start either: it was refused", problem);
+        Assert.Equal(2, both.Tried.Count);
+
+        var alone = new RefusingStarter("C:/Windows/System32/conhost.exe");
+        Assert.Null(TerminalStarts.Start(alone, launch.Fallback!, out problem, out passedOver));
+        Assert.Equal("it was refused", problem);
+        Assert.Null(passedOver);
+        Assert.Single(alone.Tried);
+
+        var willing = new RefusingStarter();
+        Assert.Same(launch, TerminalStarts.Start(willing, launch, out problem, out passedOver));
+        Assert.Null(problem);
+        Assert.Null(passedOver);
+        Assert.Single(willing.Tried);
+    }
+
+    private sealed class RefusingStarter(params string[] refused) : ITerminalStarter
+    {
+        public TerminalPlatform Platform => TerminalPlatform.Windows;
+
+        public string? SystemDirectory => null;
+
+        public List<string> Tried { get; } = [];
+
+        public bool Start(TerminalLaunch launch, out string? problem)
+        {
+            Tried.Add(launch.Argv[0]);
+            problem = refused.Contains(launch.Argv[0]) ? "it was refused" : null;
+            return problem is null;
+        }
+    }
+
+    /// <summary>
+    /// Windows Terminal is used only where its version, read from the package folder its alias names, is at least the
+    /// lowest one that hands a new tab the environment of wt's start (1.18.2681.0); an older one, a Preview below it, an
+    /// alias naming no package folder, or one that cannot be read starts the console host. Nothing is started to read it.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe", true)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.2681.0_x64__8wekyb3d8bbwe\wt.exe", true)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.10000.0_x64__8wekyb3d8bbwe\wt.exe", true)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminalPreview_1.25.1.0_arm64__8wekyb3d8bbwe\wt.exe", true)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.1462.0_x64__8wekyb3d8bbwe\wt.exe", false)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.17.11461.0_x64__8wekyb3d8bbwe\wt.exe", false)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminalPreview_1.18.2001.0_x64__8wekyb3d8bbwe\wt.exe", false)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe", false)]
+    [InlineData(@"C:\Tools\wt.exe", false)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_one_x64__8wekyb3d8bbwe\wt.exe", false)]
+    [InlineData(null, false)]
+    public void Windows_terminal_is_used_only_from_the_version_that_carries_the_callers_environment(string? target, bool used)
+    {
+        var system = Folder("System32");
+        var conhost = StandIn(system, "conhost.exe");
+        var apps = Folder("WindowsApps");
+        var wt = StandIn(apps, "wt.exe");
+        var asked = new List<string>();
+
+        var found = TerminalPlan.Find(TerminalPlatform.Windows, system, null, null, apps, path =>
+        {
+            asked.Add(path);
+            return target;
+        });
+
+        Assert.Equal(used ? new TerminalFound("Windows Terminal", wt, new TerminalFound("conhost", conhost)) : new TerminalFound("conhost", conhost), found);
+        Assert.Equal([wt], asked);
+        Assert.Equal(new Version(1, 18, 2681, 0), TerminalPlan.WindowsTerminalFloor);
+    }
+
+    /// <summary>The version a package folder's name carries, and none where the path is no Windows Terminal's program in one.</summary>
+    [Theory]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe", "1.24.12741.0")]
+    [InlineData("C:/Program Files/WindowsApps/Microsoft.WindowsTerminalPreview_1.25.2.0_neutral__8wekyb3d8bbwe/wt.exe", "1.25.2.0")]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24_x64__8wekyb3d8bbwe\wt.exe", null)]
+    [InlineData(@"C:\Program Files\WindowsApps\Contoso.WindowsTerminal_9.9.9.9_x64__8wekyb3d8bbwe\wt.exe", null)]
+    [InlineData(@"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.18.10000.0_x64__8wekyb3d8bbwe\wt.exe", "1.18.10000.0")]
+    [InlineData("C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\n\\wt.exe", null)]
+    [InlineData("C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_\u0661.24.1.0_x64__8wekyb3d8bbwe\\wt.exe", null)]
+    [InlineData("wt.exe", null)]
+    [InlineData("", null)]
+    public void The_version_is_read_from_the_package_folders_name(string target, string? version)
+    {
+        Assert.Equal(version is null ? null : Version.Parse(version), TerminalPlan.WindowsTerminalVersion(target));
+    }
+
+    /// <summary>
+    /// The reparse data of an App Execution Alias, as Windows keeps it for <c>wt.exe</c>: the tag, the length, the version
+    /// 3, then the package family name, the application's id and the program's full path, each ending in <c>\0</c>. The
+    /// program's path is read from it; data of another tag or version, cut short, or naming no full path reads as none.
+    /// </summary>
+    [Fact]
+    public void An_execution_aliass_program_is_read_from_its_reparse_data()
+    {
+        const string Program = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe";
+        string[] strings = ["Microsoft.WindowsTerminal_8wekyb3d8bbwe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", Program, "0"];
+
+        Assert.Equal(Program, ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, strings)));
+        Assert.Null(ExecutionAlias.TargetOf(Reparse(0xA000000C, 3, strings)));
+        Assert.Null(ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 2, strings)));
+        Assert.Null(ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, strings).AsSpan(0, 40)));
+        Assert.Null(ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, [strings[0], strings[1], "wt.exe", "0"])));
+        Assert.Null(ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, [strings[0], strings[1]])));
+        Assert.Null(ExecutionAlias.TargetOf([]));
+    }
+
+    /// <summary>
+    /// The program's path is judged full by Windows' own rules on every system, since it is a Windows path whichever system
+    /// reads the bytes: a drive letter and a separator, or a UNC, device or NT start. A drive with no separator, a rooted
+    /// path with no drive and a relative one are none.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Program Files\WindowsApps\wt.exe", true)]
+    [InlineData(@"d:/Apps/wt.exe", true)]
+    [InlineData(@"\\server\share\wt.exe", true)]
+    [InlineData(@"\\?\C:\Apps\wt.exe", true)]
+    [InlineData(@"\\.\C:\Apps\wt.exe", true)]
+    [InlineData(@"\??\C:\x", true)]
+    [InlineData(@"C:foo\wt.exe", false)]
+    [InlineData(@"C:", false)]
+    [InlineData(@"\Apps\wt.exe", false)]
+    [InlineData(@"Apps\wt.exe", false)]
+    [InlineData(@"/usr/bin/wt", false)]
+    [InlineData(@"1:\Apps\wt.exe", false)]
+    public void An_alias_s_program_is_full_by_windows_rules_on_every_system(string program, bool full)
+    {
+        string[] strings = ["Microsoft.WindowsTerminal_8wekyb3d8bbwe", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", program, "0"];
+
+        Assert.Equal(full ? program : null, ExecutionAlias.TargetOf(Reparse(ExecutionAlias.Tag, 3, strings)));
+    }
+
+    private static byte[] Reparse(uint tag, uint version, string[] strings)
+    {
+        var text = System.Text.Encoding.Unicode.GetBytes(string.Concat(strings.Select(each => each + "\0")));
+        var data = new byte[12 + text.Length];
+        BitConverter.GetBytes(tag).CopyTo(data, 0);
+        BitConverter.GetBytes((ushort)(4 + text.Length)).CopyTo(data, 4);
+        BitConverter.GetBytes(version).CopyTo(data, 8);
+        text.CopyTo(data, 12);
+        return data;
+    }
+
+    /// <summary>
+    /// Windows Terminal's start is given the environment the console host's start is given, by the one construction
+    /// (<see cref="TerminalStartInfo.For"/>): the launch's variables added, and the confinement, chat-turn and, for Windows
+    /// PowerShell, module-path variables removed. The two starts' environments are compared whole. Making a start info
+    /// starts nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Windows_terminals_start_gets_the_environment_the_console_hosts_start_gets(bool powerShell)
+    {
+        var own = new OwnJason("C:/Users/marta/jason-test", "C:/Users/marta/AppData/Local/Programs/Jason", "C:/Windows/System32");
+        var console = new TerminalFound("conhost", Path.Combine(Path.GetTempPath(), "conhost.exe"));
+        var terminal = new TerminalFound("Windows Terminal", Path.Combine(Path.GetTempPath(), "wt.exe"), console);
+        string[] host = powerShell ? [Path.Combine(Path.GetTempPath(), "WindowsPowerShell", "v1.0", "powershell.exe")] : ["C:/Tools/claude.exe", Prompt];
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, terminal, "C:/Jason", host, Item, own);
+        var wt = TerminalStartInfo.For(TerminalPlatform.Windows, launch.Argv, launch.WorkingDirectory, launch.Variables);
+        var conhost = TerminalStartInfo.For(TerminalPlatform.Windows, launch.Fallback!.Argv, launch.Fallback.WorkingDirectory, launch.Fallback.Variables);
+
+        Assert.Equal(conhost.Environment.OrderBy(pair => pair.Key, StringComparer.Ordinal), wt.Environment.OrderBy(pair => pair.Key, StringComparer.Ordinal));
+        Assert.Equal("C:/Users/marta/jason-test", wt.Environment["JASON_DATA_DIR"]);
+        if (powerShell)
+        {
+            Assert.DoesNotContain(wt.Environment.Keys, key => string.Equals(key, ChildProcess.ModulePathVariable, StringComparison.OrdinalIgnoreCase));
+        }
+
+        Assert.Equal(conhost.WorkingDirectory, wt.WorkingDirectory);
     }
 
     /// <summary>The script's name is made from the item's id, so an id that is not one is refused before it names a file.</summary>
@@ -599,6 +978,9 @@ public sealed class TerminalPlanTests : IDisposable
             string.Empty,
         ]);
 
+    /// <summary>The alias of the Windows Terminal this was seen on, 1.24, as <see cref="ExecutionAlias.Target"/> reads one.</summary>
+    private static readonly Func<string, string?> CurrentTerminal = _ => @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\wt.exe";
+
     private static TerminalFound TerminalOf(TerminalPlatform os) => os switch
     {
         TerminalPlatform.Windows => new TerminalFound("conhost", "C:/Windows/System32/conhost.exe"),
@@ -640,20 +1022,23 @@ public sealed class TerminalStartConfinementTests
     public void The_terminal_does_not_carry_the_variable(TerminalPlatform os)
     {
         var original = Environment.GetEnvironmentVariable(Confinement.Variable);
+        var turn = Environment.GetEnvironmentVariable(Confinement.ChatTurnVariable);
         bool carried;
         try
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, "1");
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, "1");
 
             // Every child is started by its full path, so the terminal is named by one this machine reads as full.
             var start = TerminalStartInfo.For(os, [Path.Combine(Path.GetTempPath(), "x-terminal-emulator"), "-e", "/usr/local/bin/codex"], "/home/marta/Jason");
 
             // The start's environment is read from this process when it is first asked for, so it is asked while the variable is set.
-            carried = start.Environment.ContainsKey(Confinement.Variable);
+            carried = start.Environment.ContainsKey(Confinement.Variable) || start.Environment.ContainsKey(Confinement.ChatTurnVariable);
         }
         finally
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, original);
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, turn);
         }
 
         Assert.False(carried, "The terminal was handed the variable.");
