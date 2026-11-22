@@ -15,6 +15,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class CampaignManagerDocTests
 {
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_manager_contract_defines_the_check_in_and_prices_the_cadence()
     {
         var page = Flattened(Read());
@@ -41,6 +42,7 @@ public partial class CampaignManagerDocTests
     /// null before the start means none.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_reserve_page_says_the_default_the_first_start_sets_and_how_to_have_none()
     {
         var page = Flattened(Read());
@@ -58,6 +60,7 @@ public partial class CampaignManagerDocTests
     /// runtime holds them to. A default that drifts here is a page that lies about what happens by itself.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_the_page_publishes_are_the_ones_the_runtime_enforces()
     {
         var page = Flattened(Read());
@@ -95,6 +98,7 @@ public partial class CampaignManagerDocTests
     /// it, so at the defaults a day is three quick looks and one deep review.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_the_two_clocks_and_what_a_day_of_them_costs()
     {
         var page = Flattened(Read());
@@ -128,6 +132,7 @@ public partial class CampaignManagerDocTests
     /// And the shape a review answers in, which is the one thing a role's own skill will be written around.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_prints_the_shape_a_review_answers_in()
     {
         var page = Flattened(Read());
@@ -150,6 +155,7 @@ public partial class CampaignManagerDocTests
     /// that moved in code and not on the page would be a refusal nobody was warned about.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_bounds_the_page_publishes_are_the_ones_a_question_is_held_to()
     {
         var page = Flattened(Read());
@@ -175,6 +181,7 @@ public partial class CampaignManagerDocTests
     /// work-execution contract carries its own. A code a caller meets and cannot look up is a dead end.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_names_every_code_a_question_can_be_refused_with()
     {
         var page = Flattened(Read());
@@ -202,6 +209,7 @@ public partial class CampaignManagerDocTests
     /// names a decision without reading one.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_the_exemption_its_limit_and_what_a_narrowed_list_costs()
     {
         var page = Flattened(Read());
@@ -224,6 +232,7 @@ public partial class CampaignManagerDocTests
     /// described is worse than none: a reader believes it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_what_the_loop_does_not_do_yet()
     {
         var page = Flattened(Read());
@@ -241,6 +250,7 @@ public partial class CampaignManagerDocTests
     /// added to the function and not the page, or the page and not the function, is red here.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_entry_table_the_page_prints_is_the_function_the_summon_calls()
     {
         var rows = EntryRows(Read());
@@ -277,6 +287,7 @@ public partial class CampaignManagerDocTests
 
     /// <summary>The rank §2 states, in the order the summon ranks by.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_the_rank_a_burst_is_caused_by()
     {
         var page = Flattened(Read());

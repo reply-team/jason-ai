@@ -28,6 +28,7 @@ public partial class PageClaimsTests
     /// and so is the rule, in its section for an agent.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void An_agent_that_installs_it_repairs_required_checks_only()
     {
         var agent = Flat(Agent());
@@ -43,6 +44,7 @@ public partial class PageClaimsTests
     /// on Windows, under <c>~/.net</c> on macOS and Linux — which is what CI's published executables report.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_name_where_the_executable_unpacks_on_each_platform()
     {
         Assert.Contains("~/.net", Agent(), StringComparison.Ordinal);
@@ -58,6 +60,7 @@ public partial class PageClaimsTests
     /// left, removing nothing there; the page and the verb's help say so in the same clause.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/release-and-update.md")]
     [InlineData("dotnet/src/Jason.Cli/Uninstall/UninstallCommand.cs")]
     public void The_pages_say_what_builds_unpacked_under_other_temporary_folders_is_named_and_left(string page)
@@ -74,6 +77,7 @@ public partial class PageClaimsTests
     /// read out of the code: a reason added on one side alone is a row the page and the verb tell apart.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_lists_the_desktop_refusals_the_verb_retries()
     {
         const string lead = "Retryable where the reason is one that passes: ";
@@ -94,6 +98,7 @@ public partial class PageClaimsTests
     /// moves no executable of its own any more: the application's installer places it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_say_how_long_a_held_executable_is_waited_for()
     {
         var wait = Jason.Cli.Uninstall.InstallationRemovers.HeldFiles.WaitInWords;
@@ -111,6 +116,7 @@ public partial class PageClaimsTests
     /// <c>--source</c>, the one source that needs it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_what_teaching_a_release_needs()
     {
         var install = Page("docs", "INSTALL.md");
@@ -131,6 +137,7 @@ public partial class PageClaimsTests
     /// saying the script did its first half, and keeps the lines that do it again.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_the_script_teaches_the_role_skills()
     {
         var release = Flat(Section(Page("docs", "INSTALL.md"), "## 2. "));
@@ -160,6 +167,7 @@ public partial class PageClaimsTests
     /// the sentence is kept from coming back.
     /// </remarks>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_a_first_dry_run_fetches_into_staging_and_deploys_nothing()
     {
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
@@ -182,6 +190,7 @@ public partial class PageClaimsTests
     /// than an older one, because the check compares by equality: a record newer than the runtime fails as well.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_names_the_line_that_moves_a_pinned_deployment_in_either_root()
     {
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
@@ -198,6 +207,7 @@ public partial class PageClaimsTests
     /// "after an update, run status" alone told every updater to repair by hand what the apply now does.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_the_apply_redeploys_the_skills_and_what_an_older_build_s_update_needs()
     {
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
@@ -217,6 +227,7 @@ public partial class PageClaimsTests
     /// so it says what that update still needs, as the two pages behind it do.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_what_an_update_applied_by_an_older_build_needs()
     {
         var readme = Flat(Page("docs", "handbook.md"));
@@ -237,6 +248,7 @@ public partial class PageClaimsTests
     /// eleven it said before the machine was set up for the application by one.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
     [InlineData("docs/INSTALL.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
     [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**")]
@@ -268,6 +280,7 @@ public partial class PageClaimsTests
     /// each says what Jason's brief asks and whose settings decide what the agent may run.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("CLAUDE.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide")]
     [InlineData("docs/ui.md", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is your host's own permission settings' to decide.")]
     [InlineData("dotnet/src/Jason.Cli/Session/SessionOpener.cs", "Jason's brief asks the agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to decide.")]
@@ -293,6 +306,7 @@ public partial class PageClaimsTests
     /// that went back to the item form alone would tell its reader the folder form is not there.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("CLAUDE.md", "with no item it opens the same terminal at a campaign's folder, a project's or the harness root")]
     [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With no item it opens the same terminal at a folder, with no first input")]
     [InlineData("docs/ui.md", "### At a folder, with no item")]
@@ -316,6 +330,7 @@ public partial class PageClaimsTests
     /// command line to change Jason itself.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("CLAUDE.md", "and with `--setup` it opens the same terminal at the installation's role skills folder, its plugins folder beside it where the host takes one, with the setup brief as its first input, asking the runtime only `preference.list` and only when no `--host` is given")]
     [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With --setup it opens the same terminal at the role skills folder <c>SetupInfo</c> names, with the plugins folder beside it where the host takes a second folder, and the setup brief as its first input")]
     [InlineData("docs/ui.md", "With `--setup`, the same verb opens your own agent host on Jason itself: at its role skills folder, with the setup brief as its first input.")]
@@ -331,6 +346,7 @@ public partial class PageClaimsTests
 
     /// <summary>The help says the setup form in the words the release agreed, and what it is not taken with.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_session_help_says_its_setup_form()
     {
         Assert.Contains(
@@ -341,6 +357,7 @@ public partial class PageClaimsTests
 
     /// <summary>The help names both forms and the flags of the folder's, and that it carries no first input.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_session_help_says_its_folder_form()
     {
         var help = Jason.Cli.Session.SessionCommands.OpenDescription;
@@ -359,6 +376,7 @@ public partial class PageClaimsTests
     /// before it opens a window on a person's desktop.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("CLAUDE.md", "`--here` opens it at the folder the command runs in", "`--resume <id>` has the host continue its own conversation of that id")]
     [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "<c>--here</c> opens it at the folder the command runs in", "<c>--resume</c> has the host continue its own conversation of that id")]
     [InlineData("docs/ui.md", "jason session open --here --host claude_code --resume <conversation-id>", "`host_cannot_resume`")]
@@ -374,6 +392,7 @@ public partial class PageClaimsTests
 
     /// <summary>The help says what the brief asks of the agent, never what the agent cannot do.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_session_help_says_what_the_brief_asks_and_who_decides_what_runs()
     {
         var help = Jason.Cli.Session.SessionCommands.OpenDescription;
@@ -387,6 +406,7 @@ public partial class PageClaimsTests
     /// one, word for word as it was accepted: the row is what a later change to the bundle has to be measured against.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_decision_register_records_what_a_diagnostic_bundle_is()
     {
         var architecture = Page("docs", "architecture.md");
@@ -416,6 +436,7 @@ public partial class PageClaimsTests
     /// that a route's account and a chain's envelope never are.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_say_a_bundle_carries_the_routes_and_never_a_route_s_account()
     {
         var notes = Flat(Page("CLAUDE.md"));
@@ -445,6 +466,7 @@ public partial class PageClaimsTests
     /// pages said before named six things and left out most of what the journal's entries hold.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md")]
     [InlineData("CLAUDE.md")]
     public void The_pages_say_what_the_journal_flag_adds_in_the_composers_own_words(string page)
@@ -486,6 +508,7 @@ public partial class PageClaimsTests
     /// receipt names" was contradicted by the verb's own list of what it removes.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
@@ -510,6 +533,7 @@ public partial class PageClaimsTests
     /// alone and left out what <c>jason runtime start</c> answers.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("CLAUDE.md")]
     [InlineData("docs/work-execution.md")]
     [InlineData("docs/release-and-update.md")]
@@ -526,6 +550,7 @@ public partial class PageClaimsTests
 
     /// <summary>The sixth sentence a release would have made false, in both places it was written.</summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("skills/README.md")]
     [InlineData("dotnet/src/Jason.Cli/Skills/SkillsSource.cs")]
     public void No_page_says_git_is_today_the_only_way_skills_can_work(string page) =>
@@ -536,6 +561,7 @@ public partial class PageClaimsTests
     /// every step listed either way — not "understood and refused", which predated the report written after a failure.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_operating_skill_states_the_uninstall_exit_code_as_it_is()
     {
         var skill = Page("skills", "runtime", "operating-the-installation", "SKILL.md");
@@ -551,6 +577,7 @@ public partial class PageClaimsTests
     /// and the installer's default directory there is the one other tools share.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "only where the installer wrote it and its directory holds nothing but Jason")]
     [InlineData("docs/INSTALL.md", "is one rule on both platforms")]
     [InlineData("docs/release-and-update.md", "only where the installer wrote it and its directory holds nothing but Jason")]
@@ -573,6 +600,7 @@ public partial class PageClaimsTests
     /// asks anyone to accept anything.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md", "Jason is released under the MIT licence: [LICENSE](LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](docs/responsible-use.md).")]
     [InlineData("docs/handbook.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).")]
     [InlineData("docs/INSTALL.md", "Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your responsibility when it reaches people, is in [responsible-use.md](responsible-use.md).")]
@@ -592,6 +620,7 @@ public partial class PageClaimsTests
     /// links its file, or asks anyone to accept anything before installing.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
@@ -616,6 +645,7 @@ public partial class PageClaimsTests
     /// also opens by saying that MIT covers the runtime and the executable each release builds.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md", "\"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\" are trademarks of ReplyApp Inc.")]
     [InlineData("docs/handbook.md", "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc.")]
     public void Each_page_s_licence_section_releases_the_repository_and_its_history_under_mit(string page, string marks)
@@ -640,6 +670,7 @@ public partial class PageClaimsTests
     /// and who operates the address, and that the skills still come from the repository's releases on GitHub directly.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly.")]
     [InlineData("docs/INSTALL.md", "The skills are the exception: their package is read from this repository's releases on GitHub directly, by the install scripts' last step, by `jason update apply`'s skills step and by `jason skills`.")]
     [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts, `jason update apply` and `jason ui install` make, go to `get.jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
@@ -655,6 +686,7 @@ public partial class PageClaimsTests
     /// that say where the requests go point there, right after saying it, rather than repeat it.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "the skills come from this repository's releases on GitHub directly. What that address keeps, and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     [InlineData("docs/INSTALL.md", "which redirects them to this repository's releases on GitHub. What that address keeps, and for how long, is in [responsible-use.md](responsible-use.md#update-check-and-downloads).")]
     public void The_pages_point_at_what_the_address_keeps_where_they_say_where_requests_go(string page, string said) =>
@@ -666,6 +698,7 @@ public partial class PageClaimsTests
     /// "Jason AI" is used descriptively, which beside that note is not so.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_names_the_marks_beside_the_licences()
     {
         var text = Flat(Page("docs", "handbook.md"));
@@ -685,6 +718,7 @@ public partial class PageClaimsTests
     /// licence and asks for no acceptance.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_leaves_the_licence_to_the_install_page_and_asks_for_no_acceptance()
     {
         var prompt = Flat(Prompt());
@@ -703,6 +737,7 @@ public partial class PageClaimsTests
     /// the executable by hand keeps them too. The uninstall's pages say the files go with it, by name.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
     [InlineData("docs/handbook.md", "every archive carries the licence and the third-party notices, and an install keeps both beside the executable as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
     [InlineData(".github/release-notes-template.md", "If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.")]
@@ -721,6 +756,7 @@ public partial class PageClaimsTests
     /// notices were never given to them.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/release-and-update.md", "**An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.**")]
     [InlineData("docs/release-and-update.md", "| `jason-win-x64.zip` | the Windows executable, `LICENSE` (the MIT licence) and `THIRD-PARTY-NOTICES` |")]
     [InlineData("docs/release-and-update.md", "| `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the MIT licence) and `THIRD-PARTY-NOTICES` |")]
@@ -742,6 +778,7 @@ public partial class PageClaimsTests
     /// pages is a platform's.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-journal-forwarder.zip` | the journal forwarder's package: the files of `plugins/journal-forwarder` at the tag, at the archive's root |")]
     [InlineData("docs/release-and-update.md", "| `jason-plugin-ntfy.zip` | the ntfy plugin's package: the files of `plugins/ntfy` at the tag, at the archive's root |")]
@@ -785,6 +822,7 @@ public partial class PageClaimsTests
     /// one names wherever the runtime stands, and every program Jason starts by name is started by its full path.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_plugins_page_says_an_entry_of_the_search_path_that_is_not_a_full_path_is_not_searched() =>
         Assert.Contains(
             "Only the entries of the search path that are full paths are searched: an empty entry, `.` or a relative folder names wherever the runtime happens to stand, and a program found only there is `executable_missing`.",
@@ -796,6 +834,7 @@ public partial class PageClaimsTests
     /// guide's own lines are held above, and these are the walk-throughs beside it.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md", "`jason ui install` places this release's browser UI, the page `jason ui open` opens; a runtime works without it.")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older than that step places none, so `jason ui install` follows it; `jason status` names it until it has.")]
     public void The_walk_throughs_say_when_jason_ui_install_follows(string page, string said) =>
@@ -808,6 +847,7 @@ public partial class PageClaimsTests
     /// builds from source too, and said to put the executable "somewhere on your PATH".
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/INSTALL.md", "Copy that file alone: the `.pdb` files beside it are debugging symbols")]
     [InlineData("docs/golden-path.md", "installed from a release as [`docs/INSTALL.md`](INSTALL.md) §2 describes")]
     public void The_pages_say_to_copy_the_executable_alone(string page, string said)
@@ -824,6 +864,7 @@ public partial class PageClaimsTests
     /// names none.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_to_start_the_install_session_without_connectors_above_the_prompt()
     {
         var readme = Page("docs", "handbook.md");
@@ -848,6 +889,7 @@ public partial class PageClaimsTests
     /// each, and that a mode asking before every command is the other way, with one agent's spelling of it as the example.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_what_auto_mode_does_at_the_install_above_the_prompt()
     {
         var readme = Page("docs", "handbook.md");
@@ -896,6 +938,7 @@ public partial class PageClaimsTests
     /// and the install page's section for an agent says to build nothing and to report a 404 from a one-liner as it is.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_builds_nothing()
     {
         var prompt = Fenced(Page("README.md"), "```text\nInstall Jason by following");
@@ -914,6 +957,7 @@ public partial class PageClaimsTests
     /// and the one-liner is the person's.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_reports_a_refusal_once_and_never_works_around_it()
     {
         var agent = Flat(Agent());
@@ -936,6 +980,7 @@ public partial class PageClaimsTests
     /// words.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_takes_a_package_then_the_script_or_the_route_by_hand()
     {
         var agent = Flat(Agent());
@@ -962,6 +1007,7 @@ public partial class PageClaimsTests
     /// the terminal, and ends with the full path of jason, which the agent's own session calls it by.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_says_what_the_install_script_does_and_how_its_last_line_is_used()
     {
         var agent = Flat(Agent());
@@ -975,6 +1021,7 @@ public partial class PageClaimsTests
     /// and not written would leave an agent nowhere to go.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_sections_package_route_names_a_subsection_that_is_there()
     {
         Assert.Contains("(*With a package manager*)", Flat(Agent()), StringComparison.Ordinal);
@@ -986,6 +1033,7 @@ public partial class PageClaimsTests
     /// in, and the order an agent takes them.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void With_a_package_manager_comes_before_by_hand_and_after_the_one_liners()
     {
         var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
@@ -1003,6 +1051,7 @@ public partial class PageClaimsTests
     /// it, and the README offers no package at all.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_package_subsection_offers_the_cask_alone_for_a_new_install()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
@@ -1025,6 +1074,7 @@ public partial class PageClaimsTests
     /// command-line install, not Jason Desktop, which its next update moves into the application.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_steps_by_hand_are_linux_s_alone()
     {
         var byHand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
@@ -1039,6 +1089,7 @@ public partial class PageClaimsTests
     /// manager's upgrade is typed, with the reason: Homebrew removes the keg a running runtime starts its plugin hosts from.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_package_subsection_says_how_the_managers_upgrade_is_typed_and_why()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
@@ -1057,6 +1108,7 @@ public partial class PageClaimsTests
     /// the sequence to the skill, so the skill is held to saying it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_operating_skill_types_a_managers_upgrade_between_the_stop_and_the_start()
     {
         var skill = Page("skills", "runtime", "operating-the-installation", "SKILL.md");
@@ -1086,6 +1138,7 @@ public partial class PageClaimsTests
     /// next route rather than a way around the refusal.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_falls_through_to_by_hand_when_the_package_manager_refuses()
     {
         var agent = Flat(Agent());
@@ -1105,6 +1158,7 @@ public partial class PageClaimsTests
     /// person's to type, and the agent hands them the line rather than finding another way to run it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_gives_the_person_the_one_liner_where_even_the_route_by_hand_is_refused() =>
         Assert.Contains(
             "Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.",
@@ -1117,6 +1171,7 @@ public partial class PageClaimsTests
     /// over the exact line <c>jason status</c> prints, with the command that proves it — never "not ready" alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_hands_over_a_declined_path_entry_with_the_line_and_the_proof() =>
         Assert.Contains(
             "With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line `jason status` prints for `path`, and say that `jason status` again proves it. Never end on \"not ready\" alone: name the step that remains.",
@@ -1128,6 +1183,7 @@ public partial class PageClaimsTests
     /// and an act that needs their word is left undone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_says_an_unanswered_question_is_nobody_to_ask() =>
         Assert.Contains(
             "With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to ask.",
@@ -1141,6 +1197,7 @@ public partial class PageClaimsTests
     /// stopped to ask what comes next would keep the person from the work they came for.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_hands_a_ready_installation_to_the_quick_start()
     {
         var agent = Flat(Agent());
@@ -1164,6 +1221,7 @@ public partial class PageClaimsTests
     /// without asking. An agent given only the link has no such yes.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_takes_the_three_lines_as_the_person_s_yes_and_the_link_alone_as_none()
     {
         var agent = Flat(Agent());
@@ -1184,6 +1242,7 @@ public partial class PageClaimsTests
     /// asking the person to choose again.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_say_one_installation_and_the_agent_section_offers_no_choice_on_linux()
     {
         const string Words = "On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once.";
@@ -1242,6 +1301,7 @@ public partial class PageClaimsTests
     /// Jason say that order, and neither says the preference is followed by Claude Code alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_say_which_program_change_Jason_itself_opens()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
@@ -1261,6 +1321,7 @@ public partial class PageClaimsTests
     /// starts nothing now, and gives the line that turns it off, so no agent asks for it or registers it again by hand.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_logon_start_is_marked_done_at_install()
     {
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 6. "));
@@ -1276,6 +1337,7 @@ public partial class PageClaimsTests
     /// its text is.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_last_section_of_the_install_page_says_what_the_quick_start_does()
     {
         var install = Page("docs", "INSTALL.md");
@@ -1300,6 +1362,7 @@ public partial class PageClaimsTests
     /// TypeScript, and the one that says why it is not recommended for a plugin. Any other sentence that names it fails.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_plugins_are_plain_javascript_and_never_typescript()
     {
         var page = Page("README.md");
@@ -1377,6 +1440,7 @@ public partial class PageClaimsTests
     /// layout follow.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_opens_with_what_it_is_then_the_install_and_the_prompt()
     {
         var lines = OutsideFences(Page("docs", "handbook.md"));
@@ -1407,6 +1471,7 @@ public partial class PageClaimsTests
     /// its role skills, without which every role it launches runs untaught, and links the install page for the rest.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_s_first_screen_says_the_install_page_holds_the_rest()
     {
         var readme = Page("docs", "handbook.md");
@@ -1426,6 +1491,7 @@ public partial class PageClaimsTests
     /// silent halt. The person who pastes the prompt has asked for the install, so it asks for no yes before it begins.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_asks_the_person_directly_when_anything_stops_it()
     {
         var prompt = Flat(Prompt());
@@ -1440,6 +1506,7 @@ public partial class PageClaimsTests
     /// against commands holds.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_leaves_the_release_source_to_the_install_page()
     {
         Assert.DoesNotContain("/releases/", Prompt(), StringComparison.Ordinal);
@@ -1455,6 +1522,7 @@ public partial class PageClaimsTests
     /// is built to use it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_and_the_readme_s_opening_say_Jason_is_used_from_a_release()
     {
         Assert.Contains("build nothing", Flat(Agent()), StringComparison.Ordinal);
@@ -1473,6 +1541,7 @@ public partial class PageClaimsTests
     /// and takes the person to their first campaign.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_starts_the_quick_start_skill_when_Jason_is_ready() =>
         Assert.Contains(
             "When it reports Ready, start its quick-start skill and take me to my first campaign.",
@@ -1483,6 +1552,7 @@ public partial class PageClaimsTests
     /// The prompt is these three lines, the same in the README, the handbook and the install page, and no others.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_is_three_lines_the_same_in_the_readme_the_handbook_and_the_install_page()
     {
         const string Lines =
@@ -1501,6 +1571,7 @@ public partial class PageClaimsTests
     /// a release is published.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_points_at_the_install_page_at_main() =>
         Assert.Contains("Install Jason by following https://get.jasonharness.ai/install", Flat(Prompt()), StringComparison.Ordinal);
 
@@ -1509,6 +1580,7 @@ public partial class PageClaimsTests
     /// into it and disagree with the page, as its <c>--source .</c> once did.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_prompt_names_no_command()
     {
         var prompt = Fenced(Page("README.md"), "```text\nInstall Jason by following");
@@ -1525,6 +1597,7 @@ public partial class PageClaimsTests
     /// phrase appears only in the section for an agent, which says what it means and which of its own acts carry it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Ask_first_is_spelled_one_way_and_marks_acts_in_sections_2_to_6()
     {
         Assert.DoesNotContain("Ask first", Prompt(), StringComparison.OrdinalIgnoreCase);
@@ -1556,6 +1629,7 @@ public partial class PageClaimsTests
     /// or the one after the paragraph that introduces it.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("## 2. ", "**Putting it on the PATH yourself.**", 1)]
     [InlineData("## 4. ", "```sh\njason skills install --dry-run\n", -1)]
     [InlineData("## 5. ", "which you type rather than hand back to `jason`.", 1)]
@@ -1577,6 +1651,7 @@ public partial class PageClaimsTests
     /// page keeps <c>--source &lt;checkout&gt;</c> for a working tree, in the paragraph that says so.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md", null)]
     [InlineData("docs/handbook.md", null)]
     [InlineData("docs/INSTALL.md", "**From a working tree.**")]
@@ -1616,6 +1691,7 @@ public partial class PageClaimsTests
     /// and a development bump that moves the version without them is red until it moves them too.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pinned_examples_name_the_release_this_tree_builds()
     {
         var found = new List<(string File, string Version)>();
@@ -1649,6 +1725,7 @@ public partial class PageClaimsTests
     /// Last, what the steps left in the temporary directory may go, named one by one so that nothing else goes with it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_s_hand_path_checks_the_digest_before_it_unpacks()
     {
         var hand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
@@ -1680,6 +1757,7 @@ public partial class PageClaimsTests
     /// <c>~/.local/bin</c>, which other tools share, so the file it overwrote would be another tool's.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_hand_path_unpacks_outside_the_install_directory()
     {
         var hand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
@@ -1693,6 +1771,7 @@ public partial class PageClaimsTests
     /// so the page gives no executable for a person to unpack and unblock there.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_hand_path_places_no_executable_on_Windows() =>
         Assert.DoesNotContain(
             "Unblock-File",
@@ -1706,6 +1785,7 @@ public partial class PageClaimsTests
     /// says the agent asks what comes next.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_ends_by_starting_the_quick_start_and_never_by_asking_what_comes_next()
     {
         var start = Section(Page("docs", "INSTALL.md"), "## 6. ").TrimEnd().TrimEnd('-').TrimEnd();
@@ -1729,6 +1809,7 @@ public partial class PageClaimsTests
     /// back — and its opening says so and points at the real work; so does the first place it sends a reader next.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_is_named_the_wiring_check_and_points_at_the_real_work()
     {
         var page = Page("docs", "golden-path.md");
@@ -1761,6 +1842,7 @@ public partial class PageClaimsTests
     /// first campaign, say — is as red as one taken away.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_says_it_is_an_optional_synthetic_run_right_after_its_opening()
     {
         var blocks = Page("docs", "golden-path.md").Split("\n\n");
@@ -1781,6 +1863,7 @@ public partial class PageClaimsTests
     /// that names the provider, so a use added to it is as red as one taken away.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_names_the_four_things_the_provider_s_web_app_is_for()
     {
         var blocks = Page("docs", "golden-path.md").Split("\n\n");
@@ -1801,6 +1884,7 @@ public partial class PageClaimsTests
     /// synthetic walk offered once, which a person may skip for the real work at once.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_names_the_wiring_check_and_where_the_real_work_begins()
     {
         var readme = Flat(Page("docs", "handbook.md"));
@@ -1826,6 +1910,7 @@ public partial class PageClaimsTests
     /// other hosts says nothing else about a sandbox.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
@@ -1856,6 +1941,7 @@ public partial class PageClaimsTests
     /// appears once more, in the section for an agent, where it is said what it means.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_marks_are_spelled_one_way()
     {
         var page = Page("docs", "golden-path.md");
@@ -1886,6 +1972,7 @@ public partial class PageClaimsTests
     /// decision; and the way back takes them out of the provider's campaign on their word.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("### The Reply CLI", "Where Node is missing, or older than 20", 0, "Ask first.")]
     [InlineData("### The Reply CLI", "```\nreply auth login\n", -1, "Yours to do.")]
     [InlineData("## 6. ", "--operation campaign.create", -1, "Ask first.")]
@@ -1914,6 +2001,7 @@ public partial class PageClaimsTests
     /// that fails its check however they are run, is executed elsewhere, against a stand-in for the release.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_installs_the_package_from_the_release()
     {
         var page = Page("docs", "golden-path.md");
@@ -1942,6 +2030,7 @@ public partial class PageClaimsTests
     /// started in.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_s_agent_says_where_the_run_s_files_go() =>
         Assert.Contains(
             "nothing in this run writes there — the package step 3 places goes into Jason's data directory, and the one file step 6 makes goes in the system's temporary directory.",
@@ -1953,6 +2042,7 @@ public partial class PageClaimsTests
     /// assumes none: nothing in the run writes into that folder, and the one file it makes goes to the temporary directory.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_assumes_no_repository_or_folder()
     {
         var page = Flat(Page("docs", "golden-path.md"));
@@ -1967,6 +2057,7 @@ public partial class PageClaimsTests
     /// meant to be, the address and nothing else, and the command names it where it was written.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_writes_the_contacts_file_on_its_own_and_runs_each_command_alone()
     {
         var step = Section(Page("docs", "golden-path.md"), "## 6. ");
@@ -1989,6 +2080,7 @@ public partial class PageClaimsTests
     /// all: the arguments in a file, given with <c>--file</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_gives_its_arguments_in_a_form_each_shell_takes()
     {
         var page = Page("docs", "golden-path.md");
@@ -2008,6 +2100,7 @@ public partial class PageClaimsTests
     /// person is not surprised by it, and outside the section for an agent, whose digest it does not move.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_says_the_sign_in_may_open_a_browser() =>
         Assert.Contains(
             "**Yours to do.** Sign in, in your own terminal, as the person whose account it is. It may open your browser:",
@@ -2020,6 +2113,7 @@ public partial class PageClaimsTests
     /// somebody already in it, a count the provider would not give — stops the run before anything is written to it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_stops_on_anything_but_a_draft_that_holds_nobody()
     {
         var agent = Flat(GoldenAgent());
@@ -2064,6 +2158,7 @@ public partial class PageClaimsTests
     /// person no longer makes it themselves.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_asks_before_its_first_write_to_the_provider_and_says_why()
     {
         var step = Flat(Section(Page("docs", "golden-path.md"), "## 6. "));
@@ -2087,6 +2182,7 @@ public partial class PageClaimsTests
     /// not the verb that made Jason's own; and a name the provider already holds is said with what to do next.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_says_which_campaign_create_it_means()
     {
         var step = Flat(Section(Page("docs", "golden-path.md"), "## 6. "));
@@ -2113,6 +2209,7 @@ public partial class PageClaimsTests
     /// pin the create leaves, and names no provider identifier of its own.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_starts_Jason_s_campaign_before_the_create_and_reads_after_it()
     {
         var page = Page("docs", "golden-path.md");
@@ -2136,6 +2233,7 @@ public partial class PageClaimsTests
     /// the mark means, "Yours to do." marks that act and no other.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_only_person_s_own_act_on_the_wiring_check_is_the_sign_in()
     {
         const string Mark = "**Yours to do.**";
@@ -2158,6 +2256,7 @@ public partial class PageClaimsTests
     /// <c>idempotency_key_reused</c>, exit 1, in front of a person following it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_create_on_the_wiring_check_has_a_key_of_its_own()
     {
         var keys = FencedLines(Page("docs", "golden-path.md"))
@@ -2176,6 +2275,7 @@ public partial class PageClaimsTests
     /// the two campaigns apart is about the campaign the reader made.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_names_Jason_s_campaign_as_it_creates_it()
     {
         var step = Section(Page("docs", "golden-path.md"), "## 6. ");
@@ -2200,6 +2300,7 @@ public partial class PageClaimsTests
     /// step 1 says rightly that the runtime owns "the schedule" of its own work.
     /// </remarks>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_claims_three_facts_about_the_provider_s_campaign_and_nothing_about_a_sender()
     {
         var page = Page("docs", "golden-path.md");
@@ -2250,6 +2351,7 @@ public partial class PageClaimsTests
     /// and gives the approval in a named person's name; and it is the email channel's alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_direct_send_says_it_is_real_reads_the_approval_before_it_is_given_and_names_who_gives_it()
     {
         var section = Section(Page("docs", "golden-path.md"), "## A direct send");
@@ -2281,6 +2383,7 @@ public partial class PageClaimsTests
     /// the direct send's own section and its <c>sender</c> are let through.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_exclusions_for_the_direct_send_let_the_old_bans_bite_everywhere_else()
     {
         var page = Page("docs", "golden-path.md");
@@ -2324,6 +2427,7 @@ public partial class PageClaimsTests
     /// campaign, and nothing else.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_way_back_takes_you_out_and_then_leaves_the_provider_s_campaign()
     {
         const string LeaveIt = "Then leave it: the provider's campaign this run made holds nobody and sends nothing. Archiving or deleting it is yours to choose, whenever you like, and no step of this page.";
@@ -2355,6 +2459,7 @@ public partial class PageClaimsTests
     /// the provider's campaign, so nothing the person later does with that campaign makes a read of Jason's fail.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_way_back_ends_by_pausing_Jason_s_campaign_once_the_stop_has_finished()
     {
         var back = Subsection(Page("docs", "golden-path.md"), "### The way back");
@@ -2377,6 +2482,7 @@ public partial class PageClaimsTests
     /// it is Jason's own and reaches nothing outside Jason, so it asks nobody, in its own line or in a paragraph of its own.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_way_back_asks_first_only_for_the_stop()
     {
         var blocks = Subsection(Page("docs", "golden-path.md"), "### The way back").Split("\n\n");
@@ -2392,6 +2498,7 @@ public partial class PageClaimsTests
     /// is typed whole and keeps its length.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_wiring_check_s_prose_wraps_at_the_page_s_width()
     {
         var lines = Page("docs", "golden-path.md").Split('\n');
@@ -2419,6 +2526,7 @@ public partial class PageClaimsTests
     /// gives the person the way back: the two commands, the stop and the pause after it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_names_the_next_step_when_it_stops() =>
         Assert.Contains(
             "When you stop, name the next step. At the end, give the person the way back in two lines: the stop, and the pause after it.",
@@ -2430,6 +2538,7 @@ public partial class PageClaimsTests
     /// of its own about it, so the two pages cannot come to say different things.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_refers_a_refusal_to_the_install_page_s_rule()
     {
         var page = Flat(Page("docs", "golden-path.md"));
@@ -2448,6 +2557,7 @@ public partial class PageClaimsTests
     /// person's yes names every download.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_asks_one_question_naming_its_sources_first() =>
         Assert.Contains(
             "Before anything, ask the person one question in plain words: what you will install and from where — the Reply plugin from the release of Jason they run, the Reply CLI from npm's registry, and Node if it is missing;",
@@ -2460,6 +2570,7 @@ public partial class PageClaimsTests
     /// so, and neither keeps the sentence from before the repository was public.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public void No_page_says_a_404_means_no_release_yet(string page)
@@ -2481,6 +2592,7 @@ public partial class PageClaimsTests
     /// one-liner's is when the person types it; only a PATH edit of its own is the person's to allow.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_agent_section_does_section_2_then_4_to_6()
     {
         var agent = Flat(Agent());
@@ -2500,6 +2612,7 @@ public partial class PageClaimsTests
     /// table and INSTALL's. A check added to one and not the others is a drift nobody held before.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public async Task The_pages_list_the_optional_checks_status_prints_in_its_help(string page)
@@ -2535,6 +2648,7 @@ public partial class PageClaimsTests
     /// told it could come.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/INSTALL.md")]
     public void The_pages_list_the_running_build_among_the_required_checks(string page)
@@ -2556,6 +2670,7 @@ public partial class PageClaimsTests
     /// installed it, and the command that takes that off.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_what_an_uninstall_leaves_to_a_package_manager()
     {
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
@@ -2573,6 +2688,7 @@ public partial class PageClaimsTests
     /// scripts do and the table of where they put Jason.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_shows_the_lines_the_scripts_print_about_the_files()
     {
         var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
@@ -2592,6 +2708,7 @@ public partial class PageClaimsTests
     /// folder moved later is recorded again, and that <c>git</c> in it is the person's act, never Jason's.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("That folder, the harness root, is `Jason` in your home directory — `/home/marta/Jason` on Linux, `/Users/marta/Jason` on macOS — unless `Harness:Root` in `~/.jason/config/settings.json` names another;")]
     [InlineData("a script cannot know what the runtime makes of its settings, so it says \"by default\", and `jason status` names the root in force.")]
     [InlineData("The install makes no folder there. The runtime makes the root the first time a project or a campaign is created,")]
@@ -2608,6 +2725,7 @@ public partial class PageClaimsTests
     /// included, and among the data directories the purge refuses.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_an_uninstall_never_touches_the_harness_root()
     {
         var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
@@ -2627,6 +2745,7 @@ public partial class PageClaimsTests
     /// it points to is never touched, as the verb's help says it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_a_link_in_the_data_directory_goes_as_itself() =>
         Assert.Contains(
             "A link in the data directory, a symbolic link or a junction, is removed as itself, and what it points to is never touched.",
@@ -2635,6 +2754,7 @@ public partial class PageClaimsTests
 
     /// <summary>And so does the README's account of taking it off.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_an_uninstall_never_touches_the_folder_of_the_person_s_files() =>
         Assert.Contains(
             "The folder Jason keeps what it learns about your business in — `~/Jason` unless `Harness:Root` names another — is never touched, `--purge-data` included: it is yours.",
@@ -2647,6 +2767,7 @@ public partial class PageClaimsTests
     /// does not write is a name no agent will find in an answer.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("plugin_availability")]
     [InlineData("plugin_grants")]
     [InlineData("plugin_updates")]
@@ -2673,6 +2794,7 @@ public partial class PageClaimsTests
     /// the page that reads the answers out; the troubleshooting skill names the check an unavailable plugin is read from.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/INSTALL.md", "plugin_availability")]
     [InlineData("docs/INSTALL.md", "plugin_grants")]
     [InlineData("docs/INSTALL.md", "install_first")]
@@ -2691,6 +2813,7 @@ public partial class PageClaimsTests
     /// text of a problem is a sentence about this machine, and the check never quotes it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_golden_path_says_the_check_names_problem_codes()
     {
         var text = Flat(Page("docs", "golden-path.md"));
@@ -2705,6 +2828,7 @@ public partial class PageClaimsTests
     /// pages once said the check still named a plain <c>jason update apply</c>, which sent the reader into the refusal.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
     public void The_pages_say_the_check_names_the_version_to_install_first_below_the_floor(string page)
@@ -2749,6 +2873,7 @@ public partial class PageClaimsTests
     /// by its place as well as its version. INSTALL.md said such an install set the machine up as the script does.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/INSTALL.md", "Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first.")]
     [InlineData("docs/desktop.md", "opened from the disk image itself, it sets nothing up and says to move it first.")]
     [InlineData("docs/desktop.md", "`jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything")]
@@ -2911,6 +3036,7 @@ public partial class PageClaimsTests
 
     /// <summary>A changed or a new conditional detail is red until its plain sentence is read again.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_conditional_detail_is_the_one_its_plain_sentence_was_written_from()
     {
         var found = FactConditionals()
@@ -2923,6 +3049,7 @@ public partial class PageClaimsTests
 
     /// <summary>Every conditional property has its sentence in the UI's words, and no sentence outlives its property.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_conditional_property_has_its_plain_sentence_and_every_sentence_its_property()
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -2945,6 +3072,7 @@ public partial class PageClaimsTests
 
     /// <summary>Every value an operation document gives these properties has its plain line in the UI's words.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_value_of_reach_reversibility_and_cost_has_its_plain_line()
     {
         var locale = Page("ui", "src", "locale", "en.ts");

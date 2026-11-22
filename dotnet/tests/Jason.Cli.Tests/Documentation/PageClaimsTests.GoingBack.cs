@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -64,6 +65,7 @@ public partial class PageClaimsTests
     /// terminal of step 2 without <c>jason</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_installs_0_48_7_by_the_scripts_own_pinned_lines()
     {
         var section = GoingBack();
@@ -96,6 +98,7 @@ public partial class PageClaimsTests
     /// <c>--purge-data</c>, and what the verb's own help says, so the step, the section and the verb are one claim.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task Going_back_from_0_49_keeps_what_the_uninstall_keeps()
     {
         var section = Flat(GoingBack());
@@ -120,6 +123,7 @@ public partial class PageClaimsTests
     /// steps to data no release after 0.49 opened and says what 0.49 and 0.48.7 make of data 0.50 has opened.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_holds_for_data_no_later_release_has_opened()
     {
         var section = Flat(GoingBack());
@@ -172,6 +176,7 @@ public partial class PageClaimsTests
     /// moves without this list and the section.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_7_shipped()
     {
         Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
@@ -203,6 +208,7 @@ public partial class PageClaimsTests
     /// that step 1 takes away: the words in the section are the check's own, so the section goes red the day they change.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_moves_a_folder_of_yours_out_of_the_way_before_0_48_7_deploys()
     {
         var section = Flat(GoingBack());
@@ -224,6 +230,7 @@ public partial class PageClaimsTests
     /// and whose install path holds a command-line executable again does not stand, and is a move to make again.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_leaves_a_done_move_record_that_no_longer_stands()
     {
         Assert.Contains("Under 0.48.7, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again,", Flat(GoingBack()), StringComparison.Ordinal);
