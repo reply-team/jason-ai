@@ -218,7 +218,8 @@ subscribe to it. It is refused, in this order, and refused writes nothing:
    is the review, and two requests at once make one check-in;
 6. the manager's launches of the day spent for the campaign (`Launches:MaxPerDay:manager`), counted as the claim counts
    them, `launches_spent`: the check-in would only wait for the installation's next midnight, so it is not made, and the
-   message says the way out — "To go on today, tell your agent: ignore the limit, or run jason launches lift."
+   message says the way out — "To go on today, tell your agent: ignore the limit, or run jason launches lift --actor
+   human:<your name>."
 
 **What a cadence costs.** One launch per active campaign per interval, on the operator's own agent
 host and their own plan: a quick look per `Manager:ReviewSeconds` since the last review, and a deep review per

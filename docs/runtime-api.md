@@ -250,8 +250,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   that is not active, a draft, a paused or an archived one, `409` `campaign_not_active`; a check-in open, one held at the
   manager's daily limit included, `409` `review_already_open`, which names it; and the manager's launches of the day
   spent, as the claim counts them, `409` `launches_spent`, whose message names the way out: "To go on today, tell your
-  agent: ignore the limit, or run jason launches lift." [The campaign manager](campaign-manager.md) §4 is the
-  contract.
+  agent: ignore the limit, or run jason launches lift --actor human:<your name>." [The campaign manager](campaign-manager.md)
+  §4 is the contract.
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`

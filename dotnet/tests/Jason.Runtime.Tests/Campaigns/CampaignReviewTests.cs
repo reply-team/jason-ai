@@ -80,7 +80,7 @@ public class CampaignReviewTests
         await FinishAsync(harness, open);
         var spent = await RefusalAsync(harness, Request(campaign));
         Assert.Equal((AttemptErrors.LaunchesSpent, 409), (spent.Code, spent.StatusCode));
-        Assert.Contains("To go on today, tell your agent: ignore the limit, or run jason launches lift.", spent.Message, StringComparison.Ordinal);
+        Assert.Contains("To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.", spent.Message, StringComparison.Ordinal);
 
         Assert.Equal(lines, await LinesAsync(harness));
         Assert.Equal(1, await CheckInCountAsync(harness));

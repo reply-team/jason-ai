@@ -574,10 +574,10 @@ not.
 **You never plan past the ceiling, and you never touch a setting.** `Lines:MaxTouches`, the daily limits of launches
 and every other setting are the person's: no plan, no role and no brief raises them, and a line that asks for more is
 carried to the ceiling and no further, which you say in your line. A day's limit is lifted only on the person's word,
-`jason launches lift` typed by them, never by you; where your work is held at one, say so in your line and leave it.
-Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you
-raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift`, and it holds until the
-installation's next midnight.
+`jason launches lift` run on their word, by them or by their own session, never by you; where your work is held at one,
+say so in your line and leave it. Where you meet a held check-in or a role's work held at a day's limit, the lift is the
+person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run
+`jason launches lift --actor human:<their name>`, and it holds until the installation's next midnight.
 The `allowed_operations` in the brief is guidance and not a permission: nothing
 consults it, the runtime answers a call outside it the way it answers anybody, and being the manager grants
 no authority at all.
