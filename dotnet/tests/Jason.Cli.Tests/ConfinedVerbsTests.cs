@@ -26,6 +26,7 @@ public class ConfinedVerbsTests
         ["campaign set-send-mode"] = ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block clear"] = ["block", "clear", "blk_A"],
         ["workitem resume"] = ["workitem", "resume", "wi_A"],
+        ["launches lift"] = ["launches", "lift"],
         ["workitem review"] = ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report submit"] = ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription rewind"] = ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
@@ -101,6 +102,7 @@ public class ConfinedVerbsTests
     [InlineData("decision answer")]
     [InlineData("preference set")]
     [InlineData("block clear")]
+    [InlineData("launches lift")]
     [InlineData("route set")]
     [InlineData("role add")]
     [InlineData("campaign start")]
@@ -377,7 +379,7 @@ public class ConfinedVerbsTests
     private static readonly string[] PersonsOwnWord =
     [
         "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer",
-        "preference set", "preference unset", "campaign set-send-mode", "block clear", "subscription rewind",
+        "preference set", "preference unset", "campaign set-send-mode", "block clear", "subscription rewind", "launches lift",
     ];
 
     /// <summary>
