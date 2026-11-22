@@ -364,8 +364,7 @@ public class DecisionCommandsTests
         var exit = await cli.RunAsync("decision", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("RAISED", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("QUESTION", cli.Text, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^RAISED +STATUS +ANSWERED BY +CAMPAIGN +WORK ITEM +ID +QUESTION", cli.Text);
         Assert.Contains("Which of the two accounts do we mean?", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pending", cli.Text, StringComparison.Ordinal);
         Assert.Contains("dec_2", cli.Text, StringComparison.Ordinal);
@@ -373,6 +372,40 @@ public class DecisionCommandsTests
         Assert.DoesNotContain(longQuestion, cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: ZGVjXzI", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"type": "human", "id": "ada"}""", "human:ada")]
+    [InlineData("""{"type": "attempt", "id": "att_1"}""", "attempt:att_1")]
+    [InlineData("null", null)]
+    public async Task List_shows_who_answered(string answeredBy, string? shown)
+    {
+        var answered = answeredBy == "null" ? "null" : "\"2026-09-19T09:30:00+00:00\"";
+        var page = $$"""
+            {
+              "items": [
+                {
+                  "id": "dec_1", "campaign_id": "cmp_1", "work_item_id": "wi_1", "status": "{{(shown is null ? "pending" : "answered")}}",
+                  "question": "Which account?",
+                  "raised_at": "2026-09-19T09:00:00+00:00", "answered_at": {{answered}}, "answered_by": {{answeredBy}}
+                }
+              ],
+              "next_cursor": null
+            }
+            """;
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("decision", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var row = cli.Text.ReplaceLineEndings("\n").Split('\n').Single(line => line.Contains("dec_1", StringComparison.Ordinal));
+        if (shown is null)
+        {
+            Assert.Matches(@"pending +- +cmp_1", row);
+            return;
+        }
+
+        Assert.Contains(shown, row, StringComparison.Ordinal);
     }
 
     /// <summary>
