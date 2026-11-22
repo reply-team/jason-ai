@@ -133,11 +133,10 @@ export interface DesktopChatOptions {
 /**
  * A chat's access mode, chosen per conversation from the menu beside the composer and kept on its record. `full_access`,
  * the mode of every new chat, the Feed's included, and of one whose record names none: it acts on this computer without
- * asking, with no confirmation; a turn on Codex, on a Claude Code below its floor or sent from a browser tab runs in Ask
- * first instead, said once, and the chat keeps the mode. `ask_first`: the agent asks on a card before anything the
- * desktop does not settle itself. `plan_only`: it reads and proposes, and changes nothing. `auto_edit`: Ask first, except
- * that the six file commands (mkdir, touch, mv, cp, rm, rmdir) run with no card on paths in the chat's own folder; no
- * confirmation, Claude Code only.
+ * asking, with no confirmation; a turn on Codex or on a Claude Code below its floor runs in Ask first instead, said once,
+ * and the chat keeps the mode. `ask_first`: the agent asks on a card before anything the desktop does not settle itself.
+ * `plan_only`: it reads and proposes, and changes nothing. `auto_edit`: Ask first, except that the six file commands
+ * (mkdir, touch, mv, cp, rm, rmdir) run with no card on paths in the chat's own folder; no confirmation, Claude Code only.
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
@@ -450,9 +449,10 @@ export interface DesktopHost {
     autoEdit: string | null;
     /**
      * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
-     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`); a mode not named runs as
-     * itself. The desktop decides it as it decides the turn, so the page draws the mode the next turn runs in, and why,
-     * and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is read as handing nothing.
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`, unreachable since 0.49.3);
+     * a mode not named runs as itself. The desktop decides it as it decides the turn, so the page draws the mode the next
+     * turn runs in, and why, and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is
+     * read as handing nothing.
      */
     runs: { window: DesktopTurnSteps; tab: DesktopTurnSteps };
     /**

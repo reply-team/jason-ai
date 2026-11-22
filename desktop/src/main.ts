@@ -5,6 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
+import './standard-streams.ts';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, Notification, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync, watchFile } from 'node:fs';
