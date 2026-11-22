@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Routing;
 
 /// <summary>
-/// The sends a route change must not strand: a send of a campaign that is not archived, which succeeded with the
+/// The sends the provider still holds, which a route change must not strand and which a stopped line takes back
+/// (<see cref="HeldSendCancels"/>): a send of a campaign that is not archived, which succeeded with the
 /// provider's reference, and whose own result says the provider can cancel it: <c>cancelable: true</c>, read as the
 /// operation's document defines the flag, where "absent reads as false", so a result that says nothing holds nothing, as
 /// one that says false does. Its moment is the one the provider took it for, its result's <c>accepted_for</c>, where it

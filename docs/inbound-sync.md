@@ -19,7 +19,20 @@ starts can be claimed in the same scan. Events, before it, hands a read of an ac
 
 **Respond** reads each active campaign's `inbound_reply_observed` lines above a watermark of its own, whichever writer
 said them — this read or the events store, which say a move under one key — at most 100 a campaign a scan, each in one
-short transaction with the watermark's guarded move. For a line about a thread that is the campaign's own — every line
+short transaction with the watermark's guarded move.
+
+First, in that transaction and before anything else the step does with the line, a reply **holds the line**: when the
+line's contact column names a person who is an `enrolled` member of the campaign, the membership becomes `paused`, and
+one reserved line, `contacts_paused`, says so as `system:dispatcher`, with the person and the reply line by their ids.
+It holds whatever follows — `Responder:OnReply` off, and every skip below, included — since a person who wrote is not
+written to again before somebody has read what they wrote. While the line is held the claim takes none of the person's
+touches in that campaign, and in the same transaction what the provider already holds for them there for a later moment
+is taken back, one `message.cancel` a letter ([work execution](work-execution.md), "A person's line in a campaign"). A
+member whose line is already held, ended or removed, and a line that names no contact, hold nobody. The hold is set
+again in the transaction that passes a line whose write was refused, so a responder that could not be made does not let
+the person's touches go on. The reply wakes the manager as it always has, and the manager continues the line or ends it.
+
+For a line about a thread that is the campaign's own — every line
 this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
 and that says `campaign_own`, because the thread was already the campaign's own or, where no campaign the reply was
 found in held it yet and the reply named no provider campaign, the campaign was the only one, of those not archived,
@@ -86,7 +99,8 @@ never a second one for a send that already has an open
 read the runtime made. Each read decides alone, when it ends: a read that finds the send bounced says
 `message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
 do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
-itself writes no line and no register entry, and a bounce of a send Jason did not make — a sequence's own email at the
+itself writes no line and no register entry, and neither holds nor ends the person's line, which a reply alone holds and
+the manager alone ends; and a bounce of a send Jason did not make — a sequence's own email at the
 provider, a mail written by hand, a send older than the window — stops nothing: where the campaign has no send it could
 be of, it asks for no read, and a read of a send that did not bounce decides nothing; a campaign with no send the bounce
 could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each logged once per
@@ -203,7 +217,8 @@ vendor block are not read out of the page at all, and appear in no line and no l
 
 **What a line does not know.** A line says that a thread the other side wrote into moved, not that the other side moved
 it last: a follow-up sent into a thread that already has a reply moves it too, and says it again. The manager reads the
-thread to know.
+thread to know. Such a line holds the person's line again, as any reply line does: a line continued after a reply is held
+once more by the next letter sent into that thread, and the manager continues it again once it has read the thread.
 
 ## 5. Where a read starts
 
