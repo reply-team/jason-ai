@@ -50,9 +50,47 @@ public class DeepReviewGridMigrationTests
         }
 
         // Read back through the model, as the summon reads it: a day after the migration, in UTC, to the second.
-        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
-        var grid = Assert.IsType<DateTime>(db.Campaigns.Single(c => c.PublicId == "cmp_active").DeepReviewDueAt);
-        Assert.InRange(grid, before.AddDays(1).AddSeconds(-1), after.AddDays(1).AddSeconds(1));
+        var floor = new DateTime(before.Ticks - (before.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc).AddDays(1);
+        var ceiling = new DateTime(after.Ticks - (after.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc).AddSeconds(1).AddDays(1);
+        DateTime grid;
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            grid = Assert.IsType<DateTime>(db.Campaigns.Single(c => c.PublicId == "cmp_active").DeepReviewDueAt);
+            Assert.Equal(DateTimeKind.Utc, grid.Kind);
+            Assert.InRange(grid, floor, ceiling);
+        }
+
+        // And as text: the backfill writes exactly what the model writes for a moment of campaigns. The model writes the
+        // value it read into another campaign's anchor, and the lowest and highest a day after the migration could be into
+        // two more; the backfill's text is the first byte for byte and lies between the other two as text, which only a
+        // value in the model's own layout can.
+        var raw = Moment(dir, "cmp_active", "deep_review_due_at");
+        Assert.Equal(EfWritten(dir, "cmp_draft", grid), raw);
+        var lowest = EfWritten(dir, "cmp_paused", floor);
+        var highest = EfWritten(dir, "cmp_archived", ceiling);
+        Assert.True(
+            string.CompareOrdinal(lowest, raw) <= 0 && string.CompareOrdinal(raw, highest) <= 0,
+            $"The backfill wrote '{raw}', which is not between '{lowest}' and '{highest}', a day after the migration as the model writes it.");
+    }
+
+    /// <summary>What the model writes for <paramref name="moment"/>: put into one campaign's anchor and read back as stored text.</summary>
+    private static string EfWritten(TempDataDir dir, string campaign, DateTime moment)
+    {
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            db.Campaigns.Single(c => c.PublicId == campaign).ManagerReviewAnchor = moment;
+            db.SaveChanges();
+        }
+
+        SqliteConnection.ClearAllPools();
+        return Moment(dir, campaign, "manager_review_anchor");
+    }
+
+    /// <summary>One moment column of one campaign, as the text the database holds.</summary>
+    private static string Moment(TempDataDir dir, string campaign, string column)
+    {
+        using var connection = Open(dir);
+        return Assert.Single(Rows(connection, $"SELECT {column} FROM campaigns WHERE public_id = '{campaign}'"));
     }
 
     [Fact]
