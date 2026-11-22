@@ -159,7 +159,7 @@ describe('the two sections', () => {
             desktop.keep({ id: 'conv_n', campaignId: null, title: 'Help me start', updatedAt: minutes(0) });
         });
         await waitFor(() => expect(titles()).toEqual(['Spring', 'Autumn', 'Summer referrals']));
-        expect(row('Autumn').querySelector('.t')?.textContent).toBe('');
+        expect(row('Autumn').querySelector('.t')?.textContent).toMatch(/^[0-9]+ (min|h|d)$/);
         fireEvent.click(row('Autumn'));
         await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_2', tab: 'chat' }));
         await waitFor(() => expect(row('Autumn').getAttribute('aria-current')).toBe('true'));
