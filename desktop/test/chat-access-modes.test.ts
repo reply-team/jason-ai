@@ -35,8 +35,10 @@ interface Rig {
     unchecked: number;
     /** The mode of each turn the log heard a tool the hook never saw in, where the turn went on. */
     filtered: ChatMode[];
-    /** The tool's word the log heard beside each of those (`claudeToolWord`). */
-    filteredTools: string[];
+    /** The tool's name, as the host said it, the log was given beside each of those. */
+    filteredTools: (string | undefined)[];
+    /** The mode and the tool of each turn the log heard the host refused a tool its mode takes out in (`removedRefused`). */
+    refused: [ChatMode, string][];
     /** Sends and waits for the turn's `done`; the events it said. */
     turn(id: string, text: string, options: unknown): Promise<ChatEvent[]>;
     until(id: string, take: (event: ChatEvent) => boolean): Promise<ChatEvent>;
@@ -66,6 +68,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
         unchecked: 0,
         filtered: [],
         filteredTools: [],
+        refused: [],
         until: (id, take) =>
             new Promise<ChatEvent>((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error(`chat ${id} never said what was waited for; it said ${JSON.stringify(events.get(id) ?? [])}`)), 20_000);
@@ -118,6 +121,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
                 r.filtered.push(mode);
                 r.filteredTools.push(tool);
             },
+            removedRefused: (mode, tool) => void r.refused.push([mode, tool]),
             started: (_host, _resumed, mode) => void r.started.push(mode),
             ...options.chat,
         });
@@ -370,11 +374,12 @@ test('a tool that ran without the hook stops the Full access turn and says Full 
 });
 
 /** A host that says one more tool as it is stopped, which ran without the hook: what a host may still print on its way out. */
-function sayingOnStop(): Partial<ChatOptions> {
-    const late = [
+function sayingOnStop(
+    late: string[] = [
         JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_late', name: 'Bash', input: { command: 'git status' } }] } }),
         JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_late', content: 'ok', is_error: false }] } }),
-    ];
+    ],
+): Partial<ChatOptions> {
     return {
         startHost: (launch, args, options) => {
             const host = startHost(launch, args, options);
@@ -602,6 +607,8 @@ test('in Ask first a tool the hook never saw is no reason to stop: the turn runs
 /** What Claude Code says, as an error result, of a tool a bare rule took out of the turn, before any hook fires. */
 const noSuchTool = (tool: string) => `<tool_use_error>Error: No such tool available: ${tool}</tool_use_error>`;
 const addContent = { command: 'Add-Content -Path C:\\elsewhere\\notes.txt -Value x' };
+/** The init line's tools: every tool of the stand-in less the bare rules of the start, as Claude Code takes them out. */
+const removedFromInit = { STUB_INIT_TOOLS: 'removed' };
 
 /** A chat that ran one turn in Full access, then put in `mode`: its conversation names the tools that turn had. */
 async function afterFullAccess(r: Rig, mode: ChatMode): Promise<string> {
@@ -615,8 +622,8 @@ async function afterFullAccess(r: Rig, mode: ChatMode): Promise<string> {
 }
 
 for (const mode of ['ask_first', 'auto_edit'] as const) {
-    test(`in ${mode} after a Full access turn, a tool that mode takes out, refused by Claude Code before any hook, is no tool the hook missed: no notice, no log line, and Full access is still offered`, async (t) => {
-        const r = rig(t);
+    test(`in ${mode} after a Full access turn, a tool that mode takes out, refused by Claude Code before any hook and not on the start's own list of its tools, is no tool the hook missed: no notice, no filtered-hook line, one line of its own per turn, and Full access is still offered`, async (t) => {
+        const r = rig(t, { env: removedFromInit });
         const id = await afterFullAccess(r, mode);
         plan(r, [
             { unhooked: { tool: 'PowerShell', input: addContent, refused: noSuchTool('PowerShell') } },
@@ -628,58 +635,105 @@ for (const mode of ['ask_first', 'auto_edit'] as const) {
         assert.ok(texts(said).includes('after the tools'), 'the turn runs on');
         assert.deepEqual(notices(said), [], 'no notice');
         assert.deepEqual(r.filtered, [], 'no log line of a filtered hook');
+        assert.deepEqual(r.refused, [[mode, 'PowerShell']], 'one line of its own in the turn, by the first such tool');
         assert.equal(r.unchecked, 0);
         assert.equal(r.chat.bypassUnavailable(), null, 'Full access is still offered');
-        // The next Full access turn, of this chat or another, runs in Full access.
+        plan(r, [{ unhooked: { tool: 'Monitor', input: { command: 'tail -f log.txt' }, refused: noSuchTool('Monitor') } }]);
+        await r.turn(id, 'again', claude);
+        assert.deepEqual(r.refused, [[mode, 'PowerShell'], [mode, 'Monitor']], 'and one in the next turn');
+        // The next Full access turn runs in Full access.
         await r.chat.setMode(id, 'full_access', 'claude');
         plan(r, [{ say: 'back in full access' }]);
         const back = await r.turn(id, 'again', claude);
         assert.deepEqual(notices(back), []);
         assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), 'bypassPermissions');
-        assert.deepEqual(r.started, ['full_access', mode, 'full_access']);
+        assert.deepEqual(r.started, ['full_access', mode, mode, 'full_access']);
     });
 
     for (const tool of ['PowerShell', 'Monitor']) {
         test(`in ${mode} after a Full access turn, ${tool}, which that mode takes out, coming back with a result that is no error ran unseen by the hook: today's notice, its log line, and Full access held off`, async (t) => {
-            const r = rig(t);
+            const r = rig(t, { env: removedFromInit });
             const id = await afterFullAccess(r, mode);
             plan(r, [{ unhooked: { tool, input: addContent } }, { say: 'after the tool' }]);
             const said = await r.turn(id, 'append to the file', claude);
             assert.deepEqual(done(said), { kind: 'done', error: null });
             assert.deepEqual(notices(said), [hookFilteredSentence]);
             assert.deepEqual(r.filtered, [mode]);
+            assert.deepEqual(r.filteredTools, [tool]);
+            assert.deepEqual(r.refused, []);
             assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null }, 'Full access is held off');
         });
+
+        for (const [init, env] of [
+            ['lists it', { STUB_INIT_TOOLS: JSON.stringify(['Bash', 'Read', tool]) }],
+            ['was never read', {}],
+        ] as const) {
+            test(`in ${mode} after a Full access turn, ${tool} with an error result unseen by the hook, where the start's own list of its tools ${init}, keeps today's path`, async (t) => {
+                const r = rig(t, { env });
+                const id = await afterFullAccess(r, mode);
+                plan(r, [{ unhooked: { tool, input: addContent, refused: noSuchTool(tool) } }, { say: 'after the tool' }]);
+                const said = await r.turn(id, 'append to the file', claude);
+                assert.deepEqual(notices(said), [hookFilteredSentence]);
+                assert.deepEqual(r.filtered, [mode]);
+                assert.deepEqual(r.filteredTools, [tool]);
+                assert.deepEqual(r.refused, []);
+                assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null });
+            });
+        }
     }
 
     test(`in ${mode} after a Full access turn, a tool that mode keeps, unseen by the hook, keeps today's path even with an error result`, async (t) => {
-        const r = rig(t);
+        const r = rig(t, { env: removedFromInit });
         const id = await afterFullAccess(r, mode);
         plan(r, [{ unhooked: { tool: 'Bash', input: { command: 'git status' }, refused: noSuchTool('Bash') } }, { say: 'after the tool' }]);
         const said = await r.turn(id, 'go', claude);
         assert.deepEqual(notices(said), [hookFilteredSentence]);
         assert.deepEqual(r.filtered, [mode]);
-        assert.deepEqual(r.filteredTools, ['Bash'], 'the log names Claude Code\'s own tool');
+        assert.deepEqual(r.filteredTools, ['Bash']);
+        assert.deepEqual(r.refused, []);
         assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null });
     });
 }
 
-test('in Full access, which keeps PowerShell, an error result its hook never saw still stops the turn; Monitor, which Full access takes out too, refused by Claude Code before any hook, does not', async (t) => {
-    const refused = rig(t);
+test('in Full access, which keeps PowerShell, an error result its hook never saw still stops the turn; Monitor, which Full access takes out too, refused by Claude Code before any hook and not on the start\'s list, does not', async (t) => {
+    const refused = rig(t, { env: removedFromInit });
     const first = await refused.chat.create();
     plan(refused, [{ unhooked: { tool: 'Monitor', input: { command: 'tail -f log.txt' }, refused: noSuchTool('Monitor') } }, { say: 'after the tool' }]);
     const ranOn = await refused.turn(first.id, 'watch the log', claude);
     assert.deepEqual(done(ranOn), { kind: 'done', error: null });
     assert.ok(texts(ranOn).includes('after the tool'));
     assert.equal(refused.unchecked, 0);
+    assert.deepEqual(refused.refused, [['full_access', 'Monitor']]);
     assert.equal(refused.chat.bypassUnavailable(), null);
-    const kept = rig(t);
+    const kept = rig(t, { env: removedFromInit });
     const second = await kept.chat.create();
     plan(kept, [{ unhooked: { tool: 'PowerShell', input: addContent, refused: noSuchTool('PowerShell') } }, { say: 'after the tool' }]);
     const stopped = await kept.turn(second.id, 'append to the file', claude);
     assert.deepEqual(done(stopped), { kind: 'done', error: unguardedSentence });
     assert.equal(kept.unchecked, 1);
+    assert.deepEqual(kept.refused, []);
     assert.deepEqual(kept.chat.bypassUnavailable(), { why: 'unguarded', named: null });
+});
+
+test('the removed set is the start\'s own mode, never the conversation\'s: a Full access start stopped by a change to Ask first, saying on its way out a PowerShell error result its hook never saw, keeps today\'s path, though its list of tools does not name PowerShell', async (t) => {
+    const late = [
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_late_ps', name: 'PowerShell', input: addContent }] } }),
+        JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_late_ps', content: 'exit 1', is_error: true }] } }),
+    ];
+    const r = rig(t, { chat: sayingOnStop(late), env: { STUB_INIT_TOOLS: JSON.stringify(['Bash', 'Read']) } });
+    const { id } = await r.chat.create();
+    const go = join(r.b.root, 'go');
+    plan(r, [{ say: 'working' }, { hold: go }, { say: 'never shown' }]);
+    const ended = r.until(id, (event) => event.kind === 'done');
+    await r.chat.send(id, 'go', claude);
+    await r.until(id, (event) => event.kind === 'text' && event.text === 'working');
+    await r.chat.setMode(id, 'ask_first');
+    await ended;
+    writeFileSync(go, '');
+    assert.equal(r.chat.modeNow(id), 'ask_first');
+    assert.equal(r.unchecked, 1, 'the Full access start\'s tool ran unseen');
+    assert.deepEqual(r.refused, []);
+    assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null });
 });
 
 /** A host start that keeps the turn's settings file as it was when the host was started, beside its arguments. */

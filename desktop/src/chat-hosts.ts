@@ -51,7 +51,7 @@ export const fullAccessRemovedTools: readonly string[] = ['Monitor'];
 /**
  * The tools a turn of `mode` is started with taken out (`--disallowedTools`), the one list its command line names and the
  * turn reads its tool results by. A conversation may still name one of them, from a turn of another mode it held: Claude
- * Code then refuses the use as a tool it does not have, before any hook fires, and its result is an error.
+ * Code then refuses the use, before any hook fires, as a tool the start does not have.
  */
 export function claudeRemovedToolsOf(mode: ChatMode): readonly string[] {
     return [...(mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools), ...(mode === 'plan_only' ? planRemovedTools : [])];
@@ -801,6 +801,11 @@ export type HostLine =
     | { kind: 'session'; id: string }
     /** The permission mode Claude Code says the turn runs in, on its `system/init` line, as one word. */
     | { kind: 'permission_mode'; mode: string }
+    /**
+     * The tools Claude Code says the start has, on its `system/init` line (`tools`): said only when the line carries a
+     * list of names and nothing else, so a start that says none, or a list of anything but names, says nothing.
+     */
+    | { kind: 'tools'; names: readonly string[] }
     /** Claude Code began to use a tool: its id and name, said before the step that shows it. */
     | { kind: 'tool_use'; id: string; name: string }
     /**
@@ -982,7 +987,8 @@ export function claudeLine(line: string): HostLine[] {
         // The mode the turn runs in: a Full access turn whose host turned its bypass off says so here alone, as seen on 2.1.329.
         // It comes first, so a start stopped for it names no session.
         const mode: HostLine[] = typeof event.permissionMode === 'string' && /^[A-Za-z]{1,32}$/.test(event.permissionMode) ? [{ kind: 'permission_mode', mode: event.permissionMode }] : [];
-        return [...mode, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
+        const tools: HostLine[] = Array.isArray(event.tools) && event.tools.every((name) => typeof name === 'string') ? [{ kind: 'tools', names: event.tools as string[] }] : [];
+        return [...mode, ...tools, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
     }
     if (event.type === 'system' && event.subtype === 'api_retry') {
         if (event.error === 'authentication_failed' || event.error_status === 401) return [{ kind: 'refused' }];

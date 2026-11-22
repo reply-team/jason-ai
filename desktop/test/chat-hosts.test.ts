@@ -698,6 +698,7 @@ test('a recorded Claude Code turn maps to its mode, its session, its words and o
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
         { kind: 'permission_mode', mode: 'default' },
+        { kind: 'tools', names: ['Bash', 'Read', 'Skill'] },
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
@@ -842,6 +843,13 @@ test('a tool\'s result says it was an error only when Claude Code marks it so, `
     const result = (extra: string) => claudeLine(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"<tool_use_error>Error: No such tool available: PowerShell</tool_use_error>"${extra}}]}}`);
     assert.deepEqual(result(',"is_error":true'), [{ kind: 'tool_result', id: 'toolu_9', error: true }]);
     for (const extra of ['', ',"is_error":false', ',"is_error":"true"', ',"is_error":1', ',"is_error":null']) assert.deepEqual(result(extra), [{ kind: 'tool_result', id: 'toolu_9' }], extra);
+});
+
+test('the init line says the start\'s tools only when it carries a list of names and nothing else', () => {
+    const init = (tools: string) => claudeLine(`{"type":"system","subtype":"init"${tools}}`).filter((line) => line.kind === 'tools');
+    assert.deepEqual(init(',"tools":["Bash","mcp__s__t"]'), [{ kind: 'tools', names: ['Bash', 'mcp__s__t'] }]);
+    assert.deepEqual(init(',"tools":[]'), [{ kind: 'tools', names: [] }]);
+    for (const tools of ['', ',"tools":null', ',"tools":"Bash"', ',"tools":["Bash",1]', ',"tools":[{"name":"Bash"}]', ',"tools":{"0":"Bash"}']) assert.deepEqual(init(tools), [], tools);
 });
 
 test('the tools a turn takes out are one list per mode, the one its command line names', () => {

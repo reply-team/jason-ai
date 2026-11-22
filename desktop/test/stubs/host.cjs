@@ -35,6 +35,7 @@
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
+// STUB_INIT_TOOLS puts a `tools` list on Claude Code's init line (`initTools`); without it the line carries none.
 // STUB_INIT_MODE is the mode Claude Code's init line names; without it the line names none. STUB_FORCED_DEFAULT has Claude
 // Code force its default mode and say so on stderr, as 2.1.329 does under CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1: "scrub"
 // where the start's environment sets that, "always" on every start that asks for another mode. STUB_BYPASS "refused"
@@ -121,6 +122,23 @@ function hookOf(args) {
     } catch {
         return null;
     }
+}
+
+/** Every tool the stand-in has, before a start's bare `--disallowedTools` rules take any out. */
+const allTools = ['Task', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'WebFetch', 'WebSearch', 'Skill', 'PowerShell', 'Monitor', 'ExitPlanMode'];
+
+/**
+ * The `tools` the init line lists (`STUB_INIT_TOOLS`): unset, none at all; "removed", every tool less the bare names of
+ * the start's `--disallowedTools`, as Claude Code takes them out; otherwise the JSON list given, as it is.
+ */
+function initTools(args) {
+    const asked = process.env.STUB_INIT_TOOLS;
+    if (asked === undefined || asked === '') return {};
+    if (asked !== 'removed') return { tools: JSON.parse(asked) };
+    const at = args.indexOf('--disallowedTools');
+    const bare = new Set();
+    for (let i = at + 1; at >= 0 && i < args.length && !args[i].startsWith('--'); i++) if (!args[i].includes('(')) bare.add(args[i]);
+    return { tools: allTools.filter((tool) => !bare.has(tool)) };
 }
 
 /** The permission mode the turn was started in: the flag's value, or Claude Code's default. */
@@ -215,7 +233,7 @@ async function claude(args, stdin) {
         if (forking && existsSync(join(store, asked))) writeFileSync(join(store, session), readFileSync(join(store, asked)));
         appendFileSync(join(store, session), stdin);
     }
-    print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+    print({ type: 'system', subtype: 'init', session_id: session, ...initTools(args), ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
