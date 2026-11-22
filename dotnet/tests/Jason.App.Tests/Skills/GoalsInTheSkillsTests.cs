@@ -17,8 +17,9 @@ public sealed partial class GoalsInTheSkillsTests
     private static partial Regex Whitespace();
 
     /// <summary>
-    /// Every <c>goals</c> value a skill prints in a context it writes, read out of the printed line and held to the
-    /// document the runtime enforces. A skill that prints none fails here too: the two are the ones that print how a
+    /// Every <c>goals</c> value a skill prints in a context it writes, read out of the printed line or out of the request
+    /// its here-document hands the program — under <c>set</c> or <c>context</c> — and held to the document the runtime
+    /// enforces. A skill that prints none fails here too: the two are the ones that print how a
     /// campaign is given its goals; the session file points to the second for it.
     /// </summary>
     [Theory]
@@ -30,20 +31,47 @@ public sealed partial class GoalsInTheSkillsTests
         Assert.NotNull(contract);
 
         var found = 0;
-        foreach (var line in SkillPack.PrintedCommands(SkillPack.Find(skill).File))
+        foreach (var command in SkillPack.Printed(SkillPack.Find(skill).File))
         {
-            foreach (Match quoted in QuotedObject().Matches(line))
+            foreach (var context in Contexts(command))
             {
-                if (JsonNode.Parse(quoted.Groups[1].Value) is JsonObject context && context.TryGetPropertyValue("goals", out var goals))
+                if (context.TryGetPropertyValue("goals", out var goals))
                 {
                     found++;
                     var problems = contract.CheckValue(goals);
-                    Assert.True(problems.Count == 0, $"{skill} prints goals the runtime refuses: {line} -> {string.Join("; ", problems)}");
+                    Assert.True(problems.Count == 0, $"{skill} prints goals the runtime refuses: {command.Line} -> {string.Join("; ", problems)}");
                 }
             }
         }
 
         Assert.True(found > 0, $"{skill} prints no goals in a context it writes.");
+    }
+
+    /// <summary>
+    /// The objects a printed command writes into a context: each quoted on its line, and the request its body hands the
+    /// program, with what that request carries under <c>set</c> and <c>context</c>.
+    /// </summary>
+    private static IEnumerable<JsonObject> Contexts(PrintedCommand command)
+    {
+        foreach (Match quoted in QuotedObject().Matches(command.Line))
+        {
+            if (JsonNode.Parse(quoted.Groups[1].Value) is JsonObject context)
+            {
+                yield return context;
+            }
+        }
+
+        if (command.Body is not null && JsonNode.Parse(command.Body) is JsonObject request)
+        {
+            yield return request;
+            foreach (var key in new[] { "set", "context" })
+            {
+                if (request[key] is JsonObject inner)
+                {
+                    yield return inner;
+                }
+            }
+        }
     }
 
     /// <summary>The kinds a skill lists are the document's, all of them and no other.</summary>

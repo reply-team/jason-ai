@@ -152,7 +152,7 @@ public partial class InteractiveSkillTests
         var paragraph = Whitespace().Replace(text[start..(end > start ? end : text.Length)], " ").Trim();
 
         Assert.Equal(
-            Opening + " What the person told you about the campaign — the product, the audience, how it sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any contact is added and before anything is sent. "
+            Opening + " What the person told you about the campaign — the product, the audience, how it sells, in their own words — is the campaign's context, given at `jason campaign create` as the `context` of the request it reads on standard input (`--file -`), before any contact is added and before anything is sent. "
             + "It is the campaign's shared knowledge: a role that reads the campaign (`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its keys are yours to name for what they hold, apart from `goals`, the one key Jason reserves and checks (below). "
             + "Keep the person's own words beside what you made of them, and put a link or a file in as what it says, briefly, with where it is, rather than pasted whole. "
             + "This `jason campaign create` makes Jason's own campaign; it is not the provider operation `campaign.create`, which makes a campaign at a provider.",
@@ -166,15 +166,16 @@ public partial class InteractiveSkillTests
         Assert.True(from >= 0 && to > from, "managed-campaign-work no longer has \"## The work itself\" followed by another section.");
         var work = text[from..to];
 
-        var printed = SkillPack.PrintedCommands(work.Split('\n')).ToList();
+        var commands = SkillPack.Printed(work.Split('\n'));
+        var printed = commands.Select(command => command.Line).ToList();
         var create = printed.FindIndex(line => line.StartsWith("jason campaign create ", StringComparison.Ordinal));
         var contacts = printed.FindIndex(line => line.StartsWith("jason campaign add-contacts ", StringComparison.Ordinal));
         Assert.True(
             create >= 0 && contacts > create,
             $"Under \"The work itself\" the campaign create is printed at line {create} and the first add-contacts at line {contacts} of: {string.Join(" | ", printed)}");
         Assert.True(
-            printed[create].Contains(" --context '{", StringComparison.Ordinal),
-            $"The campaign create under \"The work itself\" gives the campaign no brief: {printed[create]}");
+            commands[create].Body is { } body && JsonNode.Parse(body)?["context"] is JsonObject,
+            $"The campaign create under \"The work itself\" gives the campaign no brief in the request it hands the program: {printed[create]}");
 
         var block = work.IndexOf(printed[create], StringComparison.Ordinal);
         var brief = work.IndexOf(Opening, StringComparison.Ordinal);
@@ -200,12 +201,12 @@ public partial class InteractiveSkillTests
         Assert.True(start >= 0, "managed-campaign-work has no paragraph on a change of direction.");
         var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
         Assert.Equal(
-            Opening + " On a campaign that already exists, what the person changes about it is written with `jason campaign update-context`: `--set` writes the top-level keys it names, `--unset` removes a key, once for each, and every key it does not name stays as it was.",
+            Opening + " On a campaign that already exists, what the person changes about it is written with `jason campaign update-context`: `set`, in the request it reads on standard input, writes the top-level keys it names, `--unset` removes a key, once for each, and every key it does not name stays as it was.",
             Whitespace().Replace(text[start..(end > start ? end : text.Length)], " ").Trim());
 
         var brief = text.IndexOf("**The brief becomes the campaign.**", StringComparison.Ordinal);
         var keys = text.IndexOf("**Give every create a key you could send again.**", StringComparison.Ordinal);
-        var printed = text.IndexOf("\njason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set ", StringComparison.Ordinal);
+        var printed = text.IndexOf("\njason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD ", StringComparison.Ordinal);
         Assert.True(
             brief >= 0 && start > brief && printed > start && keys > printed,
             $"The paragraph on a change of direction is at offset {start} and its line at {printed}; they belong after the paragraph on the brief (offset {brief}) and before the one on keys (offset {keys}).");
@@ -321,26 +322,30 @@ public partial class InteractiveSkillTests
     /// The guard over printed commands asks only whether a line parses; the arguments of a provider operation are judged
     /// later, at <c>workitem.create</c>, against the operation's own document. So each <c>--input</c> the skill prints is
     /// judged here against that document, and an operation that needs the work item's person names one: a session copies
-    /// these lines, and a line refused at the create teaches the session that the managed path does not work.
+    /// these lines, and a line refused at the create teaches the session that the managed path does not work. The arguments
+    /// are the line's <c>--input</c>, or the <c>context.input</c> of the request its here-document hands the program.
     /// </summary>
     [Fact]
     public void Every_provider_operation_the_managed_path_prints_carries_arguments_its_document_accepts()
     {
-        var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File)
-            .Where(line => line.Contains(" --kind provider_op ", StringComparison.Ordinal))
+        var printed = SkillPack.Printed(SkillPack.Find("managed-campaign-work").File)
+            .Where(command => command.Line.Contains(" --kind provider_op ", StringComparison.Ordinal))
             .ToList();
 
         var operations = new List<string>();
-        foreach (var line in printed)
+        foreach (var command in printed)
         {
+            var line = command.Line;
             var words = ShellWords.Split(line);
             var operation = ValueOf(words, "--operation") ?? string.Empty;
             var contract = OperationCatalog.Find(operation);
             Assert.True(contract is not null, $"managed-campaign-work prints a work item for '{operation}', which is no published operation: {line}");
 
-            var input = ValueOf(words, "--input");
-            Assert.True(input is not null, $"managed-campaign-work prints a work item for {operation} with no --input: {line}");
-            var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(JsonNode.Parse(input), contract.ArgumentSchema));
+            var input = ValueOf(words, "--input") is { } inline
+                ? JsonNode.Parse(inline)
+                : command.Body is { } body ? JsonNode.Parse(body)?["context"]?["input"]?.DeepClone() : null;
+            Assert.True(input is not null, $"managed-campaign-work prints a work item for {operation} with no arguments, on the line or in its body: {line}");
+            var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(input, contract.ArgumentSchema));
             Assert.True(
                 problems.Count == 0,
                 $"The --input managed-campaign-work prints for {operation} is refused by its document: "
