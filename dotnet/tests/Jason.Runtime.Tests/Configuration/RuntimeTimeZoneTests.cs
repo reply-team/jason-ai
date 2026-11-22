@@ -43,7 +43,6 @@ public class RuntimeTimeZoneTests
     [InlineData("Europe/Berlin")]
     [InlineData("UTC")]
     [InlineData("Etc/UTC")]
-    [InlineData(" Asia/Tokyo ")]
     [InlineData("")]
     [InlineData("   ")]
     public void A_known_iana_id_or_nothing_is_taken(string zone)
@@ -52,8 +51,9 @@ public class RuntimeTimeZoneTests
     }
 
     /// <summary>
-    /// An id no system knows is refused, and so is a Windows id, a vocabulary of one system's own, and an IANA id in another
-    /// case than the zone's own: Windows and macOS find <c>asia/tokyo</c> where Linux does not, so it is refused on all three.
+    /// An id no system knows is refused, and so is a Windows id, a vocabulary of one system's own, an IANA id in another
+    /// case than the zone's own: Windows and macOS find <c>asia/tokyo</c> where Linux does not, so it is refused on all three,
+    /// and an id with white space around it, since the zone's resolved id must equal the text exactly.
     /// </summary>
     [Theory]
     [InlineData(Planted, Refusal)]
@@ -65,6 +65,10 @@ public class RuntimeTimeZoneTests
         + "the value written is 3 characters long and is not one this system knows by that spelling.")]
     [InlineData("Tokyo Standard Time", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
         + "the value written is 19 characters long and is not one this system knows by that spelling.")]
+    [InlineData(" Asia/Tokyo ", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 12 characters long and is not one this system knows by that spelling.")]
+    [InlineData(" UTC ", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 5 characters long and is not one this system knows by that spelling.")]
     public void An_unknown_or_a_windows_id_is_refused_by_its_length(string zone, string expected)
     {
         var result = new RuntimeOptionsValidator().Validate(null, new RuntimeOptions { TimeZone = zone });
@@ -197,7 +201,6 @@ public class RuntimeTimeZoneTests
     /// <summary>The day is named by the zone's own id, and both spellings of UTC name one day, <c>UTC</c>.</summary>
     [Theory]
     [InlineData("Asia/Tokyo", "Asia/Tokyo")]
-    [InlineData(" Asia/Tokyo ", "Asia/Tokyo")]
     [InlineData("UTC", "UTC")]
     [InlineData("Etc/UTC", "UTC")]
     public void The_day_is_named_by_the_zone_s_own_id(string written, string named)

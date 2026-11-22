@@ -264,8 +264,10 @@ The runtime writes the brief, and the brief is identifiers and constants:
     "qualifying_count": 3
   },
   "allowed_operations": ["workitem.create", "workitem.update", "workitem.cancel",
-                         "campaign.update_context", "journal.append", "rolenote.set",
-                         "approval.list", "report.list", "decision.raise", "decision.list", "campaign.pause"],
+                         "campaign.update_context", "campaign.finish_contacts",
+                         "campaign.continue_contacts", "campaign.reopen_contacts", "journal.append",
+                         "rolenote.set", "approval.list", "report.list", "reply.record", "decision.raise",
+                         "decision.list", "campaign.pause"],
   "escalation": "decision.raise"
 }
 ```

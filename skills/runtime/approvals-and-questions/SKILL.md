@@ -189,8 +189,10 @@ runtime takes only a question that is answered, so the answer comes first. It ch
 campaign's, answered by a named person, and about that line, and reopens only the people the line ended
 whose line it was the latest to end (`not_in_decision` for anybody else, and for a person whose line was ended again
 later, who needs a question of their own); it never reads what the answer says, so you run the reopen on a yes alone. On any
-other answer, record it and reopen nothing. When the person tells you directly to reopen somebody's line, with no
-question behind it, run it as theirs without `--decision`:
+other answer, record it and reopen nothing. Before you reopen, read the person's touches. Where they stand at the
+ceiling, say that reopening alone sends nothing more, since the next touch is refused and the line ends again, and that
+the ceiling is the installation's setting; then do as they say. When the person tells you directly to reopen
+somebody's line, with no question behind it, run it as theirs without `--decision`:
 
 ```
 jason decision answer dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --answer "yes, write to Marta again" --option "write to them again" --actor human:ada

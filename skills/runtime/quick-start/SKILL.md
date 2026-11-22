@@ -42,6 +42,9 @@ yet, the set-up in `managed-campaign-work` asks for it once, first, as it says.
 
 ## 2. Read the channels, never ask for them
 
+Before you make anything, read `jason campaign list`; where a draft campaign already stands for what they sell, take it
+up as the set-up's, as `managed-campaign-work` says, and create no second one.
+
 Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it,
 under a name drawn from what the campaign is for, with the offer and the audience in their own words as its context
 (`managed-campaign-work` says how). Neither is asked about. Then ask the runtime which provider each channel goes

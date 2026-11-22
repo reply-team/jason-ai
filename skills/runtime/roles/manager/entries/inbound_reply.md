@@ -139,7 +139,7 @@ take-back of your own beside it. The hold cancels nothing else and never stops t
 read, the responder and an `optout.record` go on. What becomes of the line is yours, and you end it or continue it: the
 reply's verdict says which. Read the latest `reply_classified` line for the thread, as your skill's review says:
 
-- **A person wrote for themselves, or asked to stop** — nature `person` or `opt_out`: end their line in this campaign.
+- **A person wrote for themselves, or asked to stop** — nature `person`, other than `not_now`, or `opt_out`: end their line in this campaign.
   Their conversation goes on: an answer in their thread is no touch, and ending the line never reaches it. Where they
   asked to stop, ending the line is the whole of your part: the register's entry and the provider's opt-out are the
   responder's, recorded with its verdict, or the person's own, and you put nothing on the register yourself.

@@ -57,7 +57,7 @@ they answered it.
 
 A notification is a pointer: how many approvals and questions are waiting, how many replies came in, how many
 protective actions failed, how many accounts have events Jason did not read, how many provider blocks hold how many work
-items, how many items wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and
+items, how many items wait on a daily limit of launches, how many emails bounced, and where to look. It decides nothing, and
 nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through their
 agent, or `jason approval list` and `jason approval approve`.
 

@@ -588,6 +588,22 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// The quick start reads the campaigns that exist before it makes one: a draft that already stands for what the
+    /// person sells is taken up as the set-up's, and no second one is created. A real host given a seeded draft made a
+    /// second campaign beside it, because nothing in the skill read what was there.
+    /// </summary>
+    [Fact]
+    public void The_quick_start_takes_up_a_standing_draft_and_creates_no_second_campaign()
+    {
+        var skill = Flattened("quick-start");
+        var makes = skill.IndexOf("Make a project named from what the person sells", StringComparison.Ordinal);
+        var reads = skill.IndexOf("Before you make anything, read `jason campaign list`; where a draft campaign already stands for what they sell, take it up as the set-up's, as `managed-campaign-work` says, and create no second one.", StringComparison.Ordinal);
+
+        Assert.True(reads >= 0, "the quick start does not read the campaigns that exist");
+        Assert.True(reads < makes, "the quick start reads the campaigns only after it makes one");
+    }
+
+    /// <summary>
     /// The quick start is what a person meets first, so the words the person sees are held exactly: the one question and
     /// its invitation, the plan message's last line, the line of fact about connected channels, the firm line when none is
     /// connected, and the wiring line in the message after "go". A paraphrase would change what the first minutes say.

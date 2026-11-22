@@ -278,8 +278,8 @@ jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 **After the start, say what happens, and stop.** Tell the person, in a few words, that the start has summoned the
 campaign's manager, and that the work that follows is the manager's and the roles' to plan; that each message comes to
 them for their yes, in Needs you in Jason Desktop or `jason approval list` in a terminal, unless they chose that such
-messages go on their own. Say nothing about when the first one will be ready, and stop: the set-up, and your part in
-it, are done.
+messages go on their own. What the set-up already said about a check, the roles or the notifications, is not said
+again here. Say nothing about when the first one will be ready, and stop: the set-up, and your part in it, are done.
 
 Where the person asks you to keep watching, read and tell them what you read, and create nothing in answer to it. A
 campaign with no work a minute after its start is waiting for its manager's review:
@@ -863,7 +863,8 @@ campaign moving asks the person and commits what they decide, as above, and `app
 `troubleshooting-jason` cover what is waiting and what stopped. Where a campaign seems to stand, say what you read and
 that its manager is the one to look again; do not fill the gap with work of your own. On the person's word, ask its
 manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open
-(`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).
+(`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`). Where the chat's
+mode only reads and proposes, you ask for no review: say that this mode does not.
 
 ```
 jason campaign review cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --depth deep --actor human:ada --reason 'the person asked for a look now'

@@ -40,6 +40,19 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// What the set-up already said about a check, the roles or the notifications, is said once: the summary after the
+    /// start does not say it again. A real host said "notifications are off" before the start and again in the summary.
+    /// </summary>
+    [Fact]
+    public void The_summary_after_the_start_does_not_say_again_what_the_set_up_said_about_a_check()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        Assert.Contains("**After the start, say what happens, and stop.**", skill, StringComparison.Ordinal);
+        Assert.Contains("What the set-up already said about a check, the roles or the notifications, is not said again here.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A pause is never asked: stopping is the protective direction, so a bare "pause all" pauses each campaign at once and
     /// the agent then says which were paused, while a bare all for starting or archiving is asked once. Said beside the
     /// archive's sentences, as rule 21 of the chat's instructions says it. A session that asked before pausing everything
@@ -1249,6 +1262,12 @@ public partial class InteractiveSkillTests
         var skill = Flattened("managed-campaign-work");
         Assert.Contains(
             "On the person's word, ask its manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).",
+            skill,
+            StringComparison.Ordinal);
+
+        // A review creates work, so a chat whose mode only reads and proposes asks for none, as it starts nothing.
+        Assert.Contains(
+            "(`launches_spent`). Where the chat's mode only reads and proposes, you ask for no review: say that this mode does not.",
             skill,
             StringComparison.Ordinal);
 
