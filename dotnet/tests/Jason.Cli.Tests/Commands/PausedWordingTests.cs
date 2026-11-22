@@ -16,7 +16,7 @@ namespace Jason.Cli.Tests.Commands;
 public partial class PausedWordingTests
 {
     /// <summary>The wordings that call the paused state held.</summary>
-    [GeneratedRegex(@"\bheld (?:line|lines|person|people|member|members|contact|contacts)\b|\bline (?:is |stays )?held\b|\bpeople held in\b|\bwho is not held\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bheld (?:line|lines|person|people|member|members|contact|contacts)\b|\bline (?:is |stays )?(?:only )?held\b|\bpeople held in\b|\bwho is not held\b", RegexOptions.IgnoreCase)]
     internal static partial Regex HeldForPaused();
 
     [Theory]
@@ -30,6 +30,7 @@ public partial class PausedWordingTests
     [InlineData("a held person", true)]
     [InlineData("a held member", true)]
     [InlineData("the line is held", true)]
+    [InlineData("one whose line is only held, paused, still counts", true)]
     [InlineData("an item held at a daily limit of launches", false)]
     [InlineData("a letter the provider holds for later", false)]
     [InlineData("audience_search_held", false)]

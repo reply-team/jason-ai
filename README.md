@@ -273,7 +273,7 @@ the money.
 Every message travels the same line, and you sit in the middle of it:
 
 ```text
-plan → research → write → personalize → critique → ✋ you approve → send → read the reply → re-plan for that person
+plan → write → personalize → ✋ you approve, or a critic where you let it go on its own → send → read the reply → re-plan for that person
 ```
 
 Day to day, it goes like this:
@@ -337,7 +337,7 @@ Instead of one AI doing everything, the work is split the way a good sales team 
 | **Researcher** | Finds the right people and the facts about them | A new office, a funding round, a fresh job title |
 | **Copywriter** | Writes the core message and the follow-ups | The pitch, in your voice |
 | **Personalizer** | Makes each message about the person reading it | "Saw you just opened in Denver…" |
-| **Critic** | Reviews the drafts the planner hands it | Sends back a claim you can't prove |
+| **Critic** | Reads each message that would go on its own, before it goes | Sends back a claim you can't prove |
 | **Responder** | Reads replies and drafts the answer | Tells "not now" from "interested" from "talk to my colleague" |
 | **Analyst** | Tells you what's working | "LinkedIn gets twice the replies of email for this group." |
 | **Deliverability** | Keeps your mail out of spam | Pauses a campaign whose bounces climb |
@@ -346,7 +346,7 @@ The roles run in the background on the host you chose, on your plan. When one ca
 and the work waits for your answer in whichever session you give it.
 
 The Manager wakes on what happens: a campaign's start, a failure, a rejected approval, a reply, an answered question, a
-provider event or block, or something you reported. If nothing happens, it looks in anyway, every six hours unless you
+provider event or block, the audience running low or a search ending, or something you reported. If nothing happens, it looks in anyway, every six hours unless you
 set another pace for that campaign, and once a day it gives the campaign a deep review.
 
 ---

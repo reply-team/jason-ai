@@ -534,8 +534,8 @@ of the campaign under way.
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about
 somebody by itself, the read of a thread that moved and the responder it woke, does not touch them. The step counts by
 the summary's own definition, so the number it says is the number `jason campaign summary` shows. A member whose line
-is ended, whom the summary counts under `finished`, is not untouched and is left out; one whose line is only held,
-`paused`, still counts. A person on the
+is ended, whom the summary counts under `finished`, is not untouched and is left out; one whose line is
+`paused` for a reply still counts. A person on the
 do-not-contact register lands and counts like any other: the register keeps a send from reaching them, not them from the
 campaign, so a reserve may hold fewer people a send can reach than its number says.
 
