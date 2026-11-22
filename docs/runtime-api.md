@@ -234,7 +234,9 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.update`: takes `project_id`, which moves the campaign.
 - `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started. From inside a
   run it is refused `403` `decided_inside_a_run`, whatever actor it names: only a person, or their own session on their
-  word, starts or resumes one.
+  word, starts or resumes one. At the first start, from `draft`, a campaign that holds no `audience_threshold` and whose
+  people come from a search is given `Manager:AudienceThreshold`, twenty by default, on a `campaign_updated` line by
+  `system:runtime`, and the answer carries it; a resume never sets it ([the campaign manager](campaign-manager.md) §9).
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`

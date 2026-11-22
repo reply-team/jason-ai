@@ -7,6 +7,28 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// The reserve's threshold is one batch that the runtime sets at the first start of a campaign fed by a search, and a
+    /// person has none by clearing it after the start. A session told the person sets it once the probe lands, a fifth of
+    /// the probe, would set a second number over the runtime's, or tell a person a null before the start means none.
+    /// </summary>
+    [Fact]
+    public void The_reserve_s_threshold_is_one_batch_the_first_start_sets_and_a_person_clears_after_it()
+    {
+        var managed = Flattened("managed-campaign-work");
+        Assert.Contains("The reserve's threshold is the campaign's own field, one batch, twenty: the runtime sets it at the campaign's first start, because its people come from a search, and the start's answer shows it. A campaign whose people the person brought as a list is given none.", managed, StringComparison.Ordinal);
+        Assert.Contains("or clear it after the start to have none, `--clear audience_threshold`, and it stays cleared.", managed, StringComparison.Ordinal);
+
+        var approvals = Flattened("approvals-and-questions");
+        Assert.Contains("one batch, twenty, which the runtime sets at the campaign's first start, because its people come from a search.", approvals, StringComparison.Ordinal);
+
+        foreach (var skill in new[] { managed, approvals, Flattened("planner-in-session") })
+        {
+            Assert.DoesNotContain("a fifth of the probe", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("a reserve threshold of 5", skill, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void The_managed_path_says_what_the_runtime_decides_and_what_it_promises_nothing_about()
     {

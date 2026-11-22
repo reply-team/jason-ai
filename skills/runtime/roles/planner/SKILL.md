@@ -87,10 +87,11 @@ who owns the campaign, who sees the definition and the number before anything is
 people it finds land on the campaign by themselves.
 
 **With the probe you propose the rest of the pulse, and the person decides it.** The reserve's threshold, under which
-the manager is told the campaign is running out of people nobody has started on: a fifth of the probe. The allowance a
-person may give once the audience is judged to work: top-ups the size of the probe, with a ceiling of ten probes'
-worth of people. You
-propose both, with the numbers, and set neither: the threshold and the allowance are the person's.
+the manager is told the campaign is running out of people nobody has started on: one batch, twenty. The runtime sets it
+at the campaign's first start, because its people come from a search; the person may change it, or clear it after the
+start to have none. The allowance a person may give once the audience is judged to work: top-ups the size of the probe,
+with a ceiling of ten probes' worth of people. You propose the allowance with its numbers and name the threshold the
+start sets, and you set neither: changing the threshold and giving the allowance are the person's.
 
 **An audience judged not worth more people comes back to you.** You form the next one the same way, from what the
 person said, what the judgement found and the audiences the campaign already holds, so that the next definition is a
@@ -247,7 +248,7 @@ it costs, the threshold, and the allowance once the audience works. Its key name
 create does:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --context '{"proposal":"The definition matches about 640 people at 410 companies, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}' --reason "the probe of the logistics audience" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-probe-logistics
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --context '{"proposal":"The definition matches about 640 people at 410 companies, so a probe of 25, about 50 credits on Reply. At the start, a reserve threshold of 20, one batch; once the audience works, top-ups of 25 up to 250."}' --reason "the probe of the logistics audience" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-probe-logistics
 ```
 
 `count` is an upper bound of at most 1000, never the look's whole count; where the look gave no count, the provider

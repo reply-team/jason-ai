@@ -423,7 +423,7 @@ they came from:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --idempotency-key q3-latam-probe-logistics --file - <<'EOF'
-{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}}
+{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. At the start, a reserve threshold of 20, one batch; once the audience works, top-ups of 25 up to 250."}}
 EOF
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --idempotency-key q3-latam-form-audience --file - <<'EOF'
 {"context":{"brief":"form the audience from the campaign context and create its probe"}}
@@ -438,8 +438,10 @@ it parks for their approval unless their allowance covers it:
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"audience":1,"count":25}' --reason 'the person asked for 25 more of audience 1' --idempotency-key q3-latam-topup-1-first
 ```
 
-The reserve's threshold is the campaign's own field, which the person sets once the probe's people have landed, the
-planner's proposal being a fifth of the probe: `jason campaign update <campaign-id> --audience-threshold <n>`. Under it, the campaign's manager is told the reserve is
+The reserve's threshold is the campaign's own field, one batch, twenty: the runtime sets it at the campaign's first start,
+because its people come from a search, and the start's answer shows it. A campaign whose people the person brought as a
+list is given none. The person may change it, `jason campaign update <campaign-id> --audience-threshold <n>`, or clear it
+after the start to have none, `--clear audience_threshold`, and it stays cleared. Under it, the campaign's manager is told the reserve is
 low, and the top-ups after the probe are the manager's, run under the allowance the person gave
 (`approvals-and-questions`). The definition is the audience's row, never the context: the context keeps the person's
 own words about who belongs.
